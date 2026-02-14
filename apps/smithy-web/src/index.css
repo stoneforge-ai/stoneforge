@@ -1,0 +1,274 @@
+/* Import design tokens first */
+@import "./styles/tokens.css";
+
+/* Import Tailwind */
+@import "tailwindcss";
+
+/* Configure Tailwind to use class-based dark mode instead of prefers-color-scheme */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Apply theme colors to body with smooth 300ms transition */
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  transition: background-color var(--duration-slow) var(--ease-in-out), color var(--duration-slow) var(--ease-in-out);
+}
+
+/* Global theme transition for major layout elements */
+.theme-transition,
+header,
+aside,
+main,
+nav,
+.sidebar,
+[data-testid="sidebar"],
+[data-testid="app-shell"] > div {
+  transition: background-color var(--duration-slow) var(--ease-in-out),
+              border-color var(--duration-slow) var(--ease-in-out),
+              color var(--duration-slow) var(--ease-in-out);
+}
+
+/* Dark mode styles for main content areas */
+.dark .bg-white {
+  background-color: var(--color-bg-secondary);
+}
+
+.dark .bg-gray-50 {
+  background-color: var(--color-bg);
+}
+
+.dark .bg-gray-100 {
+  background-color: var(--color-surface);
+}
+
+.dark .border-gray-200,
+.dark .border-gray-300 {
+  border-color: var(--color-border);
+}
+
+.dark .border-gray-100 {
+  border-color: var(--color-border-subtle);
+}
+
+.dark .text-gray-900,
+.dark .text-gray-800 {
+  color: var(--color-text);
+}
+
+.dark .text-gray-700 {
+  color: var(--color-text-secondary);
+}
+
+.dark .text-gray-600,
+.dark .text-gray-500 {
+  color: var(--color-text-tertiary);
+}
+
+.dark .text-gray-400 {
+  color: var(--color-text-tertiary);
+}
+
+/* Dark mode hover state overrides */
+.dark .hover\:bg-gray-50:hover {
+  background-color: var(--color-surface-hover);
+}
+
+.dark .hover\:bg-gray-100:hover {
+  background-color: var(--color-surface-active);
+}
+
+.dark .hover\:text-gray-900:hover {
+  color: var(--color-text);
+}
+
+.dark .hover\:text-gray-600:hover {
+  color: var(--color-text-secondary);
+}
+
+/* Custom animations for slide-over panels */
+@keyframes slide-in-right {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.2s ease-out;
+}
+
+/* Fade-in animation for view transitions */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.15s ease-out;
+}
+
+/* Scale-in animation for modals/dialogs */
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-scale-in {
+  animation: scale-in 0.2s ease-out;
+}
+
+/* Markdown content styles for chat messages */
+.markdown-content {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.markdown-content p {
+  margin-bottom: 0.5em;
+}
+
+.markdown-content p:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.markdown-content h4,
+.markdown-content h5,
+.markdown-content h6 {
+  font-weight: 600;
+  margin-top: 1em;
+  margin-bottom: 0.5em;
+}
+
+.markdown-content h1:first-child,
+.markdown-content h2:first-child,
+.markdown-content h3:first-child,
+.markdown-content h4:first-child,
+.markdown-content h5:first-child,
+.markdown-content h6:first-child {
+  margin-top: 0;
+}
+
+.markdown-content h1 { font-size: 1.5em; }
+.markdown-content h2 { font-size: 1.25em; }
+.markdown-content h3 { font-size: 1.125em; }
+.markdown-content h4 { font-size: 1em; }
+
+.markdown-content strong {
+  font-weight: 600;
+}
+
+.markdown-content em {
+  font-style: italic;
+}
+
+.markdown-content code {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.875em;
+  padding: 0.125em 0.25em;
+  border-radius: 0.25rem;
+  background-color: var(--color-bg-secondary);
+}
+
+.markdown-content pre {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.875em;
+  padding: 0.75em 1em;
+  border-radius: 0.375rem;
+  background-color: var(--color-bg-secondary);
+  overflow-x: auto;
+  margin: 0.5em 0;
+}
+
+.markdown-content pre code {
+  padding: 0;
+  background-color: transparent;
+}
+
+.markdown-content ul,
+.markdown-content ol {
+  margin: 0.5em 0;
+  padding-left: 1.5em;
+}
+
+.markdown-content ul {
+  list-style-type: disc;
+}
+
+.markdown-content ol {
+  list-style-type: decimal;
+}
+
+.markdown-content li {
+  margin: 0.25em 0;
+}
+
+.markdown-content blockquote {
+  border-left: 3px solid var(--color-border);
+  padding-left: 1em;
+  margin: 0.5em 0;
+  color: var(--color-text-secondary);
+}
+
+.markdown-content a {
+  color: var(--color-primary);
+  text-decoration: underline;
+}
+
+.markdown-content a:hover {
+  opacity: 0.8;
+}
+
+.markdown-content hr {
+  border: none;
+  border-top: 1px solid var(--color-border);
+  margin: 1em 0;
+}
+
+.markdown-content table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.5em 0;
+}
+
+.markdown-content th,
+.markdown-content td {
+  border: 1px solid var(--color-border);
+  padding: 0.5em 0.75em;
+  text-align: left;
+}
+
+.markdown-content th {
+  font-weight: 600;
+  background-color: var(--color-bg-secondary);
+}
+
+.markdown-content img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Utility to hide scrollbar while maintaining scroll functionality */
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari and Opera */
+}

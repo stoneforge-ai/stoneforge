@@ -1,0 +1,121 @@
+{
+  "name": "@stoneforge/quarry",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Core SDK for Stoneforge - API, services, sync, and CLI",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "sf": "./dist/bin/sf.js",
+    "stoneforge": "./dist/bin/sf.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "bun": "./src/index.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./api": {
+      "types": "./src/api/index.ts",
+      "bun": "./src/api/index.ts",
+      "import": "./dist/api/index.js",
+      "default": "./dist/api/index.js"
+    },
+    "./services": {
+      "types": "./src/services/index.ts",
+      "bun": "./src/services/index.ts",
+      "import": "./dist/services/index.js",
+      "default": "./dist/services/index.js"
+    },
+    "./sync": {
+      "types": "./src/sync/index.ts",
+      "bun": "./src/sync/index.ts",
+      "import": "./dist/sync/index.js",
+      "default": "./dist/sync/index.js"
+    },
+    "./cli": {
+      "types": "./src/cli/index.ts",
+      "bun": "./src/cli/index.ts",
+      "import": "./dist/cli/index.js",
+      "default": "./dist/cli/index.js"
+    },
+    "./config": {
+      "types": "./src/config/index.ts",
+      "bun": "./src/config/index.ts",
+      "import": "./dist/config/index.js",
+      "default": "./dist/config/index.js"
+    },
+    "./http": {
+      "types": "./src/http/index.ts",
+      "bun": "./src/http/index.ts",
+      "import": "./dist/http/index.js",
+      "default": "./dist/http/index.js"
+    },
+    "./server": {
+      "types": "./src/server/index.ts",
+      "bun": "./src/server/index.ts",
+      "import": "./dist/server/index.js",
+      "default": "./dist/server/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsc && chmod +x dist/bin/sf.js",
+    "test": "bun test src",
+    "test:node": "vitest run",
+    "test:all": "pnpm run test && pnpm run test:node",
+    "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "dist",
+    "web",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stoneforge-ai/stoneforge.git",
+    "directory": "packages/quarry"
+  },
+  "author": "Stoneforge",
+  "license": "Apache-2.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "stoneforge",
+    "sdk",
+    "api",
+    "cli",
+    "agents",
+    "coordination"
+  ],
+  "dependencies": {
+    "@stoneforge/core": "workspace:*",
+    "@stoneforge/shared-routes": "workspace:*",
+    "@stoneforge/storage": "workspace:*",
+    "hono": "^4.7.0",
+    "ws": "^8.18.0",
+    "yaml": "^2.8.2"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "^20.0.0",
+    "@types/ws": "^8.5.0",
+    "typescript": "^5.0.0",
+    "vitest": "^4.0.18"
+  },
+  "peerDependencies": {
+    "@stoneforge/smithy": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "@stoneforge/smithy": {
+      "optional": true
+    }
+  }
+}

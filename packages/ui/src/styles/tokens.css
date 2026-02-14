@@ -1,0 +1,847 @@
+/* =============================================================================
+   STONEFORGE DESIGN TOKENS
+   =============================================================================
+   A comprehensive design token system for consistent styling across the app.
+   Inspired by Linear, Notion, and Obsidian design systems.
+
+   Usage:
+   - Import this file before Tailwind imports in index.css
+   - Access tokens via CSS custom properties: var(--token-name)
+   - All tokens are available as Tailwind utilities via @theme
+   ============================================================================= */
+
+/* =============================================================================
+   COLOR TOKENS - Light Mode (Default)
+   ============================================================================= */
+:root {
+  /* --- Primary Colors (Blue) --- */
+  --color-primary-50: #eff6ff;
+  --color-primary-100: #dbeafe;
+  --color-primary-200: #bfdbfe;
+  --color-primary-300: #93c5fd;
+  --color-primary-400: #60a5fa;
+  --color-primary-500: #3b82f6;
+  --color-primary-600: #2563eb;
+  --color-primary-700: #1d4ed8;
+  --color-primary-800: #1e40af;
+  --color-primary-900: #1e3a8a;
+  --color-primary-950: #172554;
+
+  /* --- Secondary Colors (Slate) --- */
+  --color-secondary-50: #f8fafc;
+  --color-secondary-100: #f1f5f9;
+  --color-secondary-200: #e2e8f0;
+  --color-secondary-300: #cbd5e1;
+  --color-secondary-400: #94a3b8;
+  --color-secondary-500: #64748b;
+  --color-secondary-600: #475569;
+  --color-secondary-700: #334155;
+  --color-secondary-800: #1e293b;
+  --color-secondary-900: #0f172a;
+  --color-secondary-950: #020617;
+
+  /* --- Accent Colors (Violet) --- */
+  --color-accent-50: #f5f3ff;
+  --color-accent-100: #ede9fe;
+  --color-accent-200: #ddd6fe;
+  --color-accent-300: #c4b5fd;
+  --color-accent-400: #a78bfa;
+  --color-accent-500: #8b5cf6;
+  --color-accent-600: #7c3aed;
+  --color-accent-700: #6d28d9;
+  --color-accent-800: #5b21b6;
+  --color-accent-900: #4c1d95;
+  --color-accent-950: #2e1065;
+
+  /* --- Neutral Colors (Gray) --- */
+  --color-neutral-50: #fafafa;
+  --color-neutral-100: #f4f4f5;
+  --color-neutral-200: #e4e4e7;
+  --color-neutral-300: #d4d4d8;
+  --color-neutral-400: #a1a1aa;
+  --color-neutral-500: #71717a;
+  --color-neutral-600: #52525b;
+  --color-neutral-700: #3f3f46;
+  --color-neutral-800: #27272a;
+  --color-neutral-900: #18181b;
+  --color-neutral-950: #09090b;
+
+  /* --- Success Colors (Green) --- */
+  --color-success-50: #f0fdf4;
+  --color-success-100: #dcfce7;
+  --color-success-200: #bbf7d0;
+  --color-success-300: #86efac;
+  --color-success-400: #4ade80;
+  --color-success-500: #22c55e;
+  --color-success-600: #16a34a;
+  --color-success-700: #15803d;
+  --color-success-800: #166534;
+  --color-success-900: #14532d;
+  --color-success-950: #052e16;
+
+  /* --- Warning Colors (Amber) --- */
+  --color-warning-50: #fffbeb;
+  --color-warning-100: #fef3c7;
+  --color-warning-200: #fde68a;
+  --color-warning-300: #fcd34d;
+  --color-warning-400: #fbbf24;
+  --color-warning-500: #f59e0b;
+  --color-warning-600: #d97706;
+  --color-warning-700: #b45309;
+  --color-warning-800: #92400e;
+  --color-warning-900: #78350f;
+  --color-warning-950: #451a03;
+
+  /* --- Error Colors (Red) --- */
+  --color-error-50: #fef2f2;
+  --color-error-100: #fee2e2;
+  --color-error-200: #fecaca;
+  --color-error-300: #fca5a5;
+  --color-error-400: #f87171;
+  --color-error-500: #ef4444;
+  --color-error-600: #dc2626;
+  --color-error-700: #b91c1c;
+  --color-error-800: #991b1b;
+  --color-error-900: #7f1d1d;
+  --color-error-950: #450a0a;
+
+  /* --- Semantic Colors (Light Mode) --- */
+  --color-bg: #ffffff;
+  --color-bg-secondary: #f9fafb;
+  --color-bg-tertiary: #f4f4f5;
+  --color-bg-elevated: #ffffff;
+  --color-bg-overlay: rgba(0, 0, 0, 0.5);
+
+  --color-text: #111827;
+  --color-text-secondary: #4b5563;
+  --color-text-tertiary: #6b7280;
+  --color-text-muted: #6b7280;
+  --color-text-inverted: #ffffff;
+
+  /* Accessible muted text - meets WCAG AA 4.5:1 on white */
+  --color-text-muted-accessible: #6b7280;
+
+  --color-border: #e5e7eb;
+  --color-border-secondary: #f3f4f6;
+  --color-border-focus: #3b82f6;
+
+  --color-surface: #ffffff;
+  --color-surface-hover: #f9fafb;
+  --color-surface-active: #f3f4f6;
+  --color-surface-selected: #eff6ff;
+
+  /* --- Sidebar specific (Light Mode) --- */
+  --color-sidebar-bg: #ffffff;
+  --color-sidebar-border: #e5e7eb;
+  --color-sidebar-item-hover: #f3f4f6;
+  --color-sidebar-item-active: #eff6ff;
+  --color-sidebar-item-text: #4b5563;
+  --color-sidebar-item-text-active: #2563eb;
+
+  /* --- Header specific (Light Mode) --- */
+  --color-header-bg: #ffffff;
+  --color-header-border: #e5e7eb;
+
+  /* --- Card specific (Light Mode) --- */
+  --color-card-bg: #ffffff;
+  --color-card-border: #e5e7eb;
+  --color-card-hover: #f9fafb;
+
+  /* --- Input specific (Light Mode) --- */
+  --color-input-bg: #ffffff;
+  --color-input-border: #d1d5db;
+  --color-input-focus-ring: rgba(59, 130, 246, 0.25);
+
+  /* --- Semantic Aliases --- */
+  --color-primary: var(--color-primary-500);
+  --color-primary-hover: var(--color-primary-600);
+  --color-primary-active: var(--color-primary-700);
+  --color-primary-text: var(--color-primary-600);
+  --color-primary-muted: rgba(59, 130, 246, 0.1);
+
+  --color-danger: var(--color-error-500);
+  --color-danger-hover: var(--color-error-600);
+  --color-danger-bg: var(--color-error-50);
+  --color-danger-text: var(--color-error-700);
+
+  --color-success: var(--color-success-500);
+  --color-success-hover: var(--color-success-600);
+  --color-success-bg: var(--color-success-50);
+  --color-success-text: var(--color-success-700);
+
+  --color-warning: var(--color-warning-500);
+  --color-warning-hover: var(--color-warning-600);
+  --color-warning-bg: var(--color-warning-50);
+  --color-warning-text: var(--color-warning-700);
+}
+
+/* =============================================================================
+   COLOR TOKENS - Dark Mode
+   Deep charcoal backgrounds (#0D0D0D, #1A1A1A), subtle borders, muted colors
+   ============================================================================= */
+:root.dark,
+:root.theme-dark,
+.dark {
+  /* --- Semantic Colors (Dark Mode) --- */
+  --color-bg: #0d0d0d;
+  --color-bg-secondary: #141414;
+  --color-bg-tertiary: #1a1a1a;
+  --color-bg-elevated: #1f1f1f;
+  --color-bg-overlay: rgba(0, 0, 0, 0.8);
+  --color-bg-subtle: #111111;
+
+  --color-text: #f5f5f5;
+  --color-text-secondary: #d4d4d8;
+  --color-text-tertiary: #a1a1aa;
+  --color-text-muted: #a1a1aa;
+  --color-text-inverted: #0d0d0d;
+
+  /* Accessible muted text - meets WCAG AA 4.5:1 on dark backgrounds */
+  --color-text-muted-accessible: #a1a1aa;
+
+  --color-border: #262626;
+  --color-border-secondary: #303030;
+  --color-border-focus: #60a5fa;
+  --color-border-subtle: #1f1f1f;
+
+  --color-surface: #161616;
+  --color-surface-hover: #1f1f1f;
+  --color-surface-active: #262626;
+  --color-surface-selected: #1e3a5f;
+
+  /* --- Sidebar specific (Dark Mode) --- */
+  --color-sidebar-bg: #0d0d0d;
+  --color-sidebar-border: #1f1f1f;
+  --color-sidebar-item-hover: #1a1a1a;
+  --color-sidebar-item-active: #1e3a5f;
+  --color-sidebar-item-text: #d4d4d8;
+  --color-sidebar-item-text-active: #60a5fa;
+
+  /* --- Header specific (Dark Mode) --- */
+  --color-header-bg: #0d0d0d;
+  --color-header-border: #1f1f1f;
+
+  /* --- Card specific (Dark Mode) --- */
+  --color-card-bg: #141414;
+  --color-card-border: #262626;
+  --color-card-hover: #1a1a1a;
+
+  /* --- Input specific (Dark Mode) --- */
+  --color-input-bg: #141414;
+  --color-input-border: #303030;
+  --color-input-focus-ring: rgba(96, 165, 250, 0.25);
+
+  /* --- Semantic Aliases (Dark Mode) --- */
+  --color-primary: var(--color-primary-400);
+  --color-primary-hover: var(--color-primary-300);
+  --color-primary-active: var(--color-primary-200);
+  --color-primary-text: var(--color-primary-400);
+  --color-primary-muted: rgba(96, 165, 250, 0.15);
+
+  --color-danger: var(--color-error-400);
+  --color-danger-hover: var(--color-error-300);
+  --color-danger-bg: rgba(239, 68, 68, 0.15);
+  --color-danger-text: var(--color-error-400);
+
+  --color-success: var(--color-success-400);
+  --color-success-hover: var(--color-success-300);
+  --color-success-bg: rgba(34, 197, 94, 0.15);
+  --color-success-text: var(--color-success-400);
+
+  --color-warning: var(--color-warning-400);
+  --color-warning-hover: var(--color-warning-300);
+  --color-warning-bg: rgba(245, 158, 11, 0.15);
+  --color-warning-text: var(--color-warning-400);
+}
+
+/* =============================================================================
+   SPACING TOKENS (4px Grid)
+   ============================================================================= */
+:root {
+  --spacing-0: 0;
+  --spacing-px: 1px;
+  --spacing-0-5: 0.125rem;  /* 2px */
+  --spacing-1: 0.25rem;     /* 4px */
+  --spacing-1-5: 0.375rem;  /* 6px */
+  --spacing-2: 0.5rem;      /* 8px */
+  --spacing-2-5: 0.625rem;  /* 10px */
+  --spacing-3: 0.75rem;     /* 12px */
+  --spacing-3-5: 0.875rem;  /* 14px */
+  --spacing-4: 1rem;        /* 16px */
+  --spacing-5: 1.25rem;     /* 20px */
+  --spacing-6: 1.5rem;      /* 24px */
+  --spacing-7: 1.75rem;     /* 28px */
+  --spacing-8: 2rem;        /* 32px */
+  --spacing-9: 2.25rem;     /* 36px */
+  --spacing-10: 2.5rem;     /* 40px */
+  --spacing-11: 2.75rem;    /* 44px */
+  --spacing-12: 3rem;       /* 48px */
+  --spacing-14: 3.5rem;     /* 56px */
+  --spacing-16: 4rem;       /* 64px */
+  --spacing-20: 5rem;       /* 80px */
+  --spacing-24: 6rem;       /* 96px */
+  --spacing-28: 7rem;       /* 112px */
+  --spacing-32: 8rem;       /* 128px */
+  --spacing-36: 9rem;       /* 144px */
+  --spacing-40: 10rem;      /* 160px */
+  --spacing-44: 11rem;      /* 176px */
+  --spacing-48: 12rem;      /* 192px */
+  --spacing-52: 13rem;      /* 208px */
+  --spacing-56: 14rem;      /* 224px */
+  --spacing-60: 15rem;      /* 240px */
+  --spacing-64: 16rem;      /* 256px */
+  --spacing-72: 18rem;      /* 288px */
+  --spacing-80: 20rem;      /* 320px */
+  --spacing-96: 24rem;      /* 384px */
+}
+
+/* =============================================================================
+   TYPOGRAPHY TOKENS
+   ============================================================================= */
+:root {
+  /* --- Font Families --- */
+  --font-family-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-family-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+  --font-family-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* --- Font Sizes --- */
+  --font-size-xs: 0.75rem;     /* 12px */
+  --font-size-sm: 0.875rem;    /* 14px */
+  --font-size-base: 1rem;      /* 16px */
+  --font-size-lg: 1.125rem;    /* 18px */
+  --font-size-xl: 1.25rem;     /* 20px */
+  --font-size-2xl: 1.5rem;     /* 24px */
+  --font-size-3xl: 1.875rem;   /* 30px */
+  --font-size-4xl: 2.25rem;    /* 36px */
+  --font-size-5xl: 3rem;       /* 48px */
+  --font-size-6xl: 3.75rem;    /* 60px */
+  --font-size-7xl: 4.5rem;     /* 72px */
+  --font-size-8xl: 6rem;       /* 96px */
+  --font-size-9xl: 8rem;       /* 128px */
+
+  /* --- Line Heights --- */
+  --line-height-none: 1;
+  --line-height-tight: 1.25;
+  --line-height-snug: 1.375;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.625;
+  --line-height-loose: 2;
+
+  /* --- Font Weights --- */
+  --font-weight-thin: 100;
+  --font-weight-extralight: 200;
+  --font-weight-light: 300;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-weight-extrabold: 800;
+  --font-weight-black: 900;
+
+  /* --- Letter Spacing --- */
+  --letter-spacing-tighter: -0.05em;
+  --letter-spacing-tight: -0.025em;
+  --letter-spacing-normal: 0;
+  --letter-spacing-wide: 0.025em;
+  --letter-spacing-wider: 0.05em;
+  --letter-spacing-widest: 0.1em;
+}
+
+/* =============================================================================
+   BORDER RADIUS TOKENS
+   ============================================================================= */
+:root {
+  --radius-none: 0;
+  --radius-sm: 0.125rem;    /* 2px */
+  --radius-DEFAULT: 0.25rem; /* 4px */
+  --radius-md: 0.375rem;    /* 6px */
+  --radius-lg: 0.5rem;      /* 8px */
+  --radius-xl: 0.75rem;     /* 12px */
+  --radius-2xl: 1rem;       /* 16px */
+  --radius-3xl: 1.5rem;     /* 24px */
+  --radius-full: 9999px;
+}
+
+/* =============================================================================
+   SHADOW TOKENS
+   ============================================================================= */
+:root {
+  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --shadow-DEFAULT: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  --shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+  --shadow-inner: inset 0 2px 4px 0 rgb(0 0 0 / 0.05);
+  --shadow-none: 0 0 #0000;
+
+  /* Focus ring shadows */
+  --shadow-focus: 0 0 0 2px var(--color-primary-200);
+  --shadow-focus-danger: 0 0 0 2px var(--color-error-200);
+}
+
+/* Dark mode shadow adjustments */
+:root.dark,
+:root.theme-dark,
+.dark {
+  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.2);
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.3), 0 1px 2px -1px rgb(0 0 0 / 0.3);
+  --shadow-DEFAULT: 0 4px 6px -1px rgb(0 0 0 / 0.3), 0 2px 4px -2px rgb(0 0 0 / 0.3);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.3), 0 2px 4px -2px rgb(0 0 0 / 0.3);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.3), 0 4px 6px -4px rgb(0 0 0 / 0.3);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.4), 0 8px 10px -6px rgb(0 0 0 / 0.4);
+  --shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.5);
+
+  /* Focus ring shadows (dark mode) */
+  --shadow-focus: 0 0 0 2px var(--color-primary-800);
+  --shadow-focus-danger: 0 0 0 2px var(--color-error-900);
+}
+
+/* =============================================================================
+   COLOR TOKENS - High Contrast Mode
+   Pure black/white backgrounds, maximum contrast, increased border weights.
+   Meets WCAG AAA 7:1 contrast requirements.
+   ============================================================================= */
+:root.high-contrast {
+  /* --- Semantic Colors (High Contrast Light) --- */
+  --color-bg: #ffffff;
+  --color-bg-secondary: #f5f5f5;
+  --color-bg-tertiary: #e8e8e8;
+  --color-bg-elevated: #ffffff;
+  --color-bg-overlay: rgba(0, 0, 0, 0.7);
+  --color-bg-subtle: #fafafa;
+
+  --color-text: #000000;
+  --color-text-secondary: #1a1a1a;
+  --color-text-tertiary: #333333;
+  --color-text-muted: #333333;
+  --color-text-inverted: #ffffff;
+  --color-text-muted-accessible: #333333;
+
+  --color-border: #000000;
+  --color-border-secondary: #333333;
+  --color-border-focus: #0052cc;
+  --color-border-subtle: #666666;
+
+  --color-surface: #ffffff;
+  --color-surface-hover: #f0f0f0;
+  --color-surface-active: #e0e0e0;
+  --color-surface-selected: #cce5ff;
+
+  /* --- Sidebar specific (High Contrast Light) --- */
+  --color-sidebar-bg: #ffffff;
+  --color-sidebar-border: #000000;
+  --color-sidebar-item-hover: #e0e0e0;
+  --color-sidebar-item-active: #cce5ff;
+  --color-sidebar-item-text: #000000;
+  --color-sidebar-item-text-active: #0052cc;
+
+  /* --- Header specific (High Contrast Light) --- */
+  --color-header-bg: #ffffff;
+  --color-header-border: #000000;
+
+  /* --- Card specific (High Contrast Light) --- */
+  --color-card-bg: #ffffff;
+  --color-card-border: #000000;
+  --color-card-hover: #f0f0f0;
+
+  /* --- Input specific (High Contrast Light) --- */
+  --color-input-bg: #ffffff;
+  --color-input-border: #000000;
+  --color-input-focus-ring: rgba(0, 82, 204, 0.5);
+
+  /* --- Semantic Aliases (High Contrast Light) --- */
+  --color-primary: #0052cc;
+  --color-primary-hover: #003d99;
+  --color-primary-active: #002966;
+  --color-primary-text: #0052cc;
+  --color-primary-muted: rgba(0, 82, 204, 0.15);
+
+  --color-danger: #cc0000;
+  --color-danger-hover: #990000;
+  --color-danger-bg: #ffcccc;
+  --color-danger-text: #cc0000;
+
+  --color-success: #006600;
+  --color-success-hover: #004d00;
+  --color-success-bg: #ccffcc;
+  --color-success-text: #006600;
+
+  --color-warning: #cc6600;
+  --color-warning-hover: #995200;
+  --color-warning-bg: #fff0cc;
+  --color-warning-text: #cc6600;
+
+  /* --- Shadows (High Contrast - more prominent) --- */
+  --shadow-xs: 0 1px 3px 0 rgb(0 0 0 / 0.15);
+  --shadow-sm: 0 2px 4px 0 rgb(0 0 0 / 0.2);
+  --shadow-DEFAULT: 0 4px 8px -1px rgb(0 0 0 / 0.2);
+  --shadow-md: 0 6px 10px -1px rgb(0 0 0 / 0.2);
+  --shadow-lg: 0 12px 20px -3px rgb(0 0 0 / 0.2);
+  --shadow-xl: 0 24px 30px -5px rgb(0 0 0 / 0.25);
+  --shadow-2xl: 0 30px 60px -12px rgb(0 0 0 / 0.35);
+  --shadow-focus: 0 0 0 3px var(--color-primary);
+  --shadow-focus-danger: 0 0 0 3px var(--color-danger);
+}
+
+/* High Contrast Dark Mode - pure black background, white text */
+:root.high-contrast.dark,
+:root.high-contrast.theme-dark {
+  /* --- Semantic Colors (High Contrast Dark) --- */
+  --color-bg: #000000;
+  --color-bg-secondary: #0a0a0a;
+  --color-bg-tertiary: #141414;
+  --color-bg-elevated: #1a1a1a;
+  --color-bg-overlay: rgba(0, 0, 0, 0.9);
+  --color-bg-subtle: #050505;
+
+  --color-text: #ffffff;
+  --color-text-secondary: #f0f0f0;
+  --color-text-tertiary: #e0e0e0;
+  --color-text-muted: #e0e0e0;
+  --color-text-inverted: #000000;
+  --color-text-muted-accessible: #e0e0e0;
+
+  --color-border: #ffffff;
+  --color-border-secondary: #cccccc;
+  --color-border-focus: #66b3ff;
+  --color-border-subtle: #808080;
+
+  --color-surface: #0a0a0a;
+  --color-surface-hover: #1a1a1a;
+  --color-surface-active: #2a2a2a;
+  --color-surface-selected: #003366;
+
+  /* --- Sidebar specific (High Contrast Dark) --- */
+  --color-sidebar-bg: #000000;
+  --color-sidebar-border: #ffffff;
+  --color-sidebar-item-hover: #1a1a1a;
+  --color-sidebar-item-active: #003366;
+  --color-sidebar-item-text: #ffffff;
+  --color-sidebar-item-text-active: #66b3ff;
+
+  /* --- Header specific (High Contrast Dark) --- */
+  --color-header-bg: #000000;
+  --color-header-border: #ffffff;
+
+  /* --- Card specific (High Contrast Dark) --- */
+  --color-card-bg: #0a0a0a;
+  --color-card-border: #ffffff;
+  --color-card-hover: #1a1a1a;
+
+  /* --- Input specific (High Contrast Dark) --- */
+  --color-input-bg: #0a0a0a;
+  --color-input-border: #ffffff;
+  --color-input-focus-ring: rgba(102, 179, 255, 0.5);
+
+  /* --- Semantic Aliases (High Contrast Dark) --- */
+  --color-primary: #66b3ff;
+  --color-primary-hover: #99ccff;
+  --color-primary-active: #cce5ff;
+  --color-primary-text: #66b3ff;
+  --color-primary-muted: rgba(102, 179, 255, 0.2);
+
+  --color-danger: #ff6666;
+  --color-danger-hover: #ff9999;
+  --color-danger-bg: rgba(255, 102, 102, 0.2);
+  --color-danger-text: #ff6666;
+
+  --color-success: #66ff66;
+  --color-success-hover: #99ff99;
+  --color-success-bg: rgba(102, 255, 102, 0.2);
+  --color-success-text: #66ff66;
+
+  --color-warning: #ffcc66;
+  --color-warning-hover: #ffdd99;
+  --color-warning-bg: rgba(255, 204, 102, 0.2);
+  --color-warning-text: #ffcc66;
+
+  /* --- Shadows (High Contrast Dark - more prominent) --- */
+  --shadow-xs: 0 1px 3px 0 rgb(255 255 255 / 0.1);
+  --shadow-sm: 0 2px 4px 0 rgb(255 255 255 / 0.1);
+  --shadow-DEFAULT: 0 4px 8px -1px rgb(255 255 255 / 0.1);
+  --shadow-md: 0 6px 10px -1px rgb(255 255 255 / 0.1);
+  --shadow-lg: 0 12px 20px -3px rgb(255 255 255 / 0.1);
+  --shadow-xl: 0 24px 30px -5px rgb(255 255 255 / 0.15);
+  --shadow-2xl: 0 30px 60px -12px rgb(255 255 255 / 0.2);
+  --shadow-focus: 0 0 0 3px var(--color-primary);
+  --shadow-focus-danger: 0 0 0 3px var(--color-danger);
+}
+
+/* =============================================================================
+   TRANSITION TOKENS
+   ============================================================================= */
+:root {
+  /* --- Durations --- */
+  --duration-fast: 100ms;
+  --duration-normal: 200ms;
+  --duration-slow: 300ms;
+  --duration-slower: 500ms;
+
+  /* --- Timing Functions --- */
+  --ease-linear: linear;
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+
+  /* --- Pre-composed Transitions --- */
+  --transition-colors: color, background-color, border-color, text-decoration-color, fill, stroke var(--duration-normal) var(--ease-in-out);
+  --transition-opacity: opacity var(--duration-normal) var(--ease-in-out);
+  --transition-shadow: box-shadow var(--duration-normal) var(--ease-in-out);
+  --transition-transform: transform var(--duration-normal) var(--ease-in-out);
+  --transition-all: all var(--duration-normal) var(--ease-in-out);
+}
+
+/* =============================================================================
+   Z-INDEX TOKENS
+   ============================================================================= */
+:root {
+  --z-index-base: 0;
+  --z-index-dropdown: 1000;
+  --z-index-sticky: 1020;
+  --z-index-fixed: 1030;
+  --z-index-modal-backdrop: 1040;
+  --z-index-modal: 1050;
+  --z-index-popover: 1060;
+  --z-index-tooltip: 1070;
+  --z-index-toast: 1080;
+}
+
+/* =============================================================================
+   RESPONSIVE BREAKPOINT TOKENS
+   Custom breakpoints for consistent responsive design.
+   Note: Tailwind CSS v4 uses @media queries directly. These tokens are for
+   reference and use in JavaScript hooks.
+   ============================================================================= */
+:root {
+  /* Breakpoint values in pixels */
+  --breakpoint-xs: 0;       /* 0 - 479px: small phones */
+  --breakpoint-sm: 480px;   /* 480 - 639px: large phones */
+  --breakpoint-md: 640px;   /* 640 - 767px: small tablets */
+  --breakpoint-lg: 768px;   /* 768 - 1023px: tablets */
+  --breakpoint-xl: 1024px;  /* 1024 - 1279px: small laptops */
+  --breakpoint-2xl: 1280px; /* 1280px+: desktops */
+}
+
+/* =============================================================================
+   RESPONSIVE SPACING TOKENS
+   Spacing values that adapt based on screen size.
+   ============================================================================= */
+:root {
+  /* Base responsive gaps - use these for adaptive layouts */
+  --gap-responsive: var(--spacing-4);        /* 16px base */
+  --padding-responsive: var(--spacing-4);    /* 16px base */
+  --margin-responsive: var(--spacing-4);     /* 16px base */
+
+  /* Container padding - adjusts for screen size */
+  --container-padding: var(--spacing-4);     /* 16px on mobile */
+
+  /* Touch target minimum - 44px for accessibility */
+  --touch-target-min: 2.75rem;               /* 44px */
+}
+
+/* Responsive spacing adjustments for tablets and up */
+@media (min-width: 768px) {
+  :root {
+    --gap-responsive: var(--spacing-6);      /* 24px */
+    --padding-responsive: var(--spacing-6);  /* 24px */
+    --margin-responsive: var(--spacing-6);   /* 24px */
+    --container-padding: var(--spacing-6);   /* 24px */
+  }
+}
+
+/* Responsive spacing adjustments for desktops */
+@media (min-width: 1280px) {
+  :root {
+    --gap-responsive: var(--spacing-8);      /* 32px */
+    --padding-responsive: var(--spacing-8);  /* 32px */
+    --margin-responsive: var(--spacing-8);   /* 32px */
+    --container-padding: var(--spacing-8);   /* 32px */
+  }
+}
+
+/* =============================================================================
+   RESPONSIVE TYPOGRAPHY TOKENS
+   Font sizes that adapt based on screen size for optimal readability.
+   ============================================================================= */
+:root {
+  /* Base responsive text sizes */
+  --font-size-responsive-base: 0.875rem;     /* 14px on mobile */
+  --font-size-responsive-lg: 1rem;           /* 16px on mobile */
+  --font-size-responsive-xl: 1.125rem;       /* 18px on mobile */
+
+  /* Responsive headings */
+  --font-size-responsive-h1: 1.5rem;         /* 24px on mobile */
+  --font-size-responsive-h2: 1.25rem;        /* 20px on mobile */
+  --font-size-responsive-h3: 1.125rem;       /* 18px on mobile */
+
+  /* Responsive line heights */
+  --line-height-responsive: 1.6;             /* Slightly looser on mobile */
+}
+
+/* Typography adjustments for tablets */
+@media (min-width: 768px) {
+  :root {
+    --font-size-responsive-base: 0.9375rem;  /* 15px */
+    --font-size-responsive-lg: 1.0625rem;    /* 17px */
+    --font-size-responsive-xl: 1.1875rem;    /* 19px */
+    --font-size-responsive-h1: 1.75rem;      /* 28px */
+    --font-size-responsive-h2: 1.375rem;     /* 22px */
+    --font-size-responsive-h3: 1.1875rem;    /* 19px */
+    --line-height-responsive: 1.55;
+  }
+}
+
+/* Typography adjustments for desktops */
+@media (min-width: 1280px) {
+  :root {
+    --font-size-responsive-base: 1rem;       /* 16px */
+    --font-size-responsive-lg: 1.125rem;     /* 18px */
+    --font-size-responsive-xl: 1.25rem;      /* 20px */
+    --font-size-responsive-h1: 2rem;         /* 32px */
+    --font-size-responsive-h2: 1.5rem;       /* 24px */
+    --font-size-responsive-h3: 1.25rem;      /* 20px */
+    --line-height-responsive: 1.5;
+  }
+}
+
+/* =============================================================================
+   RESPONSIVE LAYOUT TOKENS
+   Layout values that adapt for different screen sizes.
+   ============================================================================= */
+:root {
+  /* Sidebar width tokens */
+  --sidebar-width: 0;                        /* Hidden on mobile by default */
+  --sidebar-width-collapsed: 3.5rem;         /* 56px for icons */
+  --sidebar-width-expanded: 15rem;           /* 240px when expanded */
+
+  /* Detail panel widths */
+  --detail-panel-width: 100%;                /* Full screen on mobile */
+
+  /* Content max widths */
+  --content-max-width: 100%;                 /* Full width on mobile */
+  --prose-max-width: 100%;                   /* Full width prose on mobile */
+}
+
+/* Layout adjustments for tablets */
+@media (min-width: 768px) {
+  :root {
+    --sidebar-width: var(--sidebar-width-collapsed); /* Collapsed by default on tablet */
+    --detail-panel-width: 20rem;             /* 320px */
+    --content-max-width: calc(100% - var(--sidebar-width));
+    --prose-max-width: 42rem;                /* 672px */
+  }
+}
+
+/* Layout adjustments for desktops */
+@media (min-width: 1024px) {
+  :root {
+    --sidebar-width: var(--sidebar-width-expanded); /* Expanded on desktop */
+    --detail-panel-width: 25rem;             /* 400px */
+  }
+}
+
+@media (min-width: 1280px) {
+  :root {
+    --prose-max-width: 50rem;                /* 800px */
+  }
+}
+
+/* =============================================================================
+   TAILWIND CSS V4 THEME INTEGRATION
+   ============================================================================= */
+/*
+ * Note: In Tailwind CSS v4, CSS custom properties defined in :root are automatically
+ * available throughout the application. The tokens above are designed to work seamlessly
+ * with Tailwind's CSS-first configuration. Use them via var(--token-name) in your styles
+ * or create Tailwind utilities as needed.
+ *
+ * Example usage:
+ *   background-color: var(--color-primary-500);
+ *   padding: var(--spacing-4);
+ *   border-radius: var(--radius-lg);
+ */
+
+/* =============================================================================
+   RESPONSIVE UTILITY CLASSES
+   These utility classes use the responsive tokens for consistent adaptive styling.
+   ============================================================================= */
+
+/* Gap utilities that adapt to screen size */
+.gap-responsive {
+  gap: var(--gap-responsive);
+}
+
+.p-responsive {
+  padding: var(--padding-responsive);
+}
+
+.px-responsive {
+  padding-left: var(--padding-responsive);
+  padding-right: var(--padding-responsive);
+}
+
+.py-responsive {
+  padding-top: var(--padding-responsive);
+  padding-bottom: var(--padding-responsive);
+}
+
+.m-responsive {
+  margin: var(--margin-responsive);
+}
+
+.mx-responsive {
+  margin-left: var(--margin-responsive);
+  margin-right: var(--margin-responsive);
+}
+
+.my-responsive {
+  margin-top: var(--margin-responsive);
+  margin-bottom: var(--margin-responsive);
+}
+
+/* Container padding utility */
+.container-padding {
+  padding-left: var(--container-padding);
+  padding-right: var(--container-padding);
+}
+
+/* Touch-friendly minimum size */
+.min-touch-target {
+  min-width: var(--touch-target-min);
+  min-height: var(--touch-target-min);
+}
+
+/* Responsive text utilities */
+.text-responsive {
+  font-size: var(--font-size-responsive-base);
+  line-height: var(--line-height-responsive);
+}
+
+.text-responsive-lg {
+  font-size: var(--font-size-responsive-lg);
+  line-height: var(--line-height-responsive);
+}
+
+/* Responsive heading utilities */
+.text-responsive-h1 {
+  font-size: var(--font-size-responsive-h1);
+  line-height: var(--line-height-tight);
+}
+
+.text-responsive-h2 {
+  font-size: var(--font-size-responsive-h2);
+  line-height: var(--line-height-tight);
+}
+
+.text-responsive-h3 {
+  font-size: var(--font-size-responsive-h3);
+  line-height: var(--line-height-snug);
+}
+
+/* Prose max width utility */
+.prose-width {
+  max-width: var(--prose-max-width);
+}

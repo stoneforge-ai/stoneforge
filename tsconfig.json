@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "references": [
+    { "path": "./packages/core" },
+    { "path": "./packages/storage" },
+    { "path": "./packages/quarry" },
+    { "path": "./apps/quarry-server" },
+    { "path": "./apps/quarry-web" }
+  ],
+  "include": [],
+  "exclude": ["node_modules"]
+}

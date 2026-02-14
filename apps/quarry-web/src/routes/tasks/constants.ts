@@ -1,0 +1,23 @@
+/**
+ * Constants for the Tasks page
+ * Re-exports shared constants from lib
+ */
+
+export {
+  DEFAULT_PAGE_SIZE,
+  SEARCH_DEBOUNCE_DELAY,
+  TASK_ROW_HEIGHT,
+  VIEW_MODE_STORAGE_KEY,
+  GROUP_BY_STORAGE_KEY,
+  SEARCH_STORAGE_KEY,
+  SORT_BY_STORAGE_KEY,
+  SORT_DIR_STORAGE_KEY,
+  SECONDARY_SORT_STORAGE_KEY,
+  EMPTY_FILTER,
+  STATUS_OPTIONS,
+  PRIORITY_OPTIONS,
+  SORT_OPTIONS,
+  GROUP_BY_OPTIONS,
+  PRIORITY_LABELS,
+  STATUS_COLORS,
+} from '../../lib/task-constants';

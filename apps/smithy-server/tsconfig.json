@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["bun-types"],
+    "paths": {
+      "@stoneforge/core": ["../../packages/core/src/index.ts"],
+      "@stoneforge/core/*": ["../../packages/core/src/*"],
+      "@stoneforge/storage": ["../../packages/storage/src/index.ts"],
+      "@stoneforge/storage/*": ["../../packages/storage/src/*"],
+      "@stoneforge/quarry": ["../../packages/quarry/src/index.ts"],
+      "@stoneforge/quarry/*": ["../../packages/quarry/src/*"],
+      "@stoneforge/smithy": ["../../packages/smithy/src/index.ts"],
+      "@stoneforge/smithy/*": ["../../packages/smithy/src/*"]
+    }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules"]
+}

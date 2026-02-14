@@ -1,0 +1,54 @@
+# Dependencies
+node_modules/
+
+**/debug/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Turbo
+.turbo/
+
+# Bun
+bun.lockb
+
+# Stoneforge workspace (local data, created by `sf init`)
+.stoneforge/
+.elemental/
+
+# Stoneforge test workspace (created by Playwright tests)
+.stoneforge-test/
+.elemental-test/
+
+# Local development files
+prompt.md
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test coverage
+coverage/
+
+# Playwright
+.playwright/
+test-results/
+playwright-report/
+
+# Visual QA checkpoints
+checkpoints/
+
+# Worktrees are stored inside .stoneforge
+# (Note: .stoneforge/ is already ignored above, this is just for clarity)
+# /.stoneforge/.worktrees/
+
+OPENCODE_CONFIG_CONTENT
+
+.npmrc

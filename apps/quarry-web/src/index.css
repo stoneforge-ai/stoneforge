@@ -1,0 +1,341 @@
+/* Import design tokens first */
+@import "./styles/tokens.css";
+
+/* Import Tailwind */
+@import "tailwindcss";
+
+/* Configure Tailwind to use class-based dark mode instead of prefers-color-scheme */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Apply theme colors to body with smooth 300ms transition */
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  transition: background-color var(--duration-slow) var(--ease-in-out), color var(--duration-slow) var(--ease-in-out);
+}
+
+/* Global theme transition for major layout elements */
+.theme-transition,
+header,
+aside,
+main,
+nav,
+.sidebar,
+[data-testid="sidebar"],
+[data-testid="app-shell"] > div {
+  transition: background-color var(--duration-slow) var(--ease-in-out),
+              border-color var(--duration-slow) var(--ease-in-out),
+              color var(--duration-slow) var(--ease-in-out);
+}
+
+/* Dark mode styles for main content areas */
+.dark .bg-white {
+  background-color: var(--color-bg-secondary);
+}
+
+.dark .bg-gray-50 {
+  background-color: var(--color-bg);
+}
+
+.dark .bg-gray-100 {
+  background-color: var(--color-surface);
+}
+
+.dark .border-gray-200,
+.dark .border-gray-300 {
+  border-color: var(--color-border);
+}
+
+.dark .border-gray-100 {
+  border-color: var(--color-border-subtle);
+}
+
+.dark .text-gray-900,
+.dark .text-gray-800 {
+  color: var(--color-text);
+}
+
+.dark .text-gray-700 {
+  color: var(--color-text-secondary);
+}
+
+.dark .text-gray-600,
+.dark .text-gray-500 {
+  color: var(--color-text-tertiary);
+}
+
+.dark .text-gray-400 {
+  color: var(--color-text-tertiary);
+}
+
+/* Dark mode hover state overrides */
+.dark .hover\:bg-gray-50:hover {
+  background-color: var(--color-surface-hover);
+}
+
+.dark .hover\:bg-gray-100:hover {
+  background-color: var(--color-surface-active);
+}
+
+.dark .hover\:text-gray-900:hover {
+  color: var(--color-text);
+}
+
+.dark .hover\:text-gray-600:hover {
+  color: var(--color-text-secondary);
+}
+
+/* Dark mode placeholder text */
+.dark .placeholder-gray-400::placeholder,
+.dark .placeholder-gray-500::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+/* Custom animations for slide-over panels */
+@keyframes slide-in-right {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.2s ease-out;
+}
+
+/* Fade-in animation for view transitions */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.15s ease-out;
+}
+
+/* Scale-in animation for modals/dialogs */
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-scale-in {
+  animation: scale-in 0.2s ease-out;
+}
+
+/* Drag handle styles for block editor */
+.drag-handle {
+  position: fixed;
+  opacity: 1;
+  transition: opacity 0.2s ease, background 0.2s ease;
+  border-radius: 0.25rem;
+  background: #e5e7eb;
+  background-size: calc(0.5em + 1px) calc(0.5em + 1px);
+  background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><circle cx="2.5" cy="2.5" r="1.2" fill="%236b7280"/><circle cx="7.5" cy="2.5" r="1.2" fill="%236b7280"/><circle cx="2.5" cy="7.5" r="1.2" fill="%236b7280"/><circle cx="7.5" cy="7.5" r="1.2" fill="%236b7280"/></svg>');
+  background-repeat: no-repeat;
+  background-position: center;
+  width: 1.2rem;
+  height: 1.5rem;
+  z-index: 50;
+  cursor: grab;
+}
+
+.drag-handle:hover {
+  background-color: #d1d5db;
+}
+
+.drag-handle:active,
+.drag-handle.dragging {
+  cursor: grabbing;
+  background-color: #9ca3af;
+}
+
+/* Drop indicator line while dragging */
+.ProseMirror-focused .is-dragging {
+  opacity: 0.5;
+}
+
+/* Drop placeholder indicator - styled via dropcursor extension config */
+.drop-cursor {
+  background-color: #3b82f6 !important;
+  z-index: 100 !important;
+}
+
+/* Block-level drop cursor (horizontal line between blocks) */
+.prosemirror-dropcursor-block {
+  height: 2px !important;
+  background-color: #3b82f6 !important;
+}
+
+/* Inline drop cursor (vertical line within text) */
+.prosemirror-dropcursor-inline {
+  width: 2px !important;
+  background-color: #3b82f6 !important;
+}
+
+/* Inline code styling - improved with monospace font and subtle background */
+.ProseMirror code:not(pre code) {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.9em;
+  background-color: rgba(175, 184, 193, 0.2);
+  border-radius: 4px;
+  padding: 0.15em 0.35em;
+  color: #1f2937;
+}
+
+.dark .ProseMirror code:not(pre code) {
+  background-color: rgba(75, 85, 99, 0.4);
+  color: #e5e7eb;
+}
+
+/* Highlight styling */
+.ProseMirror mark {
+  background-color: #fef08a;
+  border-radius: 2px;
+  padding: 0.05em 0;
+}
+
+.dark .ProseMirror mark {
+  background-color: #854d0e;
+  color: #fef08a;
+}
+
+/* Link styling in editor */
+.ProseMirror a,
+.ProseMirror a.message-link {
+  color: #2563eb;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.ProseMirror a:hover,
+.ProseMirror a.message-link:hover {
+  color: #1d4ed8;
+}
+
+.dark .ProseMirror a,
+.dark .ProseMirror a.message-link {
+  color: #60a5fa;
+}
+
+.dark .ProseMirror a:hover,
+.dark .ProseMirror a.message-link:hover {
+  color: #93c5fd;
+}
+
+/* Bubble menu animation */
+@keyframes bubble-menu-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.bubble-menu {
+  animation: bubble-menu-fade-in 0.15s ease-out;
+}
+
+/* Deep-link highlight animation (TB70) */
+@keyframes deep-link-flash {
+  0% {
+    background-color: rgba(250, 204, 21, 0);
+  }
+  20% {
+    background-color: rgba(250, 204, 21, 0.4);
+  }
+  100% {
+    background-color: rgba(250, 204, 21, 0);
+  }
+}
+
+.deep-link-highlight {
+  animation: deep-link-flash 2s ease-out;
+  position: relative;
+}
+
+/* Yellow ring indicator for highlight */
+.deep-link-highlight::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 2px solid #fbbf24;
+  border-radius: 4px;
+  pointer-events: none;
+  animation: deep-link-ring-fade 2s ease-out;
+}
+
+@keyframes deep-link-ring-fade {
+  0% {
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Dark mode adjustments for deep-link highlight */
+.dark .deep-link-highlight {
+  animation: deep-link-flash-dark 2s ease-out;
+}
+
+@keyframes deep-link-flash-dark {
+  0% {
+    background-color: rgba(250, 204, 21, 0);
+  }
+  20% {
+    background-color: rgba(250, 204, 21, 0.3);
+  }
+  100% {
+    background-color: rgba(250, 204, 21, 0);
+  }
+}
+
+/* @mention chip styling (TB111) */
+.mention-chip {
+  display: inline-flex;
+  align-items: center;
+  font-weight: 500;
+  color: #2563eb;
+  background-color: #dbeafe;
+  padding: 0.1em 0.4em;
+  border-radius: 4px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.mention-chip:hover {
+  background-color: #bfdbfe;
+}
+
+.dark .mention-chip {
+  color: #93c5fd;
+  background-color: rgba(37, 99, 235, 0.3);
+}
+
+.dark .mention-chip:hover {
+  background-color: rgba(37, 99, 235, 0.4);
+}

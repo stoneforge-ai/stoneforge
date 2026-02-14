@@ -1,0 +1,232 @@
+/**
+ * Dispatch Daemon Routes
+ *
+ * API endpoints for controlling the dispatch daemon lifecycle.
+ */
+
+import { Hono } from 'hono';
+import type { Services } from '../services.js';
+import { saveDaemonState, saveDaemonConfigOverrides } from '../daemon-state.js';
+
+/**
+ * Whether the daemon was started by the server (vs CLI or manual).
+ * Used to warn CLI users when stopping a server-managed daemon.
+ */
+let serverManaged = false;
+
+/**
+ * Mark the daemon as server-managed (called during auto-start).
+ */
+export function markDaemonAsServerManaged(): void {
+  serverManaged = true;
+}
+
+export function createDaemonRoutes(services: Services) {
+  const { dispatchDaemon } = services;
+  const app = new Hono();
+
+  // GET /api/daemon/status
+  app.get('/api/daemon/status', (c) => {
+    if (!dispatchDaemon) {
+      return c.json({
+        isRunning: false,
+        available: false,
+        reason: 'DispatchDaemon not available (no git repository)',
+        serverManaged: false,
+      });
+    }
+
+    const config = dispatchDaemon.getConfig();
+    return c.json({
+      isRunning: dispatchDaemon.isRunning(),
+      available: true,
+      serverManaged,
+      config: {
+        pollIntervalMs: config.pollIntervalMs,
+        workerAvailabilityPollEnabled: config.workerAvailabilityPollEnabled,
+        inboxPollEnabled: config.inboxPollEnabled,
+        stewardTriggerPollEnabled: config.stewardTriggerPollEnabled,
+        workflowTaskPollEnabled: config.workflowTaskPollEnabled,
+        directorInboxForwardingEnabled: config.directorInboxForwardingEnabled,
+      },
+    });
+  });
+
+  // POST /api/daemon/start
+  app.post('/api/daemon/start', async (c) => {
+    if (!dispatchDaemon) {
+      return c.json(
+        {
+          error: {
+            code: 'DAEMON_UNAVAILABLE',
+            message: 'DispatchDaemon not available (no git repository)',
+          },
+        },
+        503
+      );
+    }
+
+    try {
+      if (dispatchDaemon.isRunning()) {
+        return c.json({
+          success: true,
+          isRunning: true,
+          alreadyRunning: true,
+          serverManaged,
+          message: 'Daemon is already running',
+        });
+      }
+
+      dispatchDaemon.start();
+
+      // Persist state so daemon restarts after server restart
+      saveDaemonState(true, 'user');
+
+      return c.json({
+        success: true,
+        isRunning: dispatchDaemon.isRunning(),
+        alreadyRunning: false,
+        serverManaged,
+      });
+    } catch (error) {
+      console.error('[orchestrator] Failed to start daemon:', error);
+      return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
+    }
+  });
+
+  // POST /api/daemon/stop
+  app.post('/api/daemon/stop', async (c) => {
+    if (!dispatchDaemon) {
+      return c.json(
+        {
+          error: {
+            code: 'DAEMON_UNAVAILABLE',
+            message: 'DispatchDaemon not available (no git repository)',
+          },
+        },
+        503
+      );
+    }
+
+    try {
+      const wasRunning = dispatchDaemon.isRunning();
+      const wasServerManaged = serverManaged;
+
+      dispatchDaemon.stop();
+
+      // Persist state so daemon stays stopped after server restart
+      saveDaemonState(false, 'user');
+
+      // Reset server-managed flag when stopped
+      serverManaged = false;
+
+      return c.json({
+        success: true,
+        isRunning: dispatchDaemon.isRunning(),
+        wasRunning,
+        wasServerManaged,
+        message: wasServerManaged
+          ? 'Daemon stopped. Note: This daemon was auto-started by the server.'
+          : 'Daemon stopped.',
+      });
+    } catch (error) {
+      console.error('[orchestrator] Failed to stop daemon:', error);
+      return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
+    }
+  });
+
+  // POST /api/daemon/poll/:type - Manual poll trigger
+  app.post('/api/daemon/poll/:type', async (c) => {
+    if (!dispatchDaemon) {
+      return c.json(
+        {
+          error: {
+            code: 'DAEMON_UNAVAILABLE',
+            message: 'DispatchDaemon not available (no git repository)',
+          },
+        },
+        503
+      );
+    }
+
+    const pollType = c.req.param('type');
+
+    try {
+      let result;
+      switch (pollType) {
+        case 'worker-availability':
+          result = await dispatchDaemon.pollWorkerAvailability();
+          break;
+        case 'inbox':
+          result = await dispatchDaemon.pollInboxes();
+          break;
+        case 'steward-trigger':
+          result = await dispatchDaemon.pollStewardTriggers();
+          break;
+        case 'workflow-task':
+          result = await dispatchDaemon.pollWorkflowTasks();
+          break;
+        default:
+          return c.json(
+            {
+              error: {
+                code: 'INVALID_POLL_TYPE',
+                message: `Invalid poll type: ${pollType}. Valid types: worker-availability, inbox, steward-trigger, workflow-task`,
+              },
+            },
+            400
+          );
+      }
+
+      return c.json({ success: true, result });
+    } catch (error) {
+      console.error(`[orchestrator] Failed to run ${pollType} poll:`, error);
+      return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
+    }
+  });
+
+  // PATCH /api/daemon/config - Update daemon configuration
+  app.patch('/api/daemon/config', async (c) => {
+    if (!dispatchDaemon) {
+      return c.json(
+        {
+          error: {
+            code: 'DAEMON_UNAVAILABLE',
+            message: 'DispatchDaemon not available (no git repository)',
+          },
+        },
+        503
+      );
+    }
+
+    try {
+      const body = (await c.req.json()) as {
+        pollIntervalMs?: number;
+        workerAvailabilityPollEnabled?: boolean;
+        inboxPollEnabled?: boolean;
+        stewardTriggerPollEnabled?: boolean;
+        workflowTaskPollEnabled?: boolean;
+        directorInboxForwardingEnabled?: boolean;
+      };
+
+      dispatchDaemon.updateConfig(body);
+
+      // Persist config overrides that should survive server restarts
+      if (body.directorInboxForwardingEnabled !== undefined) {
+        saveDaemonConfigOverrides({
+          directorInboxForwardingEnabled: body.directorInboxForwardingEnabled,
+        });
+      }
+
+      return c.json({
+        success: true,
+        config: dispatchDaemon.getConfig(),
+      });
+    } catch (error) {
+      console.error('[orchestrator] Failed to update daemon config:', error);
+      return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
+    }
+  });
+
+  return app;
+}

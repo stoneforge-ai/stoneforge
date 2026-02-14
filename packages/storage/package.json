@@ -1,0 +1,82 @@
+{
+  "name": "@stoneforge/storage",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "SQLite storage layer for Stoneforge with multi-runtime support",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "bun": "./src/index.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./bun": {
+      "types": "./src/bun-backend.ts",
+      "bun": "./src/bun-backend.ts",
+      "import": "./dist/bun-backend.js",
+      "default": "./dist/bun-backend.js"
+    },
+    "./node": {
+      "types": "./src/node-backend.ts",
+      "bun": "./src/node-backend.ts",
+      "import": "./dist/node-backend.js",
+      "default": "./dist/node-backend.js"
+    },
+    "./browser": {
+      "types": "./src/browser-backend.ts",
+      "bun": "./src/browser-backend.ts",
+      "import": "./dist/browser-backend.js",
+      "default": "./dist/browser-backend.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "bun test src",
+    "test:node": "vitest run",
+    "test:all": "pnpm run test && pnpm run test:node",
+    "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stoneforge-ai/stoneforge.git",
+    "directory": "packages/storage"
+  },
+  "author": "Stoneforge",
+  "license": "Apache-2.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "stoneforge",
+    "storage",
+    "sqlite",
+    "database"
+  ],
+  "dependencies": {
+    "@stoneforge/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/bun": "latest",
+    "@types/node": "^20.0.0",
+    "@types/sql.js": "^1.4.9",
+    "typescript": "^5.0.0",
+    "vitest": "^4.0.18"
+  },
+  "optionalDependencies": {
+    "better-sqlite3": "^11.8.1",
+    "sql.js": "^1.12.0"
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "name": "@stoneforge/smithy-server",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Stoneforge Smithy server - AI agent orchestration platform",
+  "license": "Apache-2.0",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "dev:bun": "bun run --hot src/index.ts",
+    "start:bun": "bun run src/index.ts",
+    "build": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test src"
+  },
+  "dependencies": {
+    "@stoneforge/core": "workspace:*",
+    "@stoneforge/smithy": "workspace:*",
+    "@stoneforge/quarry": "workspace:*",
+    "@stoneforge/shared-routes": "workspace:*",
+    "@stoneforge/storage": "workspace:*",
+    "@hono/node-server": "^1.13.0",
+    "hono": "^4.7.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/ws": "^8.5.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.9.3",
+    "typescript-language-server": "^5.1.3",
+    "vscode-langservers-extracted": "^4.10.0"
+  }
+}

@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: oven-sh/setup-bun@v2
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm typecheck
+
+      - run: pnpm build
+
+      - name: Test packages/core
+        run: bun test src
+        working-directory: packages/core
+
+      - name: Test packages/storage
+        run: bun test src
+        working-directory: packages/storage
+
+      - name: Test packages/quarry
+        run: bun test src
+        working-directory: packages/quarry
+
+      - name: Test packages/smithy
+        run: bun test src
+        working-directory: packages/smithy

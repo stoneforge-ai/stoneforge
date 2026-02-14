@@ -1,0 +1,2524 @@
+/**
+ * Dispatch Daemon Service
+ *
+ * This daemon runs continuous polling loops to coordinate task assignment
+ * and message delivery across all agents in the orchestration system.
+ *
+ * Key features:
+ * - Worker availability polling: Assigns unassigned tasks to available workers
+ * - Inbox polling: Delivers messages and spawns agents when needed
+ * - Steward trigger polling: Activates stewards based on scheduled triggers
+ * - Workflow task polling: Assigns workflow tasks to available stewards
+ *
+ * The daemon implements the dispatch behavior defined in ORCHESTRATION_PLAN.md:
+ * - Workers are spawned INSIDE their worktree directory
+ * - Handoff branches are reused when present in task metadata
+ * - Inbox polling: Routes messages by role (triage for ephemeral, forward for persistent)
+ *
+ * @module
+ */
+
+import { EventEmitter } from 'node:events';
+import type {
+  EntityId,
+  ElementId,
+  Task,
+  Message,
+  InboxItem,
+  Document,
+} from '@stoneforge/core';
+import { InboxStatus, createTimestamp, TaskStatus, asEntityId, asElementId } from '@stoneforge/core';
+import type { QuarryAPI, InboxService } from '@stoneforge/quarry';
+import { loadTriagePrompt, loadRolePrompt } from '../prompts/index.js';
+
+import type { AgentRegistry, AgentEntity } from './agent-registry.js';
+import { getAgentMetadata } from './agent-registry.js';
+import type { SessionManager, SessionRecord } from '../runtime/session-manager.js';
+import type { DispatchService, DispatchOptions } from './dispatch-service.js';
+import type { WorktreeManager, CreateWorktreeResult } from '../git/worktree-manager.js';
+import type { SyncResult } from '../cli/commands/task.js';
+import type { TaskAssignmentService } from './task-assignment-service.js';
+import type { StewardScheduler } from './steward-scheduler.js';
+import type { AgentPoolService } from './agent-pool-service.js';
+import type { WorkerMetadata, StewardMetadata } from '../types/agent.js';
+import type { PoolSpawnRequest } from '../types/agent-pool.js';
+import {
+  getOrchestratorTaskMeta,
+  updateOrchestratorTaskMeta,
+  appendTaskSessionHistory,
+  type TaskSessionHistoryEntry,
+} from '../types/task-meta.js';
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+/**
+ * Default poll interval in milliseconds for dispatch daemon (5 seconds)
+ */
+export const DISPATCH_DAEMON_DEFAULT_POLL_INTERVAL_MS = 5000;
+
+/**
+ * Minimum poll interval in milliseconds for dispatch daemon (1 second)
+ */
+export const DISPATCH_DAEMON_MIN_POLL_INTERVAL_MS = 1000;
+
+/**
+ * Maximum poll interval in milliseconds for dispatch daemon (1 minute)
+ */
+export const DISPATCH_DAEMON_MAX_POLL_INTERVAL_MS = 60000;
+
+// ============================================================================
+// Types
+// ============================================================================
+
+/**
+ * Callback fired when a session is started by the dispatch daemon.
+ * This allows the server to attach event listeners and save the initial prompt.
+ */
+export type OnSessionStartedCallback = (
+  session: SessionRecord,
+  events: import('events').EventEmitter,
+  agentId: EntityId,
+  initialPrompt: string
+) => void;
+
+/**
+ * Configuration for the Dispatch Daemon
+ */
+export interface DispatchDaemonConfig {
+  /**
+   * Poll interval in milliseconds.
+   * Default: 5000 (5 seconds)
+   */
+  readonly pollIntervalMs?: number;
+
+  /**
+   * Whether worker availability polling is enabled.
+   * Default: true
+   */
+  readonly workerAvailabilityPollEnabled?: boolean;
+
+  /**
+   * Whether inbox polling is enabled.
+   * Default: true
+   */
+  readonly inboxPollEnabled?: boolean;
+
+  /**
+   * Whether steward trigger polling is enabled.
+   * Default: true
+   */
+  readonly stewardTriggerPollEnabled?: boolean;
+
+  /**
+   * Whether workflow task polling is enabled.
+   * Default: true
+   */
+  readonly workflowTaskPollEnabled?: boolean;
+
+  /**
+   * Whether orphan recovery polling is enabled.
+   * Detects workers with assigned tasks but no active session after a restart
+   * and re-spawns sessions to continue the work.
+   * Default: true
+   */
+  readonly orphanRecoveryEnabled?: boolean;
+
+  /**
+   * Whether closed-but-unmerged task reconciliation is enabled.
+   * Detects tasks with status=CLOSED but mergeStatus not 'merged'
+   * and moves them back to REVIEW so merge stewards can pick them up.
+   * Default: true
+   */
+  readonly closedUnmergedReconciliationEnabled?: boolean;
+
+  /**
+   * Grace period in ms before a closed-but-unmerged task is reconciled.
+   * Prevents racing with in-progress close+merge sequences.
+   * Default: 120000 (2 minutes)
+   */
+  readonly closedUnmergedGracePeriodMs?: number;
+
+  /**
+   * Whether stuck-merge recovery is enabled.
+   * Detects tasks stuck in 'merging' or 'testing' mergeStatus for too long
+   * and resets them to 'pending' for a fresh retry.
+   * Default: true
+   */
+  readonly stuckMergeRecoveryEnabled?: boolean;
+
+  /**
+   * Grace period in ms before a stuck merge task is recovered.
+   * Prevents racing with in-progress merge operations.
+   * Default: 600000 (10 minutes)
+   */
+  readonly stuckMergeRecoveryGracePeriodMs?: number;
+
+  /**
+   * Maximum session duration in ms before the daemon terminates it.
+   * Prevents stuck workers from blocking their slot indefinitely.
+   * Default: 0 (disabled).
+   */
+  readonly maxSessionDurationMs?: number;
+
+  /**
+   * Callback fired when a session is started by the daemon.
+   * Allows the server to attach event savers and save the initial prompt.
+   */
+  readonly onSessionStarted?: OnSessionStartedCallback;
+
+  /**
+   * Project root directory for loading prompt overrides.
+   * Default: process.cwd()
+   */
+  readonly projectRoot?: string;
+
+  /**
+   * Whether to auto-forward inbox messages to the director's interactive session.
+   * When enabled, messages are injected into the director's PTY as user input
+   * (same mechanism as persistent workers via processPersistentAgentMessage).
+   * Default: true
+   */
+  readonly directorInboxForwardingEnabled?: boolean;
+
+  /**
+   * Minimum idle time (ms) since last user input before forwarding messages
+   * to the director's session. Prevents interrupting the user mid-thought.
+   * Default: 120000 (2 minutes)
+   */
+  readonly directorInboxIdleThresholdMs?: number;
+}
+
+/**
+ * Result of a poll operation
+ */
+export interface PollResult {
+  /** The poll type */
+  readonly pollType: 'worker-availability' | 'inbox' | 'steward-trigger' | 'workflow-task' | 'orphan-recovery' | 'closed-unmerged-reconciliation' | 'stuck-merge-recovery';
+  /** Timestamp when the poll started */
+  readonly startedAt: string;
+  /** Duration of the poll in milliseconds */
+  readonly durationMs: number;
+  /** Number of items processed */
+  readonly processed: number;
+  /** Number of errors encountered */
+  readonly errors: number;
+  /** Error messages if any */
+  readonly errorMessages?: string[];
+}
+
+/**
+ * Internal normalized configuration
+ */
+interface NormalizedConfig {
+  pollIntervalMs: number;
+  workerAvailabilityPollEnabled: boolean;
+  inboxPollEnabled: boolean;
+  stewardTriggerPollEnabled: boolean;
+  workflowTaskPollEnabled: boolean;
+  orphanRecoveryEnabled: boolean;
+  closedUnmergedReconciliationEnabled: boolean;
+  closedUnmergedGracePeriodMs: number;
+  stuckMergeRecoveryEnabled: boolean;
+  stuckMergeRecoveryGracePeriodMs: number;
+  maxSessionDurationMs: number;
+  onSessionStarted?: OnSessionStartedCallback;
+  projectRoot: string;
+  directorInboxForwardingEnabled: boolean;
+  directorInboxIdleThresholdMs: number;
+}
+
+// ============================================================================
+// Dispatch Daemon Interface
+// ============================================================================
+
+/**
+ * Dispatch Daemon interface for coordinating task assignment and message delivery.
+ *
+ * The daemon provides methods for:
+ * - Starting and stopping the polling loops
+ * - Manual trigger of individual poll operations
+ * - Configuration management
+ */
+export interface DispatchDaemon {
+  // ----------------------------------------
+  // Lifecycle
+  // ----------------------------------------
+
+  /**
+   * Starts the dispatch daemon with all enabled polling loops.
+   * Reconciles stale sessions on startup before beginning polls.
+   */
+  start(): Promise<void>;
+
+  /**
+   * Stops the dispatch daemon and all polling loops.
+   * Waits for any in-flight poll cycle to complete before returning.
+   */
+  stop(): Promise<void>;
+
+  /**
+   * Whether the daemon is currently running.
+   */
+  isRunning(): boolean;
+
+  // ----------------------------------------
+  // Manual Poll Triggers
+  // ----------------------------------------
+
+  /**
+   * Manually triggers worker availability polling.
+   * Finds available ephemeral workers and assigns unassigned tasks.
+   */
+  pollWorkerAvailability(): Promise<PollResult>;
+
+  /**
+   * Manually triggers inbox polling.
+   * Processes unread messages for all agents.
+   */
+  pollInboxes(): Promise<PollResult>;
+
+  /**
+   * Manually triggers steward trigger polling.
+   * Checks for scheduled steward activations.
+   */
+  pollStewardTriggers(): Promise<PollResult>;
+
+  /**
+   * Manually triggers workflow task polling.
+   * Assigns workflow tasks to available stewards.
+   */
+  pollWorkflowTasks(): Promise<PollResult>;
+
+  /**
+   * Manually triggers orphan recovery polling.
+   * Detects workers with assigned tasks but no active session
+   * and re-spawns sessions to continue the work.
+   */
+  recoverOrphanedAssignments(): Promise<PollResult>;
+
+  /**
+   * Manually triggers closed-but-unmerged task reconciliation.
+   * Detects tasks with status=CLOSED but mergeStatus not 'merged'
+   * and moves them back to REVIEW so merge stewards can pick them up.
+   */
+  reconcileClosedUnmergedTasks(): Promise<PollResult>;
+
+  /**
+   * Manually triggers stuck-merge recovery.
+   * Detects tasks stuck in 'merging' or 'testing' mergeStatus for too long
+   * and resets them to 'pending' for a fresh retry.
+   */
+  recoverStuckMergeTasks(): Promise<PollResult>;
+
+  // ----------------------------------------
+  // Configuration
+  // ----------------------------------------
+
+  /**
+   * Gets the current configuration.
+   */
+  getConfig(): Omit<Required<DispatchDaemonConfig>, 'onSessionStarted'> & { onSessionStarted?: OnSessionStartedCallback };
+
+  /**
+   * Updates the configuration.
+   * Takes effect on the next poll cycle.
+   */
+  updateConfig(config: Partial<DispatchDaemonConfig>): void;
+
+  // ----------------------------------------
+  // Events
+  // ----------------------------------------
+
+  /**
+   * Subscribe to daemon events.
+   */
+  on(event: 'poll:start', listener: (pollType: string) => void): void;
+  on(event: 'poll:complete', listener: (result: PollResult) => void): void;
+  on(event: 'poll:error', listener: (pollType: string, error: Error) => void): void;
+  on(event: 'task:dispatched', listener: (taskId: ElementId, agentId: EntityId) => void): void;
+  on(event: 'message:forwarded', listener: (messageId: string, agentId: EntityId) => void): void;
+  on(event: 'agent:spawned', listener: (agentId: EntityId, worktree?: string) => void): void;
+  on(event: 'daemon:notification', listener: (data: { type: 'info' | 'warning' | 'error'; title: string; message?: string }) => void): void;
+
+  /**
+   * Unsubscribe from daemon events.
+   */
+  off(event: string, listener: (...args: unknown[]) => void): void;
+}
+
+// ============================================================================
+// Dispatch Daemon Implementation
+// ============================================================================
+
+/**
+ * Implementation of the Dispatch Daemon.
+ */
+export class DispatchDaemonImpl implements DispatchDaemon {
+  private readonly api: QuarryAPI;
+  private readonly agentRegistry: AgentRegistry;
+  private readonly sessionManager: SessionManager;
+  private readonly dispatchService: DispatchService;
+  private readonly worktreeManager: WorktreeManager;
+  private readonly taskAssignment: TaskAssignmentService;
+  private readonly stewardScheduler: StewardScheduler;
+  private readonly inboxService: InboxService;
+  private readonly poolService: AgentPoolService | undefined;
+  private readonly emitter: EventEmitter;
+
+  private config: NormalizedConfig;
+  private running = false;
+  private polling = false;
+  private pollIntervalHandle?: NodeJS.Timeout;
+  private currentPollCycle?: Promise<void>;
+
+  /**
+   * Tracks inbox item IDs that are currently being forwarded to persistent agents.
+   * Prevents duplicate message delivery when concurrent pollInboxes() calls
+   * race to forward the same unread message before markAsRead() completes.
+   *
+   * Key: inbox item ID
+   * Value: true (item is in-flight, being processed)
+   *
+   * Items are added before forwarding and removed after markAsRead() completes.
+   */
+  private readonly forwardingInboxItems = new Set<string>();
+
+  constructor(
+    api: QuarryAPI,
+    agentRegistry: AgentRegistry,
+    sessionManager: SessionManager,
+    dispatchService: DispatchService,
+    worktreeManager: WorktreeManager,
+    taskAssignment: TaskAssignmentService,
+    stewardScheduler: StewardScheduler,
+    inboxService: InboxService,
+    config?: DispatchDaemonConfig,
+    poolService?: AgentPoolService
+  ) {
+    this.api = api;
+    this.agentRegistry = agentRegistry;
+    this.sessionManager = sessionManager;
+    this.dispatchService = dispatchService;
+    this.worktreeManager = worktreeManager;
+    this.taskAssignment = taskAssignment;
+    this.stewardScheduler = stewardScheduler;
+    this.inboxService = inboxService;
+    this.poolService = poolService;
+    this.emitter = new EventEmitter();
+    this.config = this.normalizeConfig(config);
+  }
+
+  // ----------------------------------------
+  // Lifecycle
+  // ----------------------------------------
+
+  async start(): Promise<void> {
+    if (this.running) {
+      return;
+    }
+
+    this.running = true;
+
+    // Reconcile stale sessions on startup (M-7)
+    try {
+      const result = await this.sessionManager.reconcileOnStartup();
+      if (result.reconciled > 0) {
+        console.log(`[dispatch-daemon] Reconciled ${result.reconciled} stale session(s)`);
+      }
+      if (result.errors.length > 0) {
+        console.warn('[dispatch-daemon] Reconciliation errors:', result.errors);
+      }
+    } catch (error) {
+      console.error('[dispatch-daemon] Failed to reconcile on startup:', error);
+    }
+
+    // Recover orphaned task assignments (workers with tasks but no session after restart)
+    if (this.config.orphanRecoveryEnabled) {
+      try {
+        const result = await this.recoverOrphanedAssignments();
+        if (result.processed > 0) {
+          console.log(`[dispatch-daemon] Startup: recovered ${result.processed} orphaned task assignment(s)`);
+        }
+      } catch (error) {
+        console.error('[dispatch-daemon] Failed to recover orphaned assignments on startup:', error);
+      }
+    }
+
+    // Start the main poll loop
+    this.pollIntervalHandle = this.createPollInterval();
+
+    // Run an initial poll cycle immediately
+    this.currentPollCycle = this.runPollCycle().catch((error) => {
+      console.error('[dispatch-daemon] Initial poll cycle error:', error);
+    });
+  }
+
+  async stop(): Promise<void> {
+    if (!this.running) {
+      return;
+    }
+
+    this.running = false;
+
+    if (this.pollIntervalHandle) {
+      clearInterval(this.pollIntervalHandle);
+      this.pollIntervalHandle = undefined;
+    }
+
+    // Wait for in-flight poll cycle to complete (M-8)
+    if (this.currentPollCycle) {
+      try {
+        await Promise.race([
+          this.currentPollCycle,
+          new Promise<void>((_, reject) =>
+            setTimeout(() => reject(new Error('Shutdown timeout')), 30_000)
+          ),
+        ]);
+      } catch { /* timeout or error — proceed with shutdown */ }
+      this.currentPollCycle = undefined;
+    }
+  }
+
+  isRunning(): boolean {
+    return this.running;
+  }
+
+  // ----------------------------------------
+  // Manual Poll Triggers
+  // ----------------------------------------
+
+  async pollWorkerAvailability(): Promise<PollResult> {
+    const startedAt = new Date().toISOString();
+    const startTime = Date.now();
+    let processed = 0;
+    let errors = 0;
+    const errorMessages: string[] = [];
+
+    this.emitter.emit('poll:start', 'worker-availability');
+
+    try {
+      // 1. Get all ephemeral workers
+      const workers = await this.agentRegistry.listAgents({
+        role: 'worker',
+        workerMode: 'ephemeral',
+      });
+
+      // 2. Find workers with no active session and no unread non-dispatch messages.
+      // pollInboxes() runs first in each cycle, marking dispatch messages as read.
+      // Any remaining unread items are non-dispatch messages needing triage —
+      // defer task assignment so the next cycle's triage pass can handle them.
+      const availableWorkers: AgentEntity[] = [];
+      for (const worker of workers) {
+        const session = this.sessionManager.getActiveSession(asEntityId(worker.id));
+        if (session) continue;
+
+        const unreadItems = this.inboxService.getInbox(asEntityId(worker.id), {
+          status: InboxStatus.UNREAD,
+          limit: 1,
+        });
+        if (unreadItems.length > 0) continue;
+
+        // Defense in depth: Check if worker already has an assigned task
+        // (protects against race conditions where session terminated but assignment wasn't cleared)
+        const workerTasks = await this.taskAssignment.getAgentTasks(asEntityId(worker.id), {
+          taskStatus: [TaskStatus.OPEN, TaskStatus.IN_PROGRESS, TaskStatus.REVIEW],
+        });
+        if (workerTasks.length > 0) {
+          console.log(`[dispatch-daemon] Worker ${worker.name} already has ${workerTasks.length} assigned task(s), skipping`);
+          continue;
+        }
+
+        availableWorkers.push(worker);
+      }
+
+      // 3. For each available worker, try to assign a task
+      for (const worker of availableWorkers) {
+        try {
+          const assigned = await this.assignTaskToWorker(worker);
+          if (assigned) {
+            processed++;
+          }
+        } catch (error) {
+          errors++;
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          errorMessages.push(`Worker ${worker.name}: ${errorMessage}`);
+          console.error(`[dispatch-daemon] Error assigning task to worker ${worker.name}:`, error);
+        }
+      }
+    } catch (error) {
+      errors++;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      errorMessages.push(errorMessage);
+      console.error('[dispatch-daemon] Error in pollWorkerAvailability:', error);
+    }
+
+    const result: PollResult = {
+      pollType: 'worker-availability',
+      startedAt,
+      durationMs: Date.now() - startTime,
+      processed,
+      errors,
+      errorMessages: errorMessages.length > 0 ? errorMessages : undefined,
+    };
+
+    this.emitter.emit('poll:complete', result);
+    return result;
+  }
+
+  async pollInboxes(): Promise<PollResult> {
+    const startedAt = new Date().toISOString();
+    const startTime = Date.now();
+    let processed = 0;
+    let errors = 0;
+    const errorMessages: string[] = [];
+
+    this.emitter.emit('poll:start', 'inbox');
+
+    // Accumulate deferred items per agent for triage processing
+    const deferredItems = new Map<string, { agent: AgentEntity; items: InboxItem[] }>();
+
+    try {
+      // Get all agents
+      const agents = await this.agentRegistry.listAgents();
+
+      for (const agent of agents) {
+        try {
+          const agentId = asEntityId(agent.id);
+          const meta = getAgentMetadata(agent);
+          if (!meta) continue;
+
+          // Get unread messages for this agent
+          const inboxItems = this.inboxService.getInbox(agentId, {
+            status: InboxStatus.UNREAD,
+            limit: 50, // Process up to 50 messages per agent per cycle
+          });
+
+          for (const item of inboxItems) {
+            try {
+              const messageProcessed = await this.processInboxItem(agent, item, meta);
+              if (messageProcessed) {
+                processed++;
+              } else {
+                // Item was not processed (deferred for triage)
+                // Only ephemeral workers and stewards get triage sessions.
+                // Persistent agents (directors, persistent workers) leave messages
+                // unread until their session starts — spawning a headless triage
+                // session for them would confuse the UI and mark messages as read
+                // before the agent can actually process them.
+                const isPersistentAgent = meta.agentRole === 'director' ||
+                  (meta.agentRole === 'worker' && (meta as WorkerMetadata).workerMode === 'persistent');
+
+                if (!isPersistentAgent) {
+                  const activeSession = this.sessionManager.getActiveSession(agentId);
+                  if (!activeSession) {
+                    if (!deferredItems.has(agentId)) {
+                      deferredItems.set(agentId, { agent, items: [] });
+                    }
+                    deferredItems.get(agentId)!.items.push(item);
+                  }
+                }
+              }
+            } catch (error) {
+              errors++;
+              const errorMessage = error instanceof Error ? error.message : String(error);
+              errorMessages.push(`Message ${item.messageId}: ${errorMessage}`);
+            }
+          }
+        } catch (error) {
+          errors++;
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          errorMessages.push(`Agent ${agent.name}: ${errorMessage}`);
+        }
+      }
+
+      // Process triage batches for idle agents with deferred messages
+      if (deferredItems.size > 0) {
+        const triageResult = await this.processTriageBatch(deferredItems);
+        processed += triageResult;
+      }
+    } catch (error) {
+      errors++;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      errorMessages.push(errorMessage);
+      console.error('[dispatch-daemon] Error in pollInboxes:', error);
+    }
+
+    const result: PollResult = {
+      pollType: 'inbox',
+      startedAt,
+      durationMs: Date.now() - startTime,
+      processed,
+      errors,
+      errorMessages: errorMessages.length > 0 ? errorMessages : undefined,
+    };
+
+    this.emitter.emit('poll:complete', result);
+    return result;
+  }
+
+  async pollStewardTriggers(): Promise<PollResult> {
+    const startedAt = new Date().toISOString();
+    const startTime = Date.now();
+    let processed = 0;
+    let errors = 0;
+    const errorMessages: string[] = [];
+
+    this.emitter.emit('poll:start', 'steward-trigger');
+
+    try {
+      // The StewardScheduler handles trigger evaluation internally
+      // We just need to check if any stewards need to be triggered
+      // This is mainly handled by the scheduler's own polling, but
+      // we can use this to ensure the scheduler is running
+
+      if (!this.stewardScheduler.isRunning()) {
+        // Start the scheduler if it's not running
+        await this.stewardScheduler.start();
+        processed++;
+      }
+
+      // Get stats to report on activity
+      const stats = this.stewardScheduler.getStats();
+      processed += stats.runningExecutions;
+    } catch (error) {
+      errors++;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      errorMessages.push(errorMessage);
+      console.error('[dispatch-daemon] Error in pollStewardTriggers:', error);
+    }
+
+    const result: PollResult = {
+      pollType: 'steward-trigger',
+      startedAt,
+      durationMs: Date.now() - startTime,
+      processed,
+      errors,
+      errorMessages: errorMessages.length > 0 ? errorMessages : undefined,
+    };
+
+    this.emitter.emit('poll:complete', result);
+    return result;
+  }
+
+  async pollWorkflowTasks(): Promise<PollResult> {
+    const startedAt = new Date().toISOString();
+    const startTime = Date.now();
+    let processed = 0;
+    let errors = 0;
+    const errorMessages: string[] = [];
+
+    this.emitter.emit('poll:start', 'workflow-task');
+
+    try {
+      const stewards = await this.agentRegistry.getStewards();
+
+      // Find available stewards (no active session)
+      const availableStewards: AgentEntity[] = [];
+      for (const steward of stewards) {
+        const session = this.sessionManager.getActiveSession(asEntityId(steward.id));
+        if (!session) {
+          availableStewards.push(steward);
+        }
+      }
+
+      // Separate merge stewards from other stewards
+      const mergeStewards = availableStewards.filter((s) => {
+        const meta = getAgentMetadata(s) as StewardMetadata | undefined;
+        return meta?.stewardFocus === 'merge';
+      });
+
+      const otherStewards = availableStewards.filter((s) => {
+        const meta = getAgentMetadata(s) as StewardMetadata | undefined;
+        return meta?.stewardFocus !== 'merge';
+      });
+
+      // 1. Handle REVIEW tasks - spawn merge stewards with full context
+      // Find tasks in REVIEW status that need merge processing
+      const reviewTasks = await this.taskAssignment.listAssignments({
+        taskStatus: [TaskStatus.REVIEW],
+        mergeStatus: ['pending'],
+      });
+
+      // Filter to tasks not already claimed by a steward.
+      // We check task.assignee rather than orchestratorMeta.assignedAgent because
+      // assignedAgent retains the original worker's ID after completeTask() clears
+      // the top-level assignee. A steward claim sets task.assignee to the steward ID
+      // (in spawnMergeStewardForTask), so an unset assignee means no steward has it.
+      const unclaimedReviewTasks = reviewTasks.filter((ta) => !ta.task.assignee);
+
+      const sortedReviewTasks = [...unclaimedReviewTasks].sort(
+        (a, b) => (b.task.priority ?? 0) - (a.task.priority ?? 0)
+      );
+
+      for (const steward of mergeStewards) {
+        if (sortedReviewTasks.length === 0) break;
+
+        const taskAssignment = sortedReviewTasks.shift();
+        if (!taskAssignment) continue;
+
+        try {
+          // Spawn merge steward with full context prompt
+          await this.spawnMergeStewardForTask(steward, taskAssignment.task);
+          processed++;
+          this.emitter.emit('task:dispatched', taskAssignment.taskId, asEntityId(steward.id));
+        } catch (error) {
+          errors++;
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          errorMessages.push(`Merge steward ${steward.name}: ${errorMessage}`);
+        }
+      }
+
+      // 2. Handle other workflow tasks (tag-based matching for non-merge stewards)
+      for (const steward of otherStewards) {
+        try {
+          const meta = getAgentMetadata(steward) as StewardMetadata | undefined;
+          if (!meta) continue;
+
+          // Look for unassigned tasks that match this steward's focus
+          const focusTag = meta.stewardFocus;
+
+          const unassignedTasks = await this.taskAssignment.getUnassignedTasks({
+            taskStatus: [TaskStatus.OPEN, TaskStatus.IN_PROGRESS],
+          });
+
+          // Filter tasks that match this steward's focus
+          const matchingTasks = unassignedTasks.filter((task) => {
+            const tags = task.tags ?? [];
+            return tags.includes(focusTag) ||
+              tags.includes(`steward-${focusTag}`) ||
+              tags.includes('workflow');
+          });
+
+          if (matchingTasks.length > 0) {
+            // Assign the highest priority task to this steward
+            const sortedTasks = [...matchingTasks].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+            const task = sortedTasks[0];
+            const stewardId = asEntityId(steward.id);
+
+            await this.dispatchService.dispatch(task.id, stewardId);
+            processed++;
+
+            this.emitter.emit('task:dispatched', task.id, stewardId);
+          }
+        } catch (error) {
+          errors++;
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          errorMessages.push(`Steward ${steward.name}: ${errorMessage}`);
+        }
+      }
+    } catch (error) {
+      errors++;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      errorMessages.push(errorMessage);
+      console.error('[dispatch-daemon] Error in pollWorkflowTasks:', error);
+    }
+
+    const result: PollResult = {
+      pollType: 'workflow-task',
+      startedAt,
+      durationMs: Date.now() - startTime,
+      processed,
+      errors,
+      errorMessages: errorMessages.length > 0 ? errorMessages : undefined,
+    };
+
+    this.emitter.emit('poll:complete', result);
+    return result;
+  }
+
+  async recoverOrphanedAssignments(): Promise<PollResult> {
+    const startedAt = new Date().toISOString();
+    const startTime = Date.now();
+    let processed = 0;
+    let errors = 0;
+    const errorMessages: string[] = [];
+
+    this.emitter.emit('poll:start', 'orphan-recovery');
+
+    try {
+      // 1. Get all ephemeral workers
+      const workers = await this.agentRegistry.listAgents({
+        role: 'worker',
+        workerMode: 'ephemeral',
+      });
+
+      for (const worker of workers) {
+        const workerId = asEntityId(worker.id);
+
+        // 2. Skip if worker has an active session
+        const session = this.sessionManager.getActiveSession(workerId);
+        if (session) continue;
+
+        // 3. Check if worker has assigned tasks (OPEN or IN_PROGRESS only, not REVIEW)
+        const workerTasks = await this.taskAssignment.getAgentTasks(workerId, {
+          taskStatus: [TaskStatus.OPEN, TaskStatus.IN_PROGRESS],
+        });
+        if (workerTasks.length === 0) continue;
+
+        // 4. Recover the first orphaned task
+        const taskAssignment = workerTasks[0];
+        try {
+          await this.recoverOrphanedTask(worker, taskAssignment.task, taskAssignment.orchestratorMeta);
+          processed++;
+        } catch (error) {
+          errors++;
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          errorMessages.push(`Worker ${worker.name}: ${errorMessage}`);
+          console.error(`[dispatch-daemon] Error recovering orphaned task for worker ${worker.name}:`, error);
+        }
+      }
+
+      // --- Phase 2: Recover orphaned merge steward assignments ---
+      const mergeStewards = await this.agentRegistry.listAgents({
+        role: 'steward',
+        stewardFocus: 'merge',
+      });
+
+      for (const steward of mergeStewards) {
+        const stewardId = asEntityId(steward.id);
+
+        // Skip if steward has an active session
+        const stewardSession = this.sessionManager.getActiveSession(stewardId);
+        if (stewardSession) continue;
+
+        // Find REVIEW tasks assigned to this steward that still need processing.
+        // Only recover tasks with 'pending' or 'testing' mergeStatus - tasks with
+        // 'test_failed', 'conflict', 'failed', or 'merged' have already been processed
+        // and should NOT be re-spawned (prevents infinite retry loops on pre-existing failures).
+        const stewardTasks = await this.taskAssignment.getAgentTasks(stewardId, {
+          taskStatus: [TaskStatus.REVIEW],
+          mergeStatus: ['pending', 'testing'],
+        });
+        if (stewardTasks.length === 0) continue;
+
+        const orphanedAssignment = stewardTasks[0];
+        try {
+          await this.recoverOrphanedStewardTask(steward, orphanedAssignment.task, orphanedAssignment.orchestratorMeta);
+          processed++;
+        } catch (error) {
+          errors++;
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          errorMessages.push(`Merge steward ${steward.name}: ${errorMessage}`);
+          console.error(`[dispatch-daemon] Error recovering orphaned steward task for ${steward.name}:`, error);
+        }
+      }
+
+      if (processed > 0) {
+        console.log(`[dispatch-daemon] Recovered ${processed} orphaned task assignment(s)`);
+      }
+    } catch (error) {
+      errors++;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      errorMessages.push(errorMessage);
+      console.error('[dispatch-daemon] Error in recoverOrphanedAssignments:', error);
+    }
+
+    const result: PollResult = {
+      pollType: 'orphan-recovery',
+      startedAt,
+      durationMs: Date.now() - startTime,
+      processed,
+      errors,
+      errorMessages: errorMessages.length > 0 ? errorMessages : undefined,
+    };
+
+    this.emitter.emit('poll:complete', result);
+    return result;
+  }
+
+  async reconcileClosedUnmergedTasks(): Promise<PollResult> {
+    const startedAt = new Date().toISOString();
+    const startTime = Date.now();
+    let processed = 0;
+    let errors = 0;
+    const errorMessages: string[] = [];
+
+    this.emitter.emit('poll:start', 'closed-unmerged-reconciliation');
+
+    try {
+      // Find tasks that are CLOSED but have a non-merged mergeStatus
+      const stuckTasks = await this.taskAssignment.listAssignments({
+        taskStatus: [TaskStatus.CLOSED],
+        mergeStatus: ['pending', 'testing', 'merging', 'conflict', 'test_failed', 'failed'],
+      });
+
+      const now = Date.now();
+
+      for (const assignment of stuckTasks) {
+        try {
+          const { task, orchestratorMeta } = assignment;
+
+          // Skip tasks without orchestrator metadata (not managed by orchestrator)
+          if (!orchestratorMeta) continue;
+
+          // Grace period: skip if closedAt is within the grace period
+          if (task.closedAt) {
+            const closedAtMs = typeof task.closedAt === 'number'
+              ? task.closedAt
+              : new Date(task.closedAt).getTime();
+            if (now - closedAtMs < this.config.closedUnmergedGracePeriodMs) {
+              continue;
+            }
+          }
+
+          // Safety valve: skip if already reconciled 3+ times (prevents infinite loops)
+          const currentCount = orchestratorMeta.reconciliationCount ?? 0;
+          if (currentCount >= 3) {
+            console.warn(
+              `[dispatch-daemon] Task ${task.id} has been reconciled ${currentCount} times, skipping (safety valve)`
+            );
+            continue;
+          }
+
+          // Move back to REVIEW with incremented reconciliation count.
+          // Clear assignee so steward dispatch sees it as unclaimed.
+          // Reset mergeStatus to 'pending' for a clean steward pickup.
+          await this.api.update<Task>(task.id, {
+            status: TaskStatus.REVIEW,
+            assignee: undefined,
+            closedAt: undefined,
+            closeReason: undefined,
+            metadata: updateOrchestratorTaskMeta(
+              task.metadata as Record<string, unknown> | undefined,
+              {
+                reconciliationCount: currentCount + 1,
+                mergeStatus: 'pending' as const,
+              }
+            ),
+          });
+
+          processed++;
+          console.log(
+            `[dispatch-daemon] Reconciled closed-but-unmerged task ${task.id} (mergeStatus=${orchestratorMeta.mergeStatus}, attempt=${currentCount + 1})`
+          );
+        } catch (error) {
+          errors++;
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          errorMessages.push(`Task ${assignment.taskId}: ${errorMessage}`);
+          console.error(`[dispatch-daemon] Error reconciling task ${assignment.taskId}:`, error);
+        }
+      }
+
+      if (processed > 0) {
+        console.log(`[dispatch-daemon] Reconciled ${processed} closed-but-unmerged task(s)`);
+      }
+    } catch (error) {
+      errors++;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      errorMessages.push(errorMessage);
+      console.error('[dispatch-daemon] Error in reconcileClosedUnmergedTasks:', error);
+    }
+
+    const result: PollResult = {
+      pollType: 'closed-unmerged-reconciliation',
+      startedAt,
+      durationMs: Date.now() - startTime,
+      processed,
+      errors,
+      errorMessages: errorMessages.length > 0 ? errorMessages : undefined,
+    };
+
+    this.emitter.emit('poll:complete', result);
+    return result;
+  }
+
+  /**
+   * Detects tasks stuck in 'merging' or 'testing' mergeStatus for too long
+   * and resets them to 'pending' for a fresh retry.
+   */
+  async recoverStuckMergeTasks(): Promise<PollResult> {
+    const startedAt = new Date().toISOString();
+    const startTime = Date.now();
+    let processed = 0;
+    let errors = 0;
+    const errorMessages: string[] = [];
+
+    this.emitter.emit('poll:start', 'stuck-merge-recovery');
+
+    try {
+      const stuckTasks = await this.taskAssignment.listAssignments({
+        taskStatus: [TaskStatus.REVIEW],
+        mergeStatus: ['merging', 'testing'],
+      });
+
+      const now = Date.now();
+
+      for (const assignment of stuckTasks) {
+        try {
+          const { task, orchestratorMeta } = assignment;
+          if (!orchestratorMeta) continue;
+
+          // Grace period: skip if updatedAt is within the grace period
+          if (task.updatedAt) {
+            const updatedAtMs = typeof task.updatedAt === 'number'
+              ? task.updatedAt
+              : new Date(task.updatedAt).getTime();
+            if (now - updatedAtMs < this.config.stuckMergeRecoveryGracePeriodMs) {
+              continue;
+            }
+          }
+
+          // Skip if steward has an active session (merge still in progress)
+          if (orchestratorMeta.assignedAgent) {
+            const activeSession = this.sessionManager.getActiveSession(
+              orchestratorMeta.assignedAgent as EntityId
+            );
+            if (activeSession) continue;
+          }
+
+          // Safety valve: skip if already recovered 3+ times
+          const currentCount = orchestratorMeta.stuckMergeRecoveryCount ?? 0;
+          if (currentCount >= 3) {
+            console.warn(
+              `[dispatch-daemon] Task ${task.id} has been recovered from stuck merge ${currentCount} times, skipping (safety valve)`
+            );
+            continue;
+          }
+
+          // Reset mergeStatus to 'pending' for fresh steward pickup
+          await this.api.update<Task>(task.id, {
+            assignee: undefined,
+            metadata: updateOrchestratorTaskMeta(
+              task.metadata as Record<string, unknown> | undefined,
+              {
+                mergeStatus: 'pending' as const,
+                stuckMergeRecoveryCount: currentCount + 1,
+              }
+            ),
+          });
+
+          // Clean up temp merge worktree if it exists
+          const mergeDirName = `_merge-${task.id.replace(/[^a-zA-Z0-9-]/g, '-')}`;
+          const mergeWorktreePath = `.stoneforge/.worktrees/${mergeDirName}`;
+          try {
+            const exists = await this.worktreeManager.worktreeExists(mergeWorktreePath);
+            if (exists) {
+              await this.worktreeManager.removeWorktree(mergeWorktreePath, { force: true });
+            }
+          } catch {
+            // Ignore worktree cleanup errors
+          }
+
+          processed++;
+          console.log(
+            `[dispatch-daemon] Recovered stuck merge task ${task.id} (mergeStatus=${orchestratorMeta.mergeStatus}, attempt=${currentCount + 1})`
+          );
+        } catch (error) {
+          errors++;
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          errorMessages.push(`Task ${assignment.taskId}: ${errorMessage}`);
+          console.error(`[dispatch-daemon] Error recovering stuck merge task ${assignment.taskId}:`, error);
+        }
+      }
+
+      if (processed > 0) {
+        console.log(`[dispatch-daemon] Recovered ${processed} stuck merge task(s)`);
+      }
+    } catch (error) {
+      errors++;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      errorMessages.push(errorMessage);
+      console.error('[dispatch-daemon] Error in recoverStuckMergeTasks:', error);
+    }
+
+    const stuckResult: PollResult = {
+      pollType: 'stuck-merge-recovery',
+      startedAt,
+      durationMs: Date.now() - startTime,
+      processed,
+      errors,
+      errorMessages: errorMessages.length > 0 ? errorMessages : undefined,
+    };
+
+    this.emitter.emit('poll:complete', stuckResult);
+    return stuckResult;
+  }
+
+  // ----------------------------------------
+  // Configuration
+  // ----------------------------------------
+
+  getConfig(): Omit<Required<DispatchDaemonConfig>, 'onSessionStarted'> & { onSessionStarted?: OnSessionStartedCallback } {
+    return { ...this.config };
+  }
+
+  updateConfig(config: Partial<DispatchDaemonConfig>): void {
+    const oldPollIntervalMs = this.config.pollIntervalMs;
+    this.config = this.normalizeConfig({ ...this.config, ...config });
+
+    if (this.running && this.config.pollIntervalMs !== oldPollIntervalMs) {
+      if (this.pollIntervalHandle) {
+        clearInterval(this.pollIntervalHandle);
+      }
+      this.pollIntervalHandle = this.createPollInterval();
+    }
+  }
+
+  // ----------------------------------------
+  // Events
+  // ----------------------------------------
+
+  on(event: 'poll:start', listener: (pollType: string) => void): void;
+  on(event: 'poll:complete', listener: (result: PollResult) => void): void;
+  on(event: 'poll:error', listener: (pollType: string, error: Error) => void): void;
+  on(event: 'task:dispatched', listener: (taskId: ElementId, agentId: EntityId) => void): void;
+  on(event: 'message:forwarded', listener: (messageId: string, agentId: EntityId) => void): void;
+  on(event: 'agent:spawned', listener: (agentId: EntityId, worktree?: string) => void): void;
+  on(event: 'agent:triage-spawned', listener: (agentId: EntityId, channelId: string, worktree: string) => void): void;
+  on(event: 'daemon:notification', listener: (data: { type: 'info' | 'warning' | 'error'; title: string; message?: string }) => void): void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  on(event: string, listener: (...args: any[]) => void): void {
+    this.emitter.on(event, listener);
+  }
+
+  off(event: string, listener: (...args: unknown[]) => void): void {
+    this.emitter.off(event, listener);
+  }
+
+  // ----------------------------------------
+  // Private Helpers
+  // ----------------------------------------
+
+  private createPollInterval(): NodeJS.Timeout {
+    return setInterval(async () => {
+      if (!this.running) return;
+      try {
+        this.currentPollCycle = this.runPollCycle();
+        await this.currentPollCycle;
+      } catch (error) {
+        console.error('[dispatch-daemon] Poll cycle error:', error);
+      }
+    }, this.config.pollIntervalMs);
+  }
+
+  private normalizeConfig(config?: DispatchDaemonConfig): NormalizedConfig {
+    let pollIntervalMs = config?.pollIntervalMs ?? DISPATCH_DAEMON_DEFAULT_POLL_INTERVAL_MS;
+    pollIntervalMs = Math.max(DISPATCH_DAEMON_MIN_POLL_INTERVAL_MS, Math.min(DISPATCH_DAEMON_MAX_POLL_INTERVAL_MS, pollIntervalMs));
+
+    return {
+      pollIntervalMs,
+      workerAvailabilityPollEnabled: config?.workerAvailabilityPollEnabled ?? true,
+      inboxPollEnabled: config?.inboxPollEnabled ?? true,
+      stewardTriggerPollEnabled: config?.stewardTriggerPollEnabled ?? true,
+      workflowTaskPollEnabled: config?.workflowTaskPollEnabled ?? true,
+      orphanRecoveryEnabled: config?.orphanRecoveryEnabled ?? true,
+      closedUnmergedReconciliationEnabled: config?.closedUnmergedReconciliationEnabled ?? true,
+      closedUnmergedGracePeriodMs: config?.closedUnmergedGracePeriodMs ?? 120_000,
+      stuckMergeRecoveryEnabled: config?.stuckMergeRecoveryEnabled ?? true,
+      stuckMergeRecoveryGracePeriodMs: config?.stuckMergeRecoveryGracePeriodMs ?? 600_000,
+      maxSessionDurationMs: config?.maxSessionDurationMs ?? 0,
+      onSessionStarted: config?.onSessionStarted,
+      projectRoot: config?.projectRoot ?? process.cwd(),
+      directorInboxForwardingEnabled: config?.directorInboxForwardingEnabled ?? true,
+      directorInboxIdleThresholdMs: config?.directorInboxIdleThresholdMs ?? 120_000,
+    };
+  }
+
+  /**
+   * Runs a complete poll cycle for all enabled polling loops.
+   */
+  private async runPollCycle(): Promise<void> {
+    if (this.polling) return;
+    this.polling = true;
+    try {
+      // Recover orphaned assignments first — workers with tasks but no session
+      // (e.g. from mid-cycle crashes). Runs before availability polling so
+      // orphans are handled before they'd be skipped.
+      if (this.config.orphanRecoveryEnabled) {
+        await this.recoverOrphanedAssignments();
+      }
+
+      // Reap stale sessions before polling for availability
+      await this.reapStaleSessions();
+
+      // Run polls sequentially to avoid overwhelming the system.
+      // Inbox runs first so triage spawns before task dispatch — idle agents
+      // process accumulated non-dispatch messages before picking up new tasks.
+      if (this.config.inboxPollEnabled) {
+        await this.pollInboxes();
+      }
+
+      if (this.config.workerAvailabilityPollEnabled) {
+        await this.pollWorkerAvailability();
+      }
+
+      if (this.config.stewardTriggerPollEnabled) {
+        await this.pollStewardTriggers();
+      }
+
+      if (this.config.workflowTaskPollEnabled) {
+        await this.pollWorkflowTasks();
+      }
+
+      // Reconcile closed-but-unmerged tasks after workflow polling so
+      // reconciled tasks get picked up on the next cycle, giving a clean
+      // state transition.
+      if (this.config.closedUnmergedReconciliationEnabled) {
+        await this.reconcileClosedUnmergedTasks();
+      }
+
+      // Recover tasks stuck in merging/testing for too long
+      if (this.config.stuckMergeRecoveryEnabled) {
+        await this.recoverStuckMergeTasks();
+      }
+    } finally {
+      this.polling = false;
+    }
+  }
+
+  /**
+   * Terminates sessions that have exceeded the configured max duration.
+   * Prevents stuck workers from blocking their slot indefinitely.
+   */
+  private async reapStaleSessions(): Promise<void> {
+    if (this.config.maxSessionDurationMs <= 0) return;
+
+    const running = this.sessionManager.listSessions({ status: 'running' });
+    const now = Date.now();
+
+    for (const session of running) {
+      const createdAt = typeof session.createdAt === 'number'
+        ? session.createdAt
+        : new Date(session.createdAt).getTime();
+      const age = now - createdAt;
+
+      if (age > this.config.maxSessionDurationMs) {
+        try {
+          await this.sessionManager.stopSession(session.id, {
+            graceful: false,
+            reason: `Session exceeded max duration (${Math.round(age / 1000)}s)`,
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          if (!message.includes('not found')) {
+            console.warn(`[dispatch-daemon] Failed to reap session ${session.id}:`, error);
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Recovers a single orphaned task by re-spawning a session for the worker.
+   * Tries to resume the previous provider session first (preserves context),
+   * falls back to a fresh spawn if no sessionId or resume fails.
+   */
+  private async recoverOrphanedTask(
+    worker: AgentEntity,
+    task: Task,
+    taskMeta: import('../types/task-meta.js').OrchestratorTaskMeta | undefined
+  ): Promise<void> {
+    const workerId = asEntityId(worker.id);
+
+    // 1. Resolve worktree — reuse existing or create new
+    let worktreePath = taskMeta?.worktree ?? taskMeta?.handoffWorktree;
+    let branch = taskMeta?.branch ?? taskMeta?.handoffBranch;
+
+    if (worktreePath) {
+      const exists = await this.worktreeManager.worktreeExists(worktreePath);
+      if (!exists) {
+        const worktreeResult = await this.createWorktreeForTask(worker, task);
+        worktreePath = worktreeResult.path;
+        branch = worktreeResult.branch;
+
+        // Update task metadata with new worktree info
+        await this.api.update(task.id, {
+          metadata: updateOrchestratorTaskMeta(
+            task.metadata as Record<string, unknown> | undefined,
+            { worktree: worktreePath, branch }
+          ),
+        });
+      }
+    } else {
+      const worktreeResult = await this.createWorktreeForTask(worker, task);
+      worktreePath = worktreeResult.path;
+      branch = worktreeResult.branch;
+
+      await this.api.update(task.id, {
+        metadata: updateOrchestratorTaskMeta(
+          task.metadata as Record<string, unknown> | undefined,
+          { worktree: worktreePath, branch }
+        ),
+      });
+    }
+
+    // 2. Try resume first if we have a previous session ID
+    const previousSessionId = taskMeta?.sessionId;
+    if (previousSessionId) {
+      try {
+        const { session, events } = await this.sessionManager.resumeSession(workerId, {
+          providerSessionId: previousSessionId,
+          workingDirectory: worktreePath,
+          worktree: worktreePath,
+          checkReadyQueue: false,
+          resumePrompt: [
+            'Your previous session was interrupted by a server restart.',
+            `You are still assigned to task ${task.id}: "${task.title}".`,
+            'Please continue working on this task from where you left off.',
+          ].join('\n'),
+        });
+
+        // Record session history entry for recovered worker session
+        const resumeHistoryEntry: TaskSessionHistoryEntry = {
+          sessionId: session.id,
+          providerSessionId: session.providerSessionId,
+          agentId: workerId,
+          agentName: worker.name,
+          agentRole: 'worker',
+          startedAt: createTimestamp(),
+        };
+        const updatedTask = await this.api.get<Task>(task.id);
+        if (updatedTask) {
+          const metadataWithHistory = appendTaskSessionHistory(
+            updatedTask.metadata as Record<string, unknown> | undefined,
+            resumeHistoryEntry
+          );
+          await this.api.update<Task>(task.id, { metadata: metadataWithHistory });
+        }
+
+        if (this.config.onSessionStarted) {
+          this.config.onSessionStarted(session, events, workerId, `[resumed session for task ${task.id}]`);
+        }
+
+        this.emitter.emit('agent:spawned', workerId, worktreePath);
+        console.log(`[dispatch-daemon] Resumed session for orphaned task ${task.id} on worker ${worker.name}`);
+        return;
+      } catch (error) {
+        console.warn(
+          `[dispatch-daemon] Failed to resume session ${previousSessionId} for worker ${worker.name}, falling back to fresh spawn:`,
+          error
+        );
+      }
+    }
+
+    // 3. Fall back to fresh spawn
+    const initialPrompt = await this.buildTaskPrompt(task, workerId);
+
+    const { session, events } = await this.sessionManager.startSession(workerId, {
+      workingDirectory: worktreePath,
+      worktree: worktreePath,
+      initialPrompt,
+    });
+
+    // Record session history entry for fresh spawned worker session
+    const freshSpawnHistoryEntry: TaskSessionHistoryEntry = {
+      sessionId: session.id,
+      providerSessionId: session.providerSessionId,
+      agentId: workerId,
+      agentName: worker.name,
+      agentRole: 'worker',
+      startedAt: createTimestamp(),
+    };
+    const taskAfterFreshSpawn = await this.api.get<Task>(task.id);
+    if (taskAfterFreshSpawn) {
+      const metadataWithHistory = appendTaskSessionHistory(
+        taskAfterFreshSpawn.metadata as Record<string, unknown> | undefined,
+        freshSpawnHistoryEntry
+      );
+      await this.api.update<Task>(task.id, { metadata: metadataWithHistory });
+    }
+
+    if (this.config.onSessionStarted) {
+      this.config.onSessionStarted(session, events, workerId, initialPrompt);
+    }
+
+    this.emitter.emit('agent:spawned', workerId, worktreePath);
+    console.log(`[dispatch-daemon] Spawned fresh session for orphaned task ${task.id} on worker ${worker.name}`);
+  }
+
+  /**
+   * Recovers a single orphaned merge steward task by resuming or re-spawning.
+   * Tries to resume the previous provider session first (preserves context),
+   * falls back to a fresh spawn via spawnMergeStewardForTask.
+   */
+  private async recoverOrphanedStewardTask(
+    steward: AgentEntity,
+    task: Task,
+    taskMeta: import('../types/task-meta.js').OrchestratorTaskMeta | undefined
+  ): Promise<void> {
+    const stewardId = asEntityId(steward.id);
+
+    // 1. Resolve worktree — verify it still exists
+    let worktreePath = taskMeta?.worktree;
+    if (worktreePath) {
+      const exists = await this.worktreeManager.worktreeExists(worktreePath);
+      if (!exists) {
+        console.warn(`[dispatch-daemon] Worktree ${worktreePath} no longer exists for steward task ${task.id}, using project root`);
+        worktreePath = undefined;
+      }
+    }
+    const workingDirectory = worktreePath ?? this.config.projectRoot;
+
+    // 2. Try resume first if we have a previous session ID
+    const previousSessionId = taskMeta?.sessionId;
+    if (previousSessionId) {
+      try {
+        const { session, events } = await this.sessionManager.resumeSession(stewardId, {
+          providerSessionId: previousSessionId,
+          workingDirectory,
+          worktree: worktreePath,
+          checkReadyQueue: false,
+          resumePrompt: [
+            'Your previous session was interrupted by a server restart.',
+            `You are still assigned to review/merge task ${task.id}: "${task.title}".`,
+            'Please continue the merge review from where you left off.',
+          ].join('\n'),
+        });
+
+        // Record session history entry for recovered steward session
+        const resumeHistoryEntry: TaskSessionHistoryEntry = {
+          sessionId: session.id,
+          providerSessionId: session.providerSessionId,
+          agentId: stewardId,
+          agentName: steward.name,
+          agentRole: 'steward',
+          startedAt: createTimestamp(),
+        };
+        const updatedTask = await this.api.get<Task>(task.id);
+        if (updatedTask) {
+          const metadataWithHistory = appendTaskSessionHistory(
+            updatedTask.metadata as Record<string, unknown> | undefined,
+            resumeHistoryEntry
+          );
+          await this.api.update<Task>(task.id, { metadata: metadataWithHistory });
+        }
+
+        if (this.config.onSessionStarted) {
+          this.config.onSessionStarted(session, events, stewardId, `[resumed steward session for task ${task.id}]`);
+        }
+        this.emitter.emit('agent:spawned', stewardId, worktreePath);
+        console.log(`[dispatch-daemon] Resumed steward session for orphaned task ${task.id} on ${steward.name}`);
+        return;
+      } catch (error) {
+        console.warn(
+          `[dispatch-daemon] Failed to resume steward session ${previousSessionId} for ${steward.name}, falling back to fresh spawn:`,
+          error
+        );
+      }
+    }
+
+    // 3. Fall back to fresh spawn (spawnMergeStewardForTask handles metadata update AND session history)
+    await this.spawnMergeStewardForTask(steward, task);
+    console.log(`[dispatch-daemon] Spawned fresh steward session for orphaned task ${task.id} on ${steward.name}`);
+  }
+
+  /**
+   * Assigns the highest priority unassigned task to a worker.
+   * Handles handoff branches by reusing existing worktrees.
+   * Respects agent pool capacity limits.
+   */
+  private async assignTaskToWorker(worker: AgentEntity): Promise<boolean> {
+    // Get ready tasks (already filtered for blocked, draft plans, future-scheduled, etc.)
+    // and sorted by effective priority via api.ready()
+    const readyTasks = await this.api.ready();
+    const unassignedTasks = readyTasks.filter((t) => !t.assignee);
+
+    if (unassignedTasks.length === 0) {
+      return false;
+    }
+
+    // ready() already sorts by effective priority, take the first
+    const task = unassignedTasks[0];
+    const workerId = asEntityId(worker.id);
+
+    // Check pool capacity before spawning
+    if (this.poolService) {
+      const meta = getAgentMetadata(worker);
+      if (meta && meta.agentRole === 'worker') {
+        const workerMeta = meta as WorkerMetadata;
+        const spawnRequest: PoolSpawnRequest = {
+          role: 'worker',
+          workerMode: workerMeta.workerMode,
+          agentId: workerId,
+        };
+
+        const poolCheck = await this.poolService.canSpawn(spawnRequest);
+        if (!poolCheck.canSpawn) {
+          console.log(
+            `[dispatch-daemon] Pool capacity reached for worker ${worker.name}: ${poolCheck.reason}`
+          );
+          return false;
+        }
+      }
+    }
+
+    // Check for existing worktree/branch in task metadata
+    // Priority: handoff > existing assignment > create new
+    const taskMeta = getOrchestratorTaskMeta(task.metadata as Record<string, unknown> | undefined);
+    const handoffBranch = taskMeta?.handoffBranch;
+    const handoffWorktree = taskMeta?.handoffWorktree;
+    const existingBranch = taskMeta?.branch;
+    const existingWorktree = taskMeta?.worktree;
+
+    let worktreePath: string;
+    let branch: string;
+
+    // Check handoff first (takes priority)
+    if (handoffBranch && handoffWorktree) {
+      worktreePath = handoffWorktree;
+      branch = handoffBranch;
+
+      // Verify the worktree still exists
+      const exists = await this.worktreeManager.worktreeExists(worktreePath);
+      if (!exists) {
+        // Worktree was cleaned up, create a new one
+        const worktreeResult = await this.createWorktreeForTask(worker, task);
+        worktreePath = worktreeResult.path;
+        branch = worktreeResult.branch;
+      }
+    }
+    // Check for existing assignment worktree (from previous attempt)
+    else if (existingBranch && existingWorktree) {
+      worktreePath = existingWorktree;
+      branch = existingBranch;
+
+      // Verify the worktree still exists
+      const exists = await this.worktreeManager.worktreeExists(worktreePath);
+      if (!exists) {
+        // Worktree was cleaned up, create a new one
+        const worktreeResult = await this.createWorktreeForTask(worker, task);
+        worktreePath = worktreeResult.path;
+        branch = worktreeResult.branch;
+      }
+    }
+    // No existing worktree, create a new one
+    else {
+      const worktreeResult = await this.createWorktreeForTask(worker, task);
+      worktreePath = worktreeResult.path;
+      branch = worktreeResult.branch;
+    }
+
+    // Build initial prompt with task context
+    const initialPrompt = await this.buildTaskPrompt(task, workerId);
+
+    // Spawn worker INSIDE the worktree BEFORE dispatching the task.
+    // This ensures that if the session fails to start (e.g. provider not
+    // available), the task stays unassigned and available for other agents.
+    const { session, events } = await this.sessionManager.startSession(workerId, {
+      workingDirectory: worktreePath,
+      worktree: worktreePath,
+      initialPrompt,
+    });
+
+    // Session started successfully — now dispatch the task (assigns + sends message)
+    const dispatchOptions: DispatchOptions = {
+      branch,
+      worktree: worktreePath,
+      markAsStarted: true,
+      priority: task.priority,
+      sessionId: session.providerSessionId ?? session.id,
+    };
+
+    await this.dispatchService.dispatch(task.id, workerId, dispatchOptions);
+    this.emitter.emit('task:dispatched', task.id, workerId);
+
+    // Record session history entry for this worker session
+    // Re-read task to get metadata after dispatch wrote to it
+    const updatedTask = await this.api.get<Task>(task.id);
+    if (updatedTask) {
+      const sessionHistoryEntry: TaskSessionHistoryEntry = {
+        sessionId: session.id,
+        providerSessionId: session.providerSessionId,
+        agentId: workerId,
+        agentName: worker.name,
+        agentRole: 'worker',
+        startedAt: createTimestamp(),
+      };
+      const metadataWithHistory = appendTaskSessionHistory(
+        updatedTask.metadata as Record<string, unknown> | undefined,
+        sessionHistoryEntry
+      );
+      await this.api.update<Task>(task.id, { metadata: metadataWithHistory });
+    }
+
+    // Call the onSessionStarted callback if provided (for event saver and initial prompt saving)
+    if (this.config.onSessionStarted) {
+      this.config.onSessionStarted(session, events, workerId, initialPrompt);
+    }
+
+    // Notify pool service that agent was spawned
+    if (this.poolService) {
+      await this.poolService.onAgentSpawned(workerId);
+    }
+
+    this.emitter.emit('agent:spawned', workerId, worktreePath);
+
+    return true;
+  }
+
+  /**
+   * Creates a worktree for a task assignment.
+   * Includes dependency installation so workers have node_modules available.
+   */
+  private async createWorktreeForTask(worker: AgentEntity, task: Task): Promise<CreateWorktreeResult> {
+    return this.worktreeManager.createWorktree({
+      agentName: worker.name,
+      taskId: task.id,
+      taskTitle: task.title,
+      installDependencies: true,
+    });
+  }
+
+  /**
+   * Builds the initial prompt for a task assignment.
+   * Includes the worker role prompt followed by task-specific details.
+   * Fetches the description Document content so handoff notes (appended to
+   * description) are automatically included.
+   */
+  private async buildTaskPrompt(task: Task, workerId: EntityId): Promise<string> {
+    const parts: string[] = [];
+
+    // Load and include the worker role prompt, framed as operating instructions
+    // so Claude understands this is its role definition, not file content
+    const roleResult = loadRolePrompt('worker', undefined, { projectRoot: this.config.projectRoot, workerMode: 'ephemeral' });
+    if (roleResult) {
+      parts.push(
+        'Please read and internalize the following operating instructions. These define your role and how you should behave:',
+        '',
+        roleResult.prompt,
+        '',
+        '---',
+        ''
+      );
+    }
+
+    // Get the director ID for context
+    const director = await this.agentRegistry.getDirector();
+    const directorId = director?.id ?? 'unknown';
+
+    parts.push(
+      '## Task Assignment',
+      '',
+      `**Worker ID:** ${workerId}`,
+      `**Director ID:** ${directorId}`,
+      `**Task ID:** ${task.id}`,
+      `**Title:** ${task.title}`,
+    );
+
+    if (task.priority !== undefined) {
+      parts.push(`**Priority:** ${task.priority}`);
+    }
+
+    // Fetch and include the actual description content
+    if (task.descriptionRef) {
+      try {
+        const doc = await this.api.get<Document>(asElementId(task.descriptionRef));
+        if (doc?.content) {
+          parts.push('', '### Description', doc.content);
+        }
+      } catch {
+        parts.push('', `**Description Document:** ${task.descriptionRef}`);
+      }
+    }
+
+    // Include acceptance criteria if any
+    if (task.acceptanceCriteria) {
+      parts.push('', '### Acceptance Criteria', task.acceptanceCriteria);
+    }
+
+    // Handoff notes are now embedded in the description — no separate section needed
+
+    // Explicit action instructions so the worker knows what to do
+    parts.push(
+      '',
+      '### Instructions',
+      '1. Read the task title and acceptance criteria carefully to decide the correct action.',
+      '2. If the task asks you to **hand off**, run: `sf task handoff ' + task.id + ' --message "your handoff note"` and stop.',
+      '3. Otherwise, complete the task: make changes, commit, push, then run: `sf task complete ' + task.id + '`.',
+    );
+
+    return parts.join('\n');
+  }
+
+  /**
+   * Builds the initial prompt for a merge steward session.
+   * Includes the steward role prompt (steward-merge.md) followed by task context.
+   *
+   * @param task - The task being reviewed
+   * @param stewardId - The steward's entity ID
+   * @param stewardFocus - The steward's focus area (merge or health)
+   * @param syncResult - Optional result from pre-spawn branch sync
+   */
+  private async buildStewardPrompt(
+    task: Task,
+    stewardId: EntityId,
+    stewardFocus: 'merge' | 'health' = 'merge',
+    syncResult?: SyncResult
+  ): Promise<string> {
+    const parts: string[] = [];
+
+    // Load and include the steward role prompt
+    const roleResult = loadRolePrompt('steward', stewardFocus, { projectRoot: this.config.projectRoot });
+    if (roleResult) {
+      parts.push(
+        'Please read and internalize the following operating instructions. These define your role and how you should behave:',
+        '',
+        roleResult.prompt,
+        '',
+        '---',
+        ''
+      );
+    }
+
+    // Get orchestrator metadata for PR/branch info
+    const taskMeta = task.metadata as Record<string, unknown> | undefined;
+    const orchestratorMeta = taskMeta?.orchestrator as Record<string, unknown> | undefined;
+    const prUrl = orchestratorMeta?.mergeRequestUrl as string | undefined;
+    const branch = orchestratorMeta?.branch as string | undefined;
+
+    // Get the director ID for context
+    const director = await this.agentRegistry.getDirector();
+    const directorId = director?.id ?? 'unknown';
+
+    parts.push(
+      '## Merge Request Assignment',
+      '',
+      `**Steward ID:** ${stewardId}`,
+      `**Director ID:** ${directorId}`,
+      `**Task ID:** ${task.id}`,
+      `**Title:** ${task.title}`,
+    );
+
+    if (branch) {
+      parts.push(`**Branch:** ${branch}`);
+    }
+
+    if (prUrl) {
+      parts.push(`**PR URL:** ${prUrl}`);
+    }
+
+    if (task.priority !== undefined) {
+      parts.push(`**Priority:** ${task.priority}`);
+    }
+
+    // Include sync status section if sync was attempted
+    if (syncResult) {
+      parts.push('', '## Sync Status', '');
+      parts.push('The branch was synced with master before your review.', '');
+
+      if (syncResult.success) {
+        parts.push('**Result**: SUCCESS');
+        parts.push('');
+        parts.push('Branch is up-to-date with master. `git diff origin/master..HEAD` will show only this task\'s changes.');
+      } else if (syncResult.conflicts && syncResult.conflicts.length > 0) {
+        parts.push('**Result**: CONFLICTS');
+        parts.push('');
+        parts.push('**Conflicted files**:');
+        for (const file of syncResult.conflicts) {
+          parts.push(`- ${file}`);
+        }
+        parts.push('');
+        parts.push('**Your first step is to resolve these conflicts before reviewing.**');
+        parts.push('See the conflict resolution guidance in your operating instructions.');
+      } else {
+        parts.push('**Result**: ERROR');
+        parts.push('');
+        parts.push(`**Error**: ${syncResult.error ?? syncResult.message}`);
+        parts.push('');
+        parts.push('You may need to manually sync the branch with `sf task sync ' + task.id + '`.');
+      }
+    }
+
+    // Fetch and include the description content
+    if (task.descriptionRef) {
+      try {
+        const doc = await this.api.get<Document>(asElementId(task.descriptionRef));
+        if (doc?.content) {
+          parts.push('', '### Task Description', doc.content);
+        }
+      } catch {
+        parts.push('', `**Description Document:** ${task.descriptionRef}`);
+      }
+    }
+
+    // Include acceptance criteria if any
+    if (task.acceptanceCriteria) {
+      parts.push('', '### Acceptance Criteria', task.acceptanceCriteria);
+    }
+
+    return parts.join('\n');
+  }
+
+  /**
+   * Spawns a merge steward session for a task in REVIEW status.
+   * Syncs the branch with master before spawning to ensure clean diffs.
+   * Respects agent pool capacity limits.
+   */
+  private async spawnMergeStewardForTask(steward: AgentEntity, task: Task): Promise<void> {
+    const stewardId = asEntityId(steward.id);
+    const meta = getAgentMetadata(steward) as StewardMetadata | undefined;
+    const stewardFocus = meta?.stewardFocus ?? 'merge';
+
+    // Check pool capacity before spawning
+    if (this.poolService && meta) {
+      const spawnRequest: PoolSpawnRequest = {
+        role: 'steward',
+        stewardFocus: meta.stewardFocus,
+        agentId: stewardId,
+      };
+
+      const poolCheck = await this.poolService.canSpawn(spawnRequest);
+      if (!poolCheck.canSpawn) {
+        console.log(
+          `[dispatch-daemon] Pool capacity reached for steward ${steward.name}: ${poolCheck.reason}`
+        );
+        return;
+      }
+    }
+
+    // Get task metadata for worktree path
+    const taskMeta = task.metadata as Record<string, unknown> | undefined;
+    const orchestratorMeta = taskMeta?.orchestrator as Record<string, unknown> | undefined;
+    let worktreePath = orchestratorMeta?.worktree as string | undefined;
+
+    // Verify the worktree still exists; create a fresh one if cleaned up (NEVER fall back to project root)
+    if (worktreePath) {
+      const exists = await this.worktreeManager.worktreeExists(worktreePath);
+      if (!exists) {
+        console.warn(`[dispatch-daemon] Worktree ${worktreePath} no longer exists for task ${task.id}, creating fresh worktree`);
+        const sourceBranch = orchestratorMeta?.branch as string | undefined;
+        if (sourceBranch) {
+          try {
+            const result = await this.worktreeManager.createReadOnlyWorktree({
+              agentName: stewardId,
+              purpose: `steward-${task.id}`,
+            });
+            worktreePath = result.path;
+          } catch (e) {
+            console.error(`[dispatch-daemon] Failed to create steward worktree: ${e}`);
+            worktreePath = undefined;
+          }
+        } else {
+          worktreePath = undefined;
+        }
+      }
+    }
+
+    // Guard: never spawn a steward in the project root — skip if no worktree
+    if (!worktreePath) {
+      this.emitter.emit('daemon:notification', {
+        type: 'warning' as const,
+        title: 'Merge steward skipped',
+        message: `Cannot spawn merge steward for task ${task.id}: worktree missing and no branch info available to create a new one.`,
+      });
+      return;
+    }
+
+    // Phase 1: Sync branch with master before spawning steward
+    // This ensures `git diff origin/master..HEAD` shows only the task's changes
+    let syncResult: SyncResult | undefined;
+    if (worktreePath) {
+      console.log(`[dispatch-daemon] Syncing task ${task.id} branch before steward spawn...`);
+      syncResult = await this.syncTaskBranch(task);
+
+      // Store sync result in task metadata for audit trail
+      await this.api.update<Task>(task.id, {
+        metadata: updateOrchestratorTaskMeta(
+          task.metadata as Record<string, unknown> | undefined,
+          {
+            lastSyncResult: {
+              success: syncResult.success,
+              conflicts: syncResult.conflicts,
+              error: syncResult.error,
+              message: syncResult.message,
+              syncedAt: new Date().toISOString(),
+            },
+          }
+        ),
+      });
+    }
+
+    // Build the steward prompt with full context including sync result
+    const initialPrompt = await this.buildStewardPrompt(task, stewardId, stewardFocus as 'merge' | 'health', syncResult);
+
+    const workingDirectory = worktreePath;
+
+    // Start the steward session
+    const { session, events } = await this.sessionManager.startSession(stewardId, {
+      workingDirectory,
+      worktree: worktreePath,
+      initialPrompt,
+      interactive: false, // Stewards use headless mode
+    });
+
+    // Record steward assignment and session history on the task to prevent double-dispatch and enable recovery.
+    // Setting task.assignee makes the steward visible in the UI and enables
+    // getAgentTasks() lookups for orphan recovery.
+    // Re-read task to get latest metadata (after sync result was stored)
+    const taskAfterSync = await this.api.get<Task>(task.id);
+    const sessionHistoryEntry: TaskSessionHistoryEntry = {
+      sessionId: session.id,
+      providerSessionId: session.providerSessionId,
+      agentId: stewardId,
+      agentName: steward.name,
+      agentRole: 'steward',
+      startedAt: createTimestamp(),
+    };
+    // First append session history, then apply steward assignment metadata
+    const metadataWithHistory = appendTaskSessionHistory(
+      taskAfterSync?.metadata as Record<string, unknown> | undefined,
+      sessionHistoryEntry
+    );
+    const finalMetadata = updateOrchestratorTaskMeta(
+      metadataWithHistory,
+      {
+        assignedAgent: stewardId,
+        mergeStatus: 'testing' as const,
+        sessionId: session.providerSessionId ?? session.id,
+      }
+    );
+    await this.api.update<Task>(task.id, {
+      assignee: stewardId,
+      metadata: finalMetadata,
+    });
+
+    // Call the onSessionStarted callback if provided
+    if (this.config.onSessionStarted) {
+      this.config.onSessionStarted(session, events, stewardId, initialPrompt);
+    }
+
+    // Notify pool service that agent was spawned
+    if (this.poolService) {
+      await this.poolService.onAgentSpawned(stewardId);
+    }
+
+    this.emitter.emit('agent:spawned', stewardId, worktreePath);
+    console.log(`[dispatch-daemon] Spawned merge steward ${steward.name} for task ${task.id}`);
+  }
+
+  /**
+   * Processes an inbox item for an agent.
+   * Handles dispatch messages and delegates to role-specific processors.
+   */
+  private async processInboxItem(
+    agent: AgentEntity,
+    item: InboxItem,
+    meta: WorkerMetadata | StewardMetadata | { agentRole: 'director' }
+  ): Promise<boolean> {
+    const agentId = asEntityId(agent.id);
+    const activeSession = this.sessionManager.getActiveSession(agentId);
+
+    // Get the message to check its type
+    const message = await this.api.get<Message>(asElementId(item.messageId));
+    if (!message) {
+      // Message not found, mark as read and skip
+      this.inboxService.markAsRead(item.id);
+      return false;
+    }
+
+    const messageMetadata = message.metadata as Record<string, unknown> | undefined;
+    const isDispatchMessage = messageMetadata?.type === 'task-dispatch' ||
+      messageMetadata?.type === 'task-assignment' ||
+      messageMetadata?.type === 'task-reassignment';
+
+    // Handle based on agent role and session state
+    if (meta.agentRole === 'worker' && (meta as WorkerMetadata).workerMode === 'ephemeral') {
+      return this.processEphemeralWorkerMessage(agent, message, item, activeSession, isDispatchMessage);
+    } else if (meta.agentRole === 'steward') {
+      // Stewards use the same two-path model as ephemeral workers
+      return this.processEphemeralWorkerMessage(agent, message, item, activeSession, isDispatchMessage);
+    } else if (meta.agentRole === 'worker' && (meta as WorkerMetadata).workerMode === 'persistent') {
+      return this.processPersistentAgentMessage(agent, message, item, activeSession);
+    } else if (meta.agentRole === 'director') {
+      if (this.config.directorInboxForwardingEnabled) {
+        // Only forward if the user hasn't typed recently (debounce)
+        if (activeSession) {
+          const idleMs = this.sessionManager.getSessionUserIdleMs(agentId);
+          // idleMs is undefined when no user input has been recorded yet — treat as idle
+          if (idleMs !== undefined && idleMs < this.config.directorInboxIdleThresholdMs) {
+            // User is actively typing — leave unread for next poll cycle
+            return false;
+          }
+        }
+        return this.processPersistentAgentMessage(agent, message, item, activeSession);
+      }
+      // Default: leave inbox items unread for manual sf inbox checks
+      return false;
+    }
+
+    return false;
+  }
+
+  /**
+   * Two-path model for ephemeral worker messages:
+   * 1. Dispatch message → mark as read (task dispatch handled by pollWorkerAvailability)
+   * 2. Non-dispatch message → leave unread if active session (don't forward/interrupt),
+   *    or accumulate as deferred item for triage if idle
+   *
+   * Returns { processed: boolean, deferredItem?: ... } so pollInboxes can batch triage.
+   */
+  private async processEphemeralWorkerMessage(
+    _agent: AgentEntity,
+    _message: Message,
+    item: InboxItem,
+    activeSession: SessionRecord | undefined,
+    isDispatchMessage: boolean
+  ): Promise<boolean> {
+    if (isDispatchMessage) {
+      // Dispatch message → mark as read (spawn handled elsewhere)
+      this.inboxService.markAsRead(item.id);
+      return true;
+    }
+
+    // Non-dispatch message:
+    if (activeSession) {
+      // Agent is busy → leave message unread for next poll cycle
+      // Do NOT forward to active session (keeps task-focused sessions uninterrupted)
+      return false;
+    }
+
+    // Agent is idle → leave unread, will be picked up by triage batch
+    // The caller (pollInboxes) accumulates these for processTriageBatch
+    return false;
+  }
+
+  /**
+   * Process message for persistent workers and directors.
+   * - If in session -> forward as user input
+   * - Otherwise -> leave for next session
+   */
+  private async processPersistentAgentMessage(
+    agent: AgentEntity,
+    message: Message,
+    item: InboxItem,
+    activeSession: SessionRecord | undefined
+  ): Promise<boolean> {
+    const agentId = asEntityId(agent.id);
+
+    if (activeSession) {
+      // Guard against duplicate forwarding:
+      // If another concurrent pollInboxes() call is already processing this item,
+      // skip it to prevent duplicate message delivery. The in-flight call will
+      // mark it as read when done.
+      if (this.forwardingInboxItems.has(item.id)) {
+        return false;
+      }
+
+      // Mark as in-flight before the async operation
+      this.forwardingInboxItems.add(item.id);
+
+      try {
+        // In session -> forward as user input
+        const forwardedContent = await this.formatForwardedMessage(message);
+        await this.sessionManager.messageSession(activeSession.id, {
+          content: forwardedContent,
+          senderId: message.sender,
+        });
+
+        this.inboxService.markAsRead(item.id);
+        this.emitter.emit('message:forwarded', message.id, agentId);
+        return true;
+      } finally {
+        // Always clean up the in-flight tracking, even on error
+        this.forwardingInboxItems.delete(item.id);
+      }
+    }
+
+    // No session -> leave message unread for next session
+    return false;
+  }
+
+  /**
+   * Processes deferred inbox items for idle agents by spawning triage sessions.
+   *
+   * Groups items by agentId then channelId. For each agent:
+   * - Skips if agent now has an active session (messages stay unread for next cycle)
+   * - Spawns triage session for the first channel group only (single-session constraint)
+   * - Marks those items as read
+   *
+   * @returns Number of items processed
+   */
+  private async processTriageBatch(
+    deferredItems: Map<string, { agent: AgentEntity; items: InboxItem[] }>
+  ): Promise<number> {
+    let processed = 0;
+
+    for (const [agentId, { agent, items }] of deferredItems) {
+      // Re-check: agent may have had a session started by task dispatch.
+      // Known race: between this check and startSession() below, another poll
+      // cycle could spawn a session for the same agent. If that happens,
+      // startSession() fails, the error is caught, items stay unread, and
+      // retry happens next cycle. This is acceptable — not a bug.
+      const activeSession = this.sessionManager.getActiveSession(asEntityId(agentId));
+      if (activeSession) {
+        // Agent is now busy — leave messages unread for next cycle
+        continue;
+      }
+
+      // Group items by channelId
+      const byChannel = new Map<string, InboxItem[]>();
+      for (const item of items) {
+        const channelKey = String(item.channelId);
+        if (!byChannel.has(channelKey)) {
+          byChannel.set(channelKey, []);
+        }
+        byChannel.get(channelKey)!.push(item);
+      }
+
+      // Spawn triage for the first channel group only (single-session constraint)
+      const [channelId, channelItems] = byChannel.entries().next().value as [string, InboxItem[]];
+
+      try {
+        await this.spawnTriageSession(agent, channelItems, channelId);
+
+        // Count items as processed only after spawn succeeds. Items are
+        // marked as read in spawnTriageSession's exit handler after the
+        // triage session completes. If the session crashes, items stay
+        // unread and retry next cycle.
+        processed += channelItems.length;
+      } catch (error) {
+        console.error(
+          `[dispatch-daemon] Failed to spawn triage session for agent ${agent.name}:`,
+          error
+        );
+      }
+
+      // Only one triage session per poll cycle per agent — remaining channels
+      // will be picked up in subsequent cycles
+    }
+
+    return processed;
+  }
+
+  /**
+   * Spawns a triage session for an agent to process deferred messages.
+   *
+   * Creates a read-only worktree on the default branch, builds the triage prompt
+   * with hydrated message contents, starts a headless session, and registers
+   * worktree cleanup on session exit.
+   */
+  private async spawnTriageSession(
+    agent: AgentEntity,
+    items: InboxItem[],
+    channelId: string
+  ): Promise<void> {
+    const agentId = asEntityId(agent.id);
+
+    // Create a read-only worktree (detached HEAD on default branch).
+    // The path is deterministic ({agentName}-triage), so a stale worktree
+    // from a previous crash would cause WORKTREE_EXISTS. Handle by removing
+    // the stale worktree and retrying once.
+    let worktreeResult: CreateWorktreeResult;
+    try {
+      worktreeResult = await this.worktreeManager.createReadOnlyWorktree({
+        agentName: agent.name,
+        purpose: 'triage',
+      });
+    } catch (error: unknown) {
+      const errorCode = (error as { code?: string })?.code;
+      if (errorCode === 'WORKTREE_EXISTS') {
+        // Remove stale worktree from a previous crash and retry.
+        // Path must match the relative path used by createReadOnlyWorktree.
+        try {
+          await this.worktreeManager.removeWorktree(
+            `.stoneforge/.worktrees/${agent.name}-triage`,
+            { force: true }
+          );
+        } catch {
+          // Ignore removal errors
+        }
+        worktreeResult = await this.worktreeManager.createReadOnlyWorktree({
+          agentName: agent.name,
+          purpose: 'triage',
+        });
+      } else {
+        throw error;
+      }
+    }
+
+    // Fetch messages and build the triage prompt
+    // Pair each message with its inbox item ID for the triage prompt
+    const triageItems: Array<{ message: Message; inboxItemId: string }> = [];
+    for (const item of items) {
+      const message = await this.api.get<Message>(asElementId(item.messageId));
+      if (message) {
+        triageItems.push({ message, inboxItemId: item.id });
+      }
+    }
+
+    // All message fetches failed — nothing to triage; clean up worktree
+    if (triageItems.length === 0) {
+      try {
+        await this.worktreeManager.removeWorktree(worktreeResult.path);
+      } catch {
+        // Ignore cleanup errors
+      }
+      return;
+    }
+
+    const initialPrompt = await this.buildTriagePrompt(agent, triageItems, channelId);
+
+    // Start a headless session in the read-only worktree
+    const { session, events } = await this.sessionManager.startSession(agentId, {
+      workingDirectory: worktreeResult.path,
+      worktree: worktreeResult.path,
+      initialPrompt,
+      interactive: false,
+    });
+
+    // Call the onSessionStarted callback if provided
+    if (this.config.onSessionStarted) {
+      this.config.onSessionStarted(session, events, agentId, initialPrompt);
+    }
+
+    // On session exit: mark triage items as read and clean up worktree.
+    // Items stay unread if the session crashes, so they retry next cycle.
+    // Use .once() since a session only exits once; bump maxListeners to avoid false warning.
+    events.setMaxListeners(events.getMaxListeners() + 1);
+    events.once('exit', async () => {
+      // Mark triage items as read. Use batch for efficiency.
+      // Errors are non-fatal — items stay unread and retry next cycle.
+      try {
+        this.inboxService.markAsReadBatch(items.map((item) => item.id));
+      } catch (error) {
+        console.warn('[dispatch-daemon] Failed to mark triage items as read:', error);
+      }
+
+      try {
+        await this.worktreeManager.removeWorktree(worktreeResult.path);
+      } catch {
+        // Ignore cleanup errors — worktree may already be removed
+      }
+    });
+
+    this.emitter.emit('agent:triage-spawned', agentId, channelId, worktreeResult.path);
+  }
+
+  /**
+   * Builds the triage prompt by loading the message-triage template and
+   * hydrating it with the actual message contents.
+   */
+  private async buildTriagePrompt(
+    agent: AgentEntity,
+    triageItems: Array<{ message: Message; inboxItemId: string }>,
+    channelId: string
+  ): Promise<string> {
+    // Load the triage prompt template
+    const triageResult = loadTriagePrompt({ projectRoot: this.config.projectRoot });
+    if (!triageResult) {
+      throw new Error('Failed to load message-triage prompt template');
+    }
+
+    // Hydrate each message's content
+    const formattedMessages: string[] = [];
+    for (const { message, inboxItemId } of triageItems) {
+      const senderId = message.sender ?? 'unknown';
+      const timestamp = message.createdAt ?? 'unknown';
+
+      // Fetch content document if contentRef is available
+      let content = '[No content available]';
+      if (message.contentRef) {
+        try {
+          const doc = await this.api.get<Document>(asElementId(message.contentRef));
+          if (doc?.content) {
+            content = doc.content;
+          }
+        } catch (error) {
+          console.warn(`[dispatch-daemon] Failed to fetch content for message ${message.id}:`, error);
+        }
+      }
+
+      formattedMessages.push(
+        `--- Inbox Item ID: ${inboxItemId} | Message ID: ${message.id} | From: ${senderId} | At: ${timestamp} ---`,
+        content,
+        ''
+      );
+    }
+
+    // Replace the {{MESSAGES}} placeholder with hydrated content
+    const messagesBlock = formattedMessages.join('\n');
+    const prompt = triageResult.prompt.replace('{{MESSAGES}}', messagesBlock);
+
+    // Get the director ID for context
+    const director = await this.agentRegistry.getDirector();
+    const directorId = director?.id ?? 'unknown';
+
+    return `${prompt}\n\n---\n\n**Worker ID:** ${agent.id}\n**Director ID:** ${directorId}\n**Channel:** ${channelId}\n**Agent:** ${agent.name}\n**Message count:** ${triageItems.length}`;
+  }
+
+  /**
+   * Formats a message for forwarding to an agent session.
+   * Fetches document content from contentRef to provide actual message text.
+   */
+  private async formatForwardedMessage(message: Message): Promise<string> {
+    let content = '[No content available]';
+    if (message.contentRef) {
+      try {
+        const doc = await this.api.get<Document>(asElementId(message.contentRef));
+        if (doc?.content) {
+          content = doc.content;
+        }
+      } catch (error) {
+        console.warn(`[dispatch-daemon] Failed to fetch content for forwarded message ${message.id}:`, error);
+      }
+    }
+    return content; // No prefix — messageSession() handles the [Message from ...] prefix
+  }
+
+  /**
+   * Syncs a task's branch with the main branch before steward review.
+   *
+   * This ensures that when a merge steward reviews a PR, the diff against
+   * master only shows the task's actual changes (not other merged work).
+   *
+   * @param task - The task to sync
+   * @returns SyncResult with success/conflicts/error status
+   */
+  private async syncTaskBranch(task: Task): Promise<SyncResult> {
+    const taskMeta = task.metadata as Record<string, unknown> | undefined;
+    const orchestratorMeta = taskMeta?.orchestrator as Record<string, unknown> | undefined;
+    const worktreePath = orchestratorMeta?.worktree as string | undefined;
+    const branch = orchestratorMeta?.branch as string | undefined;
+
+    // Check for worktree path
+    if (!worktreePath) {
+      return {
+        success: false,
+        error: 'No worktree path found in task metadata',
+        message: 'Task has no worktree path - cannot sync',
+      };
+    }
+
+    // Verify worktree exists
+    const worktreeExists = await this.worktreeManager.worktreeExists(worktreePath);
+    if (!worktreeExists) {
+      return {
+        success: false,
+        error: `Worktree does not exist: ${worktreePath}`,
+        message: `Worktree not found at ${worktreePath}`,
+        worktreePath,
+        branch,
+      };
+    }
+
+    // Import node modules for git operations
+    const { execFile } = await import('node:child_process');
+    const { promisify } = await import('node:util');
+    const path = await import('node:path');
+    const execFileAsync = promisify(execFile);
+
+    // Resolve full worktree path
+    const workspaceRoot = this.worktreeManager.getWorkspaceRoot();
+    const fullWorktreePath = path.isAbsolute(worktreePath)
+      ? worktreePath
+      : path.join(workspaceRoot, worktreePath);
+
+    // Fetch from origin
+    try {
+      await execFileAsync('git', ['fetch', 'origin'], {
+        cwd: fullWorktreePath,
+        encoding: 'utf8',
+        timeout: 60_000,
+      });
+    } catch (fetchError) {
+      return {
+        success: false,
+        error: `Failed to fetch from origin: ${(fetchError as Error).message}`,
+        message: 'Git fetch failed',
+        worktreePath,
+        branch,
+      };
+    }
+
+    // Get default branch
+    const defaultBranch = await this.worktreeManager.getDefaultBranch();
+    const remoteBranch = `origin/${defaultBranch}`;
+
+    // Attempt to merge
+    try {
+      await execFileAsync('git', ['merge', remoteBranch, '--no-edit'], {
+        cwd: fullWorktreePath,
+        encoding: 'utf8',
+        timeout: 120_000,
+      });
+
+      // Merge succeeded
+      console.log(`[dispatch-daemon] Synced task ${task.id} branch with ${remoteBranch}`);
+      return {
+        success: true,
+        message: `Branch synced with ${remoteBranch}`,
+        worktreePath,
+        branch,
+      };
+    } catch (mergeError) {
+      // Check for merge conflicts
+      try {
+        const { stdout: statusOutput } = await execFileAsync('git', ['status', '--porcelain'], {
+          cwd: fullWorktreePath,
+          encoding: 'utf8',
+        });
+
+        // Parse conflicted files (UU, AA, DD, AU, UA, DU, UD)
+        const conflictPatterns = /^(UU|AA|DD|AU|UA|DU|UD)\s+(.+)$/gm;
+        const conflicts: string[] = [];
+        let match;
+        while ((match = conflictPatterns.exec(statusOutput)) !== null) {
+          conflicts.push(match[2]);
+        }
+
+        if (conflicts.length > 0) {
+          console.log(`[dispatch-daemon] Merge conflicts detected for task ${task.id}: ${conflicts.join(', ')}`);
+          return {
+            success: false,
+            conflicts,
+            message: `Merge conflicts detected in ${conflicts.length} file(s)`,
+            worktreePath,
+            branch,
+          };
+        }
+
+        // Some other merge error
+        return {
+          success: false,
+          error: (mergeError as Error).message,
+          message: 'Merge failed (not due to conflicts)',
+          worktreePath,
+          branch,
+        };
+      } catch {
+        return {
+          success: false,
+          error: (mergeError as Error).message,
+          message: 'Merge failed',
+          worktreePath,
+          branch,
+        };
+      }
+    }
+  }
+}
+
+// ============================================================================
+// Factory Function
+// ============================================================================
+
+/**
+ * Creates a DispatchDaemon instance
+ */
+export function createDispatchDaemon(
+  api: QuarryAPI,
+  agentRegistry: AgentRegistry,
+  sessionManager: SessionManager,
+  dispatchService: DispatchService,
+  worktreeManager: WorktreeManager,
+  taskAssignment: TaskAssignmentService,
+  stewardScheduler: StewardScheduler,
+  inboxService: InboxService,
+  config?: DispatchDaemonConfig,
+  poolService?: AgentPoolService
+): DispatchDaemon {
+  return new DispatchDaemonImpl(
+    api,
+    agentRegistry,
+    sessionManager,
+    dispatchService,
+    worktreeManager,
+    taskAssignment,
+    stewardScheduler,
+    inboxService,
+    config,
+    poolService
+  );
+}
