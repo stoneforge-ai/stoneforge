@@ -1683,3 +1683,166 @@ describe('task command', () => {
     expect(result.exitCode).toBe(ExitCode.INVALID_ARGUMENTS);
   });
 });
+
+// ============================================================================
+// Task List --ready Flag Tests
+// ============================================================================
+
+describe('task list --ready flag', () => {
+  // Access the list subcommand handler through taskCommand
+  const listCommand = taskCommand.subcommands!.list;
+
+  test('shows only dispatch-ready tasks', async () => {
+    // Create some open tasks (should be ready)
+    await createTestTask('Ready Task 1');
+    await createTestTask('Ready Task 2');
+
+    const options = createTestOptions({ ready: true });
+    const result = await listCommand.handler([], options);
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    expect(result.data).toBeDefined();
+    expect(Array.isArray(result.data)).toBe(true);
+    expect((result.data as unknown[]).length).toBe(2);
+  });
+
+  test('excludes blocked tasks from --ready results', async () => {
+    const taskId = await createTestTask('Blocked Task');
+    const blockerTaskId = await createTestTask('Blocker Task');
+
+    // Add a blocking dependency
+    const { api } = createTestAPI();
+    await api.addDependency({
+      blockedId: taskId as ElementId,
+      blockerId: blockerTaskId as ElementId,
+      type: DependencyType.BLOCKS,
+    });
+
+    const options = createTestOptions({ ready: true });
+    const result = await listCommand.handler([], options);
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    const tasks = result.data as { id: string }[];
+    // The blocked task should not appear
+    expect(tasks.some((t) => t.id === taskId)).toBe(false);
+    // The blocker task should appear (it's not blocked)
+    expect(tasks.some((t) => t.id === blockerTaskId)).toBe(true);
+  });
+
+  test('errors when --ready and --status are both provided', async () => {
+    const options = createTestOptions({ ready: true, status: 'open' });
+    const result = await listCommand.handler([], options);
+
+    expect(result.exitCode).toBe(ExitCode.VALIDATION);
+    expect(result.error).toContain('Cannot use --ready and --status together');
+  });
+
+  test('supports --assignee filter with --ready', async () => {
+    await createTestTask('Task for Alice', { assignee: 'alice' });
+    await createTestTask('Task for Bob', { assignee: 'bob' });
+    await createTestTask('Unassigned Task');
+
+    const options = createTestOptions({ ready: true, assignee: 'alice' });
+    const result = await listCommand.handler([], options);
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    const tasks = result.data as { assignee: string }[];
+    expect(tasks.length).toBe(1);
+    expect(tasks[0].assignee).toBe('alice');
+  });
+
+  test('supports --priority filter with --ready', async () => {
+    await createTestTask('Critical Task', { priority: '1' });
+    await createTestTask('Low Priority Task', { priority: '5' });
+
+    const options = createTestOptions({ ready: true, priority: '1' });
+    const result = await listCommand.handler([], options);
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    const tasks = result.data as { priority: number }[];
+    expect(tasks.length).toBe(1);
+    expect(tasks[0].priority).toBe(1);
+  });
+
+  test('supports --limit filter with --ready', async () => {
+    await createTestTask('Task 1');
+    await createTestTask('Task 2');
+    await createTestTask('Task 3');
+
+    const options = createTestOptions({ ready: true, limit: '2' });
+    const result = await listCommand.handler([], options);
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    expect((result.data as unknown[]).length).toBe(2);
+  });
+
+  test('returns JSON in JSON mode with --ready', async () => {
+    await createTestTask('JSON Ready Task');
+
+    const options = createTestOptions({ ready: true, json: true });
+    const result = await listCommand.handler([], options);
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    expect(Array.isArray(result.data)).toBe(true);
+  });
+
+  test('returns IDs only in quiet mode with --ready', async () => {
+    const taskId = await createTestTask('Quiet Ready Task');
+
+    const options = createTestOptions({ ready: true, quiet: true });
+    const result = await listCommand.handler([], options);
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    expect(typeof result.data).toBe('string');
+    expect(result.data).toContain(taskId);
+  });
+
+  test('returns empty list when no ready tasks with --ready', async () => {
+    const options = createTestOptions({ ready: true });
+    const result = await listCommand.handler([], options);
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    expect(result.message).toContain('No ready tasks');
+  });
+
+  test('excludes tasks blocked by plan-level deps with --ready', async () => {
+    const { api } = createTestAPI();
+    const { createPlan } = await import('@stoneforge/core');
+
+    // Create a plan in draft status using the proper factory function
+    const planInput = await createPlan({
+      title: 'Draft Plan',
+      createdBy: 'test-user' as any,
+    });
+    const plan = await api.create(planInput as any);
+
+    // Create a task
+    const taskId = await createTestTask('Plan Child Task');
+
+    // Make the task a child of the draft plan (parent-child dependency)
+    await api.addDependency({
+      blockedId: taskId as ElementId,
+      blockerId: plan.id as ElementId,
+      type: 'parent-child' as any,
+    });
+
+    const options = createTestOptions({ ready: true });
+    const result = await listCommand.handler([], options);
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    // Result could be null (no ready tasks) or an array
+    const tasks = (result.data as { id: string }[] | null) ?? [];
+    // The task under a draft plan should NOT appear in ready results
+    expect(tasks.some((t) => t.id === taskId)).toBe(false);
+  });
+
+  test('falls back to normal list when --ready is not provided', async () => {
+    await createTestTask('Normal List Task');
+
+    const options = createTestOptions({ status: 'open' });
+    const result = await listCommand.handler([], options);
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    expect(result.data).toBeDefined();
+  });
+});

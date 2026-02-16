@@ -1283,6 +1283,132 @@ Examples:
     createHandler(['task', ...args], options)) as Command['handler'],
 };
 
+// Extended list options with --ready flag for dispatch-ready filtering
+const taskListOptions: CommandOption[] = [
+  ...listOptions,
+  {
+    name: 'ready',
+    description: 'Show only dispatch-ready tasks (mutually exclusive with --status)',
+  },
+];
+
+interface TaskListOptions {
+  ready?: boolean;
+  status?: string;
+  assignee?: string;
+  priority?: string;
+  type?: string;
+  tag?: string[];
+  limit?: string;
+  offset?: string;
+}
+
+async function taskListHandler(
+  args: string[],
+  options: GlobalOptions & TaskListOptions
+): Promise<CommandResult> {
+  // Validate mutual exclusivity of --ready and --status
+  if (options.ready && options.status) {
+    return failure(
+      'Cannot use --ready and --status together. Use --ready to show dispatch-ready tasks, or --status to filter by raw status.',
+      ExitCode.VALIDATION
+    );
+  }
+
+  // If --ready is specified, use the ready() API method
+  if (options.ready) {
+    const { api, error } = createAPI(options);
+    if (error) {
+      return failure(error, ExitCode.GENERAL_ERROR);
+    }
+
+    try {
+      // Build filter from options (same filters ready() supports)
+      const filter: TaskFilter = {};
+
+      if (options.assignee) {
+        filter.assignee = options.assignee as EntityId;
+      }
+
+      if (options.priority) {
+        const priority = parseInt(options.priority, 10);
+        if (isNaN(priority) || priority < 1 || priority > 5) {
+          return failure('Priority must be a number from 1 to 5', ExitCode.VALIDATION);
+        }
+        filter.priority = priority as Priority;
+      }
+
+      if (options.type) {
+        const validTypes: string[] = Object.values(TaskTypeValue);
+        if (!validTypes.includes(options.type)) {
+          return failure(
+            `Invalid task type: ${options.type}. Must be one of: ${validTypes.join(', ')}`,
+            ExitCode.VALIDATION
+          );
+        }
+        filter.taskType = options.type as TaskFilter['taskType'];
+      }
+
+      if (options.limit) {
+        const limit = parseInt(options.limit, 10);
+        if (isNaN(limit) || limit < 1) {
+          return failure('Limit must be a positive number', ExitCode.VALIDATION);
+        }
+        filter.limit = limit;
+      }
+
+      // Get ready tasks
+      const tasks = await api.ready(filter);
+
+      // Format output based on mode
+      const mode = getOutputMode(options);
+      const formatter = getFormatter(mode);
+
+      if (mode === 'json') {
+        return success(tasks);
+      }
+
+      if (mode === 'quiet') {
+        return success(tasks.map((t) => t.id).join('\n'));
+      }
+
+      // Human-readable output
+      if (tasks.length === 0) {
+        return success(null, 'No ready tasks found');
+      }
+
+      // Build table data (same format as sf task list)
+      const headers = ['ID', 'TYPE', 'TITLE/NAME', 'STATUS', 'PRIORITY', 'ASSIGNEE', 'CREATED'];
+      const rows = tasks.map((task) => {
+        const title = task.title.length > 40 ? task.title.substring(0, 37) + '...' : task.title;
+        const statusIcon = task.status === TaskStatus.OPEN ? '\u25CB' : '\u25D4';
+        const status = `${statusIcon} ${task.status}`;
+        const created = task.createdAt.split('T')[0];
+        return [
+          task.id,
+          task.type,
+          title,
+          status,
+          `P${task.priority}`,
+          task.assignee ?? '-',
+          created,
+        ];
+      });
+
+      const table = formatter.table(headers, rows);
+      const summary = `\n${tasks.length} dispatch-ready task(s)`;
+
+      return success(tasks, table + summary);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return failure(`Failed to list ready tasks: ${message}`, ExitCode.GENERAL_ERROR);
+    }
+  }
+
+  // Default: delegate to the standard list handler
+  return listHandler(['task', ...args], options);
+}
+
 const taskListCommand: Command = {
   name: 'list',
   description: 'List tasks',
@@ -1291,6 +1417,10 @@ const taskListCommand: Command = {
 
 Options:
   -s, --status <status> Filter by status
+      --ready           Show only dispatch-ready tasks (accounts for blocked
+                        cache, draft plans, scheduled-for-future, ephemeral
+                        workflows, and plan-level blocking). Mutually exclusive
+                        with --status.
   -p, --priority <1-5>  Filter by priority
   -a, --assignee <id>   Filter by assignee
       --tag <tag>       Filter by tag (can be repeated)
@@ -1300,10 +1430,11 @@ Options:
 Examples:
   sf task list
   sf task list --status open
+  sf task list --ready
+  sf task list --ready --assignee alice
   sf task list --priority 1 --status in_progress`,
-  options: listOptions,
-  handler: ((args: string[], options: GlobalOptions) =>
-    listHandler(['task', ...args], options)) as Command['handler'],
+  options: taskListOptions,
+  handler: taskListHandler as Command['handler'],
 };
 
 const taskShowCommand: Command = {
