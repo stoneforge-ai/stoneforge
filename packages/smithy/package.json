@@ -1,6 +1,6 @@
 {
   "name": "@stoneforge/smithy",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
   "description": "Orchestrator SDK for Stoneforge - AI agent orchestration library extending the core SDK",
   "main": "dist/index.js",

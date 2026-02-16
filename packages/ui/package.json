@@ -1,6 +1,6 @@
 {
   "name": "@stoneforge/ui",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
   "description": "Shared UI components, design tokens, and hooks for Stoneforge platform",
   "main": "dist/index.js",

@@ -1,6 +1,6 @@
 {
   "name": "@stoneforge/shared-routes",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
   "description": "Shared route factories for Stoneforge servers",
   "main": "dist/index.js",
