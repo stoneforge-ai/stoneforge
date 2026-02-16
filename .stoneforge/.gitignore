@@ -9,8 +9,7 @@
 *.sqlite-shm
 daemon-state.json
 
-# Workspace data (project-specific — most teams will want to commit JSONL)
-*.jsonl
+# Local workspace data
 .worktrees/
 sync/
 uploads/
