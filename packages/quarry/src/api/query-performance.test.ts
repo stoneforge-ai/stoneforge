@@ -599,6 +599,7 @@ describe('Query API Performance', () => {
     it('should maintain list performance as dataset grows', async () => {
       const sizes = [50, 100, 150];
       const listTimes: number[] = [];
+      const RUNS_PER_SIZE = 5;
 
       for (const size of sizes) {
         // Fresh database for each size
@@ -611,10 +612,19 @@ describe('Query API Performance', () => {
 
         await createTaskBatch(api, size);
 
-        const { duration } = await measureTime(() =>
-          api.list<Task>({ type: 'task', limit: size })
-        );
-        listTimes.push(duration);
+        // Warmup run to avoid cold-start variance
+        await api.list<Task>({ type: 'task', limit: size });
+
+        // Take multiple measurements and use the median to reduce noise
+        const runs: number[] = [];
+        for (let r = 0; r < RUNS_PER_SIZE; r++) {
+          const { duration } = await measureTime(() =>
+            api.list<Task>({ type: 'task', limit: size })
+          );
+          runs.push(duration);
+        }
+        runs.sort((a, b) => a - b);
+        listTimes.push(runs[Math.floor(runs.length / 2)]);
       }
 
       // List time should grow sub-linearly (less than 2x for 2x data)
