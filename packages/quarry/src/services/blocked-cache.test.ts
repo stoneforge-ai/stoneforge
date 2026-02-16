@@ -1226,4 +1226,247 @@ describe('BlockedCacheService', () => {
       expect([task2, task3]).toContain(result!.blockedBy);
     });
   });
+
+  // ==========================================================================
+  // Plan-Level Blocking Cascade
+  // ==========================================================================
+
+  describe('plan-level blocking cascade', () => {
+    const planX = 'el-planx01' as ElementId;
+    const planY = 'el-plany01' as ElementId;
+    const planZ = 'el-planz01' as ElementId;
+    const taskA = 'el-taska01' as ElementId;
+    const taskB = 'el-taskb01' as ElementId;
+
+    test('plan blocked by another plan cascades to child tasks via onDependencyAdded', () => {
+      // Setup: Plan X has Task A (via parent-child dep)
+      createTestElement(planX, 'plan', 'active');
+      createTestElement(planY, 'plan', 'active');
+      createTestElement(taskA, 'task', 'open');
+
+      // Task A is child of Plan X
+      createTestDependency(taskA, planX, DependencyType.PARENT_CHILD);
+
+      // Plan Y blocks Plan X (Plan X waits for Plan Y)
+      createTestDependency(planX, planY, DependencyType.BLOCKS);
+
+      // Notify via event handler (simulating real-time dependency addition)
+      service.onDependencyAdded(planX, planY, DependencyType.BLOCKS);
+
+      // Plan X should be blocked by Plan Y
+      expect(service.isBlocked(planX)).not.toBeNull();
+      expect(service.isBlocked(planX)?.blockedBy).toBe(planY);
+
+      // Task A should also be blocked (transitive via parent-child)
+      expect(service.isBlocked(taskA)).not.toBeNull();
+      expect(service.isBlocked(taskA)?.reason).toContain('parent is blocked');
+    });
+
+    test('plan blocker completes -> child tasks become unblocked', () => {
+      // Setup: Plan Y blocks Plan X, Task A is child of Plan X
+      createTestElement(planX, 'plan', 'active');
+      createTestElement(planY, 'plan', 'active');
+      createTestElement(taskA, 'task', 'open');
+
+      createTestDependency(taskA, planX, DependencyType.PARENT_CHILD);
+      createTestDependency(planX, planY, DependencyType.BLOCKS);
+
+      // Establish blocked state
+      service.rebuild();
+      expect(service.isBlocked(planX)).not.toBeNull();
+      expect(service.isBlocked(taskA)).not.toBeNull();
+
+      // Complete Plan Y (the blocker)
+      updateElementStatus(planY, 'closed');
+      service.onStatusChanged(planY, 'active', 'closed');
+
+      // Plan X should now be unblocked
+      expect(service.isBlocked(planX)).toBeNull();
+      // Task A should also be unblocked
+      expect(service.isBlocked(taskA)).toBeNull();
+    });
+
+    test('task added to plan AFTER plan-to-plan dep is established should be blocked', () => {
+      // Setup: Plan Y blocks Plan X first, then Task A is added to Plan X
+      createTestElement(planX, 'plan', 'active');
+      createTestElement(planY, 'plan', 'active');
+
+      // Plan Y blocks Plan X
+      createTestDependency(planX, planY, DependencyType.BLOCKS);
+      service.onDependencyAdded(planX, planY, DependencyType.BLOCKS);
+      expect(service.isBlocked(planX)).not.toBeNull();
+
+      // NOW add Task A to Plan X
+      createTestElement(taskA, 'task', 'open');
+      createTestDependency(taskA, planX, DependencyType.PARENT_CHILD);
+      service.onDependencyAdded(taskA, planX, DependencyType.PARENT_CHILD);
+
+      // Task A should be blocked because its parent (Plan X) is blocked
+      expect(service.isBlocked(taskA)).not.toBeNull();
+      expect(service.isBlocked(taskA)?.reason).toContain('parent is blocked');
+    });
+
+    test('task added to plan BEFORE plan-to-plan dep is established should be blocked', () => {
+      // Setup: Task A is in Plan X first, then Plan Y blocks Plan X
+      createTestElement(planX, 'plan', 'active');
+      createTestElement(planY, 'plan', 'active');
+      createTestElement(taskA, 'task', 'open');
+
+      // Task A is child of Plan X
+      createTestDependency(taskA, planX, DependencyType.PARENT_CHILD);
+      service.onDependencyAdded(taskA, planX, DependencyType.PARENT_CHILD);
+
+      // Task A should NOT be blocked yet
+      expect(service.isBlocked(taskA)).toBeNull();
+
+      // NOW Plan Y blocks Plan X
+      createTestDependency(planX, planY, DependencyType.BLOCKS);
+      service.onDependencyAdded(planX, planY, DependencyType.BLOCKS);
+
+      // Plan X should be blocked
+      expect(service.isBlocked(planX)).not.toBeNull();
+      // Task A should also now be blocked
+      expect(service.isBlocked(taskA)).not.toBeNull();
+    });
+
+    test('multiple levels: Plan Z blocks Plan Y blocks Plan X -> Task A blocked', () => {
+      // Setup: Chain of blocking — Plan Z -> Plan Y -> Plan X -> Task A
+      createTestElement(planX, 'plan', 'active');
+      createTestElement(planY, 'plan', 'active');
+      createTestElement(planZ, 'plan', 'active');
+      createTestElement(taskA, 'task', 'open');
+
+      // Task A is child of Plan X
+      createTestDependency(taskA, planX, DependencyType.PARENT_CHILD);
+      // Plan Y blocks Plan X
+      createTestDependency(planX, planY, DependencyType.BLOCKS);
+      // Plan Z blocks Plan Y
+      createTestDependency(planY, planZ, DependencyType.BLOCKS);
+
+      service.rebuild();
+
+      // Plan Y should be blocked by Plan Z
+      expect(service.isBlocked(planY)).not.toBeNull();
+      expect(service.isBlocked(planY)?.blockedBy).toBe(planZ);
+
+      // Plan X should be blocked by Plan Y
+      expect(service.isBlocked(planX)).not.toBeNull();
+      expect(service.isBlocked(planX)?.blockedBy).toBe(planY);
+
+      // Task A should be blocked (parent Plan X is blocked)
+      expect(service.isBlocked(taskA)).not.toBeNull();
+    });
+
+    test('multiple levels unblock: Plan Z completes -> all downstream unblocked', () => {
+      // Setup: Chain of blocking — Plan Z -> Plan Y -> Plan X -> Task A
+      createTestElement(planX, 'plan', 'active');
+      createTestElement(planY, 'plan', 'active');
+      createTestElement(planZ, 'plan', 'active');
+      createTestElement(taskA, 'task', 'open');
+
+      createTestDependency(taskA, planX, DependencyType.PARENT_CHILD);
+      createTestDependency(planX, planY, DependencyType.BLOCKS);
+      createTestDependency(planY, planZ, DependencyType.BLOCKS);
+
+      service.rebuild();
+
+      // Verify everything is blocked
+      expect(service.isBlocked(planY)).not.toBeNull();
+      expect(service.isBlocked(planX)).not.toBeNull();
+      expect(service.isBlocked(taskA)).not.toBeNull();
+
+      // Complete Plan Z
+      updateElementStatus(planZ, 'closed');
+      service.onStatusChanged(planZ, 'active', 'closed');
+
+      // Plan Y should be unblocked (Plan Z completed)
+      expect(service.isBlocked(planY)).toBeNull();
+      // Plan X should be unblocked (Plan Y is no longer blocked, but Plan Y is still open...)
+      // Actually Plan X is still blocked by Plan Y (which is open, not completed)
+      expect(service.isBlocked(planX)).not.toBeNull();
+      // Task A is still blocked (parent Plan X is still blocked)
+      expect(service.isBlocked(taskA)).not.toBeNull();
+
+      // Now complete Plan Y
+      updateElementStatus(planY, 'closed');
+      service.onStatusChanged(planY, 'active', 'closed');
+
+      // Plan X should now be unblocked
+      expect(service.isBlocked(planX)).toBeNull();
+      // Task A should now be unblocked
+      expect(service.isBlocked(taskA)).toBeNull();
+    });
+
+    test('multiple children of blocked plan are all blocked', () => {
+      // Plan Y blocks Plan X, Plan X has Task A and Task B
+      createTestElement(planX, 'plan', 'active');
+      createTestElement(planY, 'plan', 'active');
+      createTestElement(taskA, 'task', 'open');
+      createTestElement(taskB, 'task', 'open');
+
+      createTestDependency(taskA, planX, DependencyType.PARENT_CHILD);
+      createTestDependency(taskB, planX, DependencyType.PARENT_CHILD);
+      createTestDependency(planX, planY, DependencyType.BLOCKS);
+
+      service.onDependencyAdded(planX, planY, DependencyType.BLOCKS);
+
+      // Both children should be blocked
+      expect(service.isBlocked(taskA)).not.toBeNull();
+      expect(service.isBlocked(taskB)).not.toBeNull();
+    });
+
+    test('invalidateDependents cascades to children for blocks deps', () => {
+      // Plan Y blocks Plan X, Task A is child of Plan X
+      createTestElement(planX, 'plan', 'active');
+      createTestElement(planY, 'plan', 'active');
+      createTestElement(taskA, 'task', 'open');
+
+      createTestDependency(taskA, planX, DependencyType.PARENT_CHILD);
+      createTestDependency(planX, planY, DependencyType.BLOCKS);
+
+      // Establish blocked state
+      service.rebuild();
+      expect(service.isBlocked(taskA)).not.toBeNull();
+
+      // Close Plan Y (the blocker)
+      updateElementStatus(planY, 'closed');
+
+      // Call invalidateDependents directly (simulating status change)
+      service.invalidateDependents(planY);
+
+      // Plan X should be unblocked
+      expect(service.isBlocked(planX)).toBeNull();
+      // Task A should also be unblocked
+      expect(service.isBlocked(taskA)).toBeNull();
+    });
+
+    test('plan blocked by awaits gate cascades to child tasks', () => {
+      // Plan X awaits a gate, Task A is child of Plan X
+      createTestElement(planX, 'plan', 'active');
+      createTestElement(task2, 'task', 'open'); // gate element
+      createTestElement(taskA, 'task', 'open');
+
+      createTestDependency(taskA, planX, DependencyType.PARENT_CHILD);
+      createTestDependency(planX, task2, DependencyType.AWAITS, {
+        gateType: GateType.EXTERNAL,
+        externalSystem: 'ci',
+        externalId: 'build-456',
+      });
+
+      service.rebuild();
+
+      // Plan X should be blocked by gate
+      expect(service.isBlocked(planX)).not.toBeNull();
+      // Task A should be blocked (parent is blocked)
+      expect(service.isBlocked(taskA)).not.toBeNull();
+
+      // Satisfy the gate
+      service.satisfyGate(planX, task2, testEntity);
+
+      // Plan X should be unblocked
+      expect(service.isBlocked(planX)).toBeNull();
+      // Task A should also be unblocked
+      expect(service.isBlocked(taskA)).toBeNull();
+    });
+  });
 });

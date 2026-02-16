@@ -483,8 +483,12 @@ export class BlockedCacheService {
     // Compute new blocking state
     const shouldBeBlocked = this.computeBlockingState(elementId, options);
 
+    // Track whether blocking state changed (for child cascade)
+    let stateChanged = false;
+
     // Case 1: Becoming blocked (wasn't blocked, now should be)
     if (!wasBlocked && shouldBeBlocked) {
+      stateChanged = true;
       // Only handle automatic status transitions for tasks
       if (this.isTask(elementId) && this.statusCallback) {
         const currentStatus = this.getElementStatus(elementId);
@@ -500,19 +504,28 @@ export class BlockedCacheService {
             currentStatus
           );
           this.statusCallback.onBlock(elementId, currentStatus);
-          return;
+        } else {
+          // Non-transitionable task: just update cache
+          this.addBlocked(
+            shouldBeBlocked.elementId,
+            shouldBeBlocked.blockedBy,
+            shouldBeBlocked.reason,
+            null
+          );
         }
+      } else {
+        // Non-task or no callback: just update cache (no previous status to preserve)
+        this.addBlocked(
+          shouldBeBlocked.elementId,
+          shouldBeBlocked.blockedBy,
+          shouldBeBlocked.reason,
+          null
+        );
       }
-      // Non-task or no callback: just update cache (no previous status to preserve)
-      this.addBlocked(
-        shouldBeBlocked.elementId,
-        shouldBeBlocked.blockedBy,
-        shouldBeBlocked.reason,
-        null
-      );
     }
     // Case 2: Becoming unblocked (was blocked, now shouldn't be)
     else if (wasBlocked && !shouldBeBlocked) {
+      stateChanged = true;
       // Get the status to restore
       const statusToRestore = wasBlocked.previousStatus;
 
@@ -539,6 +552,12 @@ export class BlockedCacheService {
       );
     }
     // Case 4: Was not blocked, still not blocked - no action needed
+
+    // When blocking state changes (blocked↔unblocked), cascade to children
+    // so their transitive blocking state is re-evaluated
+    if (stateChanged) {
+      this.invalidateChildren(elementId, options);
+    }
   }
 
   /**
@@ -560,10 +579,11 @@ export class BlockedCacheService {
       const blockedId = dep.blocked_id as ElementId;
       this.invalidateElement(blockedId, options);
 
-      // For parent-child, also invalidate children (transitive)
-      if (dep.type === DT.PARENT_CHILD) {
-        this.invalidateChildren(blockedId, options);
-      }
+      // Always invalidate children for ALL blocking dep types.
+      // When a blocker's status changes, any element it blocks may transition
+      // between blocked↔unblocked, so their children must be re-evaluated
+      // for transitive blocking state.
+      this.invalidateChildren(blockedId, options);
     }
   }
 
@@ -995,10 +1015,10 @@ export class BlockedCacheService {
     // All blocking types: blockedId is the waiting element
     this.invalidateElement(blockedId, options);
 
-    // For parent-child, also invalidate all children (transitive)
-    if (type === DT.PARENT_CHILD) {
-      this.invalidateChildren(blockedId, options);
-    }
+    // Always invalidate children for ALL blocking dep types.
+    // When a plan becomes blocked (e.g. via `blocks` dep), its child tasks
+    // need to be re-evaluated since they inherit blocked state transitively.
+    this.invalidateChildren(blockedId, options);
   }
 
   /**
@@ -1023,10 +1043,10 @@ export class BlockedCacheService {
     // All blocking types: blockedId is the waiting element
     this.invalidateElement(blockedId, options);
 
-    // For parent-child, also invalidate all children
-    if (type === DT.PARENT_CHILD) {
-      this.invalidateChildren(blockedId, options);
-    }
+    // Always invalidate children for ALL blocking dep types.
+    // When a plan becomes unblocked (e.g. `blocks` dep removed), its child tasks
+    // need to be re-evaluated since they inherit blocked state transitively.
+    this.invalidateChildren(blockedId, options);
   }
 
   /**
