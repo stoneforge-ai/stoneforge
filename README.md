@@ -173,10 +173,10 @@ sf export
 
 | App | Default Port | Description |
 |-----|--------------|-------------|
-| [`server`](apps/quarry-server) | 3456 | Core Stoneforge API server |
-| [`web`](apps/quarry-web) | 5173 | Element management dashboard |
-| [`orchestrator-server`](apps/smithy-server) | 3457 | Agent orchestration API |
-| [`orchestrator-web`](apps/smithy-web) | 5174 | Agent management dashboard |
+| [`quarry-server`](apps/quarry-server) | 3456 | Core Stoneforge API server |
+| [`quarry-web`](apps/quarry-web) | 5173 | Element management dashboard |
+| [`smithy-server`](apps/smithy-server) | 3457 | Agent orchestration API |
+| [`smithy-web`](apps/smithy-web) | 5174 | Agent management dashboard |
 
 ---
 
@@ -399,17 +399,17 @@ stoneforge/
 ├── packages/
 │   ├── core/              # @stoneforge/core
 │   ├── storage/           # @stoneforge/storage
-│   ├── sdk/               # @stoneforge/quarry
-│   ├── orchestrator-sdk/  # @stoneforge/smithy
+│   ├── quarry/            # @stoneforge/quarry
+│   ├── smithy/            # @stoneforge/smithy
 │   ├── ui/                # @stoneforge/ui
 │   └── shared-routes/     # @stoneforge/shared-routes
 ├── apps/
-│   ├── server/            # Core API server
-│   ├── web/               # Element dashboard
-│   ├── orchestrator-server/  # Orchestration API
-│   └── orchestrator-web/     # Agent dashboard
+│   ├── quarry-server/     # Core API server
+│   ├── quarry-web/        # Element dashboard
+│   ├── smithy-server/     # Orchestration API
+│   └── smithy-web/        # Agent dashboard
 ├── docs/                  # Documentation
-└── .stoneforge/            # Project data directory
+└── .stoneforge/           # Project configuration & workspace
 ```
 
 ---
