@@ -655,16 +655,24 @@ export class PluginExecutorImpl implements PluginExecutor {
         shell: true,
         cwd,
         env,
+        detached: true,
       });
+
+      const killProcessGroup = (signal: NodeJS.Signals) => {
+        try {
+          // Kill the entire process group (shell + all children)
+          process.kill(-child.pid!, signal);
+        } catch {
+          // Fallback to killing just the child
+          try { child.kill(signal); } catch {}
+        }
+      };
 
       const timeoutHandle = setTimeout(() => {
         timedOut = true;
-        child.kill('SIGTERM');
-        // Force kill after grace period in case SIGTERM is not forwarded
-        // (e.g., shell: true on some platforms doesn't propagate signals)
-        setTimeout(() => {
-          try { child.kill('SIGKILL'); } catch {}
-        }, 500);
+        killProcessGroup('SIGTERM');
+        // Force kill after grace period in case SIGTERM is ignored
+        setTimeout(() => killProcessGroup('SIGKILL'), 500);
       }, timeout);
 
       child.stdout?.on('data', (data) => {
