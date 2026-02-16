@@ -21,6 +21,7 @@ import {
   type ElementId,
 } from '@stoneforge/core';
 import { EntityTypeValue } from '@stoneforge/core';
+import { createSyncService } from '../../sync/service.js';
 
 // ============================================================================
 // Constants
@@ -98,33 +99,50 @@ async function initHandler(
   const workDir = process.cwd();
   const stoneforgeDir = join(workDir, STONEFORGE_DIR);
 
-  // Check if already initialized
-  if (existsSync(stoneforgeDir)) {
+  const dbPath = join(stoneforgeDir, DEFAULT_DB_NAME);
+  const dirExists = existsSync(stoneforgeDir);
+  const dbExists = dirExists && existsSync(dbPath);
+
+  // Fully initialized — directory and database both exist
+  if (dirExists && dbExists) {
     return failure(
       `Workspace already initialized at ${stoneforgeDir}`,
       ExitCode.VALIDATION
     );
   }
 
+  // Partial init: directory exists (e.g. cloned repo) but no database
+  const partialInit = dirExists && !dbExists;
+
   try {
-    // Create .stoneforge directory
-    mkdirSync(stoneforgeDir, { recursive: true });
-
-    // Create config file
-    let config = DEFAULT_CONFIG;
-    if (options.actor) {
-      config = config.replace('# actor: my-agent', `actor: ${options.actor}`);
+    // Create .stoneforge directory (skip if already present)
+    if (!dirExists) {
+      mkdirSync(stoneforgeDir, { recursive: true });
     }
-    writeFileSync(join(stoneforgeDir, CONFIG_FILENAME), config);
 
-    // Create gitignore
-    writeFileSync(join(stoneforgeDir, GITIGNORE_FILENAME), DEFAULT_GITIGNORE);
+    // Create config file (skip if already present)
+    const configPath = join(stoneforgeDir, CONFIG_FILENAME);
+    if (!existsSync(configPath)) {
+      let config = DEFAULT_CONFIG;
+      if (options.actor) {
+        config = config.replace('# actor: my-agent', `actor: ${options.actor}`);
+      }
+      writeFileSync(configPath, config);
+    }
 
-    // Create playbooks directory
-    mkdirSync(join(stoneforgeDir, 'playbooks'), { recursive: true });
+    // Create gitignore (skip if already present)
+    const gitignorePath = join(stoneforgeDir, GITIGNORE_FILENAME);
+    if (!existsSync(gitignorePath)) {
+      writeFileSync(gitignorePath, DEFAULT_GITIGNORE);
+    }
+
+    // Create playbooks directory (skip if already present)
+    const playbooksDir = join(stoneforgeDir, 'playbooks');
+    if (!existsSync(playbooksDir)) {
+      mkdirSync(playbooksDir, { recursive: true });
+    }
 
     // Create the database and operator entity
-    const dbPath = join(stoneforgeDir, DEFAULT_DB_NAME);
     const backend = createStorage({ path: dbPath, create: true });
     initializeSchema(backend);
     const api = createQuarryAPI(backend);
@@ -145,9 +163,25 @@ async function initHandler(
 
     await api.create(operatorEntity as unknown as Record<string, unknown> & { createdBy: EntityId });
 
+    // Import from JSONL files if they exist (common after cloning a repo)
+    let importMessage = '';
+    if (partialInit) {
+      const elementsJsonl = join(stoneforgeDir, 'elements.jsonl');
+      const depsJsonl = join(stoneforgeDir, 'dependencies.jsonl');
+      if (existsSync(elementsJsonl) || existsSync(depsJsonl)) {
+        const syncService = createSyncService(backend);
+        const importResult = syncService.importSync({ inputDir: stoneforgeDir });
+        importMessage = `\nImported ${importResult.elementsImported} element(s) and ${importResult.dependenciesImported} dependency(ies) from JSONL files`;
+      }
+    }
+
+    const baseMessage = partialInit
+      ? `Initialized Stoneforge workspace from existing files at ${stoneforgeDir}`
+      : `Initialized Stoneforge workspace at ${stoneforgeDir}`;
+
     return success(
       { path: stoneforgeDir, operatorId: OPERATOR_ENTITY_ID },
-      `Initialized Stoneforge workspace at ${stoneforgeDir}\nCreated default operator entity: ${OPERATOR_ENTITY_ID}`
+      `${baseMessage}\nCreated default operator entity: ${OPERATOR_ENTITY_ID}${importMessage}`
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

@@ -3,9 +3,8 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { existsSync, rmSync, readFileSync } from 'node:fs';
+import { existsSync, rmSync, readFileSync, mkdirSync, writeFileSync, mkdtempSync } from 'node:fs';
 import { join } from 'node:path';
-import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { initCommand } from './init.js';
 import { ExitCode, DEFAULT_GLOBAL_OPTIONS } from '../types.js';
@@ -173,6 +172,116 @@ describe('initCommand', () => {
       const content = readFileSync(configPath, 'utf-8');
       expect(content).toContain('identity:');
       expect(content).toContain('mode: soft');
+    });
+  });
+
+  describe('partial init (directory exists, no database)', () => {
+    it('should succeed when .stoneforge/ exists but has no database', async () => {
+      // Simulate a cloned repo with .stoneforge/ but no database
+      const sfDir = join(testDir, '.stoneforge');
+      mkdirSync(sfDir, { recursive: true });
+      writeFileSync(join(sfDir, 'config.yaml'), '# existing config\n');
+      writeFileSync(join(sfDir, '.gitignore'), '*.db\n');
+
+      const result = await initCommand.handler([], { ...DEFAULT_GLOBAL_OPTIONS });
+      expect(result.exitCode).toBe(ExitCode.SUCCESS);
+      expect(result.message).toContain('existing files');
+    });
+
+    it('should not overwrite existing config.yaml', async () => {
+      const sfDir = join(testDir, '.stoneforge');
+      mkdirSync(sfDir, { recursive: true });
+      const customConfig = '# my custom config\ndatabase: stoneforge.db\n';
+      writeFileSync(join(sfDir, 'config.yaml'), customConfig);
+
+      await initCommand.handler([], { ...DEFAULT_GLOBAL_OPTIONS });
+
+      const content = readFileSync(join(sfDir, 'config.yaml'), 'utf-8');
+      expect(content).toBe(customConfig);
+    });
+
+    it('should not overwrite existing .gitignore', async () => {
+      const sfDir = join(testDir, '.stoneforge');
+      mkdirSync(sfDir, { recursive: true });
+      const customGitignore = '*.db\n*.custom\n';
+      writeFileSync(join(sfDir, '.gitignore'), customGitignore);
+
+      await initCommand.handler([], { ...DEFAULT_GLOBAL_OPTIONS });
+
+      const content = readFileSync(join(sfDir, '.gitignore'), 'utf-8');
+      expect(content).toBe(customGitignore);
+    });
+
+    it('should create database even when directory already exists', async () => {
+      const sfDir = join(testDir, '.stoneforge');
+      mkdirSync(sfDir, { recursive: true });
+
+      await initCommand.handler([], { ...DEFAULT_GLOBAL_OPTIONS });
+
+      expect(existsSync(join(sfDir, 'stoneforge.db'))).toBe(true);
+    });
+
+    it('should import from JSONL files when they exist', async () => {
+      const sfDir = join(testDir, '.stoneforge');
+      mkdirSync(sfDir, { recursive: true });
+
+      // Write a valid entity JSONL line (operator entity will already exist from init,
+      // so use a different entity id)
+      const entity = {
+        id: 'el-ent1',
+        type: 'entity',
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+        createdBy: 'el-0000',
+        tags: [],
+        metadata: {},
+        name: 'test-agent',
+        entityType: 'agent',
+      };
+      const task = {
+        id: 'el-task1',
+        type: 'task',
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+        createdBy: 'el-0000',
+        tags: ['test'],
+        metadata: {},
+        title: 'Test Task',
+        status: 'open',
+        priority: 3,
+        complexity: 3,
+        taskType: 'task',
+      };
+      writeFileSync(
+        join(sfDir, 'elements.jsonl'),
+        JSON.stringify(entity) + '\n' + JSON.stringify(task) + '\n'
+      );
+
+      const dep = {
+        blockedId: 'el-task1',
+        blockerId: 'el-ent1',
+        type: 'parent-child',
+        createdAt: '2025-01-01T00:00:00.000Z',
+        createdBy: 'el-0000',
+        metadata: {},
+      };
+      writeFileSync(join(sfDir, 'dependencies.jsonl'), JSON.stringify(dep) + '\n');
+
+      const result = await initCommand.handler([], { ...DEFAULT_GLOBAL_OPTIONS });
+      expect(result.exitCode).toBe(ExitCode.SUCCESS);
+      expect(result.message).toContain('Imported');
+      expect(result.message).toContain('element(s)');
+      expect(result.message).toContain('dependency(ies)');
+    });
+
+    it('should succeed with directory but no JSONL files', async () => {
+      const sfDir = join(testDir, '.stoneforge');
+      mkdirSync(sfDir, { recursive: true });
+
+      const result = await initCommand.handler([], { ...DEFAULT_GLOBAL_OPTIONS });
+      expect(result.exitCode).toBe(ExitCode.SUCCESS);
+      expect(result.message).toContain('existing files');
+      expect(result.message).not.toContain('Imported');
     });
   });
 });
