@@ -2460,6 +2460,20 @@ export class QuarryAPIImpl implements QuarryAPI {
       ).map((r) => r.blocked_id)
     );
 
+    // Defense-in-depth: filter out tasks whose parent plan is in the blocked cache.
+    // Even if the blocked cache correctly marks child tasks as blocked, this provides
+    // an extra safety net against edge cases in blocked cache invalidation.
+    const blockedPlanTaskIds = new Set(
+      this.backend.query<{ blocked_id: string }>(
+        `SELECT d.blocked_id FROM dependencies d
+         JOIN blocked_cache bc ON d.blocker_id = bc.element_id
+         JOIN elements e ON d.blocker_id = e.id
+         WHERE d.type = 'parent-child'
+           AND e.deleted_at IS NULL
+           AND e.type = 'plan'`
+      ).map((r) => r.blocked_id)
+    );
+
     // Get tasks that are children of ephemeral workflows (to exclude from ready list)
     // Find all ephemeral workflows
     const workflows = await this.list<Workflow>({ type: 'workflow' });
@@ -2488,6 +2502,10 @@ export class QuarryAPIImpl implements QuarryAPI {
       }
       // Not in a draft plan
       if (draftPlanTaskIds.has(task.id)) {
+        return false;
+      }
+      // Not in a blocked plan (defense-in-depth)
+      if (blockedPlanTaskIds.has(task.id)) {
         return false;
       }
       // Not scheduled for future

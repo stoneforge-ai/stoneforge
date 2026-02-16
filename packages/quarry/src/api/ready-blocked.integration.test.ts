@@ -1686,4 +1686,156 @@ describe('Ready/Blocked Work Query Integration', () => {
       expect(readyTasks.map((t) => t.id)).not.toContain(blocked.id);
     });
   });
+
+  // ==========================================================================
+  // Blocked Plan Filtering (Defense-in-Depth)
+  // ==========================================================================
+
+  describe('Blocked Plan Filtering', () => {
+    it('should exclude tasks in a plan that is blocked by another plan', async () => {
+      // Create two active plans
+      const blockerPlan = await createPlan({
+        title: 'Blocker Plan',
+        createdBy: mockEntityId,
+        status: PlanStatus.ACTIVE,
+      });
+      const blockedPlan = await createPlan({
+        title: 'Blocked Plan',
+        createdBy: mockEntityId,
+        status: PlanStatus.ACTIVE,
+      });
+      await api.create(toCreateInput(blockerPlan));
+      await api.create(toCreateInput(blockedPlan));
+
+      // Create a task in the blocked plan
+      const task = await createTestTask({ title: 'Task in blocked plan' });
+      await api.create(toCreateInput(task));
+
+      // Add task as child of blocked plan
+      await api.addDependency({
+        blockedId: task.id,
+        blockerId: blockedPlan.id,
+        type: DependencyType.PARENT_CHILD,
+      });
+
+      // Task should be ready before plan is blocked
+      let readyTasks = await api.ready();
+      expect(readyTasks.map((t) => t.id)).toContain(task.id);
+
+      // Block the plan: blockerPlan blocks blockedPlan
+      await api.addDependency({
+        blockedId: blockedPlan.id,
+        blockerId: blockerPlan.id,
+        type: DependencyType.BLOCKS,
+      });
+
+      // Task should NOT appear in ready() because its parent plan is blocked
+      readyTasks = await api.ready();
+      expect(readyTasks.map((t) => t.id)).not.toContain(task.id);
+    });
+
+    it('should include tasks in a plan that is NOT blocked', async () => {
+      // Create an active plan that is not blocked by anything
+      const plan = await createPlan({
+        title: 'Unblocked Plan',
+        createdBy: mockEntityId,
+        status: PlanStatus.ACTIVE,
+      });
+      await api.create(toCreateInput(plan));
+
+      // Create a task in the plan
+      const task = await createTestTask({ title: 'Task in unblocked plan' });
+      await api.create(toCreateInput(task));
+
+      // Add task as child of plan
+      await api.addDependency({
+        blockedId: task.id,
+        blockerId: plan.id,
+        type: DependencyType.PARENT_CHILD,
+      });
+
+      // Task should appear in ready()
+      const readyTasks = await api.ready();
+      expect(readyTasks.map((t) => t.id)).toContain(task.id);
+    });
+
+    it('should include tasks after blocking plan completes', async () => {
+      // Create a blocker task (to satisfy the blocker plan's completion)
+      const blockerTask = await createTestTask({ title: 'Blocker Task' });
+      await api.create(toCreateInput(blockerTask));
+
+      // Create two active plans
+      const blockerPlan = await createPlan({
+        title: 'Blocker Plan',
+        createdBy: mockEntityId,
+        status: PlanStatus.ACTIVE,
+      });
+      const blockedPlan = await createPlan({
+        title: 'Blocked Plan',
+        createdBy: mockEntityId,
+        status: PlanStatus.ACTIVE,
+      });
+      await api.create(toCreateInput(blockerPlan));
+      await api.create(toCreateInput(blockedPlan));
+
+      // Create task in blocked plan
+      const task = await createTestTask({ title: 'Task waiting for plan' });
+      await api.create(toCreateInput(task));
+
+      // Add task as child of blocked plan
+      await api.addDependency({
+        blockedId: task.id,
+        blockerId: blockedPlan.id,
+        type: DependencyType.PARENT_CHILD,
+      });
+
+      // Block the plan
+      await api.addDependency({
+        blockedId: blockedPlan.id,
+        blockerId: blockerPlan.id,
+        type: DependencyType.BLOCKS,
+      });
+
+      // Verify task is NOT ready while plan is blocked
+      let readyTasks = await api.ready();
+      expect(readyTasks.map((t) => t.id)).not.toContain(task.id);
+
+      // Complete the blocker plan (transitions from active -> completed)
+      await api.update<Plan>(blockerPlan.id, { status: PlanStatus.COMPLETED } as Partial<Plan>);
+
+      // Now the blocked plan should be unblocked, and the task should be ready
+      readyTasks = await api.ready();
+      expect(readyTasks.map((t) => t.id)).toContain(task.id);
+    });
+
+    it('should not affect standalone tasks when plans are blocked', async () => {
+      // Create a standalone task (not in any plan)
+      const standaloneTask = await createTestTask({ title: 'Standalone task' });
+      await api.create(toCreateInput(standaloneTask));
+
+      // Create two plans with blocking relationship
+      const blockerPlan = await createPlan({
+        title: 'Blocker Plan',
+        createdBy: mockEntityId,
+        status: PlanStatus.ACTIVE,
+      });
+      const blockedPlan = await createPlan({
+        title: 'Blocked Plan',
+        createdBy: mockEntityId,
+        status: PlanStatus.ACTIVE,
+      });
+      await api.create(toCreateInput(blockerPlan));
+      await api.create(toCreateInput(blockedPlan));
+
+      await api.addDependency({
+        blockedId: blockedPlan.id,
+        blockerId: blockerPlan.id,
+        type: DependencyType.BLOCKS,
+      });
+
+      // Standalone task should still appear in ready()
+      const readyTasks = await api.ready();
+      expect(readyTasks.map((t) => t.id)).toContain(standaloneTask.id);
+    });
+  });
 });
