@@ -128,7 +128,7 @@ export interface AgentRegistry {
 
   /**
    * Registers a Steward agent.
-   * Stewards perform support tasks like merging, health checks, etc.
+   * Stewards perform support tasks like merging branches and scanning documentation.
    */
   registerSteward(input: RegisterStewardInput): Promise<AgentEntity>;
 

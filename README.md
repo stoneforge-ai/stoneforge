@@ -191,7 +191,7 @@ Stoneforge provides a complete agent orchestration system with three agent types
 | **Director** | Persistent | Creates tasks/plans, sets priorities, coordinates workers |
 | **Worker (Ephemeral)** | Task-scoped | Executes assigned task in isolated worktree, shuts down on completion |
 | **Worker (Persistent)** | Interactive | Works directly with human, responds in real-time |
-| **Steward** | Workflow-scoped | Maintenance, merge review, health monitoring, cleanup |
+| **Steward** | Workflow-scoped | Merge review and branch cleanup, documentation scanning and fixes |
 
 ### Dispatch Flow
 

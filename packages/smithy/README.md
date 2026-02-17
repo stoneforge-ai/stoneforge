@@ -13,7 +13,7 @@ Multi-agent orchestration for Stoneforge — directors, workers, and stewards wi
 
 ## Overview
 
-`@stoneforge/smithy` adds AI agent orchestration on top of `@stoneforge/quarry`. It defines three agent roles (director, worker, steward), manages their sessions across multiple providers, dispatches tasks automatically, and isolates work in Git worktrees. Agents communicate through Stoneforge channels and can be monitored via health checks.
+`@stoneforge/smithy` adds AI agent orchestration on top of `@stoneforge/quarry`. It defines three agent roles (director, worker, steward), manages their sessions across multiple providers, dispatches tasks automatically, and isolates work in Git worktrees. Agents communicate through Stoneforge channels.
 
 ## Installation
 
@@ -61,7 +61,7 @@ await orch.assignTask(taskId, { priority: 'high' });
 | **Director** | Persistent | Creates tasks and plans, sets priorities, coordinates workers |
 | **Worker (ephemeral)** | Task-scoped | Executes one task in an isolated Git worktree, exits on completion |
 | **Worker (persistent)** | Interactive | Long-lived session for real-time collaboration with a human |
-| **Steward** | Workflow-scoped | Maintenance tasks — merge review, health monitoring, documentation, cleanup |
+| **Steward** | Workflow-scoped | Merge review, branch cleanup, and documentation scanning/fixes |
 
 ## Providers
 
@@ -83,7 +83,6 @@ Each provider implements the `AgentProvider` interface with `headless` and `inte
 | `TaskAssignmentService` | Assign tasks with orchestrator metadata |
 | `WorkerTaskService` | Worker-side task operations (complete, hand off, request help) |
 | `MergeStewardService` | Review and merge completed work branches |
-| `HealthStewardService` | Monitor agent health and restart stale sessions |
 | `StewardScheduler` | Run stewards on cron-like schedules |
 | `RoleDefinitionService` | Store and retrieve agent role definitions |
 | `AgentPoolService` | Manage pools of workers with auto-scaling |

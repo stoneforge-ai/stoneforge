@@ -703,7 +703,7 @@ function StewardsTab({ stewards, onStart, onStop, onOpenTerminal, onRename, onDe
       <EmptyState
         icon={Shield}
         title="No stewards yet"
-        description="Create stewards to automate maintenance tasks like merging branches, health monitoring, and cleanup operations."
+        description="Create stewards to automate maintenance tasks like merging branches and scanning documentation."
         actionLabel="Create Steward"
         actionTestId="stewards-create-empty"
         onAction={onCreateSteward}
