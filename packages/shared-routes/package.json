@@ -3,6 +3,11 @@
   "version": "1.0.0",
   "type": "module",
   "description": "Shared route factories for Stoneforge servers",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stoneforge-ai/stoneforge.git",
+    "directory": "packages/shared-routes"
+  },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
