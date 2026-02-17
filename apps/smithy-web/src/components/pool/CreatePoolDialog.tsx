@@ -4,7 +4,7 @@
  * Provides a form for creating agent pools with:
  * - Pool name (validated per isValidPoolName rules)
  * - Max concurrent agents (validated per isValidPoolSize rules)
- * - Agent type configurations (role, mode/focus, priority, maxSlots)
+ * - Agent type configurations (role, mode/focus, priority, maxSlots, provider, model)
  * - Optional description and tags
  *
  * Follows the same dialog pattern as CreateAgentDialog.
@@ -118,6 +118,8 @@ export function CreatePoolDialog({ isOpen, onClose, onSuccess }: CreatePoolDialo
         ...(at.role === 'steward' && at.stewardFocus ? { stewardFocus: at.stewardFocus as 'merge' | 'docs' | 'custom' } : {}),
         ...(at.priority.trim() ? { priority: parseInt(at.priority, 10) } : {}),
         ...(at.maxSlots.trim() ? { maxSlots: parseInt(at.maxSlots, 10) } : {}),
+        ...(at.provider.trim() ? { provider: at.provider.trim() } : {}),
+        ...(at.model.trim() ? { model: at.model.trim() } : {}),
       };
     });
 

@@ -8,6 +8,7 @@ import { Hono } from 'hono';
 import type { EntityId, ElementId } from '@stoneforge/core';
 import type { Services } from '../services.js';
 import type { AgentPoolService, CreatePoolInput, UpdatePoolInput, PoolAgentTypeConfig } from '../../index.js';
+import { isValidPoolAgentTypeConfig } from '../../types/agent-pool.js';
 import { createLogger } from '../../utils/logger.js';
 
 const logger = createLogger('orchestrator');
@@ -65,6 +66,15 @@ export function createPoolRoutes(services: Services) {
 
       if (typeof body.maxSize !== 'number' || body.maxSize < 1 || body.maxSize > 1000) {
         return c.json({ error: { code: 'INVALID_INPUT', message: 'maxSize must be between 1 and 1000' } }, 400);
+      }
+
+      // Validate agent type configs if provided
+      if (body.agentTypes && Array.isArray(body.agentTypes)) {
+        for (const agentType of body.agentTypes) {
+          if (!isValidPoolAgentTypeConfig(agentType)) {
+            return c.json({ error: { code: 'INVALID_INPUT', message: 'Invalid agent type configuration' } }, 400);
+          }
+        }
       }
 
       const input: CreatePoolInput = {
@@ -134,6 +144,15 @@ export function createPoolRoutes(services: Services) {
       // Validate maxSize if provided
       if (body.maxSize !== undefined && (typeof body.maxSize !== 'number' || body.maxSize < 1 || body.maxSize > 1000)) {
         return c.json({ error: { code: 'INVALID_INPUT', message: 'maxSize must be between 1 and 1000' } }, 400);
+      }
+
+      // Validate agent type configs if provided
+      if (body.agentTypes && Array.isArray(body.agentTypes)) {
+        for (const agentType of body.agentTypes) {
+          if (!isValidPoolAgentTypeConfig(agentType)) {
+            return c.json({ error: { code: 'INVALID_INPUT', message: 'Invalid agent type configuration' } }, 400);
+          }
+        }
       }
 
       const updatedPool = await poolService.updatePool(pool.id, body);

@@ -20,6 +20,10 @@ export interface PoolAgentTypeConfig {
   stewardFocus?: 'merge' | 'docs' | 'custom';
   priority?: number;
   maxSlots?: number;
+  /** Agent provider name (e.g., 'claude', 'opencode'). If not set, uses system default. */
+  provider?: string;
+  /** Model identifier (e.g., 'claude-sonnet-4-20250514'). If not set, uses provider default. */
+  model?: string;
 }
 
 export interface AgentPoolConfig {

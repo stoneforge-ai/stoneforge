@@ -46,6 +46,10 @@ export interface PoolAgentTypeConfig {
    * Must be <= pool maxSize.
    */
   readonly maxSlots?: number;
+  /** Agent provider name (e.g., 'claude', 'opencode'). If not set, uses system default. */
+  readonly provider?: string;
+  /** Model identifier (e.g., 'claude-sonnet-4-20250514'). If not set, uses provider default. */
+  readonly model?: string;
 }
 
 // ============================================================================
@@ -270,6 +274,15 @@ export function isValidPoolAgentTypeConfig(value: unknown): value is PoolAgentTy
   }
 
   if (config.maxSlots !== undefined && !isValidPoolSize(config.maxSlots)) {
+    return false;
+  }
+
+  // Provider and model are free-form optional strings
+  if (config.provider !== undefined && typeof config.provider !== 'string') {
+    return false;
+  }
+
+  if (config.model !== undefined && typeof config.model !== 'string') {
     return false;
   }
 

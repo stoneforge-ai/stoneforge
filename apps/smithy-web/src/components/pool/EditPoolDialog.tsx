@@ -60,6 +60,8 @@ function poolToFormState(pool: AgentPool): FormState {
       stewardFocus: at.stewardFocus ?? '',
       priority: at.priority !== undefined ? String(at.priority) : '0',
       maxSlots: at.maxSlots !== undefined ? String(at.maxSlots) : '',
+      provider: at.provider ?? '',
+      model: at.model ?? '',
     })),
     enabled: config.enabled,
     tags: config.tags?.join(', ') ?? '',
@@ -147,6 +149,8 @@ export function EditPoolDialog({ isOpen, onClose, pool, onSuccess }: EditPoolDia
         ...(at.role === 'steward' && at.stewardFocus ? { stewardFocus: at.stewardFocus as 'merge' | 'docs' | 'custom' } : {}),
         ...(at.priority.trim() ? { priority: parseInt(at.priority, 10) } : {}),
         ...(at.maxSlots.trim() ? { maxSlots: parseInt(at.maxSlots, 10) } : {}),
+        ...(at.provider.trim() ? { provider: at.provider.trim() } : {}),
+        ...(at.model.trim() ? { model: at.model.trim() } : {}),
       };
     });
 

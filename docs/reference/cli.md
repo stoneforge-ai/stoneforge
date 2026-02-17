@@ -865,7 +865,7 @@ Create a new agent pool.
 | ---------------------------- | ------------------------------------------------------------- |
 | `-s, --size <n>`             | Maximum pool size (default: 5)                                |
 | `-d, --description <text>`   | Pool description                                              |
-| `-t, --agentType <config>`   | Agent type config (can repeat). Format: `role[:mode\|focus][:priority][:maxSlots]` |
+| `-t, --agentType <config>`   | Agent type config (can repeat). Format: `role[:mode\|focus][:priority][:maxSlots][:provider][:model]` |
 | `--tags <tags>`              | Comma-separated tags                                          |
 | `--disabled`                 | Create pool in disabled state                                 |
 
@@ -874,14 +874,19 @@ Create a new agent pool.
 - `worker:ephemeral` — Ephemeral workers only
 - `worker:ephemeral:100` — Ephemeral workers with priority 100
 - `worker:persistent:50:3` — Persistent workers, priority 50, max 3 slots
+- `worker:ephemeral:100:5:claude:claude-sonnet-4-20250514` — With provider and model
 - `steward:merge` — Merge stewards
 - `steward:docs:80` — Docs stewards with priority 80
+- `steward:merge:100:2:opencode` — Merge stewards with provider only
+
+The optional `provider` and `model` fields allow specifying which AI provider and model each agent type should use. If omitted, the system default is used.
 
 ```bash
 sf pool create default --size 5
 sf pool create workers --size 10 -t worker:ephemeral -t worker:persistent
 sf pool create merge-pool --size 2 -t steward:merge:100
 sf pool create production --size 20 --tags "prod,critical"
+sf pool create gpu-pool --size 5 -t worker:ephemeral:100:5:claude:claude-sonnet-4-20250514
 ```
 
 #### pool update
@@ -892,7 +897,7 @@ Update an agent pool configuration.
 | ---------------------------- | ------------------------------------------------ |
 | `-s, --size <n>`             | Maximum pool size                                |
 | `-d, --description <text>`   | Pool description                                 |
-| `-t, --agentType <config>`   | Agent type config (replaces existing, can repeat)|
+| `-t, --agentType <config>`   | Agent type config (replaces existing, can repeat). Format: `role[:mode\|focus][:priority][:maxSlots][:provider][:model]` |
 | `--tags <tags>`              | Comma-separated tags (replaces existing)         |
 | `--enable`                   | Enable the pool                                  |
 | `--disable`                  | Disable the pool                                 |
@@ -902,6 +907,7 @@ sf pool update default --size 10
 sf pool update workers --enable
 sf pool update merge-pool --disable
 sf pool update production --description "Production agent pool"
+sf pool update workers -t worker:ephemeral:100:5:claude:claude-sonnet-4-20250514
 ```
 
 #### pool delete

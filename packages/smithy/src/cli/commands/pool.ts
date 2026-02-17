@@ -64,12 +64,13 @@ async function createPoolClient(options: GlobalOptions): Promise<{
 
 /**
  * Parses agent type configuration from CLI string format
- * Format: "role[:workerMode|stewardFocus][:priority][:maxSlots]"
+ * Format: "role[:workerMode|stewardFocus][:priority][:maxSlots][:provider][:model]"
  * Examples:
- *   "worker:ephemeral:100:5" - ephemeral workers, priority 100, max 5 slots
- *   "worker:persistent:50"   - persistent workers, priority 50
- *   "steward:merge"          - merge stewards
- *   "worker"                 - all workers with default settings
+ *   "worker:ephemeral:100:5"                          - ephemeral workers, priority 100, max 5 slots
+ *   "worker:ephemeral:100:5:claude:claude-sonnet-4-20250514" - with provider and model
+ *   "worker:persistent:50"                            - persistent workers, priority 50
+ *   "steward:merge"                                   - merge stewards
+ *   "worker"                                          - all workers with default settings
  */
 function parseAgentTypeConfig(configStr: string): PoolAgentTypeConfig | null {
   const parts = configStr.split(':');
@@ -85,6 +86,8 @@ function parseAgentTypeConfig(configStr: string): PoolAgentTypeConfig | null {
   let stewardFocus: StewardFocus | undefined;
   let priority: number | undefined;
   let maxSlots: number | undefined;
+  let provider: string | undefined;
+  let model: string | undefined;
 
   if (parts.length > 1) {
     if (role === 'worker') {
@@ -117,6 +120,14 @@ function parseAgentTypeConfig(configStr: string): PoolAgentTypeConfig | null {
     }
   }
 
+  if (parts.length > 4 && parts[4].trim()) {
+    provider = parts[4];
+  }
+
+  if (parts.length > 5 && parts[5].trim()) {
+    model = parts[5];
+  }
+
   // Build the config object with all properties upfront
   const config: PoolAgentTypeConfig = {
     role: role as Exclude<AgentRole, 'director'>,
@@ -124,6 +135,8 @@ function parseAgentTypeConfig(configStr: string): PoolAgentTypeConfig | null {
     ...(stewardFocus !== undefined && { stewardFocus }),
     ...(priority !== undefined && { priority }),
     ...(maxSlots !== undefined && { maxSlots }),
+    ...(provider !== undefined && { provider }),
+    ...(model !== undefined && { model }),
   };
 
   return config;
@@ -138,6 +151,8 @@ function formatAgentTypeConfig(config: PoolAgentTypeConfig): string {
   if (config.stewardFocus) result += `:${config.stewardFocus}`;
   if (config.priority !== undefined) result += ` (priority: ${config.priority})`;
   if (config.maxSlots !== undefined) result += ` (max: ${config.maxSlots})`;
+  if (config.provider) result += ` [provider: ${config.provider}]`;
+  if (config.model) result += ` [model: ${config.model}]`;
   return result;
 }
 
@@ -365,7 +380,7 @@ const poolCreateOptions: CommandOption[] = [
   {
     name: 'agentType',
     short: 't',
-    description: 'Agent type config (can repeat). Format: role[:mode|focus][:priority][:maxSlots]',
+    description: 'Agent type config (can repeat). Format: role[:mode|focus][:priority][:maxSlots][:provider][:model]',
     hasValue: true,
   },
   {
@@ -413,7 +428,7 @@ async function poolCreateHandler(
       if (!typeConfig) {
         return failure(
           `Invalid agent type format: ${typeStr}. ` +
-          `Use: role[:mode|focus][:priority][:maxSlots] (e.g., worker:ephemeral:100:5)`,
+          `Use: role[:mode|focus][:priority][:maxSlots][:provider][:model] (e.g., worker:ephemeral:100:5:claude:claude-sonnet-4-20250514)`,
           ExitCode.VALIDATION
         );
       }
@@ -462,23 +477,25 @@ Options:
   -s, --size <n>              Maximum pool size (default: 5)
   -d, --description <text>    Pool description
   -t, --agentType <config>    Agent type config (can repeat)
-                              Format: role[:mode|focus][:priority][:maxSlots]
+                              Format: role[:mode|focus][:priority][:maxSlots][:provider][:model]
   --tags <tags>               Comma-separated tags
   --disabled                  Create pool in disabled state
 
 Agent Type Format Examples:
-  worker                     All workers with default settings
-  worker:ephemeral           Ephemeral workers only
-  worker:ephemeral:100       Ephemeral workers with priority 100
-  worker:persistent:50:3     Persistent workers, priority 50, max 3 slots
-  steward:merge              Merge stewards
-  steward:docs:80            Docs stewards with priority 80
+  worker                                                All workers with default settings
+  worker:ephemeral                                      Ephemeral workers only
+  worker:ephemeral:100                                  Ephemeral workers with priority 100
+  worker:persistent:50:3                                Persistent workers, priority 50, max 3 slots
+  worker:ephemeral:100:5:claude:claude-sonnet-4-20250514  With provider and model
+  steward:merge                                         Merge stewards
+  steward:docs:80                                       Docs stewards with priority 80
 
 Examples:
   sf pool create default --size 5
   sf pool create workers --size 10 -t worker:ephemeral -t worker:persistent
   sf pool create merge-pool --size 2 -t steward:merge:100
-  sf pool create production --size 20 --tags "prod,critical"`,
+  sf pool create production --size 20 --tags "prod,critical"
+  sf pool create ai-pool --size 3 -t worker:ephemeral:100:5:claude:claude-sonnet-4-20250514`,
   options: poolCreateOptions,
   handler: poolCreateHandler as Command['handler'],
 };

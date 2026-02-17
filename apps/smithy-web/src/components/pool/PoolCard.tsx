@@ -114,9 +114,14 @@ export function PoolCard({ pool, onToggleEnabled, onEdit, onDelete, isUpdating }
           <p className="text-xs text-[var(--color-text-tertiary)] mb-1">Agent Types</p>
           <div className="flex flex-wrap gap-1">
             {config.agentTypes.map((typeConfig, i) => {
-              const label = typeConfig.role === 'worker'
+              let label = typeConfig.role === 'worker'
                 ? typeConfig.workerMode ? `${typeConfig.workerMode} worker` : 'worker'
                 : typeConfig.stewardFocus ? `${typeConfig.stewardFocus} steward` : 'steward';
+              // Append provider/model info when configured
+              const providerModel = typeConfig.model || typeConfig.provider;
+              if (providerModel) {
+                label += ` (${typeConfig.model ?? typeConfig.provider})`;
+              }
               return (
                 <span
                   key={i}

@@ -21,6 +21,8 @@ export interface AgentTypeFormState {
   stewardFocus: 'merge' | 'docs' | 'custom' | '';
   priority: string;
   maxSlots: string;
+  provider: string;
+  model: string;
 }
 
 export interface FormState {
@@ -100,6 +102,8 @@ export const defaultAgentType: AgentTypeFormState = {
   stewardFocus: '',
   priority: '0',
   maxSlots: '',
+  provider: '',
+  model: '',
 };
 
 // ============================================================================
@@ -263,6 +267,46 @@ export function AgentTypeConfigRow({ index, agentType, onUpdate, onRemove }: Age
               focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)]/30
             "
             data-testid={`agent-type-${index}-max-slots`}
+          />
+        </div>
+      </div>
+
+      {/* Provider + Model row */}
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1">
+          <label className="text-xs text-[var(--color-text-tertiary)]">Provider</label>
+          <input
+            type="text"
+            value={agentType.provider}
+            onChange={e => onUpdate({ provider: e.target.value })}
+            placeholder="e.g., claude, opencode"
+            className="
+              w-full px-2 py-1.5
+              text-xs
+              bg-[var(--color-bg)]
+              border border-[var(--color-border)]
+              rounded
+              focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)]/30
+            "
+            data-testid={`agent-type-${index}-provider`}
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs text-[var(--color-text-tertiary)]">Model</label>
+          <input
+            type="text"
+            value={agentType.model}
+            onChange={e => onUpdate({ model: e.target.value })}
+            placeholder="e.g., claude-sonnet-4-20250514"
+            className="
+              w-full px-2 py-1.5
+              text-xs
+              bg-[var(--color-bg)]
+              border border-[var(--color-border)]
+              rounded
+              focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)]/30
+            "
+            data-testid={`agent-type-${index}-model`}
           />
         </div>
       </div>
