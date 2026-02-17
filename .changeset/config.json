@@ -9,7 +9,11 @@
       "@stoneforge/quarry",
       "@stoneforge/smithy",
       "@stoneforge/ui",
-      "@stoneforge/shared-routes"
+      "@stoneforge/shared-routes",
+      "@stoneforge/quarry-server",
+      "@stoneforge/quarry-web",
+      "@stoneforge/smithy-server",
+      "@stoneforge/smithy-web"
     ]
   ],
   "linked": [],
