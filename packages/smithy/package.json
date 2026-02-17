@@ -100,7 +100,7 @@
     "claude"
   ],
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.41",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.45",
     "@stoneforge/core": "workspace:*",
     "@stoneforge/quarry": "workspace:*",
     "@stoneforge/shared-routes": "workspace:*",
@@ -110,7 +110,7 @@
     "ws": "^8.18.0"
   },
   "optionalDependencies": {
-    "@opencode-ai/sdk": "^1.1.64"
+    "@opencode-ai/sdk": "^1.2.6"
   },
   "devDependencies": {
     "@types/bun": "latest",
