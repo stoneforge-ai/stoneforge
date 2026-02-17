@@ -541,8 +541,8 @@ importers:
   packages/smithy:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
-        specifier: ^0.2.41
-        version: 0.2.41(zod@4.3.6)
+        specifier: ^0.2.45
+        version: 0.2.45(zod@4.3.6)
       '@stoneforge/core':
         specifier: workspace:*
         version: link:../core
@@ -566,8 +566,8 @@ importers:
         version: 8.19.0
     optionalDependencies:
       '@opencode-ai/sdk':
-        specifier: ^1.1.64
-        version: 1.1.64
+        specifier: ^1.2.6
+        version: 1.2.6
     devDependencies:
       '@types/bun':
         specifier: latest
@@ -718,8 +718,8 @@ packages:
     engines: {node: '>=10'}
     dev: true
 
-  /@anthropic-ai/claude-agent-sdk@0.2.41(zod@4.3.6):
-    resolution: {integrity: sha512-8qOHvRWWJSULlRnLdJRWYSivDDA0C1szWQx83kXDrFsxMYlPQX3udFzS53GNoJz98rPxUqfH7MjNAc/Vkt7QSQ==}
+  /@anthropic-ai/claude-agent-sdk@0.2.45(zod@4.3.6):
+    resolution: {integrity: sha512-AKH2hKoJNyjLf9ThAttKqbmCjUFg7qs/8+LR/UTVX20fCLn359YH9WrQc6dAiAfi8RYNA+mWwrNYCAq+Sdo5Ag==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
       zod: ^4.0.0
@@ -1893,8 +1893,8 @@ packages:
       fastq: 1.20.1
     dev: true
 
-  /@opencode-ai/sdk@1.1.64:
-    resolution: {integrity: sha512-g+bZGx/86JlRTKyPWsD1oFu1SoENIHeKK4LhzWWFToPv4tpN3MSLVGSUsoTSi2XqSd9JzkfPBHPdTeFvqcbzMA==}
+  /@opencode-ai/sdk@1.2.6:
+    resolution: {integrity: sha512-dWMF8Aku4h7fh8sw5tQ2FtbqRLbIFT8FcsukpxTird49ax7oUXP+gzqxM/VdxHjfksQvzLBjLZyMdDStc5g7xA==}
     requiresBuild: true
     dev: false
     optional: true
