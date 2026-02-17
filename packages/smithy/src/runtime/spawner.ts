@@ -943,6 +943,17 @@ export class SpawnerServiceImpl implements SpawnerService {
             session.events.emit('provider-session-id', message.sessionId);
           }
         }
+
+        // Detect agent completion: when we receive a 'result' message that is
+        // NOT an error, the agent has finished its work. For headless sessions
+        // using streaming input mode (stewards, ephemeral workers), the SDK
+        // stream won't close on its own because the input queue stays open.
+        // Close the headless session to break the for-await loop and allow
+        // the finally block to clean up.
+        if (message.type === 'result' && message.subtype !== 'error_during_execution') {
+          headlessSession.close();
+          break;
+        }
       }
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {

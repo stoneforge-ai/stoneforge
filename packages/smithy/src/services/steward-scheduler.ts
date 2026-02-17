@@ -1231,6 +1231,20 @@ export function createStewardScheduler(
 // ============================================================================
 
 /**
+ * Default idle timeout for steward sessions in milliseconds (2 minutes).
+ * If a steward session receives no events for this duration, it is
+ * assumed to be stuck and will be force-terminated.
+ */
+export const STEWARD_SESSION_DEFAULT_IDLE_TIMEOUT_MS = 120_000;
+
+/**
+ * Default maximum duration for steward sessions in milliseconds (30 minutes).
+ * Steward sessions exceeding this duration are force-terminated regardless
+ * of activity, as a safety net.
+ */
+export const STEWARD_SESSION_DEFAULT_MAX_DURATION_MS = 30 * 60 * 1000;
+
+/**
  * Dependencies required by the real steward executor.
  */
 export interface StewardExecutorDeps {
@@ -1244,6 +1258,118 @@ export interface StewardExecutorDeps {
    * or undefined if not found. Used when a custom steward has `playbookId` set.
    */
   resolvePlaybookContent?: (playbookId: string) => Promise<string | undefined>;
+  /**
+   * Idle timeout in ms for spawned steward sessions (docs, custom).
+   * If no session events are received within this window, the session
+   * is force-terminated. Default: 120000 (2 minutes).
+   */
+  stewardSessionIdleTimeoutMs?: number;
+  /**
+   * Maximum duration in ms for spawned steward sessions (docs, custom).
+   * Sessions exceeding this duration are force-terminated regardless of
+   * activity. Default: 1800000 (30 minutes).
+   */
+  stewardSessionMaxDurationMs?: number;
+}
+
+/**
+ * Sets up idle timeout and max duration monitoring for a spawned steward session.
+ * Watches for session activity via the session manager's event emitter and
+ * force-terminates the session if it goes idle or exceeds the max duration.
+ *
+ * @param sessionId - The session ID to monitor
+ * @param sessionEvents - The session's event emitter (from startSession)
+ * @param deps - Steward executor dependencies (for session manager and config)
+ * @param stewardName - Name of the steward (for logging)
+ */
+function monitorStewardSession(
+  sessionId: string,
+  sessionEvents: EventEmitter,
+  deps: StewardExecutorDeps,
+  stewardName: string
+): void {
+  const idleTimeoutMs = deps.stewardSessionIdleTimeoutMs ?? STEWARD_SESSION_DEFAULT_IDLE_TIMEOUT_MS;
+  const maxDurationMs = deps.stewardSessionMaxDurationMs ?? STEWARD_SESSION_DEFAULT_MAX_DURATION_MS;
+  const startTime = Date.now();
+  let lastActivityAt = Date.now();
+  let cleanedUp = false;
+
+  // Update last activity on any session event
+  const onEvent = () => {
+    lastActivityAt = Date.now();
+  };
+
+  // Clean up watchers
+  const cleanup = () => {
+    if (cleanedUp) return;
+    cleanedUp = true;
+    clearInterval(checkInterval);
+    sessionEvents.removeListener('event', onEvent);
+    sessionEvents.removeListener('exit', onExit);
+    sessionEvents.removeListener('status', onStatus);
+  };
+
+  // Session exited naturally — clean up watchers
+  const onExit = () => {
+    cleanup();
+  };
+
+  // Session status changed to terminated — clean up watchers
+  const onStatus = (status: string) => {
+    if (status === 'terminated') {
+      cleanup();
+    }
+  };
+
+  sessionEvents.on('event', onEvent);
+  sessionEvents.on('exit', onExit);
+  sessionEvents.on('status', onStatus);
+
+  // Periodically check idle time and max duration
+  const checkIntervalMs = Math.min(idleTimeoutMs / 2, 30_000);
+  const checkInterval = setInterval(() => {
+    const now = Date.now();
+    const idleMs = now - lastActivityAt;
+    const totalMs = now - startTime;
+
+    if (idleMs > idleTimeoutMs) {
+      logger.warn(
+        `Steward '${stewardName}' session ${sessionId} idle for ${Math.round(idleMs / 1000)}s (timeout: ${Math.round(idleTimeoutMs / 1000)}s), force-terminating`
+      );
+      cleanup();
+      deps.sessionManager.stopSession(sessionId, {
+        graceful: false,
+        reason: `Steward session idle for ${Math.round(idleMs / 1000)}s (timeout: ${Math.round(idleTimeoutMs / 1000)}s)`,
+      }).catch((err) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (!msg.includes('not found')) {
+          logger.warn(`Failed to stop idle steward session ${sessionId}:`, err);
+        }
+      });
+      return;
+    }
+
+    if (totalMs > maxDurationMs) {
+      logger.warn(
+        `Steward '${stewardName}' session ${sessionId} exceeded max duration ${Math.round(maxDurationMs / 1000)}s, force-terminating`
+      );
+      cleanup();
+      deps.sessionManager.stopSession(sessionId, {
+        graceful: false,
+        reason: `Steward session exceeded max duration (${Math.round(totalMs / 1000)}s)`,
+      }).catch((err) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (!msg.includes('not found')) {
+          logger.warn(`Failed to stop over-duration steward session ${sessionId}:`, err);
+        }
+      });
+    }
+  }, checkIntervalMs);
+
+  // Prevent the interval from keeping the process alive
+  if (checkInterval.unref) {
+    checkInterval.unref();
+  }
 }
 
 /**
@@ -1302,11 +1428,15 @@ export function createStewardExecutor(deps: StewardExecutorDeps): StewardExecuto
             projectRoot: deps.projectRoot,
           });
           const initialPrompt = roleResult?.prompt ?? '';
-          const { session } = await deps.sessionManager.startSession(stewardId, {
+          const { session, events } = await deps.sessionManager.startSession(stewardId, {
             workingDirectory: deps.projectRoot,
             initialPrompt,
             interactive: false,
           });
+
+          // Monitor session for idle timeout and max duration
+          monitorStewardSession(session.id, events, deps, steward.name);
+
           return {
             success: true,
             output: `Spawned ${focus} steward session ${session.id}`,
@@ -1375,11 +1505,15 @@ export function createStewardExecutor(deps: StewardExecutorDeps): StewardExecuto
             ? `${basePrompt}\n\n---\n\n## Custom Steward Playbook\n\n${playbook}`
             : `## Custom Steward Playbook\n\n${playbook}`;
 
-          const { session } = await deps.sessionManager.startSession(stewardId, {
+          const { session, events } = await deps.sessionManager.startSession(stewardId, {
             workingDirectory: deps.projectRoot,
             initialPrompt,
             interactive: false,
           });
+
+          // Monitor session for idle timeout and max duration
+          monitorStewardSession(session.id, events, deps, steward.name);
+
           return {
             success: true,
             output: `Spawned custom steward session ${session.id}`,

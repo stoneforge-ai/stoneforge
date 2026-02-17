@@ -182,6 +182,14 @@ export interface DispatchDaemonConfig {
   readonly maxSessionDurationMs?: number;
 
   /**
+   * Maximum session duration in ms for steward sessions specifically.
+   * Steward sessions are expected to be short-lived; this provides
+   * a safety net for sessions that fail to self-terminate.
+   * Default: 1800000 (30 minutes).
+   */
+  readonly maxStewardSessionDurationMs?: number;
+
+  /**
    * Callback fired when a session is started by the daemon.
    * Allows the server to attach event savers and save the initial prompt.
    */
@@ -244,6 +252,7 @@ interface NormalizedConfig {
   stuckMergeRecoveryGracePeriodMs: number;
   maxResumeAttemptsBeforeRecovery: number;
   maxSessionDurationMs: number;
+  maxStewardSessionDurationMs: number;
   onSessionStarted?: OnSessionStartedCallback;
   projectRoot: string;
   directorInboxForwardingEnabled: boolean;
@@ -1350,6 +1359,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       stuckMergeRecoveryGracePeriodMs: config?.stuckMergeRecoveryGracePeriodMs ?? 600_000,
       maxResumeAttemptsBeforeRecovery: config?.maxResumeAttemptsBeforeRecovery ?? 3,
       maxSessionDurationMs: config?.maxSessionDurationMs ?? 0,
+      maxStewardSessionDurationMs: config?.maxStewardSessionDurationMs ?? 30 * 60 * 1000,
       onSessionStarted: config?.onSessionStarted,
       projectRoot: config?.projectRoot ?? process.cwd(),
       directorInboxForwardingEnabled: config?.directorInboxForwardingEnabled ?? true,
@@ -1417,9 +1427,17 @@ export class DispatchDaemonImpl implements DispatchDaemon {
   /**
    * Terminates sessions that have exceeded the configured max duration.
    * Prevents stuck workers from blocking their slot indefinitely.
+   *
+   * Applies two thresholds:
+   * - `maxSessionDurationMs` — general limit for all sessions (0 = disabled)
+   * - `maxStewardSessionDurationMs` — stricter limit for steward sessions
+   *   (default 30 minutes), which are expected to be short-lived
    */
   private async reapStaleSessions(): Promise<void> {
-    if (this.config.maxSessionDurationMs <= 0) return;
+    const hasGeneralLimit = this.config.maxSessionDurationMs > 0;
+    const hasStewardLimit = this.config.maxStewardSessionDurationMs > 0;
+
+    if (!hasGeneralLimit && !hasStewardLimit) return;
 
     const running = this.sessionManager.listSessions({ status: 'running' });
     const now = Date.now();
@@ -1430,7 +1448,24 @@ export class DispatchDaemonImpl implements DispatchDaemon {
         : new Date(session.createdAt).getTime();
       const age = now - createdAt;
 
-      if (age > this.config.maxSessionDurationMs) {
+      // Apply steward-specific limit
+      if (hasStewardLimit && session.agentRole === 'steward' && age > this.config.maxStewardSessionDurationMs) {
+        try {
+          await this.sessionManager.stopSession(session.id, {
+            graceful: false,
+            reason: `Steward session exceeded max duration (${Math.round(age / 1000)}s, limit: ${Math.round(this.config.maxStewardSessionDurationMs / 1000)}s)`,
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          if (!message.includes('not found')) {
+            logger.warn(`Failed to reap steward session ${session.id}:`, error);
+          }
+        }
+        continue;
+      }
+
+      // Apply general limit
+      if (hasGeneralLimit && age > this.config.maxSessionDurationMs) {
         try {
           await this.sessionManager.stopSession(session.id, {
             graceful: false,
