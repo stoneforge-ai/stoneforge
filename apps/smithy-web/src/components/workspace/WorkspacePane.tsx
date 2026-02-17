@@ -28,10 +28,8 @@ export interface WorkspacePaneProps {
   onMinimize: () => void;
   onFocus: () => void;
   onStatusChange: (status: PaneStatus) => void;
-  /** Drag event handlers - applied to header only */
+  /** Drag event handlers - applied to header only (drag source, not drop target) */
   onDragStart?: (e: React.DragEvent) => void;
-  onDragOver?: (e: React.DragEvent) => void;
-  onDrop?: (e: React.DragEvent) => void;
   onDragEnd?: () => void;
 }
 
@@ -76,8 +74,6 @@ export const WorkspacePane = forwardRef<WorkspacePaneHandle, WorkspacePaneProps>
   onFocus,
   onStatusChange,
   onDragStart,
-  onDragOver,
-  onDrop,
   onDragEnd,
 }, ref) {
   const [showMenu, setShowMenu] = useState(false);
@@ -251,8 +247,6 @@ export const WorkspacePane = forwardRef<WorkspacePaneHandle, WorkspacePaneProps>
         `}
         draggable={draggable}
         onDragStart={onDragStart}
-        onDragOver={onDragOver}
-        onDrop={onDrop}
         onDragEnd={onDragEnd}
         data-testid="pane-header"
       >

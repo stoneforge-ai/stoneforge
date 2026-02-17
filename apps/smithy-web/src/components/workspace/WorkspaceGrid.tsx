@@ -276,8 +276,6 @@ function PaneWrapper({
         onStatusChange={onStatusChange}
         onDragStart={onDragStart}
         onDragEnd={onDragEnd}
-        onDragOver={onDragOver}
-        onDrop={onDrop}
       />
     </div>
   );
