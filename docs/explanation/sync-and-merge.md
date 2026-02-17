@@ -101,9 +101,13 @@ interface SerializedDependency {
 ### Export (SQLite → JSONL)
 
 ```typescript
-import { exportToJsonl } from '@stoneforge/quarry/sync';
+import { createSyncService } from '@stoneforge/quarry';
 
-await exportToJsonl(storage, '.stoneforge/elements.jsonl');
+const syncService = createSyncService(storage);
+await syncService.export();
+
+// Full export (all elements, not just dirty)
+await syncService.export({ full: true });
 ```
 
 Exports all elements and dependencies from SQLite to JSONL files.
@@ -111,10 +115,11 @@ Exports all elements and dependencies from SQLite to JSONL files.
 ### Import (JSONL → SQLite)
 
 ```typescript
-import { importFromJsonl } from '@stoneforge/quarry/sync';
+import { createSyncService } from '@stoneforge/quarry';
 
-const result = await importFromJsonl(storage, '.stoneforge/elements.jsonl');
-console.log(`Imported ${result.elementsImported} elements`);
+const syncService = createSyncService(storage);
+const result = await syncService.import('.stoneforge/sync');
+console.log(`Imported ${result.imported} elements`);
 console.log(`Conflicts: ${result.conflicts.length}`);
 ```
 
@@ -123,9 +128,10 @@ Reads JSONL files and merges into SQLite.
 ### Full Rebuild
 
 ```typescript
-import { rebuildFromJsonl } from '@stoneforge/quarry/sync';
+import { createSyncService } from '@stoneforge/quarry';
 
-await rebuildFromJsonl(storage, '.stoneforge/');
+const syncService = createSyncService(storage);
+await syncService.import('.stoneforge/sync', { force: true });
 // Clears SQLite and rebuilds entirely from JSONL
 ```
 
@@ -347,7 +353,7 @@ The steward:
 - Export after significant changes
 - Import before starting work
 - Commit JSONL files to Git
-- Use `rebuildFromJsonl()` if SQLite corrupts
+- Use `syncService.import(path, { force: true })` if SQLite corrupts
 
 ### Don't
 - Commit SQLite database files to Git

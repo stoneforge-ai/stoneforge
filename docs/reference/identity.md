@@ -199,7 +199,10 @@ const result = checkTimeTolerance(signedAt, 60000);  // 1 minute
 ### Resolving Actor
 
 ```typescript
-import { resolveActor, ActorSource } from '@stoneforge/quarry';
+// Note: resolveActor and ActorSource are internal to quarry and not
+// re-exported from the public package index. They are used internally
+// by the CLI and API for actor resolution.
+import { resolveActor, type ActorSource } from '@stoneforge/quarry/src/systems/identity';
 
 const context = resolveActor({
   explicitActor: 'agent-1',     // Highest priority
@@ -226,7 +229,8 @@ const context = resolveActor({
 ### Validate Actor
 
 ```typescript
-import { validateSoftActor } from '@stoneforge/quarry';
+// Note: Internal function, not in public API index
+import { validateSoftActor } from '@stoneforge/quarry/src/systems/identity';
 
 const result = await validateSoftActor(actor, {
   lookupEntity,
@@ -241,7 +245,8 @@ if (result.valid) {
 ## Verification Middleware
 
 ```typescript
-import { createVerificationMiddleware } from '@stoneforge/quarry';
+// Note: Internal function, not in public API index
+import { createVerificationMiddleware } from '@stoneforge/quarry/src/systems/identity';
 
 const middleware = createVerificationMiddleware({
   lookupEntity: (actor) => api.lookupEntityByName(actor),

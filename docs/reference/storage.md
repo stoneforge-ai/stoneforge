@@ -358,7 +358,7 @@ const merged = mergeElements(local, remote, options);
 ### Bun Backend
 
 ```typescript
-import { BunStorageBackend } from '@stoneforge/storage/bun-backend';
+import { BunStorageBackend } from '@stoneforge/storage/bun';
 
 const backend = new BunStorageBackend('./db.sqlite');
 ```
@@ -366,7 +366,7 @@ const backend = new BunStorageBackend('./db.sqlite');
 ### Node Backend
 
 ```typescript
-import { NodeStorageBackend } from '@stoneforge/storage/node-backend';
+import { NodeStorageBackend } from '@stoneforge/storage/node';
 
 const backend = new NodeStorageBackend('./db.sqlite');
 ```
@@ -374,7 +374,7 @@ const backend = new NodeStorageBackend('./db.sqlite');
 ### Browser Backend
 
 ```typescript
-import { BrowserStorageBackend } from '@stoneforge/storage/browser-backend';
+import { BrowserStorageBackend } from '@stoneforge/storage/browser';
 
 // Uses OPFS (Origin Private File System)
 const backend = await BrowserStorageBackend.create('./db.sqlite');

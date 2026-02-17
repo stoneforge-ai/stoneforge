@@ -48,7 +48,7 @@ const worker = await api.registerWorker({
 ```typescript
 const steward = await api.registerSteward({
   name: 'MergeSteward',
-  stewardFocus: 'merge',  // 'merge' | 'docs' | 'custom'
+  stewardFocus: 'merge',  // 'merge' | 'docs' | 'recovery' | 'custom'
   triggers: [
     { type: 'event', event: 'task_completed' },
   ],

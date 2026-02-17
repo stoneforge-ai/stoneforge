@@ -306,10 +306,10 @@ sf workflow gc --age 14
 | ----------------------- | ------------------------------------ |
 | `sf inbox <agent-id>`   | List inbox items with message preview |
 | `sf inbox read <id>`    | Mark as read                         |
-| `sf inbox read-all`     | Mark all as read                     |
+| `sf inbox read-all <entity>` | Mark all as read for entity     |
 | `sf inbox unread <id>`  | Mark as unread                       |
 | `sf inbox archive <id>` | Archive item                         |
-| `sf inbox count`        | Count unread                         |
+| `sf inbox count <entity>` | Count unread for entity            |
 | `sf show <inbox-id>`    | Show inbox item with full content    |
 
 #### inbox list
@@ -506,7 +506,7 @@ sf library delete el-lib123 --force
 | Command            | Description       |
 | ------------------ | ----------------- |
 | `sf export`        | Export to JSONL   |
-| `sf import <file>` | Import from JSONL |
+| `sf import`        | Import from JSONL |
 | `sf status`        | Show sync status  |
 
 ```bash
@@ -516,11 +516,14 @@ sf export
 # Full export
 sf export --full
 
-# Import
-sf import backup.jsonl
+# Import from default sync directory
+sf import
+
+# Import from specific directory
+sf import --input /path/to/sync
 
 # Force import (remote always wins)
-sf import backup.jsonl --force
+sf import --force
 ```
 
 ## Config Commands
@@ -545,9 +548,9 @@ sf config unset actor
 | --------------------------------- | --------------------- |
 | `sf identity whoami`              | Show current identity |
 | `sf identity keygen`              | Generate keypair      |
-| `sf identity sign <data>`         | Sign data             |
-| `sf identity verify <sig> <data>` | Verify signature      |
-| `sf identity hash <data>`         | Compute hash          |
+| `sf identity sign`                | Sign data             |
+| `sf identity verify`              | Verify signature      |
+| `sf identity hash`                | Compute hash          |
 | `sf identity mode [mode]`         | Show/set mode         |
 
 ## Admin Commands

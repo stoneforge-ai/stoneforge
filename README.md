@@ -98,7 +98,7 @@ sf task ready
 sf update el-abc123 --status in_progress
 
 # Add a dependency
-sf dependency add el-task1 blocks el-task2
+sf dependency add --type=blocks el-task1 el-task2
 
 # View dependency tree
 sf dependency tree el-task1
@@ -222,10 +222,13 @@ See [Orchestration Architecture](docs/ORCHESTRATION_PLAN.md) for full details.
 ## API Usage
 
 ```typescript
-import { QuarryAPI } from '@stoneforge/quarry';
+import { createQuarryAPI } from '@stoneforge/quarry';
+import { createStorage, initializeSchema } from '@stoneforge/storage';
 
 // Create API instance
-const api = await QuarryAPI.create({ rootDir: '.stoneforge' });
+const storage = createStorage('.stoneforge/stoneforge.db');
+initializeSchema(storage);
+const api = createQuarryAPI(storage);
 
 // Create a task
 const task = await api.create({
@@ -236,7 +239,7 @@ const task = await api.create({
 });
 
 // Query ready work (unblocked, open tasks)
-const ready = await api.getReadyWork();
+const ready = await api.ready();
 
 // Add a dependency
 await api.addDependency({
@@ -245,11 +248,9 @@ await api.addDependency({
   type: 'blocks',
 });
 
-// Search documents with hybrid ranking
-const results = await api.searchDocuments({
-  query: 'authentication flow',
-  mode: 'hybrid',
-  limit: 10,
+// Search documents with FTS5
+const results = await api.searchDocumentsFTS('authentication flow', {
+  hardCap: 10,
 });
 ```
 
@@ -301,8 +302,8 @@ sf task undefer <id>      # Remove deferral
 <summary><strong>Dependency Commands</strong></summary>
 
 ```bash
-sf dependency add <src> <type> <tgt>    # Add dependency
-sf dependency remove <src> <type> <tgt> # Remove dependency
+sf dependency add <blocked> <blocker> --type <type>    # Add dependency
+sf dependency remove <blocked> <blocker> --type <type> # Remove dependency
 sf dependency list <id>                 # List dependencies
 sf dependency tree <id>                 # Show dependency tree
 ```
@@ -324,8 +325,8 @@ sf status            # Show sync status
 <summary><strong>Search & Embeddings</strong></summary>
 
 ```bash
-sf search <query>           # Search elements
-sf embeddings index         # Index all documents
+sf document search <query>  # Search documents (FTS5)
+sf embeddings install       # Install local embedding model
 sf embeddings reindex       # Rebuild embedding index
 ```
 

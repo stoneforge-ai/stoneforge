@@ -227,15 +227,46 @@ type DependencyType =
 | `relates-to` | Neither (associative) |
 
 **Gate metadata (for `awaits`):**
+
+`AwaitsMetadata` is a discriminated union based on `gateType` (required):
+
 ```typescript
-interface AwaitsDependencyMetadata {
-  gateType?: 'timer' | 'approval' | 'external' | 'webhook';
-  waitUntil?: Timestamp;        // For timer
-  requiredApprovers?: string[]; // For approval
-  currentApprovers?: string[];
-  approvalCount?: number;
-  satisfied?: boolean;          // For external/webhook
+interface AwaitsMetadataBase {
+  gateType: GateType;  // Required, not optional
+  satisfied?: boolean;
+  satisfiedAt?: Timestamp;
+  satisfiedBy?: EntityId;
 }
+
+interface TimerGateMetadata extends AwaitsMetadataBase {
+  gateType: 'timer';
+  waitUntil: Timestamp;  // Required
+}
+
+interface ApprovalGateMetadata extends AwaitsMetadataBase {
+  gateType: 'approval';
+  requiredApprovers: string[];  // Required, min 1
+  currentApprovers?: string[];
+  requiredCount?: number;
+}
+
+interface ExternalGateMetadata extends AwaitsMetadataBase {
+  gateType: 'external';
+  externalSystem: string;  // Required
+  externalId: string;      // Required
+}
+
+interface WebhookGateMetadata extends AwaitsMetadataBase {
+  gateType: 'webhook';
+  webhookUrl?: string;
+  callbackId?: string;
+}
+
+type AwaitsMetadata =
+  | TimerGateMetadata
+  | ApprovalGateMetadata
+  | ExternalGateMetadata
+  | WebhookGateMetadata;
 ```
 
 ---

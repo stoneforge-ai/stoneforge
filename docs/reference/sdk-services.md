@@ -70,10 +70,10 @@ const hasCycle = depService.detectCycle(blockedId, blockerId, type);
 
 **File:** `services/blocked-cache.ts`
 
-Materialized view of blocked status. Import directly (not exported from index):
+Materialized view of blocked status. Exported from the main package:
 
 ```typescript
-import { createBlockedCacheService } from '@stoneforge/quarry/services/blocked-cache';
+import { createBlockedCacheService } from '@stoneforge/quarry';
 
 const blockedCache = createBlockedCacheService(storage);
 ```
@@ -318,7 +318,7 @@ await syncService.import(jsonlPath, { force: true });
 Utility functions for FTS5 full-text search.
 
 ```typescript
-import { escapeFts5Query, adaptiveTopK } from '@stoneforge/quarry/services/search-utils';
+import { escapeFts5Query, applyAdaptiveTopK } from '@stoneforge/quarry/services';
 ```
 
 ### Functions
@@ -330,7 +330,7 @@ const safeQuery = escapeFts5Query(userInput);
 // Adaptive top-K selection using elbow detection
 // Automatically determines the optimal number of results to return
 // based on score distribution (detects the "elbow" where scores drop off)
-const topResults = adaptiveTopK(scoredResults, {
+const topResults = applyAdaptiveTopK(scoredResults, {
   maxResults?: number,    // Hard upper limit
   minResults?: number,    // Minimum results to return
 });
@@ -347,7 +347,7 @@ const topResults = adaptiveTopK(scoredResults, {
 Manages document embeddings for semantic search.
 
 ```typescript
-import { createEmbeddingService } from '@stoneforge/quarry/services/embeddings';
+import { EmbeddingService } from '@stoneforge/quarry/services';
 ```
 
 ### EmbeddingProvider Interface
@@ -398,11 +398,11 @@ Services are typically created together:
 ```typescript
 import {
   createDependencyService,
+  createBlockedCacheService,
   createPriorityService,
   createInboxService,
   createIdLengthCache,
 } from '@stoneforge/quarry';
-import { createBlockedCacheService } from '@stoneforge/quarry/services/blocked-cache';
 
 // Create services
 const depService = createDependencyService(storage);

@@ -7,11 +7,12 @@ The main API for working with Stoneforge elements.
 ## Initialization
 
 ```typescript
-import { QuarryAPI } from '@stoneforge/quarry';
+import { createQuarryAPI } from '@stoneforge/quarry';
+import { createStorage, initializeSchema } from '@stoneforge/storage';
 
-const api = await QuarryAPI.create({
-  rootDir: '.stoneforge',  // Optional, defaults to .stoneforge
-});
+const storage = createStorage('.stoneforge/stoneforge.db');
+initializeSchema(storage);
+const api = createQuarryAPI(storage);
 ```
 
 ## CRUD Operations
