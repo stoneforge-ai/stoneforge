@@ -6,8 +6,8 @@
 
 import { createStorage, initializeSchema } from '@stoneforge/storage';
 import type { StorageBackend } from '@stoneforge/storage';
-import { createQuarryAPI, createInboxService } from '@stoneforge/quarry';
-import type { QuarryAPI, InboxService } from '@stoneforge/quarry';
+import { createQuarryAPI, createInboxService, createSyncService, createAutoExportService, loadConfig } from '@stoneforge/quarry';
+import type { QuarryAPI, InboxService, SyncService, AutoExportService } from '@stoneforge/quarry';
 import { createSessionMessageService, type SessionMessageService } from './services/session-messages.js';
 import type { EntityId } from '@stoneforge/core';
 import {
@@ -73,6 +73,8 @@ export interface Services {
   pluginExecutor: PluginExecutor;
   poolService: AgentPoolService | undefined;
   inboxService: InboxService;
+  syncService: SyncService;
+  autoExportService: AutoExportService;
   mergeStewardService: MergeStewardService;
   healthStewardService: HealthStewardService;
   docsStewardService: DocsStewardService;
@@ -195,6 +197,20 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
   const inboxService = createInboxService(storageBackend);
   const sessionMessageService = createSessionMessageService(storageBackend);
 
+  // Create sync and auto-export services
+  const { resolve } = await import('node:path');
+  const syncService = createSyncService(storageBackend);
+  const config = loadConfig();
+  const autoExportService = createAutoExportService({
+    syncService,
+    backend: storageBackend,
+    syncConfig: config.sync,
+    outputDir: resolve(projectRoot, '.stoneforge/sync'),
+  });
+  autoExportService.start().catch((err: Error) => {
+    console.error('[orchestrator] Failed to start auto-export:', err);
+  });
+
   // DispatchDaemon requires worktreeManager, so only create if available
   let dispatchDaemon: DispatchDaemon | undefined;
   if (worktreeManager) {
@@ -289,6 +305,8 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
     pluginExecutor,
     poolService,
     inboxService,
+    syncService,
+    autoExportService,
     dispatchDaemon,
     sessionInitialPrompts,
     sessionMessageService,

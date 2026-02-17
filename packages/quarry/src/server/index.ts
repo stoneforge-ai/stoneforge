@@ -69,9 +69,12 @@ import { createStorage, initializeSchema } from '@stoneforge/storage';
 // SDK - API and services (relative imports since we're inside the quarry package)
 import { createQuarryAPI } from '../api/quarry-api.js';
 import { createSyncService } from '../sync/service.js';
+import { createAutoExportService } from '../sync/auto-export.js';
 import { createInboxService } from '../services/inbox.js';
+import { loadConfig } from '../config/config.js';
 import type { QuarryAPI } from '../api/types.js';
 import type { SyncService } from '../sync/service.js';
+import type { AutoExportService } from '../sync/auto-export.js';
 import type { InboxService } from '../services/inbox.js';
 // Shared routes for collaborate features
 import {
@@ -112,6 +115,7 @@ export interface QuarryApp {
   app: InstanceType<typeof Hono>;
   api: QuarryAPI;
   syncService: SyncService;
+  autoExportService: AutoExportService;
   inboxService: InboxService;
   broadcaster: ReturnType<typeof initializeBroadcaster>;
   storageBackend: ReturnType<typeof createStorage>;
@@ -172,6 +176,21 @@ export function createQuarryApp(options: QuarryServerOptions = {}): QuarryApp {
   } catch (error) {
     throw new Error(`Failed to initialize database: ${error instanceof Error ? error.message : String(error)}`);
   }
+
+  // ============================================================================
+  // Initialize Auto Export
+  // ============================================================================
+
+  const config = loadConfig();
+  const autoExportService = createAutoExportService({
+    syncService,
+    backend: storageBackend,
+    syncConfig: config.sync,
+    outputDir: resolve(PROJECT_ROOT, '.stoneforge/sync'),
+  });
+  autoExportService.start().catch((err: Error) => {
+    console.error('[stoneforge] Failed to start auto-export:', err);
+  });
 
   // ============================================================================
   // Initialize Event Broadcaster
@@ -3756,7 +3775,7 @@ app.delete('/api/uploads/:filename', async (c) => {
 });
 
   // Return the app and services
-  return { app, api, syncService, inboxService, broadcaster, storageBackend };
+  return { app, api, syncService, autoExportService, inboxService, broadcaster, storageBackend };
 }
 
 // ============================================================================

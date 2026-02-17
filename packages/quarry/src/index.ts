@@ -134,6 +134,10 @@ export {
   // Service
   SyncService,
   createSyncService,
+  // Auto Export
+  AutoExportService,
+  createAutoExportService,
+  type AutoExportOptions,
 } from './sync/index.js';
 
 // Config - Configuration management

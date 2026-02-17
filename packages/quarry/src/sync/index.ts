@@ -46,3 +46,6 @@ export {
 
 // Sync Service
 export { SyncService, createSyncService } from './service.js';
+
+// Auto Export Service
+export { AutoExportService, createAutoExportService, type AutoExportOptions } from './auto-export.js';
