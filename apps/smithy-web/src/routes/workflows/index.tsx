@@ -41,7 +41,7 @@ import {
 type TabValue = 'templates' | 'active';
 
 export function WorkflowsPage() {
-  const search = useSearch({ from: '/workflows' }) as { tab?: string; selected?: string; action?: string };
+  const search = useSearch({ from: '/workflows' });
   const navigate = useNavigate();
 
   const currentTab = (search.tab as TabValue) || 'templates';
@@ -65,7 +65,7 @@ export function WorkflowsPage() {
       // Clear the action param and switch to templates tab
       navigate({
         to: '/workflows',
-        search: { tab: 'templates', selected: undefined },
+        search: { tab: 'templates', selected: undefined, action: undefined },
         replace: true,
       });
     }
@@ -126,7 +126,7 @@ export function WorkflowsPage() {
   }, [searchQuery, terminalWorkflows]);
 
   const setTab = (tab: TabValue) => {
-    navigate({ to: '/workflows', search: { selected: search.selected, tab } });
+    navigate({ to: '/workflows', search: { selected: search.selected, tab, action: undefined } });
   };
 
   const handleCreateFromPlaybook = (playbookId: string) => {
@@ -174,12 +174,12 @@ export function WorkflowsPage() {
 
   // Handle viewing workflow details (TB-O35)
   const handleViewDetails = (workflowId: string) => {
-    navigate({ to: '/workflows', search: { tab: search.tab ?? 'active', selected: workflowId } });
+    navigate({ to: '/workflows', search: { tab: search.tab ?? 'active', selected: workflowId, action: undefined } });
   };
 
   // Handle going back from detail view
   const handleBackToList = () => {
-    navigate({ to: '/workflows', search: { tab: search.tab ?? 'active', selected: undefined } });
+    navigate({ to: '/workflows', search: { tab: search.tab ?? 'active', selected: undefined, action: undefined } });
   };
 
   const isLoading = currentTab === 'templates' ? playbooksLoading : workflowsLoading;

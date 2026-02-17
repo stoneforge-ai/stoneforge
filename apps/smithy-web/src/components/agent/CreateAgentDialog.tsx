@@ -34,6 +34,8 @@ import type {
 } from '../../api/types';
 import { useCreateAgent, useAgents, useProviders, useProviderModels } from '../../api/hooks/useAgents';
 import { useAgentDefaultsSettings } from '../../api/hooks/useSettings';
+import { usePlaybooks } from '@stoneforge/ui/workflows';
+import { Link } from '@tanstack/react-router';
 
 export interface CreateAgentDialogProps {
   isOpen: boolean;
@@ -80,7 +82,7 @@ const stewardFocusOptions: Record<StewardFocus, { label: string; description: st
   },
   custom: {
     label: 'Custom Steward',
-    description: 'User-defined steward with a custom playbook executed when triggers fire.',
+    description: 'User-defined steward with a workflow template executed when triggers fire.',
   },
 };
 
@@ -154,8 +156,8 @@ interface FormState {
   // Steward fields
   stewardFocus: StewardFocus;
   triggers: StewardTrigger[];
-  // Custom steward playbook
-  playbook: string;
+  // Custom steward workflow template
+  playbookId: string;
   // Tags
   tags: string;
   // Provider
@@ -170,7 +172,7 @@ const defaultState: FormState = {
   workerMode: 'ephemeral',
   stewardFocus: 'merge',
   triggers: [],
-  playbook: '',
+  playbookId: '',
   tags: '',
   provider: 'claude',
   model: '',
@@ -195,6 +197,10 @@ export function CreateAgentDialog({
 
   // Load agent defaults from settings
   const { settings: agentDefaults } = useAgentDefaultsSettings();
+
+  // Fetch workflow templates (playbooks) for custom steward dropdown
+  const { data: playbooksData } = usePlaybooks();
+  const playbooks = playbooksData?.playbooks ?? [];
 
   const [form, setForm] = useState<FormState>({
     ...defaultState,
@@ -280,8 +286,8 @@ export function CreateAgentDialog({
       return;
     }
 
-    if (form.role === 'steward' && form.stewardFocus === 'custom' && !form.playbook.trim()) {
-      setError('Playbook is required for custom stewards');
+    if (form.role === 'steward' && form.stewardFocus === 'custom' && !form.playbookId) {
+      setError('A workflow template is required for custom stewards');
       return;
     }
 
@@ -302,8 +308,8 @@ export function CreateAgentDialog({
       if (form.triggers.length > 0) {
         input.triggers = form.triggers;
       }
-      if (form.stewardFocus === 'custom' && form.playbook.trim()) {
-        input.playbook = form.playbook.trim();
+      if (form.stewardFocus === 'custom' && form.playbookId) {
+        input.playbookId = form.playbookId;
       }
     }
 
@@ -559,32 +565,56 @@ export function CreateAgentDialog({
               </div>
             )}
 
-            {/* Custom Steward: Playbook */}
+            {/* Custom Steward: Workflow Template */}
             {form.role === 'steward' && form.stewardFocus === 'custom' && (
               <div className="space-y-2">
                 <label htmlFor="steward-playbook" className="text-sm font-medium text-[var(--color-text)]">
-                  Playbook
+                  Workflow Template
                 </label>
-                <textarea
-                  id="steward-playbook"
-                  value={form.playbook}
-                  onChange={e => setForm(prev => ({ ...prev, playbook: e.target.value }))}
-                  placeholder="Describe what this steward should do when triggered. Supports markdown.&#10;&#10;Example:&#10;1. Check for stale branches older than 7 days&#10;2. Post a reminder message to the branch owner&#10;3. Archive branches with no activity for 30 days"
-                  rows={6}
-                  className="
-                    w-full px-3 py-2
-                    text-sm font-mono
-                    bg-[var(--color-surface)]
-                    border border-[var(--color-border)]
-                    rounded-lg
-                    placeholder:text-[var(--color-text-tertiary)]
-                    focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30
-                    resize-y
-                  "
-                  data-testid="steward-playbook"
-                />
+                {playbooks.length === 0 ? (
+                  <div className="px-3 py-4 text-sm text-[var(--color-text-secondary)] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg">
+                    <p className="mb-2">
+                      No workflow templates exist yet. Create one on the Workflows page to use with custom stewards.
+                    </p>
+                    <Link
+                      to="/workflows"
+                      search={{ action: 'create', tab: 'templates', selected: undefined }}
+                      className="inline-flex items-center gap-1 text-sm font-medium text-[var(--color-primary)] hover:text-[var(--color-primary-hover)] transition-colors"
+                      data-testid="create-workflow-template-link"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Create Workflow Template
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <select
+                      id="steward-playbook"
+                      value={form.playbookId}
+                      onChange={e => setForm(prev => ({ ...prev, playbookId: e.target.value }))}
+                      className="
+                        w-full px-3 py-2 pr-8
+                        text-sm
+                        bg-[var(--color-surface)]
+                        border border-[var(--color-border)]
+                        rounded-lg
+                        appearance-none
+                        focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30
+                      "
+                      data-testid="steward-playbook"
+                    >
+                      <option value="">Select a workflow template...</option>
+                      {playbooks.map(pb => (
+                        <option key={pb.id} value={pb.id}>
+                          {pb.title}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-tertiary)] pointer-events-none" />
+                  </div>
+                )}
                 <p className="text-xs text-[var(--color-text-tertiary)]">
-                  The playbook defines the steward&apos;s behavior when its triggers fire. Use markdown to describe the workflow steps.
+                  The workflow template defines this steward&apos;s behavior when its triggers fire.
                 </p>
               </div>
             )}
@@ -829,7 +859,7 @@ export function CreateAgentDialog({
               </button>
               <button
                 type="submit"
-                disabled={createAgent.isPending || !form.name.trim() || (form.role === 'steward' && form.stewardFocus === 'custom' && !form.playbook.trim())}
+                disabled={createAgent.isPending || !form.name.trim() || (form.role === 'steward' && form.stewardFocus === 'custom' && !form.playbookId)}
                 className="
                   flex items-center gap-2
                   px-4 py-2

@@ -39,6 +39,7 @@ export function createAgentRoutes(services: Services) {
         workerMode?: 'ephemeral' | 'persistent';
         stewardFocus?: 'merge' | 'docs' | 'recovery' | 'custom';
         playbook?: string;
+        playbookId?: string;
         maxConcurrentTasks?: number;
         tags?: string[];
         triggers?: Array<{ type: 'cron'; schedule: string } | { type: 'event'; event: string; condition?: string }>;
@@ -92,6 +93,7 @@ export function createAgentRoutes(services: Services) {
             stewardFocus: body.stewardFocus,
             triggers: body.triggers,
             playbook: body.stewardFocus === 'custom' ? body.playbook : undefined,
+            playbookId: body.stewardFocus === 'custom' ? body.playbookId : undefined,
             createdBy,
             tags: body.tags,
             maxConcurrentTasks: body.maxConcurrentTasks,
@@ -198,6 +200,7 @@ export function createAgentRoutes(services: Services) {
         stewardFocus: 'merge' | 'docs' | 'recovery' | 'custom';
         triggers?: Array<{ type: 'cron'; schedule: string } | { type: 'event'; event: string; condition?: string }>;
         playbook?: string;
+        playbookId?: string;
         maxConcurrentTasks?: number;
         tags?: string[];
         reportsTo?: string;
@@ -217,9 +220,9 @@ export function createAgentRoutes(services: Services) {
           400
         );
       }
-      if (body.stewardFocus === 'custom' && !body.playbook?.trim()) {
+      if (body.stewardFocus === 'custom' && !body.playbook?.trim() && !body.playbookId?.trim()) {
         return c.json(
-          { error: { code: 'INVALID_INPUT', message: 'playbook is required for custom stewards' } },
+          { error: { code: 'INVALID_INPUT', message: 'Either playbook or playbookId is required for custom stewards' } },
           400
         );
       }
@@ -243,6 +246,7 @@ export function createAgentRoutes(services: Services) {
         stewardFocus: body.stewardFocus,
         triggers: body.triggers,
         playbook: body.stewardFocus === 'custom' ? body.playbook : undefined,
+        playbookId: body.stewardFocus === 'custom' ? body.playbookId : undefined,
         createdBy: (body.createdBy ?? 'el-0000') as EntityId,
         tags: body.tags,
         maxConcurrentTasks: body.maxConcurrentTasks,

@@ -1238,6 +1238,12 @@ export interface StewardExecutorDeps {
   docsStewardService: DocsStewardService;
   sessionManager: SessionManager;
   projectRoot: string;
+  /**
+   * Optional callback to resolve a playbook (workflow template) by ID.
+   * Returns the playbook content as a markdown string for the steward prompt,
+   * or undefined if not found. Used when a custom steward has `playbookId` set.
+   */
+  resolvePlaybookContent?: (playbookId: string) => Promise<string | undefined>;
 }
 
 /**
@@ -1331,7 +1337,23 @@ export function createStewardExecutor(deps: StewardExecutorDeps): StewardExecuto
           }
 
           // Build prompt from steward base + custom playbook
-          const playbook = metadata?.playbook;
+          // Resolve playbook content: prefer playbookId (template reference), fall back to inline playbook
+          let playbook: string | undefined;
+          if (metadata?.playbookId && deps.resolvePlaybookContent) {
+            try {
+              playbook = await deps.resolvePlaybookContent(metadata.playbookId);
+              if (!playbook) {
+                logger.warn(`Custom steward '${steward.name}': playbook template ${metadata.playbookId} not found, falling back to inline playbook`);
+                playbook = metadata?.playbook;
+              }
+            } catch (err) {
+              logger.warn(`Custom steward '${steward.name}': failed to resolve playbook template ${metadata.playbookId}: ${err}, falling back to inline playbook`);
+              playbook = metadata?.playbook;
+            }
+          } else {
+            playbook = metadata?.playbook;
+          }
+
           if (!playbook) {
             return {
               success: false,

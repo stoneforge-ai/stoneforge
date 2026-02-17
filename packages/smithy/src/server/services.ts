@@ -9,7 +9,7 @@ import type { StorageBackend } from '@stoneforge/storage';
 import { createQuarryAPI, createInboxService, createSyncService, createAutoExportService, loadConfig } from '@stoneforge/quarry';
 import type { QuarryAPI, InboxService, SyncService, AutoExportService } from '@stoneforge/quarry';
 import { createSessionMessageService, type SessionMessageService } from './services/session-messages.js';
-import type { EntityId } from '@stoneforge/core';
+import type { EntityId, ElementId, Playbook } from '@stoneforge/core';
 import {
   createOrchestratorAPI,
   createAgentRegistry,
@@ -172,6 +172,30 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
     docsStewardService,
     sessionManager,
     projectRoot,
+    resolvePlaybookContent: async (playbookId: string): Promise<string | undefined> => {
+      const playbook = await api.get<Playbook>(playbookId as ElementId);
+      if (!playbook) return undefined;
+
+      // Convert playbook steps into a markdown description for the steward prompt
+      const parts: string[] = [];
+      if (playbook.title) {
+        parts.push(`# ${playbook.title}`);
+      }
+      if (playbook.steps && playbook.steps.length > 0) {
+        parts.push('\n## Steps\n');
+        for (const step of playbook.steps) {
+          parts.push(`### ${step.title}`);
+          if (step.description) {
+            parts.push(step.description);
+          }
+          if (step.dependsOn && step.dependsOn.length > 0) {
+            parts.push(`_Depends on: ${step.dependsOn.join(', ')}_`);
+          }
+          parts.push('');
+        }
+      }
+      return parts.join('\n') || playbook.title || undefined;
+    },
   });
   const stewardScheduler = createStewardScheduler(agentRegistry, stewardExecutor, {
     maxHistoryPerSteward: 100,

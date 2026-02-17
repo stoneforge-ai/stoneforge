@@ -130,6 +130,7 @@ const workflowsRoute = createRoute({
     return {
       selected: typeof search.selected === 'string' ? search.selected : undefined,
       tab: typeof search.tab === 'string' ? search.tab : 'templates',
+      action: typeof search.action === 'string' ? search.action : undefined,
     };
   },
 });

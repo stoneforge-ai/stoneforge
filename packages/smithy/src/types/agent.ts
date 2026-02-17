@@ -218,8 +218,14 @@ export interface StewardMetadata extends BaseAgentMetadata {
    * Custom playbook content (markdown/plain text) for 'custom' stewards.
    * Describes what the steward should do when triggered.
    * Only used when stewardFocus is 'custom'.
+   * @deprecated Prefer `playbookId` for new stewards. Kept for backward compatibility.
    */
   readonly playbook?: string;
+  /**
+   * Reference to a Workflow Template (playbook) for 'custom' stewards.
+   * Preferred over inline `playbook`. The template content is resolved at execution time.
+   */
+  readonly playbookId?: string;
   /** Timestamp of last execution */
   readonly lastExecutedAt?: Timestamp;
   /** Timestamp of next scheduled execution (for cron triggers) */
@@ -313,8 +319,14 @@ export interface RegisterStewardInput {
   /**
    * Custom playbook content (markdown/plain text) for 'custom' stewards.
    * Describes what the steward should do when triggered.
+   * @deprecated Prefer `playbookId` for new stewards. Kept for backward compatibility.
    */
   readonly playbook?: string;
+  /**
+   * Reference to a Workflow Template (playbook) for 'custom' stewards.
+   * Preferred over inline `playbook`. The template content is resolved at execution time.
+   */
+  readonly playbookId?: string;
   /** Optional tags for the agent entity */
   readonly tags?: string[];
   /** Entity ID of the creator */

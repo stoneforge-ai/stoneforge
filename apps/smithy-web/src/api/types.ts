@@ -63,8 +63,10 @@ export interface StewardMetadata extends BaseAgentMetadata {
   agentRole: 'steward';
   stewardFocus: StewardFocus;
   triggers?: StewardTrigger[];
-  /** Custom playbook content for 'custom' stewards */
+  /** Custom playbook content for 'custom' stewards (legacy) */
   playbook?: string;
+  /** Reference to a Workflow Template (playbook) for 'custom' stewards */
+  playbookId?: string;
   lastExecutedAt?: Timestamp;
   nextScheduledAt?: Timestamp;
 }
@@ -191,8 +193,10 @@ export interface CreateAgentInput {
   // Steward-specific
   stewardFocus?: StewardFocus;
   triggers?: StewardTrigger[];
-  /** Custom playbook content for 'custom' stewards */
+  /** Custom playbook content for 'custom' stewards (legacy) */
   playbook?: string;
+  /** Reference to a Workflow Template (playbook) for 'custom' stewards */
+  playbookId?: string;
   // Provider
   provider?: string;
   // Model override (if not set, uses provider default)

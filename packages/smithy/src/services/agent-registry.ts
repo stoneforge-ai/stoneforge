@@ -335,6 +335,7 @@ export class AgentRegistryImpl implements AgentRegistry {
       stewardFocus: input.stewardFocus,
       triggers: input.triggers,
       playbook: input.stewardFocus === 'custom' ? input.playbook : undefined,
+      playbookId: input.stewardFocus === 'custom' ? input.playbookId : undefined,
       sessionStatus: 'idle',
       maxConcurrentTasks: input.maxConcurrentTasks,
       roleDefinitionRef: input.roleDefinitionRef,
