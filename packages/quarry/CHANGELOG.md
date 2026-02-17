@@ -1,5 +1,18 @@
 # @stoneforge/quarry
 
+## 1.0.3
+
+### Patch Changes
+
+- d088df0: - Fix `sf -V` reporting hardcoded "v0.1.0" instead of actual installed version by reading version from package.json at runtime.
+  - Fix `sf init` failing with "Referenced element does not exist" when cloning a repo with stale JSONL files. Dependencies referencing elements not in `elements.jsonl` are now skipped gracefully instead of triggering a fatal foreign key violation.
+  - Wire up automatic JSONL export via new `AutoExportService`. When `sync.autoExport` is enabled (default), the server polls for dirty elements and incrementally exports to `.stoneforge/sync/` on each mutation.
+- Updated dependencies [f4c196e]
+  - @stoneforge/smithy@1.0.3
+  - @stoneforge/core@1.0.3
+  - @stoneforge/storage@1.0.3
+  - @stoneforge/shared-routes@1.0.3
+
 ## 1.0.2
 
 ### Patch Changes
