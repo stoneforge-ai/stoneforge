@@ -115,40 +115,40 @@ sf export
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                  @stoneforge/smithy                 │
-│       Agent orchestration, spawning, sessions, prompts       │
+│                    @stoneforge/smithy                       │
+│       Agent orchestration, spawning, sessions, prompts      │
 └────────────────────────────┬────────────────────────────────┘
                              │
 ┌────────────────────────────▼────────────────────────────────┐
-│                       @stoneforge/quarry                         │
-│        QuarryAPI, services, sync, CLI, identity           │
+│                   @stoneforge/quarry                        │
+│        QuarryAPI, services, sync, CLI, identity             │
 └────────────────────────────┬────────────────────────────────┘
                              │
-          ┌──────────────────┼──────────────────┐
-          │                  │                  │
-┌─────────▼─────────┐  ┌─────▼─────┐  ┌────────▼────────┐
-│  @stoneforge/core  │  │ @stoneforge │  │ @stoneforge/ui   │
-│  Types & IDs      │  │  /storage  │  │ React components│
-└───────────────────┘  └───────────┘  └─────────────────┘
+          ┌──────────────────┼───────────────────┐
+          │                  │                   │
+┌─────────▼─────────┐  ┌─────▼───────┐  ┌────────▼─────────┐
+│  @stoneforge/core │  │ @stoneforge │  │ @stoneforge/ui   │
+│  Types & IDs      │  │  /storage   │  │ React components │
+└───────────────────┘  └─────────────┘  └──────────────────┘
 ```
 
 ### Dual Storage Model
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                         SQLite                               │
-│  • Fast queries with indexes                                 │
-│  • Full-text search (FTS5)                                   │
-│  • Materialized views (blocked cache)                        │
-│  • Ephemeral — rebuilt from JSONL on sync                    │
+│                         SQLite                              │
+│  • Fast queries with indexes                                │
+│  • Full-text search (FTS5)                                  │
+│  • Materialized views (blocked cache)                       │
+│  • Ephemeral — rebuilt from JSONL on sync                   │
 └────────────────────────────┬────────────────────────────────┘
                              │ sync
 ┌────────────────────────────▼────────────────────────────────┐
-│                         JSONL                                │
-│  • Git-tracked, append-only                                  │
-│  • Source of truth for all durable data                      │
-│  • Human-readable, diff-friendly                             │
-│  • Mergeable across branches                                 │
+│                         JSONL                               │
+│  • Git-tracked, append-only                                 │
+│  • Source of truth for all durable data                     │
+│  • Human-readable, diff-friendly                            │
+│  • Mergeable across branches                                │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -198,15 +198,15 @@ Stoneforge provides a complete agent orchestration system with three agent types
 ```
 ┌──────────┐    creates    ┌──────────────────┐    dispatches    ┌─────────────┐
 │ Director │───────────────│  Task (ready)    │─────────────────▶│   Worker    │
-└──────────┘    tasks      └──────────────────┘    via daemon     └──────┬──────┘
-                                                                         │
-                                                           completes or hands off
-                                                                         │
-                                                                         ▼
-                                                              ┌─────────────────┐
-                                                              │    Steward      │
-                                                              │  (merge review) │
-                                                              └─────────────────┘
+└──────────┘    tasks      └──────────────────┘    via daemon    └──────┬──────┘
+                                                                        │
+                                                              completes or hands off
+                                                                        │
+                                                                        ▼
+                                                               ┌─────────────────┐
+                                                               │    Steward      │
+                                                               │  (merge review) │
+                                                               └─────────────────┘
 ```
 
 ### Worktree Isolation
