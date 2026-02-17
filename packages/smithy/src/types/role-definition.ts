@@ -326,7 +326,7 @@ export function isStewardRoleDefinition(value: unknown): value is StewardRoleDef
     return false;
   }
   // stewardFocus is optional, but if present must be valid
-  const validFoci = ['merge', 'docs', 'custom'];
+  const validFoci = ['merge', 'docs', 'recovery', 'custom'];
   if (def.stewardFocus !== undefined && !validFoci.includes(def.stewardFocus)) {
     return false;
   }

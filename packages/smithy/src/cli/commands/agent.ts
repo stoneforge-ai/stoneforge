@@ -229,7 +229,7 @@ async function agentListHandler(
 
     // Filter by steward focus
     if (options.focus) {
-      const validFocuses = ['merge', 'docs', 'custom'];
+      const validFocuses = ['merge', 'docs', 'recovery', 'custom'];
       if (!validFocuses.includes(options.focus)) {
         return failure(
           `Invalid focus: ${options.focus}. Must be one of: ${validFocuses.join(', ')}`,
@@ -540,7 +540,7 @@ async function agentRegisterHandler(
 
       case 'steward': {
         const stewardFocus = (options.focus as StewardFocus) ?? 'merge';
-        const validFocuses = ['merge', 'docs', 'custom'];
+        const validFocuses = ['merge', 'docs', 'recovery', 'custom'];
         if (!validFocuses.includes(stewardFocus)) {
           return failure(
             `Invalid focus: ${stewardFocus}. Must be one of: ${validFocuses.join(', ')}`,

@@ -24,6 +24,7 @@ describe("Prompt Loading", () => {
     it("returns true for steward with focus", () => {
       expect(hasBuiltInPrompt("steward", "merge")).toBe(true);
       expect(hasBuiltInPrompt("steward", "docs")).toBe(true);
+      expect(hasBuiltInPrompt("steward", "recovery")).toBe(true);
     });
   });
 
@@ -35,6 +36,7 @@ describe("Prompt Loading", () => {
       expect(files).toContain("steward-base.md");
       expect(files).toContain("steward-merge.md");
       expect(files).toContain("steward-docs.md");
+      expect(files).toContain("steward-recovery.md");
       expect(files).not.toContain("steward-health.md");
       expect(files).not.toContain("steward-ops.md");
       expect(files).not.toContain("steward-reminder.md");
@@ -294,6 +296,13 @@ describe("Prompt Content", () => {
       const prompt = loadBuiltInPrompt("steward", "docs");
       expect(prompt).toBeDefined();
       expect(prompt).toContain("You are a **Steward**");
+    });
+
+    it("recovery focus includes recovery workflow", () => {
+      const prompt = loadBuiltInPrompt("steward", "recovery");
+      expect(prompt).toBeDefined();
+      expect(prompt).toContain("You are a **Steward**"); // Base
+      expect(prompt).toContain("Recovery Steward"); // Focus
     });
   });
 });

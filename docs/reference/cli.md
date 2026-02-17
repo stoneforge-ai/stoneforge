@@ -695,7 +695,7 @@ List registered agents with optional filters.
 | `-r, --role <role>`       | Filter by role: director, worker, steward                      |
 | `-s, --status <status>`   | Filter by session status: idle, running, suspended, terminated |
 | `-m, --workerMode <mode>` | Filter by worker mode: ephemeral, persistent                   |
-| `-f, --focus <focus>`     | Filter by steward focus: merge, docs, custom                   |
+| `-f, --focus <focus>`     | Filter by steward focus: merge, docs, recovery, custom         |
 | `--reportsTo <id>`        | Filter by manager entity ID                                    |
 | `--hasSession`            | Filter to agents with active sessions                          |
 
@@ -716,7 +716,7 @@ Register a new orchestrator agent.
 | --------------------- | ------------------------------------------------------- |
 | `-r, --role <role>`   | Agent role: director, worker, steward (required)        |
 | `-m, --mode <mode>`   | Worker mode: ephemeral, persistent (default: ephemeral) |
-| `-f, --focus <focus>` | Steward focus: merge, docs, custom                      |
+| `-f, --focus <focus>` | Steward focus: merge, docs, recovery, custom            |
 | `-t, --maxTasks <n>`  | Maximum concurrent tasks (default: 1)                   |
 | `--tags <tags>`       | Comma-separated tags                                    |
 | `--reportsTo <id>`    | Manager entity ID (for workers/stewards)                |

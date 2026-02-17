@@ -37,7 +37,7 @@ export function createAgentRoutes(services: Services) {
         role: 'director' | 'worker' | 'steward';
         name: string;
         workerMode?: 'ephemeral' | 'persistent';
-        stewardFocus?: 'merge' | 'docs' | 'custom';
+        stewardFocus?: 'merge' | 'docs' | 'recovery' | 'custom';
         maxConcurrentTasks?: number;
         tags?: string[];
         triggers?: Array<{ type: 'cron'; schedule: string } | { type: 'event'; event: string; condition?: string }>;
@@ -202,7 +202,7 @@ export function createAgentRoutes(services: Services) {
     try {
       const body = (await c.req.json()) as {
         name: string;
-        stewardFocus: 'merge' | 'docs' | 'custom';
+        stewardFocus: 'merge' | 'docs' | 'recovery' | 'custom';
         triggers?: Array<{ type: 'cron'; schedule: string } | { type: 'event'; event: string; condition?: string }>;
         playbook?: string;
         maxConcurrentTasks?: number;
@@ -217,7 +217,7 @@ export function createAgentRoutes(services: Services) {
       if (!body.stewardFocus) {
         return c.json({ error: { code: 'INVALID_INPUT', message: 'stewardFocus is required' } }, 400);
       }
-      const validFocuses = ['merge', 'docs', 'custom'];
+      const validFocuses = ['merge', 'docs', 'recovery', 'custom'];
       if (!validFocuses.includes(body.stewardFocus)) {
         return c.json(
           { error: { code: 'INVALID_INPUT', message: `stewardFocus must be one of: ${validFocuses.join(', ')}` } },

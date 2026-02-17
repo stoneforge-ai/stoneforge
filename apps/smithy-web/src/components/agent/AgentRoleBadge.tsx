@@ -58,6 +58,10 @@ const stewardFocusConfig: Record<StewardFocus, { label: string; icon: React.Comp
     label: 'Docs',
     icon: Bot,
   },
+  recovery: {
+    label: 'Recovery',
+    icon: Bot,
+  },
   custom: {
     label: 'Custom',
     icon: Bot,

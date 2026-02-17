@@ -4,7 +4,7 @@
  * Provides forms for creating:
  * - Director (strategic agent)
  * - Worker (ephemeral or persistent)
- * - Steward (merge, docs, custom)
+ * - Steward (merge, docs, recovery, custom)
  *
  * TB-O22: Steward Configuration UI
  */
@@ -73,6 +73,10 @@ const stewardFocusOptions: Record<StewardFocus, { label: string; description: st
   docs: {
     label: 'Documentation Steward',
     description: 'Reviews, updates, and maintains workspace documents.',
+  },
+  recovery: {
+    label: 'Recovery Steward',
+    description: 'Diagnoses and recovers tasks left in broken state by workers.',
   },
   custom: {
     label: 'Custom Steward',

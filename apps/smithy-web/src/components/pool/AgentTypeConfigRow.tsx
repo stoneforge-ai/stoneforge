@@ -18,7 +18,7 @@ import { Trash2, ChevronDown } from 'lucide-react';
 export interface AgentTypeFormState {
   role: 'worker' | 'steward';
   workerMode: 'ephemeral' | 'persistent' | '';
-  stewardFocus: 'merge' | 'docs' | 'custom' | '';
+  stewardFocus: 'merge' | 'docs' | 'recovery' | 'custom' | '';
   priority: string;
   maxSlots: string;
   provider: string;
@@ -85,6 +85,7 @@ export const workerModeLabels: Record<string, string> = {
 export const stewardFocusLabels: Record<string, string> = {
   merge: 'Merge',
   docs: 'Docs',
+  recovery: 'Recovery',
   custom: 'Custom',
 };
 

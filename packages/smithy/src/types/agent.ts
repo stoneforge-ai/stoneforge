@@ -71,14 +71,15 @@ export function isWorkerMode(value: unknown): value is WorkerMode {
  *
  * - `merge`: Handles merging completed branches, running tests, cleanup
  * - `docs`: Scans and fixes documentation issues, auto-merges fixes
+ * - `recovery`: Diagnoses and recovers tasks left in broken state by workers
  * - `custom`: User-defined steward with a custom playbook and trigger configuration
  */
-export type StewardFocus = 'merge' | 'docs' | 'custom';
+export type StewardFocus = 'merge' | 'docs' | 'recovery' | 'custom';
 
 /**
  * All valid steward focus values
  */
-export const StewardFocusValues = ['merge', 'docs', 'custom'] as const;
+export const StewardFocusValues = ['merge', 'docs', 'recovery', 'custom'] as const;
 
 /**
  * Type guard to check if a value is a valid StewardFocus

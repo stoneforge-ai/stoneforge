@@ -42,7 +42,7 @@ import type { SyncResult } from '../cli/commands/task.js';
 import type { TaskAssignmentService } from './task-assignment-service.js';
 import type { StewardScheduler } from './steward-scheduler.js';
 import type { AgentPoolService } from './agent-pool-service.js';
-import type { WorkerMetadata, StewardMetadata } from '../types/agent.js';
+import type { WorkerMetadata, StewardMetadata, StewardFocus } from '../types/agent.js';
 import type { PoolSpawnRequest } from '../types/agent-pool.js';
 import {
   getOrchestratorTaskMeta,
@@ -1852,7 +1852,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
   private async buildStewardPrompt(
     task: Task,
     stewardId: EntityId,
-    stewardFocus: 'merge' | 'docs' | 'custom' = 'merge',
+    stewardFocus: StewardFocus = 'merge',
     syncResult?: SyncResult
   ): Promise<string> {
     const parts: string[] = [];
@@ -2039,7 +2039,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
     }
 
     // Build the steward prompt with full context including sync result
-    const initialPrompt = await this.buildStewardPrompt(task, stewardId, stewardFocus as 'merge' | 'docs' | 'custom', syncResult);
+    const initialPrompt = await this.buildStewardPrompt(task, stewardId, stewardFocus as StewardFocus, syncResult);
 
     const workingDirectory = worktreePath;
 

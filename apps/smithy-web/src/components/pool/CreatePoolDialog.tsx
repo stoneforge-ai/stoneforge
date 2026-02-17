@@ -115,7 +115,7 @@ export function CreatePoolDialog({ isOpen, onClose, onSuccess }: CreatePoolDialo
       return {
         role: at.role,
         ...(at.role === 'worker' && at.workerMode ? { workerMode: at.workerMode as 'ephemeral' | 'persistent' } : {}),
-        ...(at.role === 'steward' && at.stewardFocus ? { stewardFocus: at.stewardFocus as 'merge' | 'docs' | 'custom' } : {}),
+        ...(at.role === 'steward' && at.stewardFocus ? { stewardFocus: at.stewardFocus as 'merge' | 'docs' | 'recovery' | 'custom' } : {}),
         ...(at.priority.trim() ? { priority: parseInt(at.priority, 10) } : {}),
         ...(at.maxSlots.trim() ? { maxSlots: parseInt(at.maxSlots, 10) } : {}),
         ...(at.provider.trim() ? { provider: at.provider.trim() } : {}),
