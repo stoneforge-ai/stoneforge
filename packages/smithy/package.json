@@ -68,7 +68,8 @@
     "test:orchestration": "bun run src/cli/commands/test-orchestration.ts",
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "postinstall": "node scripts/fix-node-pty-permissions.cjs"
   },
   "engines": {
     "node": ">=18.0.0"
@@ -76,6 +77,7 @@
   "files": [
     "dist",
     "web",
+    "scripts",
     "README.md"
   ],
   "repository": {
