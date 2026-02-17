@@ -14,7 +14,7 @@ import { useTasks } from '../../api/hooks/useTasks';
 import { usePools, useUpdatePool, useDeletePool } from '../../api/hooks/usePools';
 import type { AgentPool } from '../../api/hooks/usePools';
 import { AgentCard, CreateAgentDialog, DeleteAgentDialog, RenameAgentDialog, StartAgentDialog } from '../../components/agent';
-import { PoolCard, CreatePoolDialog } from '../../components/pool';
+import { PoolCard, CreatePoolDialog, EditPoolDialog } from '../../components/pool';
 import { AgentWorkspaceGraph } from '../../components/agent-graph';
 import type { Agent, SessionStatus, AgentRole, StewardFocus } from '../../api/types';
 
@@ -32,6 +32,9 @@ export function AgentsPage() {
 
   // Create Pool Dialog state
   const [createPoolDialogOpen, setCreatePoolDialogOpen] = useState(false);
+
+  // Edit Pool Dialog state
+  const [editingPool, setEditingPool] = useState<AgentPool | null>(null);
 
   // Handle ?action=create from global keyboard shortcuts
   useEffect(() => {
@@ -488,6 +491,7 @@ export function AgentsPage() {
           pools={pools}
           isLoading={poolsLoading}
           onCreatePool={() => setCreatePoolDialogOpen(true)}
+          onEditPool={(pool) => setEditingPool(pool)}
           onToggleEnabled={(poolId, enabled) => updatePoolMutation.mutate({ id: poolId, enabled })}
           onDeletePool={(poolId) => deletePoolMutation.mutate({ id: poolId })}
           isUpdating={updatePoolMutation.isPending}
@@ -510,6 +514,16 @@ export function AgentsPage() {
         onClose={() => setCreatePoolDialogOpen(false)}
         onSuccess={() => refetchPools()}
       />
+
+      {/* Edit Pool Dialog */}
+      {editingPool && (
+        <EditPoolDialog
+          isOpen={!!editingPool}
+          onClose={() => setEditingPool(null)}
+          pool={editingPool}
+          onSuccess={() => { setEditingPool(null); refetchPools(); }}
+        />
+      )}
 
       {/* Rename Agent Dialog */}
       {renameAgent && (
@@ -767,12 +781,13 @@ interface PoolsTabProps {
   pools: AgentPool[];
   isLoading: boolean;
   onCreatePool: () => void;
+  onEditPool: (pool: AgentPool) => void;
   onToggleEnabled: (poolId: string, enabled: boolean) => void;
   onDeletePool: (poolId: string) => void;
   isUpdating: boolean;
 }
 
-function PoolsTab({ pools, isLoading, onCreatePool, onToggleEnabled, onDeletePool, isUpdating }: PoolsTabProps) {
+function PoolsTab({ pools, isLoading, onCreatePool, onEditPool, onToggleEnabled, onDeletePool, isUpdating }: PoolsTabProps) {
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center py-16">
@@ -808,6 +823,7 @@ function PoolsTab({ pools, isLoading, onCreatePool, onToggleEnabled, onDeletePoo
             <PoolCard
               key={pool.id}
               pool={pool}
+              onEdit={() => onEditPool(pool)}
               onToggleEnabled={(enabled) => onToggleEnabled(pool.id, enabled)}
               onDelete={() => onDeletePool(pool.id)}
               isUpdating={isUpdating}

@@ -1,33 +1,31 @@
 /**
- * CreatePoolDialog - Dialog for creating new agent pools
+ * EditPoolDialog - Dialog for editing existing agent pools
  *
- * Provides a form for creating agent pools with:
- * - Pool name (validated per isValidPoolName rules)
- * - Max concurrent agents (validated per isValidPoolSize rules)
- * - Agent type configurations (role, mode/focus, priority, maxSlots)
- * - Optional description and tags
- *
- * Follows the same dialog pattern as CreateAgentDialog.
+ * Mirrors CreatePoolDialog layout but:
+ * - Pre-populates form with the pool's current configuration
+ * - Pool name is displayed as read-only (not editable after creation)
+ * - Uses useUpdatePool hook instead of useCreatePool
+ * - Validates maxSize >= activeCount (can't shrink below active agents)
+ * - Shows "Save Changes" instead of "Create Pool"
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   X,
   Plus,
   AlertCircle,
   Loader2,
   ChevronDown,
-  Users,
+  Settings,
+  Save,
 } from 'lucide-react';
-import type { CreatePoolInput, PoolAgentTypeConfig } from '../../api/hooks/usePools';
-import { useCreatePool } from '../../api/hooks/usePools';
+import type { PoolAgentTypeConfig, AgentPool, UpdatePoolInput } from '../../api/hooks/usePools';
+import { useUpdatePool } from '../../api/hooks/usePools';
 import {
   AgentTypeConfigRow,
-  validatePoolName,
   validateMaxSize,
   validatePriority,
   validateMaxSlots,
-  defaultFormState,
   defaultAgentType,
 } from './AgentTypeConfigRow';
 import type { AgentTypeFormState, FormState } from './AgentTypeConfigRow';
@@ -36,29 +34,63 @@ import type { AgentTypeFormState, FormState } from './AgentTypeConfigRow';
 // Types
 // ============================================================================
 
-export interface CreatePoolDialogProps {
+export interface EditPoolDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess?: (pool: { id: string; name: string }) => void;
+  pool: AgentPool;
+  onSuccess?: () => void;
+}
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+/**
+ * Convert a pool's config into editable form state
+ */
+function poolToFormState(pool: AgentPool): FormState {
+  const { config } = pool;
+  return {
+    name: config.name,
+    description: config.description ?? '',
+    maxSize: String(config.maxSize),
+    agentTypes: config.agentTypes.map((at): AgentTypeFormState => ({
+      role: at.role,
+      workerMode: at.workerMode ?? '',
+      stewardFocus: at.stewardFocus ?? '',
+      priority: at.priority !== undefined ? String(at.priority) : '0',
+      maxSlots: at.maxSlots !== undefined ? String(at.maxSlots) : '',
+    })),
+    enabled: config.enabled,
+    tags: config.tags?.join(', ') ?? '',
+  };
 }
 
 // ============================================================================
 // Component
 // ============================================================================
 
-export function CreatePoolDialog({ isOpen, onClose, onSuccess }: CreatePoolDialogProps) {
-  const [form, setForm] = useState<FormState>({ ...defaultFormState });
+export function EditPoolDialog({ isOpen, onClose, pool, onSuccess }: EditPoolDialogProps) {
+  const [form, setForm] = useState<FormState>(() => poolToFormState(pool));
   const [error, setError] = useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
-  const createPool = useCreatePool();
+  const updatePool = useUpdatePool();
+
+  // Re-initialize form when pool changes (e.g., opening dialog for a different pool)
+  useEffect(() => {
+    if (isOpen) {
+      setForm(poolToFormState(pool));
+      setError(null);
+      // Show advanced if pool has non-default values for enabled or tags
+      setShowAdvanced(!pool.config.enabled || (pool.config.tags && pool.config.tags.length > 0) || false);
+    }
+  }, [isOpen, pool]);
 
   if (!isOpen) return null;
 
   const handleClose = () => {
-    setForm({ ...defaultFormState });
     setError(null);
-    setShowAdvanced(false);
     onClose();
   };
 
@@ -93,11 +125,8 @@ export function CreatePoolDialog({ isOpen, onClose, onSuccess }: CreatePoolDialo
     e.preventDefault();
     setError(null);
 
-    // Validate
-    const nameError = validatePoolName(form.name);
-    if (nameError) { setError(nameError); return; }
-
-    const sizeError = validateMaxSize(form.maxSize);
+    // Validate max size (must be >= activeCount)
+    const sizeError = validateMaxSize(form.maxSize, pool.status.activeCount);
     if (sizeError) { setError(`Max size: ${sizeError}`); return; }
 
     // Validate agent types
@@ -110,7 +139,7 @@ export function CreatePoolDialog({ isOpen, onClose, onSuccess }: CreatePoolDialo
       if (maxSlotsError) { setError(`Agent type ${i + 1} max slots: ${maxSlotsError}`); return; }
     }
 
-    // Build input
+    // Build update input
     const agentTypes: PoolAgentTypeConfig[] = form.agentTypes.map(at => {
       return {
         role: at.role,
@@ -121,21 +150,21 @@ export function CreatePoolDialog({ isOpen, onClose, onSuccess }: CreatePoolDialo
       };
     });
 
-    const input: CreatePoolInput = {
-      name: form.name.trim(),
+    const input: UpdatePoolInput & { id: string } = {
+      id: pool.id,
       maxSize: parseInt(form.maxSize, 10),
-      ...(form.description.trim() && { description: form.description.trim() }),
-      ...(agentTypes.length > 0 && { agentTypes }),
+      description: form.description.trim() || undefined,
+      agentTypes,
       enabled: form.enabled,
-      ...(form.tags.trim() && { tags: form.tags.split(',').map(t => t.trim()).filter(Boolean) }),
+      tags: form.tags.trim() ? form.tags.split(',').map(t => t.trim()).filter(Boolean) : undefined,
     };
 
     try {
-      const pool = await createPool.mutateAsync(input);
-      onSuccess?.({ id: pool.id, name: pool.config.name });
+      await updatePool.mutateAsync(input);
+      onSuccess?.();
       handleClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create pool');
+      setError(err instanceof Error ? err.message : 'Failed to update pool');
     }
   };
 
@@ -145,7 +174,7 @@ export function CreatePoolDialog({ isOpen, onClose, onSuccess }: CreatePoolDialo
       <div
         className="fixed inset-0 z-40 bg-black/50 animate-fade-in"
         onClick={handleClose}
-        data-testid="create-pool-backdrop"
+        data-testid="edit-pool-backdrop"
       />
 
       {/* Dialog */}
@@ -160,19 +189,19 @@ export function CreatePoolDialog({ isOpen, onClose, onSuccess }: CreatePoolDialo
             pointer-events-auto
             my-8
           "
-          data-testid="create-pool-dialog"
+          data-testid="edit-pool-dialog"
           role="dialog"
-          aria-labelledby="create-pool-title"
+          aria-labelledby="edit-pool-title"
         >
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)]">
             <div className="flex items-center gap-2">
-              <Users className="w-5 h-5 text-[var(--color-primary)]" />
+              <Settings className="w-5 h-5 text-[var(--color-primary)]" />
               <h2
-                id="create-pool-title"
+                id="edit-pool-title"
                 className="text-lg font-semibold text-[var(--color-text)]"
               >
-                Create Pool
+                Edit Pool
               </h2>
             </div>
             <button
@@ -185,7 +214,7 @@ export function CreatePoolDialog({ isOpen, onClose, onSuccess }: CreatePoolDialo
                 transition-colors
               "
               aria-label="Close dialog"
-              data-testid="create-pool-close"
+              data-testid="edit-pool-close"
             >
               <X className="w-5 h-5" />
             </button>
@@ -200,42 +229,37 @@ export function CreatePoolDialog({ isOpen, onClose, onSuccess }: CreatePoolDialo
               </div>
             )}
 
-            {/* Pool Name */}
+            {/* Pool Name (read-only) */}
             <div className="space-y-1">
-              <label htmlFor="pool-name" className="text-sm font-medium text-[var(--color-text)]">
+              <label className="text-sm font-medium text-[var(--color-text)]">
                 Pool Name
               </label>
-              <input
-                id="pool-name"
-                type="text"
-                value={form.name}
-                onChange={e => setForm(prev => ({ ...prev, name: e.target.value }))}
-                placeholder="e.g., worker-pool, build-agents"
+              <p
                 className="
-                  w-full px-3 py-2
+                  px-3 py-2
                   text-sm
-                  bg-[var(--color-surface)]
+                  text-[var(--color-text-secondary)]
+                  bg-[var(--color-surface-elevated)]
                   border border-[var(--color-border)]
                   rounded-lg
-                  placeholder:text-[var(--color-text-tertiary)]
-                  focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30
                 "
-                autoFocus
-                data-testid="pool-name"
-              />
+                data-testid="edit-pool-name"
+              >
+                {pool.config.name}
+              </p>
               <p className="text-xs text-[var(--color-text-tertiary)]">
-                Must start with a letter. Letters, numbers, hyphens, underscores only.
+                Pool name cannot be changed after creation.
               </p>
             </div>
 
             {/* Description */}
             <div className="space-y-1">
-              <label htmlFor="pool-description" className="text-sm font-medium text-[var(--color-text)]">
+              <label htmlFor="edit-pool-description" className="text-sm font-medium text-[var(--color-text)]">
                 Description
                 <span className="ml-1 text-xs text-[var(--color-text-tertiary)]">(optional)</span>
               </label>
               <input
-                id="pool-description"
+                id="edit-pool-description"
                 type="text"
                 value={form.description}
                 onChange={e => setForm(prev => ({ ...prev, description: e.target.value }))}
@@ -249,19 +273,20 @@ export function CreatePoolDialog({ isOpen, onClose, onSuccess }: CreatePoolDialo
                   placeholder:text-[var(--color-text-tertiary)]
                   focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30
                 "
-                data-testid="pool-description"
+                autoFocus
+                data-testid="edit-pool-description"
               />
             </div>
 
             {/* Max Concurrent Agents */}
             <div className="space-y-1">
-              <label htmlFor="pool-max-size" className="text-sm font-medium text-[var(--color-text)]">
+              <label htmlFor="edit-pool-max-size" className="text-sm font-medium text-[var(--color-text)]">
                 Max Concurrent Agents
               </label>
               <input
-                id="pool-max-size"
+                id="edit-pool-max-size"
                 type="number"
-                min="1"
+                min={pool.status.activeCount || 1}
                 max="1000"
                 value={form.maxSize}
                 onChange={e => setForm(prev => ({ ...prev, maxSize: e.target.value }))}
@@ -273,10 +298,13 @@ export function CreatePoolDialog({ isOpen, onClose, onSuccess }: CreatePoolDialo
                   rounded-lg
                   focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30
                 "
-                data-testid="pool-max-size"
+                data-testid="edit-pool-max-size"
               />
               <p className="text-xs text-[var(--color-text-tertiary)]">
                 Maximum number of agents that can run simultaneously in this pool (1-1000).
+                {pool.status.activeCount > 0 && (
+                  <> Currently {pool.status.activeCount} active — cannot set below this.</>
+                )}
               </p>
             </div>
 
@@ -291,7 +319,7 @@ export function CreatePoolDialog({ isOpen, onClose, onSuccess }: CreatePoolDialo
                   type="button"
                   onClick={addAgentType}
                   className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-[var(--color-primary)] hover:bg-[var(--color-primary-muted)] rounded transition-colors"
-                  data-testid="add-agent-type"
+                  data-testid="edit-add-agent-type"
                 >
                   <Plus className="w-3 h-3" />
                   Add Type
@@ -323,7 +351,7 @@ export function CreatePoolDialog({ isOpen, onClose, onSuccess }: CreatePoolDialo
                 type="button"
                 onClick={() => setShowAdvanced(!showAdvanced)}
                 className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
-                data-testid="toggle-advanced"
+                data-testid="edit-toggle-advanced"
               >
                 <ChevronDown className={`w-4 h-4 transition-transform ${showAdvanced ? 'rotate-180' : ''}`} />
                 Advanced Settings
@@ -337,18 +365,18 @@ export function CreatePoolDialog({ isOpen, onClose, onSuccess }: CreatePoolDialo
                       checked={form.enabled}
                       onChange={e => setForm(prev => ({ ...prev, enabled: e.target.checked }))}
                       className="rounded border-[var(--color-border)] text-[var(--color-primary)] focus:ring-[var(--color-primary)]"
-                      data-testid="pool-enabled"
+                      data-testid="edit-pool-enabled"
                     />
                     <span className="text-sm text-[var(--color-text)]">Pool enabled</span>
                   </label>
 
                   {/* Tags */}
                   <div className="space-y-1">
-                    <label htmlFor="pool-tags" className="text-xs font-medium text-[var(--color-text-secondary)]">
+                    <label htmlFor="edit-pool-tags" className="text-xs font-medium text-[var(--color-text-secondary)]">
                       Tags (comma-separated)
                     </label>
                     <input
-                      id="pool-tags"
+                      id="edit-pool-tags"
                       type="text"
                       value={form.tags}
                       onChange={e => setForm(prev => ({ ...prev, tags: e.target.value }))}
@@ -362,7 +390,7 @@ export function CreatePoolDialog({ isOpen, onClose, onSuccess }: CreatePoolDialo
                         placeholder:text-[var(--color-text-tertiary)]
                         focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30
                       "
-                      data-testid="pool-tags"
+                      data-testid="edit-pool-tags"
                     />
                   </div>
                 </div>
@@ -383,13 +411,13 @@ export function CreatePoolDialog({ isOpen, onClose, onSuccess }: CreatePoolDialo
                   rounded-lg
                   transition-colors
                 "
-                data-testid="cancel-create-pool"
+                data-testid="cancel-edit-pool"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                disabled={createPool.isPending || !form.name.trim() || !form.maxSize.trim()}
+                disabled={updatePool.isPending || !form.maxSize.trim()}
                 className="
                   flex items-center gap-2
                   px-4 py-2
@@ -401,17 +429,17 @@ export function CreatePoolDialog({ isOpen, onClose, onSuccess }: CreatePoolDialo
                   rounded-lg
                   transition-colors
                 "
-                data-testid="submit-create-pool"
+                data-testid="submit-edit-pool"
               >
-                {createPool.isPending ? (
+                {updatePool.isPending ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Creating...
+                    Saving...
                   </>
                 ) : (
                   <>
-                    <Plus className="w-4 h-4" />
-                    Create Pool
+                    <Save className="w-4 h-4" />
+                    Save Changes
                   </>
                 )}
               </button>
