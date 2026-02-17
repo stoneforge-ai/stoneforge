@@ -7,15 +7,18 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { useSearch, useNavigate } from '@tanstack/react-router';
-import { Users, Plus, Search, Crown, Wrench, Shield, Loader2, AlertCircle, RefreshCw, Network } from 'lucide-react';
+import { Users, Plus, Search, Crown, Wrench, Shield, Loader2, AlertCircle, RefreshCw, Network, Layers } from 'lucide-react';
 import { getCurrentBinding, formatKeyBinding } from '../../lib/keyboard';
 import { useAgentsByRole, useStartAgentSession, useStopAgentSession, useDeleteAgent, useDirector, useSessions } from '../../api/hooks/useAgents';
 import { useTasks } from '../../api/hooks/useTasks';
+import { usePools, useUpdatePool, useDeletePool } from '../../api/hooks/usePools';
+import type { AgentPool } from '../../api/hooks/usePools';
 import { AgentCard, CreateAgentDialog, DeleteAgentDialog, RenameAgentDialog, StartAgentDialog } from '../../components/agent';
+import { PoolCard, CreatePoolDialog } from '../../components/pool';
 import { AgentWorkspaceGraph } from '../../components/agent-graph';
 import type { Agent, SessionStatus, AgentRole, StewardFocus } from '../../api/types';
 
-type TabValue = 'agents' | 'stewards' | 'graph';
+type TabValue = 'agents' | 'stewards' | 'pools' | 'graph';
 
 export function AgentsPage() {
   const search = useSearch({ from: '/agents' }) as { tab?: string; selected?: string; role?: string; action?: string };
@@ -26,6 +29,9 @@ export function AgentsPage() {
 
   // Create Agent Dialog state
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+
+  // Create Pool Dialog state
+  const [createPoolDialogOpen, setCreatePoolDialogOpen] = useState(false);
 
   // Handle ?action=create from global keyboard shortcuts
   useEffect(() => {
@@ -68,6 +74,12 @@ export function AgentsPage() {
     error,
     refetch,
   } = useAgentsByRole();
+
+  // Fetch pools
+  const { data: poolsData, isLoading: poolsLoading, refetch: refetchPools } = usePools();
+  const pools = poolsData ?? [];
+  const updatePoolMutation = useUpdatePool();
+  const deletePoolMutation = useDeletePool();
 
   // Fetch tasks for the graph view
   const { data: tasksData } = useTasks({ status: 'all', limit: 100 });
@@ -304,17 +316,28 @@ export function AgentsPage() {
               data-testid="agents-search"
             />
           </div>
-          <button
-            onClick={() => openCreateDialog(currentTab === 'stewards' ? 'steward' : undefined)}
-            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-[var(--color-primary)] rounded-md hover:bg-[var(--color-primary-hover)] transition-colors duration-150"
-            data-testid="agents-create"
-          >
-            <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">{currentTab === 'stewards' ? 'Create Steward' : 'Create Agent'}</span>
-            <kbd className="hidden sm:inline ml-1 text-xs bg-[var(--color-primary-700)]/50 text-white px-1 py-0.5 rounded">
-              {formatKeyBinding(getCurrentBinding('action.createAgent'))}
-            </kbd>
-          </button>
+          {currentTab === 'pools' ? (
+            <button
+              onClick={() => setCreatePoolDialogOpen(true)}
+              className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-[var(--color-primary)] rounded-md hover:bg-[var(--color-primary-hover)] transition-colors duration-150"
+              data-testid="pools-create"
+            >
+              <Plus className="w-4 h-4" />
+              <span className="hidden sm:inline">Create Pool</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => openCreateDialog(currentTab === 'stewards' ? 'steward' : undefined)}
+              className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-[var(--color-primary)] rounded-md hover:bg-[var(--color-primary-hover)] transition-colors duration-150"
+              data-testid="agents-create"
+            >
+              <Plus className="w-4 h-4" />
+              <span className="hidden sm:inline">{currentTab === 'stewards' ? 'Create Steward' : 'Create Agent'}</span>
+              <kbd className="hidden sm:inline ml-1 text-xs bg-[var(--color-primary-700)]/50 text-white px-1 py-0.5 rounded">
+                {formatKeyBinding(getCurrentBinding('action.createAgent'))}
+              </kbd>
+            </button>
+          )}
         </div>
       </div>
 
@@ -355,6 +378,25 @@ export function AgentsPage() {
               {stewardCount > 0 && (
                 <span className="px-1.5 py-0.5 text-xs rounded-full bg-[var(--color-surface-elevated)]">
                   {stewardCount}
+                </span>
+              )}
+            </span>
+          </button>
+          <button
+            onClick={() => setTab('pools')}
+            className={`pb-3 px-4 text-sm font-medium border-b-2 transition-colors ${
+              currentTab === 'pools'
+                ? 'text-[var(--color-primary)] border-[var(--color-primary)]'
+                : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text)] border-transparent hover:border-[var(--color-border)]'
+            }`}
+            data-testid="agents-tab-pools"
+          >
+            <span className="flex items-center gap-2">
+              <Layers className="w-4 h-4" />
+              Pools
+              {pools.length > 0 && (
+                <span className="px-1.5 py-0.5 text-xs rounded-full bg-[var(--color-surface-elevated)]">
+                  {pools.length}
                 </span>
               )}
             </span>
@@ -441,6 +483,15 @@ export function AgentsPage() {
           onCreateSteward={() => openCreateDialog('steward')}
           getActiveSessionStatus={getActiveSessionStatus}
         />
+      ) : currentTab === 'pools' ? (
+        <PoolsTab
+          pools={pools}
+          isLoading={poolsLoading}
+          onCreatePool={() => setCreatePoolDialogOpen(true)}
+          onToggleEnabled={(poolId, enabled) => updatePoolMutation.mutate({ id: poolId, enabled })}
+          onDeletePool={(poolId) => deletePoolMutation.mutate({ id: poolId })}
+          isUpdating={updatePoolMutation.isPending}
+        />
       ) : null}
 
       {/* Create Agent Dialog */}
@@ -451,6 +502,13 @@ export function AgentsPage() {
         initialStewardFocus={createDialogStewardFocus}
         hasDirector={!!director}
         onSuccess={() => refetch()}
+      />
+
+      {/* Create Pool Dialog */}
+      <CreatePoolDialog
+        isOpen={createPoolDialogOpen}
+        onClose={() => setCreatePoolDialogOpen(false)}
+        onSuccess={() => refetchPools()}
       />
 
       {/* Rename Agent Dialog */}
@@ -699,6 +757,66 @@ function StewardsTab({ stewards, onStart, onStop, onOpenTerminal, onRename, onDe
           </div>
         </AgentSection>
       ))}
+    </div>
+  );
+}
+
+// ============================================================================
+// Pools Tab
+// ============================================================================
+
+interface PoolsTabProps {
+  pools: AgentPool[];
+  isLoading: boolean;
+  onCreatePool: () => void;
+  onToggleEnabled: (poolId: string, enabled: boolean) => void;
+  onDeletePool: (poolId: string) => void;
+  isUpdating: boolean;
+}
+
+function PoolsTab({ pools, isLoading, onCreatePool, onToggleEnabled, onDeletePool, isUpdating }: PoolsTabProps) {
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16">
+        <Loader2 className="w-8 h-8 text-[var(--color-primary)] animate-spin mb-4" />
+        <p className="text-sm text-[var(--color-text-secondary)]">Loading pools...</p>
+      </div>
+    );
+  }
+
+  if (pools.length === 0) {
+    return (
+      <EmptyState
+        icon={Layers}
+        title="No pools yet"
+        description="Create agent pools to control the maximum number of agents running concurrently. Pools help manage resource usage and agent scheduling."
+        actionLabel="Create Pool"
+        actionTestId="pools-create-empty"
+        onAction={onCreatePool}
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-8">
+      <AgentSection
+        title="Agent Pools"
+        icon={Layers}
+        description="Pools control how many agents can run concurrently"
+        count={pools.length}
+      >
+        <div className="grid grid-cols-1 @md:grid-cols-2 @xl:grid-cols-3 gap-4">
+          {pools.map((pool) => (
+            <PoolCard
+              key={pool.id}
+              pool={pool}
+              onToggleEnabled={(enabled) => onToggleEnabled(pool.id, enabled)}
+              onDelete={() => onDeletePool(pool.id)}
+              isUpdating={isUpdating}
+            />
+          ))}
+        </div>
+      </AgentSection>
     </div>
   );
 }
