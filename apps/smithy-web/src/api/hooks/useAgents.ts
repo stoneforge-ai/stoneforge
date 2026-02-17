@@ -16,6 +16,7 @@ import type {
   CreateAgentInput,
   ProvidersResponse,
   ProviderModelsResponse,
+  StewardTrigger,
 } from '../types';
 
 // ============================================================================
@@ -382,6 +383,26 @@ export function useChangeAgentModel() {
       return fetchApi<AgentResponse>(`/agents/${agentId}`, {
         method: 'PATCH',
         body: JSON.stringify({ model }),
+      });
+    },
+    onSuccess: (_, { agentId }) => {
+      queryClient.invalidateQueries({ queryKey: ['agents'] });
+      queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
+    },
+  });
+}
+
+/**
+ * Hook to change a steward agent's triggers
+ */
+export function useChangeAgentTriggers() {
+  const queryClient = useQueryClient();
+
+  return useMutation<AgentResponse, Error, { agentId: string; triggers: StewardTrigger[] }>({
+    mutationFn: async ({ agentId, triggers }) => {
+      return fetchApi<AgentResponse>(`/agents/${agentId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ triggers }),
       });
     },
     onSuccess: (_, { agentId }) => {

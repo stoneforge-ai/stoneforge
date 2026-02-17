@@ -281,7 +281,12 @@ export function createAgentRoutes(services: Services) {
   app.patch('/api/agents/:id', async (c) => {
     try {
       const agentId = c.req.param('id') as EntityId;
-      const body = (await c.req.json()) as { name?: string; provider?: string; model?: string | null };
+      const body = (await c.req.json()) as {
+        name?: string;
+        provider?: string;
+        model?: string | null;
+        triggers?: Array<{ type: 'cron'; schedule: string } | { type: 'event'; event: string; condition?: string }>;
+      };
 
       const agent = await agentRegistry.getAgent(agentId);
       if (!agent) {
@@ -316,6 +321,38 @@ export function createAgentRoutes(services: Services) {
         updatedAgent = await agentRegistry.updateAgentMetadata(agentId, {
           model: body.model === null ? undefined : body.model.trim(),
         });
+      }
+
+      // Update triggers in agent metadata if provided (steward agents only)
+      if (body.triggers !== undefined) {
+        const agentMeta = updatedAgent.metadata?.agent;
+        if (!agentMeta || agentMeta.agentRole !== 'steward') {
+          return c.json({ error: { code: 'VALIDATION_ERROR', message: 'Triggers can only be set on steward agents' } }, 400);
+        }
+
+        // Validate each trigger
+        for (const trigger of body.triggers) {
+          if (trigger.type === 'cron' && !trigger.schedule) {
+            return c.json({ error: { code: 'VALIDATION_ERROR', message: 'Cron trigger requires a schedule' } }, 400);
+          }
+          if (trigger.type === 'event' && !trigger.event) {
+            return c.json({ error: { code: 'VALIDATION_ERROR', message: 'Event trigger requires an event name' } }, 400);
+          }
+          if (trigger.type !== 'cron' && trigger.type !== 'event') {
+            return c.json({ error: { code: 'VALIDATION_ERROR', message: 'Trigger type must be "cron" or "event"' } }, 400);
+          }
+        }
+
+        updatedAgent = await agentRegistry.updateAgentMetadata(agentId, { triggers: body.triggers });
+
+        // Re-register steward with scheduler to pick up new triggers
+        if (stewardScheduler.isRunning()) {
+          try {
+            await stewardScheduler.registerSteward(agentId);
+          } catch (err) {
+            console.warn('[orchestrator] Failed to re-register steward with scheduler after trigger update:', err);
+          }
+        }
       }
 
       return c.json({ agent: updatedAgent });
