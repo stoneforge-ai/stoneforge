@@ -52,10 +52,10 @@ Core domain types used across all Stoneforge packages:
 | `Document` | Versioned content with content type |
 | `Plan` | Collection of related tasks with status tracking |
 | `Workflow` | Multi-step process with triggers |
-| `Channel` | Communication channel (direct, group, broadcast) |
+| `Channel` | Communication channel (direct, group) |
 | `Message` | Message within a channel |
 | `Team` | Named group of entities with roles |
-| `Library` | Reusable collection of playbooks |
+| `Library` | Collection of related documents |
 | `Playbook` | Templated multi-step process definition |
 | `Inbox` | Notification items for entities |
 | `Dependency` | Blocking relationship between elements |
