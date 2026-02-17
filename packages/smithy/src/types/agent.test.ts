@@ -67,18 +67,18 @@ describe('WorkerMode', () => {
 
 describe('StewardFocus', () => {
   test('StewardFocusValues contains all valid focus areas', () => {
-    expect(StewardFocusValues).toEqual(['merge', 'health', 'reminder', 'ops', 'docs']);
+    expect(StewardFocusValues).toEqual(['merge', 'docs']);
   });
 
   test('isStewardFocus returns true for valid focus areas', () => {
     expect(isStewardFocus('merge')).toBe(true);
-    expect(isStewardFocus('health')).toBe(true);
-    expect(isStewardFocus('reminder')).toBe(true);
-    expect(isStewardFocus('ops')).toBe(true);
     expect(isStewardFocus('docs')).toBe(true);
   });
 
   test('isStewardFocus returns false for invalid focus areas', () => {
+    expect(isStewardFocus('health')).toBe(false);
+    expect(isStewardFocus('reminder')).toBe(false);
+    expect(isStewardFocus('ops')).toBe(false);
     expect(isStewardFocus('cleanup')).toBe(false);
     expect(isStewardFocus('')).toBe(false);
     expect(isStewardFocus(null)).toBe(false);
@@ -172,7 +172,7 @@ describe('validateAgentMetadata', () => {
 
   test('validates steward metadata', () => {
     expect(validateAgentMetadata({ agentRole: 'steward', stewardFocus: 'merge' })).toBe(true);
-    expect(validateAgentMetadata({ agentRole: 'steward', stewardFocus: 'ops', triggers: [{ type: 'cron', schedule: '0 2 * * *' }] })).toBe(true);
+    expect(validateAgentMetadata({ agentRole: 'steward', stewardFocus: 'docs', triggers: [{ type: 'cron', schedule: '0 2 * * *' }] })).toBe(true);
   });
 
   test('rejects steward metadata without stewardFocus', () => {

@@ -456,9 +456,7 @@ const executor = createPluginExecutor(api);
 | Plugin | Focus | Purpose |
 |--------|-------|---------|
 | `merge-plugin` | `merge` | Merge completed branches |
-| `health-plugin` | `health` | Monitor agent health |
-| `reminder-plugin` | `reminder` | Send reminders |
-| `ops-plugin` | `ops` | Operational tasks |
+| `docs-plugin` | `docs` | Scan and fix documentation |
 
 ### Methods
 
@@ -469,7 +467,7 @@ const result = await executor.execute(stewardId, pluginName, context);
 // Register custom plugin
 executor.registerPlugin({
   name: 'custom-plugin',
-  focus: 'ops',
+  focus: 'docs',
   execute: async (context) => {
     // Plugin logic
     return { success: true };
@@ -478,59 +476,6 @@ executor.registerPlugin({
 
 // List available plugins
 const plugins = executor.listPlugins();
-```
-
----
-
-## HealthStewardService
-
-**File:** `services/health-steward-service.ts`
-
-Monitors agent health and triggers remediation.
-
-```typescript
-import { createHealthStewardService } from '@stoneforge/smithy';
-
-const healthService = createHealthStewardService(api, sessionManager);
-```
-
-### Methods
-
-```typescript
-// Check all agent health
-const results = await healthService.checkAllAgents();
-
-// Check specific agent
-const health = await healthService.checkAgentHealth(agentId);
-
-// Get health history
-const history = await healthService.getHealthHistory(agentId, limit);
-
-// Run remediation
-const remediated = await healthService.remediate(agentId, issue);
-
-// Activity tracking
-healthService.recordActivity(agentId, activityType);
-const lastActivity = healthService.getLastActivity(agentId);
-```
-
-### Health Check Result
-
-```typescript
-interface HealthCheckResult {
-  agentId: EntityId;
-  healthy: boolean;
-  issues: HealthIssue[];
-  checkedAt: Timestamp;
-  recommendations: string[];
-}
-
-interface HealthIssue {
-  type: 'unresponsive' | 'stuck' | 'overloaded' | 'error';
-  severity: 'warning' | 'critical';
-  description: string;
-  detectedAt: Timestamp;
-}
 ```
 
 ---
@@ -871,7 +816,7 @@ interface AgentPoolConfig {
 interface PoolAgentTypeConfig {
   role: 'worker' | 'steward';        // Agent role (not director)
   workerMode?: 'ephemeral' | 'persistent';  // For workers
-  stewardFocus?: 'merge' | 'health' | 'reminder' | 'ops' | 'docs';  // For stewards
+  stewardFocus?: 'merge' | 'docs';  // For stewards
   priority?: number;                 // Spawn priority (higher = higher priority)
   maxSlots?: number;                 // Max slots for this type within the pool
 }

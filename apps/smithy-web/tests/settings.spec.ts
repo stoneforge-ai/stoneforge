@@ -303,65 +303,6 @@ test.describe('TB-O25c: Settings Page', () => {
       await expect(page.getByTestId('settings-section-steward-schedules')).toBeVisible();
     });
 
-    test('can toggle health steward', async ({ page }) => {
-      await page.goto('/settings?tab=workspace');
-
-      const toggle = page.getByTestId('settings-health-steward');
-      const checkbox = toggle.locator('input[type="checkbox"]');
-      const initialState = await checkbox.getAttribute('data-checked') === 'true';
-
-      await toggle.click();
-
-      const newState = await checkbox.getAttribute('data-checked') === 'true';
-      expect(newState).toBe(!initialState);
-    });
-
-    test('shows health check interval when health steward is enabled', async ({ page }) => {
-      await page.goto('/settings?tab=workspace');
-
-      // Ensure health steward is enabled
-      const toggle = page.getByTestId('settings-health-steward');
-      const checkbox = toggle.locator('input[type="checkbox"]');
-      const isChecked = await checkbox.getAttribute('data-checked') === 'true';
-      if (!isChecked) {
-        await toggle.click();
-      }
-
-      // Interval selector should be visible
-      await expect(page.getByTestId('settings-health-interval')).toBeVisible();
-    });
-
-    test('hides health check interval when health steward is disabled', async ({ page }) => {
-      await page.goto('/settings?tab=workspace');
-
-      // Ensure health steward is disabled
-      const toggle = page.getByTestId('settings-health-steward');
-      const checkbox = toggle.locator('input[type="checkbox"]');
-      const isChecked = await checkbox.getAttribute('data-checked') === 'true';
-      if (isChecked) {
-        await toggle.click();
-      }
-
-      // Interval selector should not be visible
-      await expect(page.getByTestId('settings-health-interval')).not.toBeVisible();
-    });
-
-    test('can change health check interval', async ({ page }) => {
-      await page.goto('/settings?tab=workspace');
-
-      // Ensure health steward is enabled
-      const toggle = page.getByTestId('settings-health-steward');
-      const checkbox = toggle.locator('input[type="checkbox"]');
-      const isChecked = await checkbox.getAttribute('data-checked') === 'true';
-      if (!isChecked) {
-        await toggle.click();
-      }
-
-      const select = page.getByTestId('settings-health-interval');
-      await select.selectOption('15m');
-      await expect(select).toHaveValue('15m');
-    });
-
     test('can toggle merge steward', async ({ page }) => {
       await page.goto('/settings?tab=workspace');
 
@@ -375,56 +316,11 @@ test.describe('TB-O25c: Settings Page', () => {
       expect(newState).toBe(!initialState);
     });
 
-    test('can toggle ops steward', async ({ page }) => {
-      await page.goto('/settings?tab=workspace');
-
-      const toggle = page.getByTestId('settings-ops-steward');
-      const checkbox = toggle.locator('input[type="checkbox"]');
-      const initialState = await checkbox.getAttribute('data-checked') === 'true';
-
-      await toggle.click();
-
-      const newState = await checkbox.getAttribute('data-checked') === 'true';
-      expect(newState).toBe(!initialState);
-    });
-
-    test('shows ops schedule when ops steward is enabled', async ({ page }) => {
-      await page.goto('/settings?tab=workspace');
-
-      // Ensure ops steward is enabled
-      const toggle = page.getByTestId('settings-ops-steward');
-      const checkbox = toggle.locator('input[type="checkbox"]');
-      const isChecked = await checkbox.getAttribute('data-checked') === 'true';
-      if (!isChecked) {
-        await toggle.click();
-      }
-
-      await expect(page.getByTestId('settings-ops-schedule')).toBeVisible();
-    });
-
-    test('can edit ops schedule cron expression', async ({ page }) => {
-      await page.goto('/settings?tab=workspace');
-
-      // Ensure ops steward is enabled
-      const toggle = page.getByTestId('settings-ops-steward');
-      const checkbox = toggle.locator('input[type="checkbox"]');
-      const isChecked = await checkbox.getAttribute('data-checked') === 'true';
-      if (!isChecked) {
-        await toggle.click();
-      }
-
-      const input = page.getByTestId('settings-ops-schedule');
-      await input.clear();
-      await input.fill('0 0 * * *');
-
-      await expect(input).toHaveValue('0 0 * * *');
-    });
-
     test('can reset steward schedules to defaults', async ({ page }) => {
       await page.goto('/settings?tab=workspace');
 
       // Make a change
-      const toggle = page.getByTestId('settings-health-steward');
+      const toggle = page.getByTestId('settings-merge-steward');
       const checkbox = toggle.locator('input[type="checkbox"]');
       const initialState = await checkbox.getAttribute('data-checked') === 'true';
       if (initialState) {

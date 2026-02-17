@@ -37,7 +37,7 @@ import {
 function createMockAgentEntity(
   id: string,
   name: string,
-  focus: 'merge' | 'health' | 'reminder' | 'ops',
+  focus: 'merge' | 'docs',
   triggers: StewardTrigger[] = []
 ): AgentEntity {
   const metadata: StewardMetadata = {
@@ -628,7 +628,7 @@ describe('StewardSchedulerImpl - multiple stewards', () => {
     const steward1 = createMockAgentEntity('steward-1', 'Merge Steward', 'merge', [
       { type: 'event', event: 'task_completed' },
     ]);
-    const steward2 = createMockAgentEntity('steward-2', 'Health Steward', 'health', [
+    const steward2 = createMockAgentEntity('steward-2', 'Docs Steward', 'docs', [
       { type: 'cron', schedule: '*/5 * * * *' },
     ]);
     const mockRegistry = createMockAgentRegistry([steward1, steward2]);
@@ -649,7 +649,7 @@ describe('StewardSchedulerImpl - multiple stewards', () => {
     const steward1 = createMockAgentEntity('steward-1', 'Steward 1', 'merge', [
       { type: 'event', event: 'task_completed' },
     ]);
-    const steward2 = createMockAgentEntity('steward-2', 'Steward 2', 'ops', [
+    const steward2 = createMockAgentEntity('steward-2', 'Steward 2', 'docs', [
       { type: 'event', event: 'task_completed' },
     ]);
     const mockRegistry = createMockAgentRegistry([steward1, steward2]);
@@ -672,7 +672,7 @@ describe('StewardSchedulerImpl - multiple stewards', () => {
 
 describe('StewardSchedulerImpl - steward without triggers', () => {
   it('should register steward without triggers', async () => {
-    const steward = createMockAgentEntity('steward-1', 'Manual Steward', 'ops', []);
+    const steward = createMockAgentEntity('steward-1', 'Manual Steward', 'docs', []);
     const mockRegistry = createMockAgentRegistry([steward]);
     const mockExecutor = createMockExecutor();
     const scheduler = createStewardScheduler(mockRegistry, mockExecutor);

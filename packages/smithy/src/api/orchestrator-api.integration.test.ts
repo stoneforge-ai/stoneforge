@@ -123,16 +123,16 @@ describe('OrchestratorAPI', () => {
       expect((meta as StewardMetadata).triggers).toHaveLength(1);
     });
 
-    test('registerSteward creates an ops steward with cron trigger', async () => {
+    test('registerSteward creates a docs steward with cron trigger', async () => {
       const steward = await api.registerSteward({
-        name: 'OpsSteward',
-        stewardFocus: 'ops',
+        name: 'DocsSteward',
+        stewardFocus: 'docs',
         triggers: [{ type: 'cron', schedule: '0 2 * * *' }],
         createdBy: systemEntity,
       });
 
       const meta = getAgentMetadata(steward) as StewardMetadata;
-      expect(meta.stewardFocus).toBe('ops');
+      expect(meta.stewardFocus).toBe('docs');
       expect(meta.triggers?.[0]).toEqual({ type: 'cron', schedule: '0 2 * * *' });
     });
   });
@@ -147,7 +147,7 @@ describe('OrchestratorAPI', () => {
       director = await api.registerDirector({ name: 'QueryDirector', createdBy: systemEntity });
       worker1 = await api.registerWorker({ name: 'QueryWorker1', workerMode: 'ephemeral', createdBy: systemEntity });
       worker2 = await api.registerWorker({ name: 'QueryWorker2', workerMode: 'persistent', createdBy: systemEntity });
-      steward = await api.registerSteward({ name: 'QuerySteward', stewardFocus: 'health', createdBy: systemEntity });
+      steward = await api.registerSteward({ name: 'QuerySteward', stewardFocus: 'docs', createdBy: systemEntity });
     });
 
     test('getAgent retrieves an agent by ID', async () => {

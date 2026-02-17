@@ -860,7 +860,7 @@ export async function createTestSteward(
   ctx: TestContext,
   name: string,
   options: {
-    focus?: 'merge' | 'health' | 'reminder' | 'ops';
+    focus?: 'merge' | 'docs';
     triggers?: Array<{ type: 'cron'; schedule: string } | { type: 'event'; event: string }>;
   } = {}
 ): Promise<AgentEntity> {

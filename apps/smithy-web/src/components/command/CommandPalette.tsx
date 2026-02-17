@@ -142,7 +142,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
       description: 'View steward agents',
       category: 'navigation',
       icon: Wrench,
-      keywords: ['stewards', 'automation', 'merge', 'health'],
+      keywords: ['stewards', 'automation', 'merge', 'docs'],
       action: () => navigateTo('/agents', { tab: 'stewards' }),
     },
     {
@@ -262,7 +262,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
       description: 'Create a new steward agent',
       category: 'agents',
       icon: Wrench,
-      keywords: ['create', 'steward', 'automation', 'merge', 'health'],
+      keywords: ['create', 'steward', 'automation', 'merge', 'docs'],
       action: () => navigateTo('/agents', { tab: 'stewards', action: 'create' }),
     },
     {

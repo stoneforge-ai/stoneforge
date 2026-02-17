@@ -4,7 +4,7 @@
  * This module defines the core types for agents in the Stoneforge Smithy:
  * - AgentRole: The primary role classification (director, steward, worker)
  * - WorkerMode: Whether a worker is ephemeral (short-lived) or persistent
- * - StewardFocus: The specialty area for steward agents
+ * - StewardFocus: The specialty area for steward agents (merge, docs)
  * - StewardTrigger: How stewards are activated (cron or event)
  *
  * Agents are stored as Entity elements with additional metadata in their
@@ -21,7 +21,7 @@ import type { EntityId, ChannelId, Timestamp, ElementId } from '@stoneforge/core
  * The primary role classification for agents in the orchestration system.
  *
  * - `director`: Strategic agent that creates and assigns tasks, reports to Human
- * - `steward`: Support agent that performs maintenance tasks (merge, health, etc.)
+ * - `steward`: Support agent that performs maintenance tasks (merge, docs)
  * - `worker`: Execution agent that produces code and completes tasks
  */
 export type AgentRole = 'director' | 'steward' | 'worker';
@@ -70,17 +70,14 @@ export function isWorkerMode(value: unknown): value is WorkerMode {
  * The specialty area for steward agents.
  *
  * - `merge`: Handles merging completed branches, running tests, cleanup
- * - `health`: Monitors agent health, detects stuck agents, helps unstick
- * - `reminder`: Sends reminders and notifications
- * - `ops`: Runs scheduled maintenance tasks, garbage collection
  * - `docs`: Scans and fixes documentation issues, auto-merges fixes
  */
-export type StewardFocus = 'merge' | 'health' | 'reminder' | 'ops' | 'docs';
+export type StewardFocus = 'merge' | 'docs';
 
 /**
  * All valid steward focus values
  */
-export const StewardFocusValues = ['merge', 'health', 'reminder', 'ops', 'docs'] as const;
+export const StewardFocusValues = ['merge', 'docs'] as const;
 
 /**
  * Type guard to check if a value is a valid StewardFocus

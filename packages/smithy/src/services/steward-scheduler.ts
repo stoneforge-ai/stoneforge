@@ -38,7 +38,6 @@ import { loadRolePrompt } from '../prompts/index.js';
 import type { AgentRegistry, AgentEntity } from './agent-registry.js';
 import { getAgentMetadata } from './agent-registry.js';
 import type { MergeStewardService } from './merge-steward-service.js';
-import type { HealthStewardService } from './health-steward-service.js';
 import type { DocsStewardService } from './docs-steward-service.js';
 
 // ============================================================================
@@ -1233,7 +1232,6 @@ export function createStewardScheduler(
  */
 export interface StewardExecutorDeps {
   mergeStewardService: MergeStewardService;
-  healthStewardService: HealthStewardService;
   docsStewardService: DocsStewardService;
   sessionManager: SessionManager;
   projectRoot: string;
@@ -1244,7 +1242,7 @@ export interface StewardExecutorDeps {
  * based on the steward's focus.
  *
  * - 'merge' focus → MergeStewardService.processAllPending()
- * - 'docs' / 'health' / 'reminder' / 'ops' → spawns an agent session via sessionManager
+ * - 'docs' → spawns an agent session via sessionManager
  *
  * Session-based stewards check for an existing active session before spawning
  * to prevent overlapping runs across cron ticks.
@@ -1278,10 +1276,7 @@ export function createStewardExecutor(deps: StewardExecutorDeps): StewardExecuto
           };
         }
       }
-      case 'docs':
-      case 'health':
-      case 'reminder':
-      case 'ops': {
+      case 'docs': {
         try {
           const stewardId = steward.id as unknown as EntityId;
           const activeSession = deps.sessionManager.getActiveSession(stewardId);

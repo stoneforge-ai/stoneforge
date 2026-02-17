@@ -8,7 +8,6 @@
  * - DispatchService (TB-O8a) - Task dispatch with assignment + notification
  * - DispatchDaemon - Continuous polling for task assignment and message delivery
  * - StewardScheduler (TB-O23) - Scheduled steward execution
- * - HealthStewardService (TB-O24) - Agent health monitoring
  */
 
 // Agent registry (TB-O7, TB-O7a)
@@ -175,35 +174,6 @@ export {
   // Factory
   createPluginExecutor,
 } from './plugin-executor.js';
-
-// Health steward service (TB-O24)
-export {
-  // Types
-  type HealthIssueType,
-  type HealthIssueSeverity,
-  type HealthAction,
-  type HealthIssue,
-  type HealthActionResult,
-  type AgentHealthStatus,
-  type HealthStewardConfig,
-  type HealthCheckResult,
-  type HealthStewardStats,
-  type AgentActivityTracker,
-  type HealthStewardService,
-  type HealthSessionStatus,
-  // Constants
-  HealthIssueTypes,
-  HealthIssueSeverities,
-  HealthActions,
-  // Type guards
-  isHealthIssueType,
-  isHealthIssueSeverity,
-  isHealthAction,
-  // Implementation
-  HealthStewardServiceImpl,
-  // Factory
-  createHealthStewardService,
-} from './health-steward-service.js';
 
 // Docs steward service
 export {

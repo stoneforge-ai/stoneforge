@@ -18,7 +18,7 @@ export type ElementId = string;
 
 export type AgentRole = 'director' | 'steward' | 'worker';
 export type WorkerMode = 'ephemeral' | 'persistent';
-export type StewardFocus = 'merge' | 'health' | 'reminder' | 'ops' | 'docs';
+export type StewardFocus = 'merge' | 'docs';
 /** Agent metadata session status (simpler set) */
 export type AgentSessionStatus = 'idle' | 'running' | 'suspended' | 'terminated';
 /** Full session status including transitional states */

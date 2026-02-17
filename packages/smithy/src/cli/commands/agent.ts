@@ -157,7 +157,7 @@ const agentListOptions: CommandOption[] = [
   {
     name: 'focus',
     short: 'f',
-    description: 'Filter by steward focus (merge, health, reminder, ops, docs)',
+    description: 'Filter by steward focus (merge, docs)',
     hasValue: true,
   },
   {
@@ -229,7 +229,7 @@ async function agentListHandler(
 
     // Filter by steward focus
     if (options.focus) {
-      const validFocuses = ['merge', 'health', 'reminder', 'ops', 'docs'];
+      const validFocuses = ['merge', 'docs'];
       if (!validFocuses.includes(options.focus)) {
         return failure(
           `Invalid focus: ${options.focus}. Must be one of: ${validFocuses.join(', ')}`,
@@ -300,7 +300,7 @@ Options:
   -r, --role <role>        Filter by role (director, worker, steward)
   -s, --status <status>    Filter by session status (idle, running, suspended, terminated)
   -m, --workerMode <mode>  Filter by worker mode (ephemeral, persistent)
-  -f, --focus <focus>      Filter by steward focus (merge, health, reminder, ops, docs)
+  -f, --focus <focus>      Filter by steward focus (merge, docs)
   --reportsTo <id>         Filter by manager entity ID
   --hasSession             Filter to agents with active sessions
 
@@ -309,7 +309,7 @@ Examples:
   sf agent list --role worker
   sf agent list --role worker --workerMode ephemeral
   sf agent list --status running
-  sf agent list --role steward --focus health
+  sf agent list --role steward --focus merge
   sf agent list --hasSession`,
   options: agentListOptions,
   handler: agentListHandler as Command['handler'],
@@ -424,7 +424,7 @@ const agentRegisterOptions: CommandOption[] = [
   {
     name: 'focus',
     short: 'f',
-    description: 'Steward focus (merge, health, reminder, ops, docs)',
+    description: 'Steward focus (merge, docs)',
     hasValue: true,
   },
   {
@@ -539,8 +539,8 @@ async function agentRegisterHandler(
       }
 
       case 'steward': {
-        const stewardFocus = (options.focus as StewardFocus) ?? 'health';
-        const validFocuses = ['merge', 'health', 'reminder', 'ops', 'docs'];
+        const stewardFocus = (options.focus as StewardFocus) ?? 'merge';
+        const validFocuses = ['merge', 'docs'];
         if (!validFocuses.includes(stewardFocus)) {
           return failure(
             `Invalid focus: ${stewardFocus}. Must be one of: ${validFocuses.join(', ')}`,
@@ -600,7 +600,7 @@ Arguments:
 Options:
   -r, --role <role>       Agent role: director, worker, steward (required)
   -m, --mode <mode>       Worker mode: ephemeral, persistent (default: ephemeral)
-  -f, --focus <focus>     Steward focus: merge, health, reminder, ops, docs
+  -f, --focus <focus>     Steward focus: merge, docs
   -t, --maxTasks <n>      Maximum concurrent tasks (default: 1)
   --tags <tags>           Comma-separated tags (e.g., "frontend,urgent")
   --reportsTo <id>        Manager entity ID (for workers/stewards)
@@ -612,10 +612,10 @@ Options:
 Examples:
   sf agent register MyWorker --role worker --mode ephemeral
   sf agent register MainDirector --role director
-  sf agent register HealthChecker --role steward --focus health
+  sf agent register MergeSteward --role steward --focus merge
   sf agent register MyWorker --role worker --tags "frontend,urgent"
   sf agent register TeamWorker --role worker --reportsTo el-director123
-  sf agent register DailyChecker --role steward --focus health --trigger "0 9 * * *"
+  sf agent register DocsSteward --role steward --focus docs --trigger "0 9 * * *"
   sf agent register OcWorker --role worker --provider opencode
   sf agent register MyWorker --role worker --model claude-sonnet-4-5-20250929`,
   options: agentRegisterOptions,

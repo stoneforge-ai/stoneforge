@@ -328,12 +328,12 @@ test.describe('TB-O22: Steward Configuration UI', () => {
       // Check default is merge
       await expect(focusSelect).toHaveValue('merge');
 
-      // Select health focus
-      await focusSelect.selectOption('health');
-      await expect(focusSelect).toHaveValue('health');
+      // Select docs focus
+      await focusSelect.selectOption('docs');
+      await expect(focusSelect).toHaveValue('docs');
 
       // Check description updates
-      await expect(page.getByText(/Monitors agent health/)).toBeVisible();
+      await expect(page.getByText(/Reviews, updates, and maintains/)).toBeVisible();
     });
 
     test('can add cron trigger', async ({ page }) => {

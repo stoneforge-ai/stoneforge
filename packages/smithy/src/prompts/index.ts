@@ -39,9 +39,6 @@ const PROMPT_FILES = {
   'persistent-worker': 'persistent-worker.md',
   'steward-base': 'steward-base.md',
   'steward-merge': 'steward-merge.md',
-  'steward-health': 'steward-health.md',
-  'steward-ops': 'steward-ops.md',
-  'steward-reminder': 'steward-reminder.md',
   'steward-docs': 'steward-docs.md',
   'message-triage': 'message-triage.md',
 } as const;

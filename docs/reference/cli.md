@@ -607,7 +607,7 @@ List registered agents with optional filters.
 | `-r, --role <role>`       | Filter by role: director, worker, steward                      |
 | `-s, --status <status>`   | Filter by session status: idle, running, suspended, terminated |
 | `-m, --workerMode <mode>` | Filter by worker mode: ephemeral, persistent                   |
-| `-f, --focus <focus>`     | Filter by steward focus: merge, health, reminder, ops, docs    |
+| `-f, --focus <focus>`     | Filter by steward focus: merge, docs                           |
 | `--reportsTo <id>`        | Filter by manager entity ID                                    |
 | `--hasSession`            | Filter to agents with active sessions                          |
 
@@ -616,7 +616,7 @@ sf agent list
 sf agent list --role worker
 sf agent list --role worker --workerMode ephemeral
 sf agent list --status running
-sf agent list --role steward --focus health
+sf agent list --role steward --focus merge
 sf agent list --hasSession
 ```
 
@@ -628,7 +628,7 @@ Register a new orchestrator agent.
 | --------------------- | ------------------------------------------------------- |
 | `-r, --role <role>`   | Agent role: director, worker, steward (required)        |
 | `-m, --mode <mode>`   | Worker mode: ephemeral, persistent (default: ephemeral) |
-| `-f, --focus <focus>` | Steward focus: merge, health, reminder, ops, docs       |
+| `-f, --focus <focus>` | Steward focus: merge, docs                              |
 | `-t, --maxTasks <n>`  | Maximum concurrent tasks (default: 1)                   |
 | `--tags <tags>`       | Comma-separated tags                                    |
 | `--reportsTo <id>`    | Manager entity ID (for workers/stewards)                |
@@ -640,10 +640,10 @@ Register a new orchestrator agent.
 ```bash
 sf agent register MyWorker --role worker --mode ephemeral
 sf agent register MainDirector --role director
-sf agent register HealthChecker --role steward --focus health
+sf agent register MergeSteward --role steward --focus merge
 sf agent register MyWorker --role worker --tags "frontend,urgent"
 sf agent register TeamWorker --role worker --reportsTo el-director123
-sf agent register DailyChecker --role steward --focus health --trigger "0 9 * * *"
+sf agent register DocsSteward --role steward --focus docs --trigger "0 9 * * *"
 sf agent register OcWorker --role worker --provider opencode
 sf agent register MyWorker --role worker --model claude-sonnet-4-5-20250929
 ```
@@ -794,7 +794,7 @@ Create a new agent pool.
 - `worker:ephemeral:100` — Ephemeral workers with priority 100
 - `worker:persistent:50:3` — Persistent workers, priority 50, max 3 slots
 - `steward:merge` — Merge stewards
-- `steward:health:80` — Health stewards with priority 80
+- `steward:docs:80` — Docs stewards with priority 80
 
 ```bash
 sf pool create default --size 5

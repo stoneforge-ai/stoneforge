@@ -37,7 +37,7 @@ export interface AgentBehaviors {
 
   /**
    * Instruction/prompt fragment appended when the agent appears stuck
-   * (detected by Health Steward). Can include debugging hints or escalation paths.
+   * (detected by monitoring). Can include debugging hints or escalation paths.
    */
   readonly onStuck?: string;
 
@@ -326,7 +326,7 @@ export function isStewardRoleDefinition(value: unknown): value is StewardRoleDef
     return false;
   }
   // stewardFocus is optional, but if present must be valid
-  const validFoci = ['merge', 'health', 'reminder', 'ops', 'docs'];
+  const validFoci = ['merge', 'docs'];
   if (def.stewardFocus !== undefined && !validFoci.includes(def.stewardFocus)) {
     return false;
   }

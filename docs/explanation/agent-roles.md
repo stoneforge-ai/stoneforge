@@ -44,7 +44,7 @@ The Director is the strategist and coordinator. There's typically one Director p
 
 ### What Directors Don't Do
 - Execute implementation tasks directly
-- Manage system health (that's Stewards)
+- Manage maintenance tasks (that's Stewards)
 - Bypass human-required approvals
 
 ### Example Prompt (Built-in)
@@ -129,7 +129,7 @@ You are a worker agent in the Stoneforge orchestration system.
 
 ## Steward
 
-Stewards handle maintenance and system health. There are specialized Steward types.
+Stewards handle maintenance and automated tasks. There are specialized Steward types.
 
 ### Responsibilities
 - **Monitoring** - Watch for issues
@@ -148,9 +148,6 @@ Stewards handle maintenance and system health. There are specialized Steward typ
 | Focus | Responsibility |
 |-------|---------------|
 | `merge` | Review and process pull requests from completed tasks |
-| `health` | Monitor worker health and intervene when stuck |
-| `ops` | System operations, cleanup, archival |
-| `reminder` | Time-based notifications, due date alerts |
 | `docs` | Scan and fix documentation issues, auto-merge fixes |
 
 ### Example Prompt (Merge Steward)
@@ -224,9 +221,6 @@ prompts/
 ├── persistent-worker.md  # Persistent worker role
 ├── steward-base.md       # Base steward (all focuses)
 ├── steward-merge.md      # Merge focus addendum
-├── steward-health.md     # Health focus addendum
-├── steward-ops.md        # Ops focus addendum
-├── steward-reminder.md   # Reminder focus addendum
 └── steward-docs.md       # Docs focus addendum
 ```
 
@@ -389,9 +383,6 @@ When creating agents through the UI, names are auto-populated following these co
 | Ephemeral Worker | `e-worker-{n}` | `e-worker-1`, `e-worker-2` |
 | Persistent Worker | `p-worker-{n}` | `p-worker-1`, `p-worker-2` |
 | Merge Steward | `m-steward-{n}` | `m-steward-1`, `m-steward-2` |
-| Health Steward | `h-steward-{n}` | `h-steward-1`, `h-steward-2` |
-| Reminder Steward | `r-steward-{n}` | `r-steward-1`, `r-steward-2` |
-| Ops Steward | `o-steward-{n}` | `o-steward-1`, `o-steward-2` |
 | Docs Steward | `d-steward-{n}` | `d-steward-1`, `d-steward-2` |
 
 The sequential number is calculated based on existing agents of the same type. Auto-generated names are editable before submission.

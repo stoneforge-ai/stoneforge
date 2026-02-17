@@ -38,16 +38,10 @@ export interface WorkspaceSettings {
 }
 
 export interface StewardScheduleSettings {
-  /** Health steward check interval (e.g., '5m', '15m') */
-  healthCheckInterval: string;
-  /** Ops steward schedule (cron expression) */
-  opsSchedule: string;
   /** Enable merge steward */
   mergeStewardEnabled: boolean;
-  /** Enable health steward */
-  healthStewardEnabled: boolean;
-  /** Enable ops steward */
-  opsStewardEnabled: boolean;
+  /** Enable docs steward */
+  docsStewardEnabled: boolean;
 }
 
 /** Provider name type for agent providers */
@@ -88,11 +82,8 @@ const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = {
 };
 
 const DEFAULT_STEWARD_SCHEDULE_SETTINGS: StewardScheduleSettings = {
-  healthCheckInterval: '5m',
-  opsSchedule: '0 2 * * *', // 2 AM daily
   mergeStewardEnabled: true,
-  healthStewardEnabled: true,
-  opsStewardEnabled: true,
+  docsStewardEnabled: false,
 };
 
 const DEFAULT_AGENT_DEFAULTS_SETTINGS: AgentDefaultsSettings = {

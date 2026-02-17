@@ -95,7 +95,7 @@ function parseAgentTypeConfig(configStr: string): PoolAgentTypeConfig | null {
         priority = parseInt(parts[1], 10);
       }
     } else if (role === 'steward') {
-      if (['merge', 'health', 'reminder', 'ops', 'docs'].includes(parts[1])) {
+      if (['merge', 'docs'].includes(parts[1])) {
         stewardFocus = parts[1] as StewardFocus;
       } else if (!isNaN(parseInt(parts[1], 10))) {
         priority = parseInt(parts[1], 10);
@@ -472,7 +472,7 @@ Agent Type Format Examples:
   worker:ephemeral:100       Ephemeral workers with priority 100
   worker:persistent:50:3     Persistent workers, priority 50, max 3 slots
   steward:merge              Merge stewards
-  steward:health:80          Health stewards with priority 80
+  steward:docs:80            Docs stewards with priority 80
 
 Examples:
   sf pool create default --size 5

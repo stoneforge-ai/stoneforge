@@ -242,18 +242,6 @@ export function useAgentGraph({
 /**
  * Get health indicator based on steward metadata
  */
-function getHealthIndicator(meta?: StewardMetadata): 'healthy' | 'warning' | 'error' | undefined {
-  if (!meta) return undefined;
-
-  // Check if steward has focus on health
-  if (meta.stewardFocus === 'health') {
-    // Could add more sophisticated health checking here based on last execution
-    if (meta.lastExecutedAt) {
-      const hoursSinceLastRun = (Date.now() - meta.lastExecutedAt) / (1000 * 60 * 60);
-      if (hoursSinceLastRun > 24) return 'warning';
-    }
-    return 'healthy';
-  }
-
+function getHealthIndicator(_meta?: StewardMetadata): 'healthy' | 'warning' | 'error' | undefined {
   return undefined;
 }

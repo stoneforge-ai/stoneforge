@@ -48,7 +48,7 @@ const worker = await api.registerWorker({
 ```typescript
 const steward = await api.registerSteward({
   name: 'MergeSteward',
-  stewardFocus: 'merge',  // 'merge' | 'health' | 'reminder' | 'ops'
+  stewardFocus: 'merge',  // 'merge' | 'docs'
   triggers: [
     { type: 'event', event: 'task_completed' },
   ],
@@ -178,7 +178,7 @@ type AgentRole = 'director' | 'worker' | 'steward';
 interface AgentMetadata {
   role: AgentRole;
   workerMode?: 'ephemeral' | 'persistent';
-  stewardFocus?: 'merge' | 'health' | 'reminder' | 'ops';
+  stewardFocus?: 'merge' | 'docs';
   maxConcurrentTasks?: number;  // Default: 1
   sessionState?: SessionState;
   currentSessionId?: string;

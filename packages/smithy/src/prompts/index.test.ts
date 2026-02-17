@@ -23,9 +23,7 @@ describe("Prompt Loading", () => {
 
     it("returns true for steward with focus", () => {
       expect(hasBuiltInPrompt("steward", "merge")).toBe(true);
-      expect(hasBuiltInPrompt("steward", "health")).toBe(true);
-      expect(hasBuiltInPrompt("steward", "ops")).toBe(true);
-      expect(hasBuiltInPrompt("steward", "reminder")).toBe(true);
+      expect(hasBuiltInPrompt("steward", "docs")).toBe(true);
     });
   });
 
@@ -36,9 +34,10 @@ describe("Prompt Loading", () => {
       expect(files).toContain("worker.md");
       expect(files).toContain("steward-base.md");
       expect(files).toContain("steward-merge.md");
-      expect(files).toContain("steward-health.md");
-      expect(files).toContain("steward-ops.md");
-      expect(files).toContain("steward-reminder.md");
+      expect(files).toContain("steward-docs.md");
+      expect(files).not.toContain("steward-health.md");
+      expect(files).not.toContain("steward-ops.md");
+      expect(files).not.toContain("steward-reminder.md");
     });
   });
 
@@ -85,13 +84,13 @@ describe("Prompt Loading", () => {
     });
 
     it("loads steward with source info for base and focus", () => {
-      const result = loadRolePrompt("steward", "health");
+      const result = loadRolePrompt("steward", "merge");
       expect(result).toBeDefined();
       expect(result!.source).toBe("built-in");
       expect(result!.baseSource).toBe("built-in");
       expect(result!.focusSource).toBe("built-in");
       expect(result!.prompt).toContain("You are a **Steward**");
-      expect(result!.prompt).toContain("You are a **Health Steward**");
+      expect(result!.prompt).toContain("You are a **Merge Steward**");
     });
   });
 
@@ -117,11 +116,10 @@ describe("Prompt Loading", () => {
     it("builds steward prompt with focus", () => {
       const prompt = buildAgentPrompt({
         role: "steward",
-        stewardFocus: "ops",
+        stewardFocus: "docs",
       });
       expect(prompt).toBeDefined();
       expect(prompt).toContain("You are a **Steward**");
-      expect(prompt).toContain("You are an **Ops Steward**");
     });
 
     it("adds additional instructions", () => {
@@ -292,10 +290,10 @@ describe("Prompt Content", () => {
       expect(prompt).toContain("Tests fail");
     });
 
-    it("health focus includes nudge guidance", () => {
-      const prompt = loadBuiltInPrompt("steward", "health");
-      expect(prompt).toContain("nudge");
-      expect(prompt).toContain("stuck");
+    it("docs focus loads successfully", () => {
+      const prompt = loadBuiltInPrompt("steward", "docs");
+      expect(prompt).toBeDefined();
+      expect(prompt).toContain("You are a **Steward**");
     });
   });
 });

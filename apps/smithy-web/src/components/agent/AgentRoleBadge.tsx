@@ -4,7 +4,7 @@
  * Shows the agent role with appropriate icon and styling.
  */
 
-import { Crown, Wrench, Bot, Shield, Zap, Settings } from 'lucide-react';
+import { Crown, Wrench, Bot, Shield, Zap } from 'lucide-react';
 import type { AgentRole, WorkerMode, StewardFocus } from '../../api/types';
 
 interface AgentRoleBadgeProps {
@@ -53,18 +53,6 @@ const stewardFocusConfig: Record<StewardFocus, { label: string; icon: React.Comp
   merge: {
     label: 'Merge',
     icon: Bot,
-  },
-  health: {
-    label: 'Health',
-    icon: Shield,
-  },
-  reminder: {
-    label: 'Reminder',
-    icon: Bot,
-  },
-  ops: {
-    label: 'Ops',
-    icon: Settings,
   },
   docs: {
     label: 'Docs',
