@@ -1,5 +1,15 @@
 # @stoneforge/smithy
 
+## 1.0.2
+
+### Patch Changes
+
+- 8d82c91: Fix `posix_spawnp failed` for bun users by ensuring node-pty spawn-helper permissions at runtime before pty.spawn(), since bun skips postinstall scripts by default.
+  - @stoneforge/quarry@1.0.2
+  - @stoneforge/core@1.0.2
+  - @stoneforge/storage@1.0.2
+  - @stoneforge/shared-routes@1.0.2
+
 ## 1.0.1
 
 ### Patch Changes
