@@ -85,7 +85,14 @@ When acceptance criteria are met:
 
 1. Commit all remaining changes with a meaningful message
 2. Push to remote
-3. Complete the task (this triggers Merge Request creation):
+3. If your changes affect source code in any `packages/` directory, create changesets. **Create one changeset file per affected package** — do not combine multiple packages in a single changeset. All packages use the same bump level (`patch` for fixes, `minor` for features, `major` for breaking changes). Skip this for test-only, docs-only, or CI-only changes.
+
+```bash
+# Create one changeset per affected package
+pnpm changeset
+```
+
+4. Complete the task (this triggers Merge Request creation):
 
 ```bash
 sf task complete <task-id>

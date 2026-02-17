@@ -87,13 +87,12 @@ When a unit of work is complete and ready to go into master:
 
 1. Commit all remaining changes with a meaningful message
 2. Push to remote
-3. If your changes affect source code in any `packages/` directory, create a changeset:
+3. If your changes affect source code in any `packages/` directory, create changesets. **Create one changeset file per affected package** — do not combine multiple packages in a single changeset. All packages use the same bump level (`patch` for fixes, `minor` for features, `major` for breaking changes). Write a short summary of the change. Skip this step for test-only, docs-only, or CI-only changes.
 
 ```bash
+# Create one changeset per affected package
 pnpm changeset
 ```
-
-All packages are versioned together — always select **all** packages and use the same bump level (`patch` for fixes, `minor` for features, `major` for breaking changes). Write a short summary of the change. Skip this step for test-only, docs-only, or CI-only changes.
 
 4. Squash-merge into master:
 
@@ -241,7 +240,7 @@ sf library add el-2rig <doc-id>                # Add new doc to Documentation li
 # Merge completed work (squash-merge session branch into master)
 sf merge --message "descriptive commit message"
 
-# Create changeset before merging (when packages/ source code changed)
+# Create one changeset per affected package before merging
 pnpm changeset
 
 # Git workflow (use commitlint-style prefixes)
