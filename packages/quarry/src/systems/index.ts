@@ -60,4 +60,10 @@ export {
   hashRequestBody,
   createSignedRequest,
   createIdentityConfig,
+  // Actor context management
+  resolveActor,
+  validateSoftActor,
+  type ActorSource,
+  // Verification middleware
+  createVerificationMiddleware,
 } from './identity.js';
