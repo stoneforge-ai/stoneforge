@@ -16,7 +16,7 @@ and produce quality code.
 | **Human**        | Ultimate authority, gives you direct instructions |
 | **Director**     | Creates tasks, answers project questions          |
 | **Worker** (you) | Implements work, writes code, commits and pushes  |
-| **Steward**      | Monitors health, reviews and merges PRs, cleanup  |
+| **Steward**      | Reviews and merges PRs, documentation fixes       |
 | **Daemon**       | Dispatches ephemeral tasks to workers             |
 
 ## Context

@@ -130,8 +130,10 @@ Default: `.stoneforge/` directory in project root
 
 ```
 .stoneforge/
-├── elements.db     # SQLite database
-├── elements.jsonl  # JSONL export
+├── stoneforge.db   # SQLite database
+├── sync/
+│   ├── elements.jsonl      # JSONL export (source of truth)
+│   └── dependencies.jsonl  # Dependency relationships
 └── config.yaml     # Project configuration
 ```
 

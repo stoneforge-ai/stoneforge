@@ -15,7 +15,7 @@
  */
 
 import type { EntityId, ElementId, Entity, Timestamp } from '@stoneforge/core';
-import { createTimestamp, EntityTypeValue, asEntityId, asElementId } from '@stoneforge/core';
+import { createTimestamp, createEntity, EntityTypeValue, asEntityId, asElementId } from '@stoneforge/core';
 import type { QuarryAPI } from '@stoneforge/quarry';
 
 import type {
@@ -259,20 +259,17 @@ export class AgentPoolServiceImpl implements AgentPoolService {
     };
 
     // Create pool as a system entity with pool metadata
-    const entityData = {
-      type: 'entity' as const,
+    const entity = await createEntity({
       name: `pool-${input.name}`,
       entityType: POOL_ENTITY_TYPE,
       tags: [POOL_TAG, ...(input.tags ?? [])],
       createdBy: input.createdBy,
-      createdAt: createTimestamp(),
-      updatedAt: createTimestamp(),
       metadata: {
         [POOL_METADATA_KEY]: config,
       },
-    };
+    });
 
-    const saved = await this.api.create<Entity>(entityData as unknown as Record<string, unknown> & { createdBy: EntityId });
+    const saved = await this.api.create<Entity>(entity as unknown as Record<string, unknown> & { createdBy: EntityId });
     const poolId = saved.id as ElementId;
 
     // Initialize status

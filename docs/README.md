@@ -72,7 +72,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for full architecture details.
 | `packages/storage/` | SQLite storage backends | `createStorage`, `initializeSchema`, `StorageBackend` |
 | `packages/quarry/` | Core API, services, sync, CLI | `QuarryAPI`, `createQuarryAPI`, `SyncService`, `InboxService` |
 | `packages/ui/` | Shared React UI components, layout, domain, visualizations, hooks, API clients, design tokens | `Button`, `Card`, `Dialog`, `AppShell`, `Sidebar`, `MobileDrawer`, `TaskCard`, `EntityCard`, `ChannelHeader`, `UserSelector`, `TaskStatusBadge`, `StatusPieChart`, `TrendLineChart`, `HorizontalBarChart`, `useTheme`, `useIsMobile`, `useWebSocket`, `useSSEStream`, `useRealtimeEvents`, `useKeyboardShortcut`, `WebSocketClient`, `SSEClient`, `ApiClient` |
-| `packages/shared-routes/` | Shared route factories for server apps | `createElementsRoutes`, `createEntityRoutes`, `createChannelRoutes`, `createMessageRoutes`, `createLibraryRoutes`, `createDocumentRoutes`, `createInboxRoutes` |
+| `packages/shared-routes/` | Shared route factories for server apps | `createElementsRoutes`, `createEntityRoutes`, `createChannelRoutes`, `createMessageRoutes`, `createLibraryRoutes`, `createDocumentRoutes`, `createInboxRoutes`, `createPlanRoutes` |
 | `packages/smithy/` | Agent orchestration | `OrchestratorAPI`, `AgentRole`, `SpawnerService`, `SessionManager` |
 
 ## File Map (@stoneforge/core)
@@ -170,7 +170,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for full architecture details.
 | Dispatch daemon | `services/dispatch-daemon.ts` | `services/dispatch-daemon.test.ts` |
 | Worker task service | `services/worker-task-service.ts` | `services/worker-task-service.test.ts` |
 | Merge steward service | `services/merge-steward-service.ts` | `services/merge-steward-service.test.ts` |
-| Health steward service | `services/health-steward-service.ts` | `services/health-steward-service.test.ts` |
+| Docs steward service | `services/docs-steward-service.ts` | - |
 | Steward scheduler | `services/steward-scheduler.ts` | `services/steward-scheduler.test.ts` |
 | Plugin executor | `services/plugin-executor.ts` | `services/plugin-executor.test.ts` |
 | Spawner service | `runtime/spawner.ts` | `runtime/spawner.test.ts` |

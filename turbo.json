@@ -21,7 +21,7 @@
     },
     "build:web": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**"]
+      "outputs": ["../../packages/smithy/web/**"]
     }
   }
 }

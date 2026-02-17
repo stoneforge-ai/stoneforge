@@ -244,7 +244,7 @@ test.describe('TB-O23: End-to-End Steward Workflow', () => {
       data: {
         role: 'steward',
         name: uniqueName,
-        stewardFocus: 'ops',
+        stewardFocus: 'merge',
         triggers: [
           { type: 'cron', schedule: '*/5 * * * *' },
           { type: 'event', event: 'task_completed' },

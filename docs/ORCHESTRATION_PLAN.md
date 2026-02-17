@@ -77,22 +77,19 @@ Persistent Workers operate interactively with direct human oversight.
 
 ### Steward
 
-Stewards handle automated maintenance, monitoring, and intervention workflows.
+Stewards handle specialized automated workflows such as merge review and documentation maintenance.
 
 | Attribute | Value |
 |-----------|-------|
 | **Reports to** | System (automated triggers) |
 | **Session type** | Ephemeral (workflow-scoped) |
 
-**Responsibilities:**
-- Executes maintenance workflows (merge, health checks, cleanup)
-- Monitors worker health and intervenes when stuck
-- Runs scheduled/triggered operations
-- Reviews and processes merge requests
+**Steward Types:**
+- **Merge Steward:** Reviews and processes merge requests, runs tests, performs squash merges
+- **Docs Steward:** Maintains documentation accuracy and consistency
 
 **Trigger Sources:**
-- Scheduled intervals (health checks, cleanup)
-- Event-based triggers (merge request created, worker stuck)
+- Event-based triggers (merge request created)
 - Workflow task assignment
 
 ---
@@ -144,10 +141,8 @@ Stewards handle automated maintenance, monitoring, and intervention workflows.
          │                                   ┌─────────────────────────────┐
          └──────────────────────────────────▶│          STEWARDS           │
                                              │                             │
-                                             │  - Merge review             │
-                                             │  - Health monitoring        │
-                                             │  - Worker intervention      │
-                                             │  - Cleanup operations       │
+                                             │  - Merge review & testing   │
+                                             │  - Docs maintenance         │
                                              └──────────────┬──────────────┘
                                                             │
                                               merge or handoff with notes
@@ -169,7 +164,7 @@ Stewards handle automated maintenance, monitoring, and intervention workflows.
    - Triggered steward playbooks
    - Incomplete workflows needing steward assignment
 4. **Ephemeral Workers** execute tasks, commit work, and either close tasks or hand off
-5. **Stewards** handle maintenance workflows including merge review
+5. **Stewards** handle merge review and documentation maintenance workflows
 6. **Completed work** is merged into main branch
 
 ---

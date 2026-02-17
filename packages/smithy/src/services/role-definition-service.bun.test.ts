@@ -347,9 +347,9 @@ describe('RoleDefinitionService', () => {
       });
       await service.createRoleDefinition({
         role: 'steward',
-        name: 'Health Steward',
+        name: 'Docs Steward',
         systemPrompt: 'Prompt',
-        stewardFocus: 'health',
+        stewardFocus: 'docs',
         createdBy: systemEntityId,
       });
 

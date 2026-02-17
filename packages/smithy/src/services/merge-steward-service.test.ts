@@ -38,7 +38,13 @@ if (!isBunRuntime) {
     const actual = await vi.importActual<typeof import('node:child_process')>('node:child_process');
     return {
       ...actual,
-      exec: vi.fn(),
+      exec: vi.fn((_cmd: string, _opts: unknown, cb?: Function) => {
+        // Default: call callback with an error so promisify(exec) rejects
+        // instead of hanging forever (which causes test timeouts).
+        // Tests that need specific exec behavior override this in their own beforeEach.
+        const callback = typeof _opts === 'function' ? _opts as unknown as Function : cb;
+        if (callback) callback(new Error('mock: no exec implementation'), { stdout: '', stderr: '' });
+      }),
     };
   });
 
@@ -211,8 +217,22 @@ describe('MergeStewardService', () => {
   let config: MergeStewardConfig;
   let service: MergeStewardService;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+
+    // Restore default exec mock implementation (vi.resetAllMocks in afterEach
+    // strips the implementation, causing promisify(exec) to hang forever).
+    // The default calls the callback with an error so hasRemote() resolves to false
+    // instead of hanging indefinitely.
+    if (!isBunRuntime) {
+      const cp = await import('node:child_process');
+      (cp.exec as unknown as MockInstance).mockImplementation(
+        (_cmd: string, _opts: unknown, cb?: Function) => {
+          const callback = typeof _opts === 'function' ? _opts as unknown as Function : cb;
+          if (callback) callback(new Error('mock: no exec implementation'), { stdout: '', stderr: '' });
+        }
+      );
+    }
 
     api = createMockApi();
     taskAssignment = createMockTaskAssignmentService();

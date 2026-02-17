@@ -33,7 +33,7 @@ export const ONE_DAY = 24 * ONE_HOUR;
  */
 export const DEFAULT_SYNC_CONFIG: SyncConfig = {
   autoExport: true,
-  exportDebounce: 500, // 500ms
+  exportDebounce: 5 * ONE_MINUTE, // 5 minutes
   elementsFile: 'elements.jsonl',
   dependenciesFile: 'dependencies.jsonl',
 };

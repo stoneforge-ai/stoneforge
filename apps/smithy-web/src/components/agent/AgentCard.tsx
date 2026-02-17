@@ -5,7 +5,7 @@
  */
 
 import { useState, useRef, useEffect } from 'react';
-import { Play, Square, RefreshCw, Terminal, MoreVertical, Clock, GitBranch, Pencil, Inbox, Trash2, ArrowLeftRight, Settings } from 'lucide-react';
+import { Play, Square, RefreshCw, Terminal, MoreVertical, Clock, GitBranch, Pencil, Inbox, Trash2, ArrowLeftRight, Settings, Zap } from 'lucide-react';
 import type { Agent, WorkerMetadata, StewardMetadata, SessionStatus } from '../../api/types';
 import { AgentStatusBadge } from './AgentStatusBadge';
 import { AgentRoleBadge } from './AgentRoleBadge';
@@ -14,6 +14,7 @@ import { useAgentInboxCount } from '../../api/hooks/useAgentInbox';
 import { AgentInboxDrawer } from './AgentInboxDrawer';
 import { ChangeProviderDialog } from './ChangeProviderDialog';
 import { ChangeModelDialog } from './ChangeModelDialog';
+import { ChangeTriggerDialog } from './ChangeTriggerDialog';
 
 interface AgentCardProps {
   agent: Agent;
@@ -44,6 +45,7 @@ export function AgentCard({
   const [inboxOpen, setInboxOpen] = useState(false);
   const [changeProviderOpen, setChangeProviderOpen] = useState(false);
   const [changeModelOpen, setChangeModelOpen] = useState(false);
+  const [changeTriggersOpen, setChangeTriggersOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Fetch inbox count for the agent
@@ -188,6 +190,25 @@ export function AgentCard({
                 <Settings className="w-3.5 h-3.5" />
                 Change model
               </button>
+              {stewardMeta && (
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setChangeTriggersOpen(true);
+                  }}
+                  className="
+                    w-full flex items-center gap-2 px-3 py-1.5 text-left text-sm
+                    text-[var(--color-text-secondary)]
+                    hover:bg-[var(--color-surface-hover)]
+                    hover:text-[var(--color-text)]
+                    whitespace-nowrap
+                  "
+                  data-testid={`agent-change-triggers-${agent.id}`}
+                >
+                  <Zap className="w-3.5 h-3.5" />
+                  Change triggers
+                </button>
+              )}
               <button
                 onClick={() => {
                   setMenuOpen(false);
@@ -321,6 +342,16 @@ export function AgentCard({
         currentModel={agentMeta?.model}
         currentProvider={agentMeta?.provider ?? 'claude'}
       />
+
+      {/* Change Triggers Dialog (steward only) */}
+      {stewardMeta && (
+        <ChangeTriggerDialog
+          isOpen={changeTriggersOpen}
+          onClose={() => setChangeTriggersOpen(false)}
+          agentId={agent.id}
+          currentTriggers={stewardMeta.triggers ?? []}
+        />
+      )}
     </div>
   );
 }

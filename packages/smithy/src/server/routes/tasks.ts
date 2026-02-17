@@ -36,14 +36,26 @@ async function hydrateTaskDescription(task: Task, api: QuarryAPI): Promise<strin
 /**
  * Format a task response with hydrated description
  */
-async function formatTaskWithDescription(task: Task, api: QuarryAPI) {
+async function formatTaskWithDescription(task: Task, api: QuarryAPI, blockedIds?: Set<string>) {
   const hydratedDescription = await hydrateTaskDescription(task, api);
-  return formatTaskResponse(task, hydratedDescription);
+  return formatTaskResponse(task, hydratedDescription, blockedIds);
 }
 
 export function createTaskRoutes(services: Services) {
-  const { api, agentRegistry, taskAssignmentService, dispatchService, workerTaskService } = services;
+  const { api, agentRegistry, taskAssignmentService, dispatchService, workerTaskService, storageBackend } = services;
   const app = new Hono();
+
+  /**
+   * Query the blocked_cache table to get IDs of all currently blocked elements.
+   * This is used to compute the effective display status for tasks — tasks with
+   * unresolved blocking dependencies should display as 'blocked' instead of 'open'.
+   */
+  function getBlockedIds(): Set<string> {
+    const rows = storageBackend.query<{ element_id: string }>(
+      'SELECT element_id FROM blocked_cache'
+    );
+    return new Set(rows.map((r) => r.element_id));
+  }
 
   // GET /api/tasks - List tasks
   app.get('/api/tasks', async (c) => {
@@ -53,6 +65,9 @@ export function createTaskRoutes(services: Services) {
       const assigneeParam = url.searchParams.get('assignee');
       const unassignedParam = url.searchParams.get('unassigned');
       const searchParam = url.searchParams.get('search');
+
+      // Get blocked element IDs for computing effective display status
+      const blockedIds = getBlockedIds();
 
       // Helper to filter tasks by search query (case-insensitive title match)
       const filterBySearch = (taskList: Task[]): Task[] => {
@@ -64,7 +79,7 @@ export function createTaskRoutes(services: Services) {
       if (unassignedParam === 'true') {
         const unassignedTasks = await taskAssignmentService.getUnassignedTasks();
         const filtered = filterBySearch(unassignedTasks);
-        return c.json({ tasks: filtered.map((t) => formatTaskResponse(t)) });
+        return c.json({ tasks: filtered.map((t) => formatTaskResponse(t, null, blockedIds)) });
       }
 
       if (assigneeParam) {
@@ -74,7 +89,7 @@ export function createTaskRoutes(services: Services) {
           ? agentTasks.filter((t) => t.status === TaskStatus[statusParam.toUpperCase() as keyof typeof TaskStatus])
           : agentTasks;
         filtered = filterBySearch(filtered);
-        return c.json({ tasks: filtered.map((t) => formatTaskResponse(t)) });
+        return c.json({ tasks: filtered.map((t) => formatTaskResponse(t, null, blockedIds)) });
       }
 
       const allElements = await api.list({ type: ElementType.TASK, limit: 10000 });
@@ -82,12 +97,18 @@ export function createTaskRoutes(services: Services) {
       // Filter out tombstoned (deleted) tasks
       let filtered = tasks.filter((t) => t.status !== TaskStatus.TOMBSTONE);
       // Apply status filter if provided
+      // Support filtering by computed 'blocked' status
       if (statusParam) {
-        filtered = filtered.filter((t) => t.status === TaskStatus[statusParam.toUpperCase() as keyof typeof TaskStatus]);
+        if (statusParam.toLowerCase() === 'blocked') {
+          // Show tasks that are computed as blocked (open tasks in blocked_cache)
+          filtered = filtered.filter((t) => t.status === 'open' && blockedIds.has(t.id));
+        } else {
+          filtered = filtered.filter((t) => t.status === TaskStatus[statusParam.toUpperCase() as keyof typeof TaskStatus]);
+        }
       }
       filtered = filterBySearch(filtered);
 
-      return c.json({ tasks: filtered.map((t) => formatTaskResponse(t)) });
+      return c.json({ tasks: filtered.map((t) => formatTaskResponse(t, null, blockedIds)) });
     } catch (error) {
       logger.error('Failed to list tasks:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
@@ -97,8 +118,9 @@ export function createTaskRoutes(services: Services) {
   // GET /api/tasks/unassigned
   app.get('/api/tasks/unassigned', async (c) => {
     try {
+      const blockedIds = getBlockedIds();
       const tasks = await taskAssignmentService.getUnassignedTasks();
-      return c.json({ tasks: tasks.map((t) => formatTaskResponse(t)) });
+      return c.json({ tasks: tasks.map((t) => formatTaskResponse(t, null, blockedIds)) });
     } catch (error) {
       logger.error('Failed to list unassigned tasks:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
@@ -314,7 +336,9 @@ export function createTaskRoutes(services: Services) {
       }
 
       // Hydrate description from descriptionRef if it exists
-      const formattedTask = await formatTaskWithDescription(task, api);
+      // Include blocked status computation for single task view
+      const blockedIds = getBlockedIds();
+      const formattedTask = await formatTaskWithDescription(task, api, blockedIds);
       return c.json({ task: formattedTask, assignment: assignmentInfo });
     } catch (error) {
       logger.error('Failed to get task:', error);

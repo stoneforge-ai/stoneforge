@@ -38,7 +38,6 @@ import { loadRolePrompt } from '../prompts/index.js';
 import type { AgentRegistry, AgentEntity } from './agent-registry.js';
 import { getAgentMetadata } from './agent-registry.js';
 import type { MergeStewardService } from './merge-steward-service.js';
-import type { HealthStewardService } from './health-steward-service.js';
 import type { DocsStewardService } from './docs-steward-service.js';
 import { createLogger } from '../utils/logger.js';
 
@@ -1236,7 +1235,6 @@ export function createStewardScheduler(
  */
 export interface StewardExecutorDeps {
   mergeStewardService: MergeStewardService;
-  healthStewardService: HealthStewardService;
   docsStewardService: DocsStewardService;
   sessionManager: SessionManager;
   projectRoot: string;
@@ -1247,7 +1245,7 @@ export interface StewardExecutorDeps {
  * based on the steward's focus.
  *
  * - 'merge' focus → MergeStewardService.processAllPending()
- * - 'docs' / 'health' / 'reminder' / 'ops' → spawns an agent session via sessionManager
+ * - 'docs' → spawns an agent session via sessionManager
  *
  * Session-based stewards check for an existing active session before spawning
  * to prevent overlapping runs across cron ticks.
@@ -1281,10 +1279,7 @@ export function createStewardExecutor(deps: StewardExecutorDeps): StewardExecuto
           };
         }
       }
-      case 'docs':
-      case 'health':
-      case 'reminder':
-      case 'ops': {
+      case 'docs': {
         try {
           const stewardId = steward.id as unknown as EntityId;
           const activeSession = deps.sessionManager.getActiveSession(stewardId);
@@ -1317,6 +1312,63 @@ export function createStewardExecutor(deps: StewardExecutorDeps): StewardExecuto
             success: false,
             error: error instanceof Error ? error.message : String(error),
             output: `${focus} steward '${steward.name}' failed: ${error instanceof Error ? error.message : String(error)}`,
+            durationMs: Date.now() - startTime,
+            itemsProcessed: 0,
+          };
+        }
+      }
+      case 'custom': {
+        try {
+          const stewardId = steward.id as unknown as EntityId;
+          const activeSession = deps.sessionManager.getActiveSession(stewardId);
+          if (activeSession) {
+            return {
+              success: true,
+              output: `Steward '${steward.name}' already has active session ${activeSession.id}, skipping`,
+              durationMs: Date.now() - startTime,
+              itemsProcessed: 0,
+            };
+          }
+
+          // Build prompt from steward base + custom playbook
+          const playbook = metadata?.playbook;
+          if (!playbook) {
+            return {
+              success: false,
+              error: 'Custom steward has no playbook configured',
+              output: `Custom steward '${steward.name}' has no playbook configured`,
+              durationMs: Date.now() - startTime,
+              itemsProcessed: 0,
+            };
+          }
+
+          // Load the steward base prompt for shared context
+          const roleResult = loadRolePrompt('steward', undefined, {
+            projectRoot: deps.projectRoot,
+          });
+          const basePrompt = roleResult?.prompt ?? '';
+
+          // Combine base steward prompt with the custom playbook
+          const initialPrompt = basePrompt
+            ? `${basePrompt}\n\n---\n\n## Custom Steward Playbook\n\n${playbook}`
+            : `## Custom Steward Playbook\n\n${playbook}`;
+
+          const { session } = await deps.sessionManager.startSession(stewardId, {
+            workingDirectory: deps.projectRoot,
+            initialPrompt,
+            interactive: false,
+          });
+          return {
+            success: true,
+            output: `Spawned custom steward session ${session.id}`,
+            durationMs: Date.now() - startTime,
+            itemsProcessed: 1,
+          };
+        } catch (error) {
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : String(error),
+            output: `Custom steward '${steward.name}' failed: ${error instanceof Error ? error.message : String(error)}`,
             durationMs: Date.now() - startTime,
             itemsProcessed: 0,
           };

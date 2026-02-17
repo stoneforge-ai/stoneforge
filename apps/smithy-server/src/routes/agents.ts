@@ -37,7 +37,8 @@ export function createAgentRoutes(services: Services) {
         role: 'director' | 'worker' | 'steward';
         name: string;
         workerMode?: 'ephemeral' | 'persistent';
-        stewardFocus?: 'merge' | 'health' | 'reminder' | 'ops';
+        stewardFocus?: 'merge' | 'docs' | 'custom';
+        playbook?: string;
         maxConcurrentTasks?: number;
         tags?: string[];
         triggers?: Array<{ type: 'cron'; schedule: string } | { type: 'event'; event: string; condition?: string }>;
@@ -90,6 +91,7 @@ export function createAgentRoutes(services: Services) {
             name: body.name,
             stewardFocus: body.stewardFocus,
             triggers: body.triggers,
+            playbook: body.stewardFocus === 'custom' ? body.playbook : undefined,
             createdBy,
             tags: body.tags,
             maxConcurrentTasks: body.maxConcurrentTasks,
@@ -193,8 +195,9 @@ export function createAgentRoutes(services: Services) {
     try {
       const body = (await c.req.json()) as {
         name: string;
-        stewardFocus: 'merge' | 'health' | 'reminder' | 'ops';
+        stewardFocus: 'merge' | 'docs' | 'custom';
         triggers?: Array<{ type: 'cron'; schedule: string } | { type: 'event'; event: string; condition?: string }>;
+        playbook?: string;
         maxConcurrentTasks?: number;
         tags?: string[];
         reportsTo?: string;
@@ -207,10 +210,16 @@ export function createAgentRoutes(services: Services) {
       if (!body.stewardFocus) {
         return c.json({ error: { code: 'INVALID_INPUT', message: 'stewardFocus is required' } }, 400);
       }
-      const validFocuses = ['merge', 'health', 'reminder', 'ops'];
+      const validFocuses = ['merge', 'docs', 'custom'];
       if (!validFocuses.includes(body.stewardFocus)) {
         return c.json(
           { error: { code: 'INVALID_INPUT', message: `stewardFocus must be one of: ${validFocuses.join(', ')}` } },
+          400
+        );
+      }
+      if (body.stewardFocus === 'custom' && !body.playbook?.trim()) {
+        return c.json(
+          { error: { code: 'INVALID_INPUT', message: 'playbook is required for custom stewards' } },
           400
         );
       }
@@ -233,6 +242,7 @@ export function createAgentRoutes(services: Services) {
         name: body.name,
         stewardFocus: body.stewardFocus,
         triggers: body.triggers,
+        playbook: body.stewardFocus === 'custom' ? body.playbook : undefined,
         createdBy: (body.createdBy ?? 'el-0000') as EntityId,
         tags: body.tags,
         maxConcurrentTasks: body.maxConcurrentTasks,

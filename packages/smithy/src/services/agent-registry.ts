@@ -128,7 +128,7 @@ export interface AgentRegistry {
 
   /**
    * Registers a Steward agent.
-   * Stewards perform support tasks like merging, health checks, etc.
+   * Stewards perform support tasks like merging branches and scanning documentation.
    */
   registerSteward(input: RegisterStewardInput): Promise<AgentEntity>;
 
@@ -334,6 +334,7 @@ export class AgentRegistryImpl implements AgentRegistry {
       agentRole: 'steward',
       stewardFocus: input.stewardFocus,
       triggers: input.triggers,
+      playbook: input.stewardFocus === 'custom' ? input.playbook : undefined,
       sessionStatus: 'idle',
       maxConcurrentTasks: input.maxConcurrentTasks,
       roleDefinitionRef: input.roleDefinitionRef,

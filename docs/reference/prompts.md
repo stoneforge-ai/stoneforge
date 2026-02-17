@@ -23,9 +23,6 @@ packages/smithy/src/prompts/
 ├── message-triage.md     # Message triage prompt (used by triage sessions)
 ├── steward-base.md       # Base steward prompt
 ├── steward-merge.md      # Merge focus addendum
-├── steward-health.md     # Health focus addendum
-├── steward-ops.md        # Ops focus addendum
-├── steward-reminder.md   # Reminder focus addendum
 └── steward-docs.md       # Docs focus addendum
 ```
 
@@ -263,9 +260,6 @@ const result = await spawner.spawn(agentId, 'worker', {
 | Focus | File | Purpose |
 |-------|------|---------|
 | `merge` | `steward-merge.md` | Merge completed branches |
-| `health` | `steward-health.md` | Monitor agent health |
-| `ops` | `steward-ops.md` | Operational tasks |
-| `reminder` | `steward-reminder.md` | Send reminders |
 | `docs` | `steward-docs.md` | Scan and fix documentation issues |
 
 Steward prompts are combined: `steward-base.md` + `steward-{focus}.md`

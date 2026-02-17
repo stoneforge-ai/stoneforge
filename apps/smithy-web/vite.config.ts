@@ -48,6 +48,8 @@ export default defineConfig({
     },
   },
   build: {
+    outDir: resolve(__dirname, '../../packages/smithy/web'),
+    emptyOutDir: true,
     minify: 'esbuild',
     target: 'es2020',
     cssCodeSplit: true,

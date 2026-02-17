@@ -442,8 +442,8 @@ export function AppShell() {
         </MobileDrawer>
       )}
 
-      {/* Tablet & Desktop: Static sidebar */}
-      {!isMobile && (
+      {/* Tablet & Desktop: Static sidebar - hidden when director panel is maximized */}
+      {!isMobile && !(directorMaximized && !directorCollapsed) && (
         <Sidebar
           collapsed={sidebarCollapsed}
           onToggle={() => setDesktopCollapsed(!desktopCollapsed)}

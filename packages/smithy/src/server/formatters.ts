@@ -13,16 +13,39 @@ import type {
   OrchestratorTaskMeta,
 } from '../index.js';
 
-export function formatTaskResponse(task: Task, hydratedDescription?: string | null) {
+/**
+ * Compute the effective display status for a task.
+ *
+ * The `blocked` status is computed at display time, never stored directly.
+ * A task is considered blocked when it has unresolved blocking dependencies
+ * (i.e., it appears in the blocked_cache). Only tasks with an 'open' stored
+ * status are shown as 'blocked' — tasks already in_progress, closed, etc.
+ * retain their stored status.
+ *
+ * @param task - The task to compute the effective status for
+ * @param blockedIds - Set of element IDs that are currently blocked (from blocked_cache)
+ * @returns The effective display status
+ */
+export function getEffectiveTaskStatus(task: Task, blockedIds?: Set<string>): string {
+  if (blockedIds && blockedIds.has(task.id) && task.status === 'open') {
+    return 'blocked';
+  }
+  return task.status;
+}
+
+export function formatTaskResponse(task: Task, hydratedDescription?: string | null, blockedIds?: Set<string>) {
   const meta = (task.metadata as { orchestrator?: OrchestratorTaskMeta })?.orchestrator;
   // Use hydrated description from descriptionRef, or fall back to metadata.description
   const description = hydratedDescription ?? (task.metadata as { description?: string })?.description;
+
+  // Compute effective display status: show 'blocked' for open tasks with unresolved dependencies
+  const effectiveStatus = getEffectiveTaskStatus(task, blockedIds);
 
   return {
     id: task.id,
     title: task.title,
     description,
-    status: task.status,
+    status: effectiveStatus,
     priority: task.priority,
     complexity: task.complexity,
     taskType: task.taskType,

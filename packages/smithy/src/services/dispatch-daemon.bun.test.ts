@@ -21,13 +21,17 @@ import {
   type EntityId,
   type Task,
   type ElementId,
+  type Plan,
   createTimestamp,
+  createPlan,
+  PlanStatus,
 } from '@stoneforge/core';
 
 import {
   createDispatchDaemon,
   type DispatchDaemon,
   type DispatchDaemonConfig,
+  type PollResult,
 } from './dispatch-daemon.js';
 import { createAgentRegistry, type AgentRegistry, type AgentEntity } from './agent-registry.js';
 import { createTaskAssignmentService, type TaskAssignmentService } from './task-assignment-service.js';
@@ -1268,5 +1272,301 @@ describe('pollInboxes - duplicate message prevention', () => {
         fs.unlinkSync(testDbPath);
       }
     }
+  });
+});
+
+// ============================================================================
+// Plan Auto-Complete Tests
+// ============================================================================
+
+describe('DispatchDaemon Plan Auto-Complete', () => {
+  let api: QuarryAPI;
+  let inboxService: InboxService;
+  let agentRegistry: AgentRegistry;
+  let taskAssignment: TaskAssignmentService;
+  let dispatchService: DispatchService;
+  let sessionManager: SessionManager;
+  let worktreeManager: WorktreeManager;
+  let stewardScheduler: StewardScheduler;
+  let daemon: DispatchDaemon;
+  let testDbPath: string;
+  let systemEntity: EntityId;
+
+  beforeEach(async () => {
+    testDbPath = `/tmp/dispatch-daemon-plan-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`;
+    const storage = createStorage({ path: testDbPath, create: true });
+    initializeSchema(storage);
+
+    api = createQuarryAPI(storage);
+    inboxService = createInboxService(storage);
+    agentRegistry = createAgentRegistry(api);
+    taskAssignment = createTaskAssignmentService(api);
+    dispatchService = createDispatchService(api, taskAssignment, agentRegistry);
+    sessionManager = createMockSessionManager();
+    worktreeManager = createMockWorktreeManager();
+    stewardScheduler = createMockStewardScheduler();
+
+    // Create system entity
+    const { createEntity, EntityTypeValue } = await import('@stoneforge/core');
+    const entity = await createEntity({
+      name: 'test-system-plans',
+      entityType: EntityTypeValue.SYSTEM,
+      createdBy: 'system:test' as EntityId,
+    });
+    const saved = await api.create(entity as unknown as Record<string, unknown> & { createdBy: EntityId });
+    systemEntity = saved.id as unknown as EntityId;
+
+    // Create daemon with plan auto-complete enabled, other polls disabled
+    const config: DispatchDaemonConfig = {
+      pollIntervalMs: 100,
+      workerAvailabilityPollEnabled: false,
+      inboxPollEnabled: false,
+      stewardTriggerPollEnabled: false,
+      workflowTaskPollEnabled: false,
+      planAutoCompleteEnabled: true,
+    };
+
+    daemon = createDispatchDaemon(
+      api,
+      agentRegistry,
+      sessionManager,
+      dispatchService,
+      worktreeManager,
+      taskAssignment,
+      stewardScheduler,
+      inboxService,
+      config
+    );
+  });
+
+  afterEach(async () => {
+    await daemon.stop();
+    if (fs.existsSync(testDbPath)) {
+      fs.unlinkSync(testDbPath);
+    }
+  });
+
+  // Helper to create a test plan
+  async function createTestPlan(status: PlanStatus = PlanStatus.ACTIVE): Promise<Plan> {
+    const plan = await createPlan({
+      title: `Test Plan ${Date.now()}`,
+      createdBy: systemEntity,
+      status,
+    });
+    return api.create(plan as unknown as Record<string, unknown> & { createdBy: EntityId }) as Promise<Plan>;
+  }
+
+  describe('pollPlanAutoComplete', () => {
+    test('auto-completes plan when all tasks are closed', async () => {
+      // 1. Create an active plan with tasks
+      const plan = await createTestPlan(PlanStatus.ACTIVE);
+
+      // 2. Add tasks that are all closed
+      await api.createTaskInPlan(plan.id, {
+        title: 'Task 1',
+        createdBy: systemEntity,
+        status: TaskStatus.CLOSED,
+      });
+      await api.createTaskInPlan(plan.id, {
+        title: 'Task 2',
+        createdBy: systemEntity,
+        status: TaskStatus.CLOSED,
+      });
+
+      // 3. Run the poll
+      const result = await daemon.pollPlanAutoComplete();
+
+      // 4. Verify plan was auto-completed
+      expect(result.pollType).toBe('plan-auto-complete');
+      expect(result.processed).toBe(1);
+      expect(result.errors).toBe(0);
+
+      // 5. Verify plan status was updated
+      const updatedPlan = await api.get<Plan>(plan.id);
+      expect(updatedPlan!.status).toBe(PlanStatus.COMPLETED);
+      expect(updatedPlan!.completedAt).toBeDefined();
+    });
+
+    test('does not auto-complete plan with non-closed tasks', async () => {
+      // 1. Create an active plan with mixed task statuses
+      const plan = await createTestPlan(PlanStatus.ACTIVE);
+
+      await api.createTaskInPlan(plan.id, {
+        title: 'Closed Task',
+        createdBy: systemEntity,
+        status: TaskStatus.CLOSED,
+      });
+      await api.createTaskInPlan(plan.id, {
+        title: 'Open Task',
+        createdBy: systemEntity,
+        status: TaskStatus.OPEN,
+      });
+
+      // 2. Run the poll
+      const result = await daemon.pollPlanAutoComplete();
+
+      // 3. Verify plan was NOT auto-completed
+      expect(result.processed).toBe(0);
+
+      const updatedPlan = await api.get<Plan>(plan.id);
+      expect(updatedPlan!.status).toBe(PlanStatus.ACTIVE);
+    });
+
+    test('does not auto-complete plan with in-progress tasks', async () => {
+      const plan = await createTestPlan(PlanStatus.ACTIVE);
+
+      await api.createTaskInPlan(plan.id, {
+        title: 'In Progress Task',
+        createdBy: systemEntity,
+        status: TaskStatus.IN_PROGRESS,
+      });
+
+      const result = await daemon.pollPlanAutoComplete();
+      expect(result.processed).toBe(0);
+
+      const updatedPlan = await api.get<Plan>(plan.id);
+      expect(updatedPlan!.status).toBe(PlanStatus.ACTIVE);
+    });
+
+    test('does not auto-complete plan with no tasks', async () => {
+      // Plan with zero tasks should not be auto-completed
+      const plan = await createTestPlan(PlanStatus.ACTIVE);
+
+      const result = await daemon.pollPlanAutoComplete();
+      expect(result.processed).toBe(0);
+
+      const updatedPlan = await api.get<Plan>(plan.id);
+      expect(updatedPlan!.status).toBe(PlanStatus.ACTIVE);
+    });
+
+    test('skips non-active plans', async () => {
+      // Create a draft plan with closed tasks (should be skipped)
+      const draftPlan = await createTestPlan(PlanStatus.DRAFT);
+
+      await api.createTaskInPlan(draftPlan.id, {
+        title: 'Closed Task',
+        createdBy: systemEntity,
+        status: TaskStatus.CLOSED,
+      });
+
+      const result = await daemon.pollPlanAutoComplete();
+      expect(result.processed).toBe(0);
+
+      const updatedPlan = await api.get<Plan>(draftPlan.id);
+      expect(updatedPlan!.status).toBe(PlanStatus.DRAFT);
+    });
+
+    test('auto-completes multiple eligible plans in one cycle', async () => {
+      // Create two active plans, both with all closed tasks
+      const plan1 = await createTestPlan(PlanStatus.ACTIVE);
+      const plan2 = await createTestPlan(PlanStatus.ACTIVE);
+
+      await api.createTaskInPlan(plan1.id, {
+        title: 'Task A',
+        createdBy: systemEntity,
+        status: TaskStatus.CLOSED,
+      });
+      await api.createTaskInPlan(plan2.id, {
+        title: 'Task B',
+        createdBy: systemEntity,
+        status: TaskStatus.CLOSED,
+      });
+
+      const result = await daemon.pollPlanAutoComplete();
+      expect(result.processed).toBe(2);
+      expect(result.errors).toBe(0);
+
+      const updatedPlan1 = await api.get<Plan>(plan1.id);
+      const updatedPlan2 = await api.get<Plan>(plan2.id);
+      expect(updatedPlan1!.status).toBe(PlanStatus.COMPLETED);
+      expect(updatedPlan2!.status).toBe(PlanStatus.COMPLETED);
+    });
+
+    test('does not auto-complete plans with deferred tasks', async () => {
+      const plan = await createTestPlan(PlanStatus.ACTIVE);
+
+      await api.createTaskInPlan(plan.id, {
+        title: 'Closed Task',
+        createdBy: systemEntity,
+        status: TaskStatus.CLOSED,
+      });
+      await api.createTaskInPlan(plan.id, {
+        title: 'Deferred Task',
+        createdBy: systemEntity,
+        status: TaskStatus.DEFERRED,
+      });
+
+      const result = await daemon.pollPlanAutoComplete();
+      expect(result.processed).toBe(0);
+
+      const updatedPlan = await api.get<Plan>(plan.id);
+      expect(updatedPlan!.status).toBe(PlanStatus.ACTIVE);
+    });
+
+    test('is disabled when planAutoCompleteEnabled is false', async () => {
+      // Re-create daemon with plan auto-complete disabled
+      await daemon.stop();
+
+      const disabledDaemon = createDispatchDaemon(
+        api,
+        agentRegistry,
+        sessionManager,
+        dispatchService,
+        worktreeManager,
+        taskAssignment,
+        stewardScheduler,
+        inboxService,
+        {
+          pollIntervalMs: 100,
+          workerAvailabilityPollEnabled: false,
+          inboxPollEnabled: false,
+          stewardTriggerPollEnabled: false,
+          workflowTaskPollEnabled: false,
+          planAutoCompleteEnabled: false,
+        }
+      );
+
+      // Create an active plan with all closed tasks
+      const plan = await createTestPlan(PlanStatus.ACTIVE);
+      await api.createTaskInPlan(plan.id, {
+        title: 'Closed Task',
+        createdBy: systemEntity,
+        status: TaskStatus.CLOSED,
+      });
+
+      // The config should show it's disabled
+      const config = disabledDaemon.getConfig();
+      expect(config.planAutoCompleteEnabled).toBe(false);
+
+      // But manual poll still works (like other poll methods)
+      const result = await disabledDaemon.pollPlanAutoComplete();
+      expect(result.processed).toBe(1);
+
+      await disabledDaemon.stop();
+    });
+
+    test('emits poll:start and poll:complete events', async () => {
+      const plan = await createTestPlan(PlanStatus.ACTIVE);
+      await api.createTaskInPlan(plan.id, {
+        title: 'Closed Task',
+        createdBy: systemEntity,
+        status: TaskStatus.CLOSED,
+      });
+
+      const startEvents: string[] = [];
+      const completeEvents: PollResult[] = [];
+
+      daemon.on('poll:start', (pollType: string) => {
+        startEvents.push(pollType);
+      });
+      daemon.on('poll:complete', (result: PollResult) => {
+        completeEvents.push(result);
+      });
+
+      await daemon.pollPlanAutoComplete();
+
+      expect(startEvents).toContain('plan-auto-complete');
+      expect(completeEvents.some(r => r.pollType === 'plan-auto-complete')).toBe(true);
+    });
   });
 });

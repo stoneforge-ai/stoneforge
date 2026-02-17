@@ -25,7 +25,6 @@ import {
   VolumeX,
   GitBranch,
   Trash2,
-  Calendar,
   Bot,
   ChevronDown,
   Loader2,
@@ -510,32 +509,6 @@ function WorkspaceTab() {
       >
         <div className="space-y-4">
           <ToggleSetting
-            label="Health Steward"
-            description="Monitors agent health and restarts stuck agents"
-            checked={stewardSchedules.settings.healthStewardEnabled}
-            onChange={(checked) => stewardSchedules.setSettings({ healthStewardEnabled: checked })}
-            testId="settings-health-steward"
-          />
-          {stewardSchedules.settings.healthStewardEnabled && (
-            <div className="pl-6 border-l-2 border-[var(--color-border)]">
-              <label className="block text-sm text-[var(--color-text-secondary)] mb-1">
-                Check interval
-              </label>
-              <select
-                value={stewardSchedules.settings.healthCheckInterval}
-                onChange={(e) => stewardSchedules.setSettings({ healthCheckInterval: e.target.value })}
-                className="w-full px-3 py-2 rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent"
-                data-testid="settings-health-interval"
-              >
-                <option value="1m">Every minute</option>
-                <option value="5m">Every 5 minutes</option>
-                <option value="15m">Every 15 minutes</option>
-                <option value="30m">Every 30 minutes</option>
-              </select>
-            </div>
-          )}
-
-          <ToggleSetting
             label="Merge Steward"
             description="Automatically merges completed branches"
             checked={stewardSchedules.settings.mergeStewardEnabled}
@@ -544,33 +517,12 @@ function WorkspaceTab() {
           />
 
           <ToggleSetting
-            label="Ops Steward"
-            description="Runs scheduled maintenance tasks"
-            checked={stewardSchedules.settings.opsStewardEnabled}
-            onChange={(checked) => stewardSchedules.setSettings({ opsStewardEnabled: checked })}
-            testId="settings-ops-steward"
+            label="Docs Steward"
+            description="Maintains and updates documentation"
+            checked={stewardSchedules.settings.docsStewardEnabled}
+            onChange={(checked) => stewardSchedules.setSettings({ docsStewardEnabled: checked })}
+            testId="settings-docs-steward"
           />
-          {stewardSchedules.settings.opsStewardEnabled && (
-            <div className="pl-6 border-l-2 border-[var(--color-border)]">
-              <label className="block text-sm text-[var(--color-text-secondary)] mb-1">
-                <span className="flex items-center gap-1">
-                  <Calendar className="w-4 h-4" />
-                  Schedule (cron)
-                </span>
-              </label>
-              <input
-                type="text"
-                value={stewardSchedules.settings.opsSchedule}
-                onChange={(e) => stewardSchedules.setSettings({ opsSchedule: e.target.value })}
-                className="w-full px-3 py-2 rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] text-[var(--color-text)] font-mono text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent"
-                placeholder="0 2 * * *"
-                data-testid="settings-ops-schedule"
-              />
-              <p className="mt-1 text-xs text-[var(--color-text-tertiary)]">
-                Cron expression (default: 2 AM daily)
-              </p>
-            </div>
-          )}
 
           <div className="pt-2">
             <button

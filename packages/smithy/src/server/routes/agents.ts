@@ -37,10 +37,11 @@ export function createAgentRoutes(services: Services) {
         role: 'director' | 'worker' | 'steward';
         name: string;
         workerMode?: 'ephemeral' | 'persistent';
-        stewardFocus?: 'merge' | 'health' | 'reminder' | 'ops';
+        stewardFocus?: 'merge' | 'docs' | 'custom';
         maxConcurrentTasks?: number;
         tags?: string[];
         triggers?: Array<{ type: 'cron'; schedule: string } | { type: 'event'; event: string; condition?: string }>;
+        playbook?: string;
         reportsTo?: string;
         createdBy?: string;
         provider?: string;
@@ -90,6 +91,7 @@ export function createAgentRoutes(services: Services) {
             name: body.name,
             stewardFocus: body.stewardFocus,
             triggers: body.triggers,
+            playbook: body.stewardFocus === 'custom' ? body.playbook : undefined,
             createdBy,
             tags: body.tags,
             maxConcurrentTasks: body.maxConcurrentTasks,
@@ -200,8 +202,9 @@ export function createAgentRoutes(services: Services) {
     try {
       const body = (await c.req.json()) as {
         name: string;
-        stewardFocus: 'merge' | 'health' | 'reminder' | 'ops';
+        stewardFocus: 'merge' | 'docs' | 'custom';
         triggers?: Array<{ type: 'cron'; schedule: string } | { type: 'event'; event: string; condition?: string }>;
+        playbook?: string;
         maxConcurrentTasks?: number;
         tags?: string[];
         reportsTo?: string;
@@ -214,10 +217,16 @@ export function createAgentRoutes(services: Services) {
       if (!body.stewardFocus) {
         return c.json({ error: { code: 'INVALID_INPUT', message: 'stewardFocus is required' } }, 400);
       }
-      const validFocuses = ['merge', 'health', 'reminder', 'ops'];
+      const validFocuses = ['merge', 'docs', 'custom'];
       if (!validFocuses.includes(body.stewardFocus)) {
         return c.json(
           { error: { code: 'INVALID_INPUT', message: `stewardFocus must be one of: ${validFocuses.join(', ')}` } },
+          400
+        );
+      }
+      if (body.stewardFocus === 'custom' && !body.playbook?.trim()) {
+        return c.json(
+          { error: { code: 'INVALID_INPUT', message: 'playbook is required for custom stewards' } },
           400
         );
       }
@@ -240,6 +249,7 @@ export function createAgentRoutes(services: Services) {
         name: body.name,
         stewardFocus: body.stewardFocus,
         triggers: body.triggers,
+        playbook: body.stewardFocus === 'custom' ? body.playbook : undefined,
         createdBy: (body.createdBy ?? 'el-0000') as EntityId,
         tags: body.tags,
         maxConcurrentTasks: body.maxConcurrentTasks,
@@ -284,7 +294,12 @@ export function createAgentRoutes(services: Services) {
   app.patch('/api/agents/:id', async (c) => {
     try {
       const agentId = c.req.param('id') as EntityId;
-      const body = (await c.req.json()) as { name?: string; provider?: string; model?: string | null };
+      const body = (await c.req.json()) as {
+        name?: string;
+        provider?: string;
+        model?: string | null;
+        triggers?: Array<{ type: 'cron'; schedule: string } | { type: 'event'; event: string; condition?: string }>;
+      };
 
       const agent = await agentRegistry.getAgent(agentId);
       if (!agent) {
@@ -319,6 +334,38 @@ export function createAgentRoutes(services: Services) {
         updatedAgent = await agentRegistry.updateAgentMetadata(agentId, {
           model: body.model === null ? undefined : body.model.trim(),
         });
+      }
+
+      // Update triggers in agent metadata if provided (steward agents only)
+      if (body.triggers !== undefined) {
+        const agentMeta = updatedAgent.metadata?.agent;
+        if (!agentMeta || agentMeta.agentRole !== 'steward') {
+          return c.json({ error: { code: 'VALIDATION_ERROR', message: 'Triggers can only be set on steward agents' } }, 400);
+        }
+
+        // Validate each trigger
+        for (const trigger of body.triggers) {
+          if (trigger.type === 'cron' && !trigger.schedule) {
+            return c.json({ error: { code: 'VALIDATION_ERROR', message: 'Cron trigger requires a schedule' } }, 400);
+          }
+          if (trigger.type === 'event' && !trigger.event) {
+            return c.json({ error: { code: 'VALIDATION_ERROR', message: 'Event trigger requires an event name' } }, 400);
+          }
+          if (trigger.type !== 'cron' && trigger.type !== 'event') {
+            return c.json({ error: { code: 'VALIDATION_ERROR', message: 'Trigger type must be "cron" or "event"' } }, 400);
+          }
+        }
+
+        updatedAgent = await agentRegistry.updateAgentMetadata(agentId, { triggers: body.triggers });
+
+        // Re-register steward with scheduler to pick up new triggers
+        if (stewardScheduler.isRunning()) {
+          try {
+            await stewardScheduler.registerSteward(agentId);
+          } catch (err) {
+            console.warn('[orchestrator] Failed to re-register steward with scheduler after trigger update:', err);
+          }
+        }
       }
 
       return c.json({ agent: updatedAgent });

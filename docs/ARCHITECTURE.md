@@ -20,7 +20,9 @@ stoneforge/
 │
 └── .stoneforge/         # Project data directory
     ├── stoneforge.db   # SQLite database (cache)
-    ├── elements.jsonl  # JSONL export (source of truth)
+    ├── sync/
+    │   ├── elements.jsonl      # JSONL export (source of truth)
+    │   └── dependencies.jsonl  # Dependency relationships
     └── config.yaml     # Project configuration
 ```
 

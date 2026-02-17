@@ -20,9 +20,6 @@ packages/smithy/src/prompts/
 ├── persistent-worker.md  # Persistent worker role
 ├── steward-base.md       # Base steward (all focuses)
 ├── steward-merge.md      # Merge focus addendum
-├── steward-health.md     # Health focus addendum
-├── steward-ops.md        # Ops focus addendum
-├── steward-reminder.md   # Reminder focus addendum
 └── steward-docs.md       # Docs focus addendum
 ```
 

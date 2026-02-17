@@ -26,7 +26,6 @@ import {
   createDispatchDaemon,
   createAgentPoolService,
   createMergeStewardService,
-  createHealthStewardService,
   createDocsStewardService,
   GitRepositoryNotFoundError,
   type OrchestratorAPI,
@@ -43,7 +42,6 @@ import {
   type DispatchDaemon,
   type AgentPoolService,
   type MergeStewardService,
-  type HealthStewardService,
   type DocsStewardService,
   type OnSessionStartedCallback,
   trackListeners,
@@ -79,7 +77,6 @@ export interface Services {
   syncService: SyncService;
   autoExportService: AutoExportService;
   mergeStewardService: MergeStewardService;
-  healthStewardService: HealthStewardService;
   docsStewardService: DocsStewardService;
   dispatchDaemon: DispatchDaemon | undefined;
   sessionInitialPrompts: Map<string, string>;
@@ -166,21 +163,12 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
     worktreeManager
   );
 
-  const healthStewardService = createHealthStewardService(
-    api,
-    agentRegistry,
-    sessionManager,
-    taskAssignmentService,
-    dispatchService
-  );
-
   const docsStewardService = createDocsStewardService({
     workspaceRoot: projectRoot,
   });
 
   const stewardExecutor = createStewardExecutor({
     mergeStewardService,
-    healthStewardService,
     docsStewardService,
     sessionManager,
     projectRoot,
@@ -304,7 +292,6 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
     roleDefinitionService,
     workerTaskService,
     mergeStewardService,
-    healthStewardService,
     docsStewardService,
     stewardScheduler,
     pluginExecutor,

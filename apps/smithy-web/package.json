@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "build:web": "vite build && mkdir -p ../../packages/smithy/web && rsync -a --delete dist/ ../../packages/smithy/web/",
+    "build:web": "vite build",
     "preview": "vite preview",
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",

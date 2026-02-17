@@ -14,6 +14,7 @@ import { createTask, createDocument, ContentType, TaskStatus, TaskTypeValue, Pla
 import type { Element, ElementId, EntityId } from '@stoneforge/core';
 import type { QuarryAPI, TaskFilter } from '../../api/types.js';
 import type { PlanProgress } from '@stoneforge/core';
+import type { StorageBackend } from '@stoneforge/storage';
 import { createInboxService } from '../../services/inbox.js';
 import { resolveDatabasePath, resolveActor, createAPI } from '../db.js';
 
@@ -323,11 +324,40 @@ export const listOptions: CommandOption[] = [
   },
 ];
 
+/**
+ * Query the blocked_cache table to get IDs of all currently blocked elements.
+ * Used to compute effective display status for tasks — open tasks with
+ * unresolved blocking dependencies should display as 'blocked'.
+ */
+function getBlockedIds(backend: StorageBackend): Set<string> {
+  try {
+    const rows = backend.query<{ element_id: string }>(
+      'SELECT element_id FROM blocked_cache'
+    );
+    return new Set(rows.map((r) => r.element_id));
+  } catch {
+    // blocked_cache table may not exist in all scenarios
+    return new Set();
+  }
+}
+
+/**
+ * Compute the effective display status for an element.
+ * Tasks with an 'open' stored status that appear in the blocked_cache
+ * are displayed as 'blocked' instead.
+ */
+function getEffectiveStatus(status: string, elementId: string, blockedIds: Set<string>): string {
+  if (status === 'open' && blockedIds.has(elementId)) {
+    return 'blocked';
+  }
+  return status;
+}
+
 export async function listHandler(
   args: string[],
   options: GlobalOptions & ListOptions
 ): Promise<CommandResult> {
-  const { api, error } = createAPI(options);
+  const { api, backend, error } = createAPI(options);
   if (error) {
     return failure(error, ExitCode.GENERAL_ERROR);
   }
@@ -345,13 +375,17 @@ export async function listHandler(
     // Status filter
     if (options.status) {
       const validStatuses: string[] = Object.values(TaskStatus);
-      if (!validStatuses.includes(options.status)) {
+      // Also accept 'blocked' as a valid filter value (computed status)
+      if (!validStatuses.includes(options.status) && options.status !== 'blocked') {
         return failure(
-          `Invalid status: ${options.status}. Must be one of: ${validStatuses.join(', ')}`,
+          `Invalid status: ${options.status}. Must be one of: ${validStatuses.join(', ')}, blocked`,
           ExitCode.VALIDATION
         );
       }
-      filter.status = options.status as (typeof TaskStatus)[keyof typeof TaskStatus];
+      // For 'blocked' filter, we query 'open' tasks and filter by blocked_cache below
+      if (options.status !== 'blocked') {
+        filter.status = options.status as (typeof TaskStatus)[keyof typeof TaskStatus];
+      }
     }
 
     // Priority filter
@@ -393,25 +427,37 @@ export async function listHandler(
     // Query elements
     const result = await api.listPaginated<Element>(filter);
 
+    // Get blocked element IDs for computing effective display status
+    const blockedIds = getBlockedIds(backend);
+
+    // If filtering by 'blocked' status, only show open tasks that are in blocked_cache
+    let items = result.items;
+    if (options.status === 'blocked') {
+      items = items.filter((item) => {
+        const data = item as unknown as Record<string, unknown>;
+        return data.status === 'open' && blockedIds.has(item.id);
+      });
+    }
+
     // Format output based on mode
     const mode = getOutputMode(options);
     const formatter = getFormatter(mode);
 
     if (mode === 'json') {
-      return success(result.items);
+      return success(items);
     }
 
     if (mode === 'quiet') {
-      return success(result.items.map((e) => e.id).join('\n'));
+      return success(items.map((e) => e.id).join('\n'));
     }
 
     // Human-readable output
-    if (result.items.length === 0) {
+    if (items.length === 0) {
       return success(null, 'No elements found');
     }
 
     // Sort by priority ASC for tasks (P1 is highest priority, comes first)
-    const sortedItems = [...result.items].sort((a, b) => {
+    const sortedItems = [...items].sort((a, b) => {
       const dataA = a as unknown as Record<string, unknown>;
       const dataB = b as unknown as Record<string, unknown>;
       const priorityA = typeof dataA.priority === 'number' ? dataA.priority : 999;
@@ -424,7 +470,11 @@ export async function listHandler(
     const rows = sortedItems.map((item) => {
       const data = item as unknown as Record<string, unknown>;
       const title = data.title ?? data.name ?? '-';
-      const status = data.status ? `${getStatusIcon(data.status as string)} ${data.status}` : '-';
+      // Compute effective display status (show 'blocked' for open tasks with unresolved dependencies)
+      const effectiveStatus = data.status
+        ? getEffectiveStatus(data.status as string, item.id, blockedIds)
+        : null;
+      const status = effectiveStatus ? `${getStatusIcon(effectiveStatus)} ${effectiveStatus}` : '-';
       const priority = typeof data.priority === 'number' ? `P${data.priority}` : '-';
       const assignee = typeof data.assignee === 'string' ? data.assignee : '-';
       const created = item.createdAt.split('T')[0];
@@ -432,9 +482,9 @@ export async function listHandler(
     });
 
     const table = formatter.table(headers, rows);
-    const summary = `\nShowing ${result.items.length} of ${result.total} elements`;
+    const summary = `\nShowing ${items.length} of ${result.total} elements`;
 
-    return success(result.items, table + summary);
+    return success(items, table + summary);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return failure(`Failed to list elements: ${message}`, ExitCode.GENERAL_ERROR);
@@ -590,7 +640,13 @@ export async function showHandler(
     }
 
     // Human-readable output - format as key-value pairs
-    let output = formatter.element(element as unknown as Record<string, unknown>);
+    // Compute effective display status for tasks (show 'blocked' for open tasks with unresolved deps)
+    const blockedIds = getBlockedIds(backend);
+    const displayElement = { ...element as unknown as Record<string, unknown> };
+    if (typeof displayElement.status === 'string') {
+      displayElement.status = getEffectiveStatus(displayElement.status, element.id, blockedIds);
+    }
+    let output = formatter.element(displayElement);
 
     // Add plan progress if available
     if (planProgress) {

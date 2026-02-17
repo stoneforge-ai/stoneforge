@@ -76,7 +76,7 @@ docs/                  # Diátaxis documentation (primary reference for agents)
 
 - **Director**: Owns task backlog, spawns workers, makes strategic decisions
 - **Worker**: Executes assigned tasks (ephemeral or persistent)
-- **Steward**: Handles code merges, health checks, maintenance
+- **Steward**: Handles code merges, documentation scanning and fixes
 
 ---
 
@@ -182,7 +182,7 @@ The orchestrator manages AI agent lifecycles for multi-agent task execution:
 ```
 Director → creates tasks, assigns priorities → dispatches to Workers
 Workers  → execute tasks in git worktrees → update status, handoff
-Stewards → merge completed work, health checks, cleanup
+Stewards → merge completed work, documentation scanning and fixes
 ```
 
 **Key Services:**

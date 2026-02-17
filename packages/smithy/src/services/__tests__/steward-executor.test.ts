@@ -5,7 +5,7 @@
  * trigger fires -> executor called -> correct steward service invoked -> real result returned.
  *
  * - 'merge' stewards call MergeStewardService.processAllPending()
- * - 'docs', 'health', 'reminder', 'ops' stewards spawn agent sessions via SessionManager
+ * - 'docs' stewards spawn agent sessions via SessionManager
  *
  * These tests use mocked services passed to createStewardExecutor(), and exercise the
  * scheduler's executeSteward() / publishEvent() to trigger execution without waiting for cron.
@@ -29,7 +29,6 @@ import {
   type StewardExecutorDeps,
 } from '../steward-scheduler.js';
 import type { MergeStewardService } from '../merge-steward-service.js';
-import type { HealthStewardService } from '../health-steward-service.js';
 import type { DocsStewardService } from '../docs-steward-service.js';
 import type { SessionManager } from '../../runtime/session-manager.js';
 
@@ -117,24 +116,6 @@ function createMockMergeStewardService(): MergeStewardService {
   } as unknown as MergeStewardService;
 }
 
-function createMockHealthStewardService(): HealthStewardService {
-  return {
-    runHealthCheck: vi.fn(async () => ({
-      timestamp: createTimestamp(),
-      agentsChecked: 5,
-      agentsWithIssues: 1,
-      newIssues: [{ id: 'issue-1', type: 'no_output', severity: 'warning' }],
-      resolvedIssues: [],
-      actionsTaken: [{ action: 'send_ping', agentId: 'agent-1', success: true }],
-      durationMs: 200,
-    })),
-    checkAgent: vi.fn(),
-    getKnownIssues: vi.fn(async () => []),
-    start: vi.fn(),
-    stop: vi.fn(),
-  } as unknown as HealthStewardService;
-}
-
 function createMockDocsStewardService(): DocsStewardService {
   return {
     scanAll: vi.fn(async () => ({
@@ -173,7 +154,6 @@ function createMockSessionManager(): SessionManager {
 function createDeps(overrides: Partial<StewardExecutorDeps> = {}): StewardExecutorDeps {
   return {
     mergeStewardService: overrides.mergeStewardService ?? createMockMergeStewardService(),
-    healthStewardService: overrides.healthStewardService ?? createMockHealthStewardService(),
     docsStewardService: overrides.docsStewardService ?? createMockDocsStewardService(),
     sessionManager: overrides.sessionManager ?? createMockSessionManager(),
     projectRoot: overrides.projectRoot ?? '/tmp/test-project',
@@ -238,51 +218,7 @@ describe('Steward Executor Integration Tests', () => {
   });
 
   // --------------------------------------------------------------------------
-  // Test 2: Health steward event trigger
-  // --------------------------------------------------------------------------
-  describe('health steward event trigger', () => {
-    it('should spawn a session via sessionManager on event publish', async () => {
-      const healthSteward = createMockAgentEntity('health-steward-1', 'HealthChecker', 'health', [
-        { type: 'event', event: 'agent_health_check' },
-      ]);
-      const registry = createMockAgentRegistry([healthSteward]);
-      const scheduler = createStewardScheduler(registry, executor);
-
-      await scheduler.registerSteward('health-steward-1' as EntityId);
-      await scheduler.start();
-
-      const triggered = await scheduler.publishEvent('agent_health_check', {});
-
-      expect(triggered).toBe(1);
-
-      // Allow async execution to complete
-      await new Promise(resolve => setTimeout(resolve, 50));
-
-      expect(deps.sessionManager.startSession).toHaveBeenCalledTimes(1);
-
-      await scheduler.stop();
-    });
-
-    it('should also work via manual execution and spawn a session', async () => {
-      const healthSteward = createMockAgentEntity('health-steward-1', 'HealthChecker', 'health', [
-        { type: 'event', event: 'agent_health_check' },
-      ]);
-      const registry = createMockAgentRegistry([healthSteward]);
-      const scheduler = createStewardScheduler(registry, executor);
-
-      const result = await scheduler.executeSteward('health-steward-1' as EntityId);
-
-      expect(result.success).toBe(true);
-      expect(deps.sessionManager.startSession).toHaveBeenCalledTimes(1);
-      expect(result.output).toContain('Spawned health steward session');
-      expect(result.itemsProcessed).toBe(1);
-
-      await scheduler.stop();
-    });
-  });
-
-  // --------------------------------------------------------------------------
-  // Test 3: Docs steward cron trigger
+  // Test 2: Docs steward cron trigger
   // --------------------------------------------------------------------------
   describe('docs steward cron trigger', () => {
     it('should spawn a session via sessionManager', async () => {
@@ -305,7 +241,7 @@ describe('Steward Executor Integration Tests', () => {
   });
 
   // --------------------------------------------------------------------------
-  // Test 4: Unknown focus type
+  // Test 3: Unknown focus type
   // --------------------------------------------------------------------------
   describe('unknown focus type', () => {
     it('should return success: false gracefully when executor receives unknown focus', async () => {
@@ -336,7 +272,6 @@ describe('Steward Executor Integration Tests', () => {
 
       // No service should have been called
       expect(deps.mergeStewardService.processAllPending).not.toHaveBeenCalled();
-      expect(deps.healthStewardService.runHealthCheck).not.toHaveBeenCalled();
       expect(deps.docsStewardService.scanAll).not.toHaveBeenCalled();
     });
 
@@ -363,7 +298,7 @@ describe('Steward Executor Integration Tests', () => {
   });
 
   // --------------------------------------------------------------------------
-  // Test 5: Service error handling
+  // Test 4: Service error handling
   // --------------------------------------------------------------------------
   describe('service error handling', () => {
     it('should return success: false with error message when service throws', async () => {
@@ -400,14 +335,14 @@ describe('Steward Executor Integration Tests', () => {
       const isolationDeps = createDeps({ mergeStewardService: failingMergeService });
       const isolationExecutor = createStewardExecutor(isolationDeps);
 
-      // Set up two stewards: one that will fail (merge) and one that should succeed (health via session)
+      // Set up two stewards: one that will fail (merge) and one that should succeed (docs via session)
       const mergeSteward = createMockAgentEntity('merge-steward-1', 'FailingMerger', 'merge', [
         { type: 'cron', schedule: '*/5 * * * *' },
       ]);
-      const healthSteward = createMockAgentEntity('health-steward-1', 'HealthChecker', 'health', [
+      const docsSteward = createMockAgentEntity('docs-steward-1', 'DocsScanner', 'docs', [
         { type: 'cron', schedule: '*/10 * * * *' },
       ]);
-      const registry = createMockAgentRegistry([mergeSteward, healthSteward]);
+      const registry = createMockAgentRegistry([mergeSteward, docsSteward]);
       const scheduler = createStewardScheduler(registry, isolationExecutor);
 
       // Execute the failing merge steward first
@@ -415,11 +350,11 @@ describe('Steward Executor Integration Tests', () => {
       expect(mergeResult.success).toBe(false);
       expect(mergeResult.error).toBe('Merge service crashed');
 
-      // The scheduler should still work fine - execute health steward (spawns session)
-      const healthResult = await scheduler.executeSteward('health-steward-1' as EntityId);
-      expect(healthResult.success).toBe(true);
+      // The scheduler should still work fine - execute docs steward (spawns session)
+      const docsResult = await scheduler.executeSteward('docs-steward-1' as EntityId);
+      expect(docsResult.success).toBe(true);
       expect(isolationDeps.sessionManager.startSession).toHaveBeenCalledTimes(1);
-      expect(healthResult.itemsProcessed).toBe(1);
+      expect(docsResult.itemsProcessed).toBe(1);
 
       // Verify both executions are recorded in history
       const history = scheduler.getExecutionHistory();
@@ -430,53 +365,6 @@ describe('Steward Executor Integration Tests', () => {
 
       const successHistory = scheduler.getExecutionHistory({ success: true });
       expect(successHistory.length).toBe(1);
-
-      await scheduler.stop();
-    });
-  });
-
-  // --------------------------------------------------------------------------
-  // Test 6: Reminder/ops focus (graceful no-op)
-  // --------------------------------------------------------------------------
-  describe('reminder/ops focus - session spawning', () => {
-    it('should spawn a session for reminder focus', async () => {
-      const reminderSteward = createMockAgentEntity('reminder-steward-1', 'Reminder', 'reminder', [
-        { type: 'cron', schedule: '0 9 * * *' },
-      ]);
-      const registry = createMockAgentRegistry([reminderSteward]);
-      const scheduler = createStewardScheduler(registry, executor);
-
-      const result = await scheduler.executeSteward('reminder-steward-1' as EntityId);
-
-      expect(result.success).toBe(true);
-      expect(result.itemsProcessed).toBe(1);
-      expect(result.output).toContain('Spawned reminder steward session');
-      expect(result.durationMs).toBeGreaterThanOrEqual(0);
-
-      expect(deps.sessionManager.startSession).toHaveBeenCalledTimes(1);
-      // merge service should not have been called
-      expect(deps.mergeStewardService.processAllPending).not.toHaveBeenCalled();
-
-      await scheduler.stop();
-    });
-
-    it('should spawn a session for ops focus', async () => {
-      const opsSteward = createMockAgentEntity('ops-steward-1', 'Ops', 'ops', [
-        { type: 'cron', schedule: '*/30 * * * *' },
-      ]);
-      const registry = createMockAgentRegistry([opsSteward]);
-      const scheduler = createStewardScheduler(registry, executor);
-
-      const result = await scheduler.executeSteward('ops-steward-1' as EntityId);
-
-      expect(result.success).toBe(true);
-      expect(result.itemsProcessed).toBe(1);
-      expect(result.output).toContain('Spawned ops steward session');
-      expect(result.durationMs).toBeGreaterThanOrEqual(0);
-
-      expect(deps.sessionManager.startSession).toHaveBeenCalledTimes(1);
-      // merge service should not have been called
-      expect(deps.mergeStewardService.processAllPending).not.toHaveBeenCalled();
 
       await scheduler.stop();
     });

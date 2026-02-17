@@ -703,7 +703,7 @@ function StewardsTab({ stewards, onStart, onStop, onOpenTerminal, onRename, onDe
       <EmptyState
         icon={Shield}
         title="No stewards yet"
-        description="Create stewards to automate maintenance tasks like merging branches, health monitoring, and cleanup operations."
+        description="Create stewards to automate maintenance tasks like merging branches and scanning documentation."
         actionLabel="Create Steward"
         actionTestId="stewards-create-empty"
         onAction={onCreateSteward}
@@ -715,9 +715,9 @@ function StewardsTab({ stewards, onStart, onStop, onOpenTerminal, onRename, onDe
   const stewardsByFocus = stewards.reduce(
     (acc, steward) => {
       const meta = steward.metadata?.agent;
-      const focus = meta?.agentRole === 'steward' ? (meta as { stewardFocus?: string })?.stewardFocus : 'ops';
-      if (!acc[focus ?? 'ops']) acc[focus ?? 'ops'] = [];
-      acc[focus ?? 'ops'].push(steward);
+      const focus = meta?.agentRole === 'steward' ? (meta as { stewardFocus?: string })?.stewardFocus : 'merge';
+      if (!acc[focus ?? 'merge']) acc[focus ?? 'merge'] = [];
+      acc[focus ?? 'merge'].push(steward);
       return acc;
     },
     {} as Record<string, Agent[]>
@@ -725,9 +725,7 @@ function StewardsTab({ stewards, onStart, onStop, onOpenTerminal, onRename, onDe
 
   const focusLabels: Record<string, string> = {
     merge: 'Merge Stewards',
-    health: 'Health Stewards',
-    reminder: 'Reminder Stewards',
-    ops: 'Ops Stewards',
+    docs: 'Docs Stewards',
   };
 
   return (

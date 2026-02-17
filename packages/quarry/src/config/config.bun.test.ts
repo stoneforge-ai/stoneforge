@@ -435,7 +435,7 @@ describe('Defaults', () => {
     test('has correct default values', () => {
       expect(DEFAULT_CONFIG.actor).toBeUndefined();
       expect(DEFAULT_CONFIG.sync.autoExport).toBe(true);
-      expect(DEFAULT_CONFIG.sync.exportDebounce).toBe(500);
+      expect(DEFAULT_CONFIG.sync.exportDebounce).toBe(5 * ONE_MINUTE);
       expect(DEFAULT_CONFIG.identity.mode).toBe(IdentityMode.SOFT);
     });
   });

@@ -33,7 +33,7 @@ interface Configuration {
   database: string;                  // Database path (default: 'db.sqlite')
   sync: {
     autoExport: boolean;             // Auto-export on mutation (default: true)
-    exportDebounce: number;          // Debounce ms (default: 1000)
+    exportDebounce: number;          // Debounce ms (default: 300000 / 5 minutes)
     elementsFile: string;            // JSONL path (default: 'elements.jsonl')
     dependenciesFile: string;        // Dependencies path
   };
@@ -164,7 +164,7 @@ const discovery = discoverConfigFile('/project');
 | `STONEFORGE_ACTOR` | `actor` | `agent-1` |
 | `STONEFORGE_DATABASE` | `database` | `db.sqlite` |
 | `STONEFORGE_SYNC_AUTO_EXPORT` | `sync.autoExport` | `true` |
-| `STONEFORGE_SYNC_EXPORT_DEBOUNCE` | `sync.exportDebounce` | `1000` |
+| `STONEFORGE_SYNC_EXPORT_DEBOUNCE` | `sync.exportDebounce` | `300000` |
 | `STONEFORGE_IDENTITY_MODE` | `identity.mode` | `cryptographic` |
 | `STONEFORGE_IDENTITY_TIME_TOLERANCE` | `identity.timeTolerance` | `300000` |
 | `STONEFORGE_CONFIG_PATH` | - | `/path/to/config.yaml` |
@@ -190,7 +190,7 @@ database: db.sqlite
 
 sync:
   autoExport: true
-  exportDebounce: 1000
+  exportDebounce: 300000  # 5 minutes in ms
   elementsFile: elements.jsonl
   dependenciesFile: dependencies.jsonl
 

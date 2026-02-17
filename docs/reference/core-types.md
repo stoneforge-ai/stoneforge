@@ -17,6 +17,7 @@ interface Element {
   createdBy: EntityId;     // Reference to creator entity
   tags: string[];          // Categorization
   metadata: Record<string, unknown>;  // Arbitrary JSON (64KB limit)
+  deletedAt?: Timestamp;   // ISO 8601 soft-delete timestamp, undefined if active
 }
 ```
 
@@ -46,11 +47,9 @@ interface Task extends Element {
   deadline?: Timestamp;
   scheduledFor?: Timestamp;
   closedAt?: Timestamp;
-  deletedAt?: Timestamp;
   deletedBy?: EntityId;
   deleteReason?: string;
   externalRef?: string;
-  ephemeral: boolean;          // If true, not synced to JSONL
 }
 
 type TaskStatus = 'open' | 'in_progress' | 'blocked' | 'deferred' | 'backlog' | 'review' | 'closed' | 'tombstone';
@@ -61,9 +60,8 @@ type Complexity = 1 | 2 | 3 | 4 | 5;
 ```
 
 **Key functions:**
-- `createTask(input)` - Factory (accepts optional `ephemeral` flag)
+- `createTask(input)` - Factory
 - `updateTaskStatus(task, newStatus)` - Validated status transition
-- `promoteTask(task)` - Convert ephemeral to durable
 - `isTask(element)` - Type guard
 
 **Status transitions:**
@@ -76,11 +74,7 @@ type Complexity = 1 | 2 | 3 | 4 | 5;
 - `closed` → only `open` (cannot go to in_progress, blocked, or deferred)
 - `tombstone` is terminal
 
-**Ephemeral tasks:**
-- Created with `ephemeral: true`
-- Not included in JSONL export
-- Not returned by `ready()` unless `includeEphemeral: true`
-- Use `promoteTask()` to make durable
+**Note:** `deletedAt` is inherited from Element (soft-delete support).
 
 ---
 

@@ -157,8 +157,8 @@ describe('AgentRegistry', () => {
 
     test('registerSteward creates a steward with triggers', async () => {
       const steward = await registry.registerSteward({
-        name: 'OpsSteward',
-        stewardFocus: 'ops',
+        name: 'DocsSteward',
+        stewardFocus: 'docs',
         triggers: [
           { type: 'cron', schedule: '0 0 * * *' },
           { type: 'event', event: 'branch_merged' },
@@ -168,7 +168,7 @@ describe('AgentRegistry', () => {
 
       const meta = getAgentMetadata(steward) as StewardMetadata;
       expect(meta.agentRole).toBe('steward');
-      expect(meta.stewardFocus).toBe('ops');
+      expect(meta.stewardFocus).toBe('docs');
       expect(meta.triggers).toHaveLength(2);
       expect(meta.triggers?.[0]).toEqual({ type: 'cron', schedule: '0 0 * * *' });
       expect(meta.triggers?.[1]).toEqual({ type: 'event', event: 'branch_merged' });
@@ -196,7 +196,7 @@ describe('AgentRegistry', () => {
     let ephemeralWorker: AgentEntity;
     let persistentWorker: AgentEntity;
     let mergeSteward: AgentEntity;
-    let healthSteward: AgentEntity;
+    let docsSteward: AgentEntity;
 
     beforeEach(async () => {
       director = await registry.registerDirector({
@@ -218,9 +218,9 @@ describe('AgentRegistry', () => {
         stewardFocus: 'merge',
         createdBy: systemEntity,
       });
-      healthSteward = await registry.registerSteward({
-        name: 'HealthSteward',
-        stewardFocus: 'health',
+      docsSteward = await registry.registerSteward({
+        name: 'DocsSteward',
+        stewardFocus: 'docs',
         createdBy: systemEntity,
       });
     });

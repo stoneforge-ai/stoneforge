@@ -26,8 +26,9 @@ import type {
   Message,
   InboxItem,
   Document,
+  Plan,
 } from '@stoneforge/core';
-import { InboxStatus, createTimestamp, TaskStatus, asEntityId, asElementId } from '@stoneforge/core';
+import { InboxStatus, createTimestamp, TaskStatus, asEntityId, asElementId, PlanStatus, canAutoComplete } from '@stoneforge/core';
 import type { QuarryAPI, InboxService } from '@stoneforge/quarry';
 import { loadTriagePrompt, loadRolePrompt } from '../prompts/index.js';
 import { createLogger } from '../utils/logger.js';
@@ -129,6 +130,13 @@ export interface DispatchDaemonConfig {
   readonly orphanRecoveryEnabled?: boolean;
 
   /**
+   * Whether plan auto-completion polling is enabled.
+   * Detects active plans where all tasks are closed and marks them as completed.
+   * Default: true
+   */
+  readonly planAutoCompleteEnabled?: boolean;
+
+  /**
    * Whether closed-but-unmerged task reconciliation is enabled.
    * Detects tasks with status=CLOSED but mergeStatus not 'merged'
    * and moves them back to REVIEW so merge stewards can pick them up.
@@ -198,7 +206,7 @@ export interface DispatchDaemonConfig {
  */
 export interface PollResult {
   /** The poll type */
-  readonly pollType: 'worker-availability' | 'inbox' | 'steward-trigger' | 'workflow-task' | 'orphan-recovery' | 'closed-unmerged-reconciliation' | 'stuck-merge-recovery';
+  readonly pollType: 'worker-availability' | 'inbox' | 'steward-trigger' | 'workflow-task' | 'orphan-recovery' | 'closed-unmerged-reconciliation' | 'stuck-merge-recovery' | 'plan-auto-complete';
   /** Timestamp when the poll started */
   readonly startedAt: string;
   /** Duration of the poll in milliseconds */
@@ -221,6 +229,7 @@ interface NormalizedConfig {
   stewardTriggerPollEnabled: boolean;
   workflowTaskPollEnabled: boolean;
   orphanRecoveryEnabled: boolean;
+  planAutoCompleteEnabled: boolean;
   closedUnmergedReconciliationEnabled: boolean;
   closedUnmergedGracePeriodMs: number;
   stuckMergeRecoveryEnabled: boolean;
@@ -314,6 +323,13 @@ export interface DispatchDaemon {
    * and resets them to 'pending' for a fresh retry.
    */
   recoverStuckMergeTasks(): Promise<PollResult>;
+
+  /**
+   * Manually triggers plan auto-completion polling.
+   * Detects active plans where all non-tombstone tasks are closed
+   * and marks them as completed.
+   */
+  pollPlanAutoComplete(): Promise<PollResult>;
 
   // ----------------------------------------
   // Configuration
@@ -1141,6 +1157,87 @@ export class DispatchDaemonImpl implements DispatchDaemon {
     return stuckResult;
   }
 
+  /**
+   * Detects active plans where all non-tombstone tasks are closed
+   * and marks them as completed.
+   */
+  async pollPlanAutoComplete(): Promise<PollResult> {
+    const startedAt = new Date().toISOString();
+    const startTime = Date.now();
+    let processed = 0;
+    let errors = 0;
+    const errorMessages: string[] = [];
+
+    this.emitter.emit('poll:start', 'plan-auto-complete');
+
+    try {
+      // 1. List all active plans
+      const allPlans = await this.api.list<Plan>({ type: 'plan' });
+      const activePlans = allPlans.filter((p) => p.status === PlanStatus.ACTIVE);
+
+      // 2. Check each active plan for auto-completion eligibility
+      for (const plan of activePlans) {
+        try {
+          // Get tasks in this plan (excluding deleted/tombstone)
+          const tasks = await this.api.getTasksInPlan(plan.id, { includeDeleted: false });
+
+          // Build status counts
+          const statusCounts: Record<string, number> = {
+            [TaskStatus.OPEN]: 0,
+            [TaskStatus.IN_PROGRESS]: 0,
+            [TaskStatus.BLOCKED]: 0,
+            [TaskStatus.CLOSED]: 0,
+            [TaskStatus.DEFERRED]: 0,
+            [TaskStatus.TOMBSTONE]: 0,
+          };
+
+          for (const task of tasks) {
+            if (task.status in statusCounts) {
+              statusCounts[task.status]++;
+            }
+          }
+
+          // 3. Check if plan can be auto-completed (all non-tombstone tasks are CLOSED)
+          if (canAutoComplete(statusCounts as Record<TaskStatus, number>)) {
+            const now = new Date().toISOString();
+            await this.api.update<Plan>(plan.id, {
+              status: PlanStatus.COMPLETED,
+              completedAt: now,
+            });
+            processed++;
+            console.log(`[dispatch-daemon] Auto-completed plan ${plan.id} ("${plan.title}")`);
+          }
+        } catch (error) {
+          errors++;
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          errorMessages.push(`Plan ${plan.id}: ${errorMessage}`);
+          console.error(`[dispatch-daemon] Error checking plan ${plan.id} for auto-completion:`, error);
+        }
+      }
+
+      if (processed > 0) {
+        console.log(`[dispatch-daemon] Auto-completed ${processed} plan(s)`);
+      }
+    } catch (error) {
+      errors++;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      errorMessages.push(errorMessage);
+      console.error('[dispatch-daemon] Error in pollPlanAutoComplete:', error);
+    }
+
+    const result: PollResult = {
+      pollType: 'plan-auto-complete',
+      startedAt,
+      durationMs: Date.now() - startTime,
+      processed,
+      errors,
+      errorMessages: errorMessages.length > 0 ? errorMessages : undefined,
+    };
+
+    this.emitter.emit('poll:complete', result);
+    return result;
+  }
+
   // ----------------------------------------
   // Configuration
   // ----------------------------------------
@@ -1209,6 +1306,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       stewardTriggerPollEnabled: config?.stewardTriggerPollEnabled ?? true,
       workflowTaskPollEnabled: config?.workflowTaskPollEnabled ?? true,
       orphanRecoveryEnabled: config?.orphanRecoveryEnabled ?? true,
+      planAutoCompleteEnabled: config?.planAutoCompleteEnabled ?? true,
       closedUnmergedReconciliationEnabled: config?.closedUnmergedReconciliationEnabled ?? true,
       closedUnmergedGracePeriodMs: config?.closedUnmergedGracePeriodMs ?? 120_000,
       stuckMergeRecoveryEnabled: config?.stuckMergeRecoveryEnabled ?? true,
@@ -1267,6 +1365,11 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       // Recover tasks stuck in merging/testing for too long
       if (this.config.stuckMergeRecoveryEnabled) {
         await this.recoverStuckMergeTasks();
+      }
+
+      // Auto-complete plans where all tasks are closed
+      if (this.config.planAutoCompleteEnabled) {
+        await this.pollPlanAutoComplete();
       }
     } finally {
       this.polling = false;
@@ -1743,13 +1846,13 @@ export class DispatchDaemonImpl implements DispatchDaemon {
    *
    * @param task - The task being reviewed
    * @param stewardId - The steward's entity ID
-   * @param stewardFocus - The steward's focus area (merge or health)
+   * @param stewardFocus - The steward's focus area (merge, docs, or custom)
    * @param syncResult - Optional result from pre-spawn branch sync
    */
   private async buildStewardPrompt(
     task: Task,
     stewardId: EntityId,
-    stewardFocus: 'merge' | 'health' = 'merge',
+    stewardFocus: 'merge' | 'docs' | 'custom' = 'merge',
     syncResult?: SyncResult
   ): Promise<string> {
     const parts: string[] = [];
@@ -1936,7 +2039,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
     }
 
     // Build the steward prompt with full context including sync result
-    const initialPrompt = await this.buildStewardPrompt(task, stewardId, stewardFocus as 'merge' | 'health', syncResult);
+    const initialPrompt = await this.buildStewardPrompt(task, stewardId, stewardFocus as 'merge' | 'docs' | 'custom', syncResult);
 
     const workingDirectory = worktreePath;
 
