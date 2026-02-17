@@ -1,6 +1,6 @@
 {
   "name": "@stoneforge/quarry",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "description": "Core SDK for Stoneforge - API, services, sync, and CLI",
   "main": "dist/index.js",

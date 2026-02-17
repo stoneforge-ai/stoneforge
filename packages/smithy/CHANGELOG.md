@@ -1,5 +1,15 @@
 # @stoneforge/smithy
 
+## 1.0.1
+
+### Patch Changes
+
+- 1a52cad: Fix `posix_spawnp failed` error when node-pty spawn-helper lacks execute permissions after NPM install. The fix script now ships with the published package and uses `require.resolve` to locate node-pty regardless of package manager.
+  - @stoneforge/quarry@1.0.1
+  - @stoneforge/core@1.0.1
+  - @stoneforge/storage@1.0.1
+  - @stoneforge/shared-routes@1.0.1
+
 ## 1.0.0
 
 ### Minor Changes

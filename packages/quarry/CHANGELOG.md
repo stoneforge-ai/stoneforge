@@ -1,5 +1,15 @@
 # @stoneforge/quarry
 
+## 1.0.1
+
+### Patch Changes
+
+- Updated dependencies [1a52cad]
+  - @stoneforge/smithy@1.0.1
+  - @stoneforge/core@1.0.1
+  - @stoneforge/storage@1.0.1
+  - @stoneforge/shared-routes@1.0.1
+
 ## 1.0.0
 
 ### Minor Changes
