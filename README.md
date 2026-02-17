@@ -65,18 +65,24 @@ Stoneforge is a **multi-agent orchestration platform** designed for developers b
 ### Installation
 
 ```bash
-# Clone the repository
-git clone https://github.com/stoneforge-ai/stoneforge.git
-cd stoneforge
+# Install the Stoneforge CLI globally
+npm install -g @stoneforge/quarry
 
-# Install dependencies
-pnpm install
+# Or with pnpm
+pnpm add -g @stoneforge/quarry
 
-# Build all packages
-pnpm build
+# Or with bun
+bun add -g @stoneforge/quarry
+```
 
-# Link the CLI globally (optional)
-cd packages/quarry && pnpm link --global
+To use Stoneforge packages in your own project:
+
+```bash
+npm install @stoneforge/core @stoneforge/storage @stoneforge/quarry
+
+# Or install individual packages as needed
+npm install @stoneforge/smithy    # Agent orchestration
+npm install @stoneforge/ui        # React component library
 ```
 
 ### Initialize & Create Your First Task
@@ -367,6 +373,8 @@ See [CLI Reference](docs/reference/cli.md) for complete documentation.
 ## Development
 
 ### Setup
+
+> **Note:** This section is for development and contributing to Stoneforge — not required for using the packages. To install Stoneforge for normal usage, see [Quick Start > Installation](#installation).
 
 ```bash
 # Clone the repository
