@@ -8,6 +8,9 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { createLogger } from '@stoneforge/smithy';
+
+const logger = createLogger('orchestrator');
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -66,6 +69,6 @@ export function getClaudePath(): string {
     }
   }
 
-  console.warn('[orchestrator] Claude CLI not found, falling back to PATH resolution');
+  logger.debug('Claude CLI not found, falling back to PATH resolution');
   return 'claude';
 }

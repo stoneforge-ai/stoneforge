@@ -10,9 +10,11 @@ import { existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
+import { createLogger } from '@stoneforge/smithy';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+const logger = createLogger('lsp-manager');
 
 /**
  * Configuration for a language server
@@ -176,10 +178,10 @@ export class LspManager {
       })
     );
 
-    console.log('[lsp-manager] Server availability:');
+    logger.info('Server availability:');
     for (const { id, available } of results) {
       const config = this.configs.find((c) => c.id === id);
-      console.log(`  - ${config?.name || id}: ${available ? '✓ available' : '✗ not found'}`);
+      logger.debug(`  - ${config?.name || id}: ${available ? '✓ available' : '✗ not found'}`);
     }
 
     return this.availabilityCache;
@@ -222,7 +224,7 @@ export class LspManager {
   async startServer(languageId: string): Promise<ChildProcess | null> {
     const config = this.getConfigForLanguage(languageId);
     if (!config) {
-      console.log(`[lsp-manager] No language server configured for: ${languageId}`);
+      logger.debug(`No language server configured for: ${languageId}`);
       return null;
     }
 
@@ -239,11 +241,11 @@ export class LspManager {
     // Check availability
     const available = await this.isServerAvailable(config.id);
     if (!available) {
-      console.log(`[lsp-manager] Server not available: ${config.name}`);
+      logger.debug(`Server not available: ${config.name}`);
       return null;
     }
 
-    console.log(`[lsp-manager] Starting ${config.name}...`);
+    logger.info(`Starting ${config.name}...`);
 
     try {
       const childProcess = spawn(config.command, config.args, {
@@ -256,7 +258,7 @@ export class LspManager {
       });
 
       if (!childProcess.pid) {
-        console.error(`[lsp-manager] Failed to spawn ${config.name}`);
+        logger.error(`Failed to spawn ${config.name}`);
         return null;
       }
 
@@ -271,24 +273,24 @@ export class LspManager {
 
       // Handle stderr for debugging
       childProcess.stderr?.on('data', (data: Buffer) => {
-        console.log(`[lsp-manager] ${config.name} stderr:`, data.toString());
+        logger.debug(`${config.name} stderr:`, data.toString());
       });
 
       // Handle process exit
       childProcess.on('exit', (code, signal) => {
-        console.log(`[lsp-manager] ${config.name} exited with code ${code}, signal ${signal}`);
+        logger.debug(`${config.name} exited with code ${code}, signal ${signal}`);
         this.runningServers.delete(config.id);
       });
 
       childProcess.on('error', (error) => {
-        console.error(`[lsp-manager] ${config.name} error:`, error);
+        logger.error(`${config.name} error:`, error);
         this.runningServers.delete(config.id);
       });
 
-      console.log(`[lsp-manager] ${config.name} started (pid: ${childProcess.pid})`);
+      logger.info(`${config.name} started (pid: ${childProcess.pid})`);
       return childProcess;
     } catch (error) {
-      console.error(`[lsp-manager] Error starting ${config.name}:`, error);
+      logger.error(`Error starting ${config.name}:`, error);
       return null;
     }
   }
@@ -313,7 +315,7 @@ export class LspManager {
     const running = this.runningServers.get(serverId);
     if (!running) return;
 
-    console.log(`[lsp-manager] Stopping ${running.config.name}...`);
+    logger.info(`Stopping ${running.config.name}...`);
     running.process.kill();
     this.runningServers.delete(serverId);
   }
@@ -322,7 +324,7 @@ export class LspManager {
    * Stop all running language servers
    */
   stopAll(): void {
-    console.log('[lsp-manager] Stopping all language servers...');
+    logger.info('Stopping all language servers...');
     for (const [serverId] of this.runningServers) {
       this.stopServer(serverId);
     }

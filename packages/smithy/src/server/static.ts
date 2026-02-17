@@ -9,6 +9,9 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve, extname } from 'node:path';
 import type { Hono } from 'hono';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('static');
 
 const MIME_TYPES: Record<string, string> = {
   '.html': 'text/html',
@@ -47,7 +50,7 @@ export function registerStaticMiddleware(app: Hono, webRoot: string): void {
   const indexPath = resolve(webRoot, 'index.html');
   const hasIndex = existsSync(indexPath);
 
-  console.log(`[static] Serving web assets from ${webRoot}`);
+  logger.info(`Serving web assets from ${webRoot}`);
 
   app.get('*', (c, next) => {
     const path = new URL(c.req.url).pathname;

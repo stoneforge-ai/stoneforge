@@ -30,6 +30,7 @@ import type {
 import { InboxStatus, createTimestamp, TaskStatus, asEntityId, asElementId } from '@stoneforge/core';
 import type { QuarryAPI, InboxService } from '@stoneforge/quarry';
 import { loadTriagePrompt, loadRolePrompt } from '../prompts/index.js';
+import { createLogger } from '../utils/logger.js';
 
 import type { AgentRegistry, AgentEntity } from './agent-registry.js';
 import { getAgentMetadata } from './agent-registry.js';
@@ -48,6 +49,8 @@ import {
   appendTaskSessionHistory,
   type TaskSessionHistoryEntry,
 } from '../types/task-meta.js';
+
+const logger = createLogger('dispatch-daemon');
 
 // ============================================================================
 // Constants
@@ -425,13 +428,13 @@ export class DispatchDaemonImpl implements DispatchDaemon {
     try {
       const result = await this.sessionManager.reconcileOnStartup();
       if (result.reconciled > 0) {
-        console.log(`[dispatch-daemon] Reconciled ${result.reconciled} stale session(s)`);
+        logger.info(`Reconciled ${result.reconciled} stale session(s)`);
       }
       if (result.errors.length > 0) {
-        console.warn('[dispatch-daemon] Reconciliation errors:', result.errors);
+        logger.warn('Reconciliation errors:', result.errors);
       }
     } catch (error) {
-      console.error('[dispatch-daemon] Failed to reconcile on startup:', error);
+      logger.error('Failed to reconcile on startup:', error);
     }
 
     // Recover orphaned task assignments (workers with tasks but no session after restart)
@@ -439,10 +442,10 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       try {
         const result = await this.recoverOrphanedAssignments();
         if (result.processed > 0) {
-          console.log(`[dispatch-daemon] Startup: recovered ${result.processed} orphaned task assignment(s)`);
+          logger.info(`Startup: recovered ${result.processed} orphaned task assignment(s)`);
         }
       } catch (error) {
-        console.error('[dispatch-daemon] Failed to recover orphaned assignments on startup:', error);
+        logger.error('Failed to recover orphaned assignments on startup:', error);
       }
     }
 
@@ -451,7 +454,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
 
     // Run an initial poll cycle immediately
     this.currentPollCycle = this.runPollCycle().catch((error) => {
-      console.error('[dispatch-daemon] Initial poll cycle error:', error);
+      logger.error('Initial poll cycle error:', error);
     });
   }
 
@@ -526,7 +529,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
           taskStatus: [TaskStatus.OPEN, TaskStatus.IN_PROGRESS, TaskStatus.REVIEW],
         });
         if (workerTasks.length > 0) {
-          console.log(`[dispatch-daemon] Worker ${worker.name} already has ${workerTasks.length} assigned task(s), skipping`);
+          logger.debug(`Worker ${worker.name} already has ${workerTasks.length} assigned task(s), skipping`);
           continue;
         }
 
@@ -544,14 +547,14 @@ export class DispatchDaemonImpl implements DispatchDaemon {
           errors++;
           const errorMessage = error instanceof Error ? error.message : String(error);
           errorMessages.push(`Worker ${worker.name}: ${errorMessage}`);
-          console.error(`[dispatch-daemon] Error assigning task to worker ${worker.name}:`, error);
+          logger.error(`Error assigning task to worker ${worker.name}:`, error);
         }
       }
     } catch (error) {
       errors++;
       const errorMessage = error instanceof Error ? error.message : String(error);
       errorMessages.push(errorMessage);
-      console.error('[dispatch-daemon] Error in pollWorkerAvailability:', error);
+      logger.error('Error in pollWorkerAvailability:', error);
     }
 
     const result: PollResult = {
@@ -642,7 +645,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       errors++;
       const errorMessage = error instanceof Error ? error.message : String(error);
       errorMessages.push(errorMessage);
-      console.error('[dispatch-daemon] Error in pollInboxes:', error);
+      logger.error('Error in pollInboxes:', error);
     }
 
     const result: PollResult = {
@@ -677,7 +680,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
         // Start the scheduler if it's not running
         await this.stewardScheduler.start();
         const registered = await this.stewardScheduler.registerAllStewards();
-        console.log(`[dispatch-daemon] Steward scheduler started, registered ${registered} steward(s)`);
+        logger.info(`Steward scheduler started, registered ${registered} steward(s)`);
         processed++;
       }
 
@@ -688,7 +691,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       errors++;
       const errorMessage = error instanceof Error ? error.message : String(error);
       errorMessages.push(errorMessage);
-      console.error('[dispatch-daemon] Error in pollStewardTriggers:', error);
+      logger.error('Error in pollStewardTriggers:', error);
     }
 
     const result: PollResult = {
@@ -814,7 +817,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       errors++;
       const errorMessage = error instanceof Error ? error.message : String(error);
       errorMessages.push(errorMessage);
-      console.error('[dispatch-daemon] Error in pollWorkflowTasks:', error);
+      logger.error('Error in pollWorkflowTasks:', error);
     }
 
     const result: PollResult = {
@@ -868,7 +871,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
           errors++;
           const errorMessage = error instanceof Error ? error.message : String(error);
           errorMessages.push(`Worker ${worker.name}: ${errorMessage}`);
-          console.error(`[dispatch-daemon] Error recovering orphaned task for worker ${worker.name}:`, error);
+          logger.error(`Error recovering orphaned task for worker ${worker.name}:`, error);
         }
       }
 
@@ -903,18 +906,18 @@ export class DispatchDaemonImpl implements DispatchDaemon {
           errors++;
           const errorMessage = error instanceof Error ? error.message : String(error);
           errorMessages.push(`Merge steward ${steward.name}: ${errorMessage}`);
-          console.error(`[dispatch-daemon] Error recovering orphaned steward task for ${steward.name}:`, error);
+          logger.error(`Error recovering orphaned steward task for ${steward.name}:`, error);
         }
       }
 
       if (processed > 0) {
-        console.log(`[dispatch-daemon] Recovered ${processed} orphaned task assignment(s)`);
+        logger.info(`Recovered ${processed} orphaned task assignment(s)`);
       }
     } catch (error) {
       errors++;
       const errorMessage = error instanceof Error ? error.message : String(error);
       errorMessages.push(errorMessage);
-      console.error('[dispatch-daemon] Error in recoverOrphanedAssignments:', error);
+      logger.error('Error in recoverOrphanedAssignments:', error);
     }
 
     const result: PollResult = {
@@ -968,8 +971,8 @@ export class DispatchDaemonImpl implements DispatchDaemon {
           // Safety valve: skip if already reconciled 3+ times (prevents infinite loops)
           const currentCount = orchestratorMeta.reconciliationCount ?? 0;
           if (currentCount >= 3) {
-            console.warn(
-              `[dispatch-daemon] Task ${task.id} has been reconciled ${currentCount} times, skipping (safety valve)`
+            logger.warn(
+              `Task ${task.id} has been reconciled ${currentCount} times, skipping (safety valve)`
             );
             continue;
           }
@@ -992,25 +995,25 @@ export class DispatchDaemonImpl implements DispatchDaemon {
           });
 
           processed++;
-          console.log(
-            `[dispatch-daemon] Reconciled closed-but-unmerged task ${task.id} (mergeStatus=${orchestratorMeta.mergeStatus}, attempt=${currentCount + 1})`
+          logger.info(
+            `Reconciled closed-but-unmerged task ${task.id} (mergeStatus=${orchestratorMeta.mergeStatus}, attempt=${currentCount + 1})`
           );
         } catch (error) {
           errors++;
           const errorMessage = error instanceof Error ? error.message : String(error);
           errorMessages.push(`Task ${assignment.taskId}: ${errorMessage}`);
-          console.error(`[dispatch-daemon] Error reconciling task ${assignment.taskId}:`, error);
+          logger.error(`Error reconciling task ${assignment.taskId}:`, error);
         }
       }
 
       if (processed > 0) {
-        console.log(`[dispatch-daemon] Reconciled ${processed} closed-but-unmerged task(s)`);
+        logger.info(`Reconciled ${processed} closed-but-unmerged task(s)`);
       }
     } catch (error) {
       errors++;
       const errorMessage = error instanceof Error ? error.message : String(error);
       errorMessages.push(errorMessage);
-      console.error('[dispatch-daemon] Error in reconcileClosedUnmergedTasks:', error);
+      logger.error('Error in reconcileClosedUnmergedTasks:', error);
     }
 
     const result: PollResult = {
@@ -1073,8 +1076,8 @@ export class DispatchDaemonImpl implements DispatchDaemon {
           // Safety valve: skip if already recovered 3+ times
           const currentCount = orchestratorMeta.stuckMergeRecoveryCount ?? 0;
           if (currentCount >= 3) {
-            console.warn(
-              `[dispatch-daemon] Task ${task.id} has been recovered from stuck merge ${currentCount} times, skipping (safety valve)`
+            logger.warn(
+              `Task ${task.id} has been recovered from stuck merge ${currentCount} times, skipping (safety valve)`
             );
             continue;
           }
@@ -1104,25 +1107,25 @@ export class DispatchDaemonImpl implements DispatchDaemon {
           }
 
           processed++;
-          console.log(
-            `[dispatch-daemon] Recovered stuck merge task ${task.id} (mergeStatus=${orchestratorMeta.mergeStatus}, attempt=${currentCount + 1})`
+          logger.info(
+            `Recovered stuck merge task ${task.id} (mergeStatus=${orchestratorMeta.mergeStatus}, attempt=${currentCount + 1})`
           );
         } catch (error) {
           errors++;
           const errorMessage = error instanceof Error ? error.message : String(error);
           errorMessages.push(`Task ${assignment.taskId}: ${errorMessage}`);
-          console.error(`[dispatch-daemon] Error recovering stuck merge task ${assignment.taskId}:`, error);
+          logger.error(`Error recovering stuck merge task ${assignment.taskId}:`, error);
         }
       }
 
       if (processed > 0) {
-        console.log(`[dispatch-daemon] Recovered ${processed} stuck merge task(s)`);
+        logger.info(`Recovered ${processed} stuck merge task(s)`);
       }
     } catch (error) {
       errors++;
       const errorMessage = error instanceof Error ? error.message : String(error);
       errorMessages.push(errorMessage);
-      console.error('[dispatch-daemon] Error in recoverStuckMergeTasks:', error);
+      logger.error('Error in recoverStuckMergeTasks:', error);
     }
 
     const stuckResult: PollResult = {
@@ -1190,7 +1193,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
         this.currentPollCycle = this.runPollCycle();
         await this.currentPollCycle;
       } catch (error) {
-        console.error('[dispatch-daemon] Poll cycle error:', error);
+        logger.error('Poll cycle error:', error);
       }
     }, this.config.pollIntervalMs);
   }
@@ -1295,7 +1298,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           if (!message.includes('not found')) {
-            console.warn(`[dispatch-daemon] Failed to reap session ${session.id}:`, error);
+            logger.warn(`Failed to reap session ${session.id}:`, error);
           }
         }
       }
@@ -1385,11 +1388,11 @@ export class DispatchDaemonImpl implements DispatchDaemon {
         }
 
         this.emitter.emit('agent:spawned', workerId, worktreePath);
-        console.log(`[dispatch-daemon] Resumed session for orphaned task ${task.id} on worker ${worker.name}`);
+        logger.info(`Resumed session for orphaned task ${task.id} on worker ${worker.name}`);
         return;
       } catch (error) {
-        console.warn(
-          `[dispatch-daemon] Failed to resume session ${previousSessionId} for worker ${worker.name}, falling back to fresh spawn:`,
+        logger.warn(
+          `Failed to resume session ${previousSessionId} for worker ${worker.name}, falling back to fresh spawn:`,
           error
         );
       }
@@ -1427,7 +1430,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
     }
 
     this.emitter.emit('agent:spawned', workerId, worktreePath);
-    console.log(`[dispatch-daemon] Spawned fresh session for orphaned task ${task.id} on worker ${worker.name}`);
+    logger.info(`Spawned fresh session for orphaned task ${task.id} on worker ${worker.name}`);
   }
 
   /**
@@ -1447,7 +1450,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
     if (worktreePath) {
       const exists = await this.worktreeManager.worktreeExists(worktreePath);
       if (!exists) {
-        console.warn(`[dispatch-daemon] Worktree ${worktreePath} no longer exists for steward task ${task.id}, using project root`);
+        logger.warn(`Worktree ${worktreePath} no longer exists for steward task ${task.id}, using project root`);
         worktreePath = undefined;
       }
     }
@@ -1491,11 +1494,11 @@ export class DispatchDaemonImpl implements DispatchDaemon {
           this.config.onSessionStarted(session, events, stewardId, `[resumed steward session for task ${task.id}]`);
         }
         this.emitter.emit('agent:spawned', stewardId, worktreePath);
-        console.log(`[dispatch-daemon] Resumed steward session for orphaned task ${task.id} on ${steward.name}`);
+        logger.info(`Resumed steward session for orphaned task ${task.id} on ${steward.name}`);
         return;
       } catch (error) {
-        console.warn(
-          `[dispatch-daemon] Failed to resume steward session ${previousSessionId} for ${steward.name}, falling back to fresh spawn:`,
+        logger.warn(
+          `Failed to resume steward session ${previousSessionId} for ${steward.name}, falling back to fresh spawn:`,
           error
         );
       }
@@ -1503,7 +1506,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
 
     // 3. Fall back to fresh spawn (spawnMergeStewardForTask handles metadata update AND session history)
     await this.spawnMergeStewardForTask(steward, task);
-    console.log(`[dispatch-daemon] Spawned fresh steward session for orphaned task ${task.id} on ${steward.name}`);
+    logger.info(`Spawned fresh steward session for orphaned task ${task.id} on ${steward.name}`);
   }
 
   /**
@@ -1538,8 +1541,8 @@ export class DispatchDaemonImpl implements DispatchDaemon {
 
         const poolCheck = await this.poolService.canSpawn(spawnRequest);
         if (!poolCheck.canSpawn) {
-          console.log(
-            `[dispatch-daemon] Pool capacity reached for worker ${worker.name}: ${poolCheck.reason}`
+          logger.debug(
+            `Pool capacity reached for worker ${worker.name}: ${poolCheck.reason}`
           );
           return false;
         }
@@ -1863,8 +1866,8 @@ export class DispatchDaemonImpl implements DispatchDaemon {
 
       const poolCheck = await this.poolService.canSpawn(spawnRequest);
       if (!poolCheck.canSpawn) {
-        console.log(
-          `[dispatch-daemon] Pool capacity reached for steward ${steward.name}: ${poolCheck.reason}`
+        logger.debug(
+          `Pool capacity reached for steward ${steward.name}: ${poolCheck.reason}`
         );
         return;
       }
@@ -1879,7 +1882,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
     if (worktreePath) {
       const exists = await this.worktreeManager.worktreeExists(worktreePath);
       if (!exists) {
-        console.warn(`[dispatch-daemon] Worktree ${worktreePath} no longer exists for task ${task.id}, creating fresh worktree`);
+        logger.warn(`Worktree ${worktreePath} no longer exists for task ${task.id}, creating fresh worktree`);
         const sourceBranch = orchestratorMeta?.branch as string | undefined;
         if (sourceBranch) {
           try {
@@ -1889,7 +1892,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
             });
             worktreePath = result.path;
           } catch (e) {
-            console.error(`[dispatch-daemon] Failed to create steward worktree: ${e}`);
+            logger.error(`Failed to create steward worktree: ${e}`);
             worktreePath = undefined;
           }
         } else {
@@ -1912,7 +1915,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
     // This ensures `git diff origin/master..HEAD` shows only the task's changes
     let syncResult: SyncResult | undefined;
     if (worktreePath) {
-      console.log(`[dispatch-daemon] Syncing task ${task.id} branch before steward spawn...`);
+      logger.debug(`Syncing task ${task.id} branch before steward spawn...`);
       syncResult = await this.syncTaskBranch(task);
 
       // Store sync result in task metadata for audit trail
@@ -1987,7 +1990,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
     }
 
     this.emitter.emit('agent:spawned', stewardId, worktreePath);
-    console.log(`[dispatch-daemon] Spawned merge steward ${steward.name} for task ${task.id}`);
+    logger.info(`Spawned merge steward ${steward.name} for task ${task.id}`);
   }
 
   /**
@@ -2171,8 +2174,8 @@ export class DispatchDaemonImpl implements DispatchDaemon {
         // unread and retry next cycle.
         processed += channelItems.length;
       } catch (error) {
-        console.error(
-          `[dispatch-daemon] Failed to spawn triage session for agent ${agent.name}:`,
+        logger.error(
+          `Failed to spawn triage session for agent ${agent.name}:`,
           error
         );
       }
@@ -2275,7 +2278,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       try {
         this.inboxService.markAsReadBatch(items.map((item) => item.id));
       } catch (error) {
-        console.warn('[dispatch-daemon] Failed to mark triage items as read:', error);
+        logger.warn('Failed to mark triage items as read:', error);
       }
 
       try {
@@ -2318,7 +2321,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
             content = doc.content;
           }
         } catch (error) {
-          console.warn(`[dispatch-daemon] Failed to fetch content for message ${message.id}:`, error);
+          logger.warn(`Failed to fetch content for message ${message.id}:`, error);
         }
       }
 
@@ -2353,7 +2356,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
           content = doc.content;
         }
       } catch (error) {
-        console.warn(`[dispatch-daemon] Failed to fetch content for forwarded message ${message.id}:`, error);
+        logger.warn(`Failed to fetch content for forwarded message ${message.id}:`, error);
       }
     }
     return content; // No prefix — messageSession() handles the [Message from ...] prefix
@@ -2437,7 +2440,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       });
 
       // Merge succeeded
-      console.log(`[dispatch-daemon] Synced task ${task.id} branch with ${remoteBranch}`);
+      logger.debug(`Synced task ${task.id} branch with ${remoteBranch}`);
       return {
         success: true,
         message: `Branch synced with ${remoteBranch}`,
@@ -2461,7 +2464,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
         }
 
         if (conflicts.length > 0) {
-          console.log(`[dispatch-daemon] Merge conflicts detected for task ${task.id}: ${conflicts.join(', ')}`);
+          logger.debug(`Merge conflicts detected for task ${task.id}: ${conflicts.join(', ')}`);
           return {
             success: false,
             conflicts,

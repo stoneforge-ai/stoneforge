@@ -13,6 +13,9 @@ import type { SpawnedSessionEvent } from '../../index.js';
 import { trackListeners } from '../../index.js';
 import type { Services } from '../services.js';
 import { generateActivitySummary } from '../formatters.js';
+import { createLogger } from '../../utils/logger.js';
+
+const logger = createLogger('orchestrator');
 
 /**
  * Global event bus for notifying SSE clients about new sessions.
@@ -132,7 +135,7 @@ export function createEventRoutes(services: Services) {
 
       return c.json({ events: filteredEvents, hasMore, total: filteredEvents.length });
     } catch (error) {
-      console.error('[orchestrator] Failed to list events:', error);
+      logger.error('Failed to list events:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -315,7 +318,7 @@ export function createEventRoutes(services: Services) {
         },
       });
     } catch (error) {
-      console.error('[orchestrator] Failed to get event:', error);
+      logger.error('Failed to get event:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });

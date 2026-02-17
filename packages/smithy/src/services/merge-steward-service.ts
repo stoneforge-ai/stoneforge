@@ -42,6 +42,9 @@ import type { DispatchService } from './dispatch-service.js';
 import type { WorktreeManager } from '../git/worktree-manager.js';
 import { mergeBranch, syncLocalBranch, hasRemote } from '../git/merge.js';
 import type { AgentRegistry } from './agent-registry.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('merge-steward');
 
 const execAsync = promisify(exec);
 
@@ -398,7 +401,7 @@ export class MergeStewardServiceImpl implements MergeStewardService {
       // Early exit: Skip if task is already closed and merged
       // This prevents re-processing of already-merged tasks
       if (task.status === TaskStatus.CLOSED && orchestratorMeta.mergeStatus === 'merged') {
-        console.log(`[merge-steward] Task ${taskId} is already closed and merged, skipping`);
+        logger.info(`Task ${taskId} is already closed and merged, skipping`);
         return {
           taskId,
           status: 'merged',
@@ -609,10 +612,10 @@ export class MergeStewardServiceImpl implements MergeStewardService {
       if (worktree) {
         cwd = worktree.path;
       } else {
-        console.warn(`[merge-steward] Worktree not found for task ${taskId}, falling back to main repo`);
+        logger.warn(`Worktree not found for task ${taskId}, falling back to main repo`);
       }
     } else {
-      console.warn(`[merge-steward] No worktree configured for task ${taskId}, running tests in main repo`);
+      logger.warn(`No worktree configured for task ${taskId}, running tests in main repo`);
     }
 
     try {
@@ -720,8 +723,8 @@ export class MergeStewardServiceImpl implements MergeStewardService {
     const existingFixTasks = await this.findExistingFixTasks(originalTaskId, options.type);
     if (existingFixTasks.length > 0) {
       // Return the existing fix task ID instead of creating a duplicate
-      console.log(
-        `[merge-steward] Fix task already exists for ${originalTaskId} (type: ${options.type}): ${existingFixTasks[0].id}`
+      logger.info(
+        `Fix task already exists for ${originalTaskId} (type: ${options.type}): ${existingFixTasks[0].id}`
       );
       return existingFixTasks[0].id;
     }

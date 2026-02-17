@@ -17,7 +17,10 @@ import {
   shouldReceiveEvent,
 } from '@stoneforge/shared-routes';
 import type { EventListener } from '@stoneforge/shared-routes';
+import { createLogger } from '../utils/logger.js';
 import type { ServerWebSocket } from './types.js';
+
+const logger = createLogger('orchestrator:events-ws');
 
 /**
  * Client data stored with each event-subscription WebSocket connection
@@ -42,7 +45,7 @@ function sendToClient(ws: ServerWebSocket<EventsWSClientData>, message: ServerMe
   try {
     ws.send(JSON.stringify(message));
   } catch (err) {
-    console.error('[orchestrator:events-ws] Error sending message to client:', err);
+    logger.error('Error sending message to client:', err);
   }
 }
 
@@ -72,7 +75,7 @@ export function handleEventsWSOpen(ws: ServerWebSocket<EventsWSClientData>): voi
   }
 
   eventsClients.set(clientId, ws);
-  console.log(`[orchestrator:events-ws] Client connected: ${clientId}`);
+  logger.debug(`Client connected: ${clientId}`);
 }
 
 /**
@@ -101,7 +104,7 @@ export function handleEventsWSMessage(ws: ServerWebSocket<EventsWSClientData>, m
         ws.data.subscriptions.add(channel);
       }
       sendToClient(ws, { type: 'subscribed', channels: parsed.channels });
-      console.log(`[orchestrator:events-ws] Client ${ws.data.id} subscribed to: ${parsed.channels.join(', ')}`);
+      logger.debug(`Client ${ws.data.id} subscribed to: ${parsed.channels.join(', ')}`);
       break;
     }
 
@@ -110,7 +113,7 @@ export function handleEventsWSMessage(ws: ServerWebSocket<EventsWSClientData>, m
         ws.data.subscriptions.delete(channel);
       }
       sendToClient(ws, { type: 'unsubscribed', channels: parsed.channels });
-      console.log(`[orchestrator:events-ws] Client ${ws.data.id} unsubscribed from: ${parsed.channels.join(', ')}`);
+      logger.debug(`Client ${ws.data.id} unsubscribed from: ${parsed.channels.join(', ')}`);
       break;
     }
   }
@@ -128,5 +131,5 @@ export function handleEventsWSClose(ws: ServerWebSocket<EventsWSClientData>): vo
   }
 
   eventsClients.delete(id);
-  console.log(`[orchestrator:events-ws] Client disconnected: ${id}`);
+  logger.debug(`Client disconnected: ${id}`);
 }

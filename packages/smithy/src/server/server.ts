@@ -14,6 +14,9 @@ import { handleLspWSOpen, handleLspWSMessage, handleLspWSClose } from './lsp-web
 import type { EventsWSClientData } from './events-websocket.js';
 import { handleEventsWSOpen, handleEventsWSMessage, handleEventsWSClose } from './events-websocket.js';
 import type { LspManager } from './services/lsp-manager.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('orchestrator');
 
 const isBun = typeof globalThis.Bun !== 'undefined';
 
@@ -104,11 +107,11 @@ function startBunServer(app: Hono, services: Services, lspManager?: LspManager, 
     return upgraded ? new Response(null, { status: 101 }) : c.json({ error: 'WebSocket upgrade failed' }, 400);
   });
 
-  console.log(`[orchestrator] Server running at http://${HOST}:${PORT} (Bun)`);
-  console.log(`[orchestrator] WebSocket available at ws://${HOST}:${PORT}/ws`);
-  console.log(`[orchestrator] Events WebSocket available at ws://${HOST}:${PORT}/ws/events`);
+  logger.info(`Server running at http://${HOST}:${PORT} (Bun)`);
+  logger.info(`WebSocket available at ws://${HOST}:${PORT}/ws`);
+  logger.info(`Events WebSocket available at ws://${HOST}:${PORT}/ws/events`);
   if (lspManager) {
-    console.log(`[orchestrator] LSP WebSocket available at ws://${HOST}:${PORT}/ws/lsp?language=<lang>`);
+    logger.info(`LSP WebSocket available at ws://${HOST}:${PORT}/ws/lsp?language=<lang>`);
   }
 }
 
@@ -278,11 +281,11 @@ function startNodeServer(app: Hono, services: Services, lspManager?: LspManager,
         });
 
         httpServer.listen(PORT, HOST, () => {
-          console.log(`[orchestrator] Server running at http://${HOST}:${PORT} (Node.js)`);
-          console.log(`[orchestrator] WebSocket available at ws://${HOST}:${PORT}/ws`);
-          console.log(`[orchestrator] Events WebSocket available at ws://${HOST}:${PORT}/ws/events`);
+          logger.info(`Server running at http://${HOST}:${PORT} (Node.js)`);
+          logger.info(`WebSocket available at ws://${HOST}:${PORT}/ws`);
+          logger.info(`Events WebSocket available at ws://${HOST}:${PORT}/ws/events`);
           if (lspManager) {
-            console.log(`[orchestrator] LSP WebSocket available at ws://${HOST}:${PORT}/ws/lsp?language=<lang>`);
+            logger.info(`LSP WebSocket available at ws://${HOST}:${PORT}/ws/lsp?language=<lang>`);
           }
         });
       });

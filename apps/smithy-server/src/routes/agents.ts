@@ -6,9 +6,12 @@
 
 import { Hono } from 'hono';
 import type { EntityId } from '@stoneforge/core';
+import { createLogger } from '@stoneforge/smithy';
 import { getProviderRegistry, ProviderError } from '@stoneforge/smithy/providers';
 import type { Services } from '../services.js';
 import { formatSessionRecord } from '../formatters.js';
+
+const logger = createLogger('orchestrator');
 
 export function createAgentRoutes(services: Services) {
   const { agentRegistry, sessionManager, taskAssignmentService } = services;
@@ -22,7 +25,7 @@ export function createAgentRoutes(services: Services) {
       const agents = role ? await agentRegistry.getAgentsByRole(role) : await agentRegistry.listAgents();
       return c.json({ agents });
     } catch (error) {
-      console.error('[orchestrator] Failed to list agents:', error);
+      logger.error('Failed to list agents:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -106,7 +109,7 @@ export function createAgentRoutes(services: Services) {
       if (errorMessage.includes('already exists') || errorMessage.includes('duplicate')) {
         return c.json({ error: { code: 'ALREADY_EXISTS', message: errorMessage } }, 409);
       }
-      console.error('[orchestrator] Failed to register agent:', error);
+      logger.error('Failed to register agent:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: errorMessage } }, 500);
     }
   });
@@ -138,7 +141,7 @@ export function createAgentRoutes(services: Services) {
       if (errorMessage.includes('already exists') || errorMessage.includes('duplicate')) {
         return c.json({ error: { code: 'ALREADY_EXISTS', message: errorMessage } }, 409);
       }
-      console.error('[orchestrator] Failed to register director:', error);
+      logger.error('Failed to register director:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: errorMessage } }, 500);
     }
   });
@@ -180,7 +183,7 @@ export function createAgentRoutes(services: Services) {
       if (errorMessage.includes('already exists') || errorMessage.includes('duplicate')) {
         return c.json({ error: { code: 'ALREADY_EXISTS', message: errorMessage } }, 409);
       }
-      console.error('[orchestrator] Failed to register worker:', error);
+      logger.error('Failed to register worker:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: errorMessage } }, 500);
     }
   });
@@ -242,7 +245,7 @@ export function createAgentRoutes(services: Services) {
       if (errorMessage.includes('already exists') || errorMessage.includes('duplicate')) {
         return c.json({ error: { code: 'ALREADY_EXISTS', message: errorMessage } }, 409);
       }
-      console.error('[orchestrator] Failed to register steward:', error);
+      logger.error('Failed to register steward:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: errorMessage } }, 500);
     }
   });
@@ -257,7 +260,7 @@ export function createAgentRoutes(services: Services) {
       }
       return c.json({ agent });
     } catch (error) {
-      console.error('[orchestrator] Failed to get agent:', error);
+      logger.error('Failed to get agent:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -305,7 +308,7 @@ export function createAgentRoutes(services: Services) {
 
       return c.json({ agent: updatedAgent });
     } catch (error) {
-      console.error('[orchestrator] Failed to update agent:', error);
+      logger.error('Failed to update agent:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -329,7 +332,7 @@ export function createAgentRoutes(services: Services) {
       await agentRegistry.deleteAgent(agentId);
       return c.json({ success: true });
     } catch (error) {
-      console.error('[orchestrator] Failed to delete agent:', error);
+      logger.error('Failed to delete agent:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -353,7 +356,7 @@ export function createAgentRoutes(services: Services) {
         recentHistory: history,
       });
     } catch (error) {
-      console.error('[orchestrator] Failed to get agent status:', error);
+      logger.error('Failed to get agent status:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -375,7 +378,7 @@ export function createAgentRoutes(services: Services) {
 
       return c.json({ agentId, agentName: agent.name, workload, hasCapacity, maxConcurrentTasks });
     } catch (error) {
-      console.error('[orchestrator] Failed to get agent workload:', error);
+      logger.error('Failed to get agent workload:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -397,7 +400,7 @@ export function createAgentRoutes(services: Services) {
       );
       return c.json({ providers });
     } catch (error) {
-      console.error('[orchestrator] Failed to list providers:', error);
+      logger.error('Failed to list providers:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -432,7 +435,7 @@ export function createAgentRoutes(services: Services) {
       // ProviderError indicates the provider SDK failed (auth, process crash, etc.)
       // — treat as 503 (service unavailable) rather than 500 (internal server error)
       if (error instanceof ProviderError) {
-        console.warn('[orchestrator] Provider error listing models:', error.message);
+        logger.warn('Provider error listing models:', error.message);
         return c.json(
           {
             error: {
@@ -443,7 +446,7 @@ export function createAgentRoutes(services: Services) {
           503
         );
       }
-      console.error('[orchestrator] Failed to list provider models:', error);
+      logger.error('Failed to list provider models:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });

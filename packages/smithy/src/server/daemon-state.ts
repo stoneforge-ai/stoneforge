@@ -9,6 +9,9 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { PROJECT_ROOT } from './config.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('daemon-state');
 
 const STATE_FILE = join(PROJECT_ROOT, '.stoneforge', 'daemon-state.json');
 
@@ -39,7 +42,7 @@ export function getDaemonState(): DaemonState | undefined {
     const content = readFileSync(STATE_FILE, 'utf-8');
     return JSON.parse(content) as DaemonState;
   } catch (error) {
-    console.warn('[daemon-state] Failed to read daemon state:', error);
+    logger.warn('Failed to read daemon state:', error);
     return undefined;
   }
 }
@@ -66,7 +69,7 @@ export function saveDaemonState(
 
     writeFileSync(STATE_FILE, JSON.stringify(state, null, 2) + '\n', 'utf-8');
   } catch (error) {
-    console.error('[daemon-state] Failed to save daemon state:', error);
+    logger.error('Failed to save daemon state:', error);
   }
 }
 
@@ -121,6 +124,6 @@ export function saveDaemonConfigOverrides(overrides: DaemonConfigOverrides): voi
     }
     writeFileSync(STATE_FILE, JSON.stringify(merged, null, 2) + '\n', 'utf-8');
   } catch (error) {
-    console.error('[daemon-state] Failed to save daemon config overrides:', error);
+    logger.error('Failed to save daemon config overrides:', error);
   }
 }

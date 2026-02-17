@@ -8,6 +8,9 @@ import { Hono } from 'hono';
 import type { EntityId, ElementId } from '@stoneforge/core';
 import type { Services } from '../services.js';
 import type { AgentPoolService, CreatePoolInput, UpdatePoolInput, PoolAgentTypeConfig } from '../../index.js';
+import { createLogger } from '../../utils/logger.js';
+
+const logger = createLogger('orchestrator');
 
 export function createPoolRoutes(services: Services) {
   const { poolService } = services;
@@ -38,7 +41,7 @@ export function createPoolRoutes(services: Services) {
 
       return c.json({ pools });
     } catch (error) {
-      console.error('[orchestrator] Failed to list pools:', error);
+      logger.error('Failed to list pools:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -81,7 +84,7 @@ export function createPoolRoutes(services: Services) {
       if (errorMessage.includes('already exists')) {
         return c.json({ error: { code: 'ALREADY_EXISTS', message: errorMessage } }, 409);
       }
-      console.error('[orchestrator] Failed to create pool:', error);
+      logger.error('Failed to create pool:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: errorMessage } }, 500);
     }
   });
@@ -105,7 +108,7 @@ export function createPoolRoutes(services: Services) {
 
       return c.json({ pool });
     } catch (error) {
-      console.error('[orchestrator] Failed to get pool:', error);
+      logger.error('Failed to get pool:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -136,7 +139,7 @@ export function createPoolRoutes(services: Services) {
       const updatedPool = await poolService.updatePool(pool.id, body);
       return c.json({ pool: updatedPool });
     } catch (error) {
-      console.error('[orchestrator] Failed to update pool:', error);
+      logger.error('Failed to update pool:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -173,7 +176,7 @@ export function createPoolRoutes(services: Services) {
       await poolService.deletePool(pool.id);
       return c.json({ success: true, deleted: pool.id });
     } catch (error) {
-      console.error('[orchestrator] Failed to delete pool:', error);
+      logger.error('Failed to delete pool:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -202,7 +205,7 @@ export function createPoolRoutes(services: Services) {
         ...status,
       });
     } catch (error) {
-      console.error('[orchestrator] Failed to get pool status:', error);
+      logger.error('Failed to get pool status:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -214,7 +217,7 @@ export function createPoolRoutes(services: Services) {
       const pools = await poolService.listPools();
       return c.json({ success: true, poolCount: pools.length });
     } catch (error) {
-      console.error('[orchestrator] Failed to refresh pool statuses:', error);
+      logger.error('Failed to refresh pool statuses:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });

@@ -9,6 +9,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { EntityId } from '@stoneforge/core';
 import { getAgentMetadata } from '../index.js';
+import { createLogger, getLogLevel } from '../utils/logger.js';
 import { CORS_ORIGINS as DEFAULT_CORS_ORIGINS, PORT as DEFAULT_PORT, HOST as DEFAULT_HOST, PROJECT_ROOT as DEFAULT_PROJECT_ROOT, DB_PATH as DEFAULT_DB_PATH } from './config.js';
 import { initializeServices, type Services } from './services.js';
 import {
@@ -49,6 +50,8 @@ import { createLspRoutes } from './routes/lsp.js';
 import { initializeBroadcaster } from '@stoneforge/shared-routes';
 import { registerStaticMiddleware } from './static.js';
 
+const logger = createLogger('orchestrator');
+
 export interface SmithyServerOptions {
   port?: number;
   host?: string;
@@ -59,6 +62,7 @@ export interface SmithyServerOptions {
 }
 
 export async function startSmithyServer(options: SmithyServerOptions = {}): Promise<Services> {
+  logger.info('Log level: ' + getLogLevel());
   const port = options.port ?? DEFAULT_PORT;
   const host = options.host ?? DEFAULT_HOST;
   const corsOrigins = options.corsOrigins ?? [
@@ -80,17 +84,17 @@ export async function startSmithyServer(options: SmithyServerOptions = {}): Prom
     const meta = getAgentMetadata(director);
     if (meta?.sessionStatus === 'running' && meta?.sessionId) {
       directorSessionId = meta.sessionId;
-      console.log(`[orchestrator] Director was running with session ${directorSessionId} before restart`);
+      logger.debug(`Director was running with session ${directorSessionId} before restart`);
     }
   }
 
   // Reconcile stale sessions: reset agents marked 'running' to 'idle' if process is dead
   const reconcileResult = await services.sessionManager.reconcileOnStartup();
   if (reconcileResult.reconciled > 0) {
-    console.log(`[orchestrator] Reconciled ${reconcileResult.reconciled} stale agent session(s)`);
+    logger.info(`Reconciled ${reconcileResult.reconciled} stale agent session(s)`);
   }
   if (reconcileResult.errors.length > 0) {
-    console.warn('[orchestrator] Reconciliation errors:', reconcileResult.errors);
+    logger.warn('Reconciliation errors:', reconcileResult.errors);
   }
 
   const app = new Hono();
@@ -155,7 +159,7 @@ export async function startSmithyServer(options: SmithyServerOptions = {}): Prom
   // This must happen after startServer() so HTTP/WS infrastructure is ready for clients
   if (directorSessionId && director) {
     const directorId = director.id as unknown as EntityId;
-    console.log(`[orchestrator] Attempting to auto-resume director session ${directorSessionId}`);
+    logger.debug(`Attempting to auto-resume director session ${directorSessionId}`);
     try {
       const { session, events } = await services.sessionManager.resumeSession(directorId, {
         providerSessionId: directorSessionId,
@@ -176,11 +180,11 @@ export async function startSmithyServer(options: SmithyServerOptions = {}): Prom
         events,
       });
 
-      console.log(`[orchestrator] Director session auto-resumed successfully (session: ${session.id})`);
+      logger.info(`Director session auto-resumed successfully (session: ${session.id})`);
     } catch (error) {
       // Resume failed - director will stay idle and can be started manually via UI
-      console.warn('[orchestrator] Failed to auto-resume director session:', error instanceof Error ? error.message : String(error));
-      console.log('[orchestrator] Director will remain idle - can be started manually via UI');
+      logger.warn('Failed to auto-resume director session:', error instanceof Error ? error.message : String(error));
+      logger.info('Director will remain idle - can be started manually via UI');
     }
   }
 
@@ -191,16 +195,16 @@ export async function startSmithyServer(options: SmithyServerOptions = {}): Prom
   const persistedShouldRun = shouldDaemonAutoStart();
 
   if (!services.dispatchDaemon) {
-    console.log('[orchestrator] Dispatch daemon not available (no git repository)');
+    logger.info('Dispatch daemon not available (no git repository)');
   } else if (envDisabled) {
-    console.log('[orchestrator] Dispatch daemon auto-start disabled (DAEMON_AUTO_START=false)');
+    logger.info('Dispatch daemon auto-start disabled (DAEMON_AUTO_START=false)');
   } else if (!persistedShouldRun) {
-    console.log('[orchestrator] Dispatch daemon not started (was stopped by user, state persisted)');
+    logger.info('Dispatch daemon not started (was stopped by user, state persisted)');
   } else {
     services.dispatchDaemon.start();
     saveDaemonState(true, 'server-startup');
     markDaemonAsServerManaged();
-    console.log('[orchestrator] Dispatch daemon auto-started');
+    logger.info('Dispatch daemon auto-started');
   }
 
   return services;

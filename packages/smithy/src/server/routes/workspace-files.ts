@@ -9,6 +9,9 @@ import { resolve, relative, join, normalize, dirname } from 'node:path';
 import { readdir, readFile, writeFile, stat, mkdir, unlink, rename as fsRename, rm } from 'node:fs/promises';
 import { Hono } from 'hono';
 import { PROJECT_ROOT } from '../config.js';
+import { createLogger } from '../../utils/logger.js';
+
+const logger = createLogger('orchestrator');
 
 /**
  * Directories to skip when traversing the file tree.
@@ -200,7 +203,7 @@ async function readDirectoryTree(
       }
     }
   } catch (error) {
-    console.error(`[orchestrator] Failed to read directory ${dirPath}:`, error);
+    logger.error(`Failed to read directory ${dirPath}:`, error);
   }
 
   return entries;
@@ -287,7 +290,7 @@ async function searchDirectory(
       }
     }
   } catch (error) {
-    console.error(`[orchestrator] Failed to search directory ${dirPath}:`, error);
+    logger.error(`Failed to search directory ${dirPath}:`, error);
   }
 
   return false;
@@ -383,7 +386,7 @@ export function createWorkspaceFilesRoutes() {
 
       return c.json({ entries, root: workspaceRoot });
     } catch (error) {
-      console.error('[orchestrator] Failed to read workspace tree:', error);
+      logger.error('Failed to read workspace tree:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -432,7 +435,7 @@ export function createWorkspaceFilesRoutes() {
         lastModified: fileStat.mtimeMs,
       });
     } catch (error) {
-      console.error('[orchestrator] Failed to read file:', error);
+      logger.error('Failed to read file:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -472,7 +475,7 @@ export function createWorkspaceFilesRoutes() {
         bytesWritten: buffer.length,
       });
     } catch (error) {
-      console.error('[orchestrator] Failed to write file:', error);
+      logger.error('Failed to write file:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -512,7 +515,7 @@ export function createWorkspaceFilesRoutes() {
         path: relative(workspaceRoot, validatedPath),
       });
     } catch (error) {
-      console.error('[orchestrator] Failed to delete file:', error);
+      logger.error('Failed to delete file:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -570,7 +573,7 @@ export function createWorkspaceFilesRoutes() {
         newPath: relative(workspaceRoot, validatedNewPath),
       });
     } catch (error) {
-      console.error('[orchestrator] Failed to rename file:', error);
+      logger.error('Failed to rename file:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -598,7 +601,7 @@ export function createWorkspaceFilesRoutes() {
         path: relative(workspaceRoot, validatedPath),
       });
     } catch (error) {
-      console.error('[orchestrator] Failed to create directory:', error);
+      logger.error('Failed to create directory:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -657,7 +660,7 @@ export function createWorkspaceFilesRoutes() {
         truncated,
       });
     } catch (error) {
-      console.error('[orchestrator] Failed to search workspace:', error);
+      logger.error('Failed to search workspace:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
