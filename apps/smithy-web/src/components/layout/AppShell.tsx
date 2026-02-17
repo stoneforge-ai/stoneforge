@@ -450,8 +450,8 @@ export function AppShell() {
         />
       )}
 
-      {/* Main content area */}
-      <div className="flex-1 flex flex-col min-w-0">
+      {/* Main content area - hidden when director panel is maximized */}
+      <div className={`flex flex-col min-w-0 ${directorMaximized && !directorCollapsed ? 'hidden' : 'flex-1'}`}>
         {/* Header */}
         <header
           className="h-14 bg-[var(--color-header-bg)] border-b border-[var(--color-header-border)] overflow-x-auto scrollbar-hide"

@@ -286,7 +286,7 @@ export function DirectorPanel({ collapsed = false, onToggle, isMaximized = false
     <aside
       className={`
         relative flex flex-col border-l border-[var(--color-border)] bg-[var(--color-bg-secondary)]
-        ${isMaximized ? 'fixed inset-0 z-50 border-l-0' : ''}
+        ${isMaximized ? 'flex-1' : ''}
       `}
       style={isMaximized ? undefined : { width: `${width}px` }}
       data-testid="director-panel"
