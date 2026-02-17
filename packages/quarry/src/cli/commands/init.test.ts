@@ -223,7 +223,8 @@ describe('initCommand', () => {
 
     it('should import from JSONL files when they exist', async () => {
       const sfDir = join(testDir, '.stoneforge');
-      mkdirSync(sfDir, { recursive: true });
+      const syncDir = join(sfDir, 'sync');
+      mkdirSync(syncDir, { recursive: true });
 
       // Write a valid entity JSONL line (operator entity will already exist from init,
       // so use a different entity id)
@@ -253,7 +254,7 @@ describe('initCommand', () => {
         taskType: 'task',
       };
       writeFileSync(
-        join(sfDir, 'elements.jsonl'),
+        join(syncDir, 'elements.jsonl'),
         JSON.stringify(entity) + '\n' + JSON.stringify(task) + '\n'
       );
 
@@ -265,7 +266,7 @@ describe('initCommand', () => {
         createdBy: 'el-0000',
         metadata: {},
       };
-      writeFileSync(join(sfDir, 'dependencies.jsonl'), JSON.stringify(dep) + '\n');
+      writeFileSync(join(syncDir, 'dependencies.jsonl'), JSON.stringify(dep) + '\n');
 
       const result = await initCommand.handler([], { ...DEFAULT_GLOBAL_OPTIONS });
       expect(result.exitCode).toBe(ExitCode.SUCCESS);

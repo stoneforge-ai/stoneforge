@@ -166,11 +166,12 @@ async function initHandler(
     // Import from JSONL files if they exist (common after cloning a repo)
     let importMessage = '';
     if (partialInit) {
-      const elementsJsonl = join(stoneforgeDir, 'elements.jsonl');
-      const depsJsonl = join(stoneforgeDir, 'dependencies.jsonl');
+      const syncDir = join(stoneforgeDir, 'sync');
+      const elementsJsonl = join(syncDir, 'elements.jsonl');
+      const depsJsonl = join(syncDir, 'dependencies.jsonl');
       if (existsSync(elementsJsonl) || existsSync(depsJsonl)) {
         const syncService = createSyncService(backend);
-        const importResult = syncService.importSync({ inputDir: stoneforgeDir });
+        const importResult = syncService.importSync({ inputDir: syncDir });
         importMessage = `\nImported ${importResult.elementsImported} element(s) and ${importResult.dependenciesImported} dependency(ies) from JSONL files`;
       }
     }
