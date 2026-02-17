@@ -32,26 +32,31 @@ npm install @opencode-ai/sdk
 
 ```typescript
 import { createOrchestratorAPI } from '@stoneforge/smithy';
+import { createStorage, initializeSchema } from '@stoneforge/storage';
 
-const orch = await createOrchestratorAPI({ rootDir: '.stoneforge' });
+// Create a storage backend and initialize the schema
+const storage = createStorage('.stoneforge/db.sqlite');
+initializeSchema(storage);
+
+// Create the OrchestratorAPI (extends QuarryAPI)
+const api = createOrchestratorAPI(storage);
 
 // Register a director agent
-await orch.registerAgent({
-  role: 'director',
+const director = await api.registerDirector({
   name: 'lead',
-  provider: 'claude',
+  createdBy: humanEntityId,
 });
 
 // Register an ephemeral worker
-await orch.registerAgent({
-  role: 'worker',
+const worker = await api.registerWorker({
   name: 'dev-1',
-  mode: 'ephemeral',
-  provider: 'claude',
+  workerMode: 'ephemeral',
+  createdBy: director.id,
+  reportsTo: director.id,
 });
 
-// Assign a task — dispatched automatically to an available worker
-await orch.assignTask(taskId, { priority: 'high' });
+// Assign a task to the worker (auto-generates branch and worktree names)
+await api.assignTaskToAgent(taskId, worker.id);
 ```
 
 ## Agent Roles
@@ -62,6 +67,81 @@ await orch.assignTask(taskId, { priority: 'high' });
 | **Worker (ephemeral)** | Task-scoped | Executes one task in an isolated Git worktree, exits on completion |
 | **Worker (persistent)** | Interactive | Long-lived session for real-time collaboration with a human |
 | **Steward** | Workflow-scoped | Merge review, branch cleanup, and documentation scanning/fixes |
+
+## OrchestratorAPI
+
+The `OrchestratorAPI` extends `QuarryAPI` (from `@stoneforge/quarry`) with agent-specific operations. Create one with `createOrchestratorAPI(backend)` where `backend` is a `StorageBackend` from `@stoneforge/storage`.
+
+### Agent Registration
+
+```typescript
+// Director — one per workspace
+const director = await api.registerDirector({
+  name: 'MainDirector',
+  createdBy: humanEntityId,
+  maxConcurrentTasks: 1,       // optional
+  provider: 'claude',           // optional, default: 'claude'
+  model: 'claude-sonnet-4-20250514', // optional
+});
+
+// Ephemeral worker
+const worker = await api.registerWorker({
+  name: 'Worker-1',
+  workerMode: 'ephemeral',     // 'ephemeral' | 'persistent'
+  createdBy: directorId,
+  reportsTo: directorId,       // optional
+  maxConcurrentTasks: 1,       // optional
+  roleDefinitionRef: roleDefId, // optional
+});
+
+// Steward
+const steward = await api.registerSteward({
+  name: 'MergeSteward',
+  stewardFocus: 'merge',       // 'merge' | 'docs' | 'custom'
+  triggers: [{ type: 'event', event: 'task_completed' }],
+  createdBy: directorId,
+});
+```
+
+### Agent Queries
+
+```typescript
+const agent = await api.getAgent(entityId);
+const agentByName = await api.getAgentByName('Worker-1');
+const allAgents = await api.listAgents();
+const workers = await api.listAgents({ role: 'worker' });
+const director = await api.getDirector();
+const stewards = await api.getStewards();
+const available = await api.getAvailableWorkers();
+```
+
+### Task Assignment
+
+```typescript
+// Assign a task — auto-generates branch and worktree paths
+const task = await api.assignTaskToAgent(taskId, workerId);
+
+// With explicit options
+const task = await api.assignTaskToAgent(taskId, workerId, {
+  branch: 'agent/worker-1/task-feat-auth',
+  worktree: '.stoneforge/.worktrees/worker-1-feat-auth',
+  sessionId: 'session-123',
+  markAsStarted: true,
+});
+
+// Read/update orchestrator metadata on a task
+const meta = await api.getTaskOrchestratorMeta(taskId);
+await api.updateTaskOrchestratorMeta(taskId, { mergeStatus: 'pending' });
+```
+
+### Session Management
+
+```typescript
+await api.updateAgentSession(agentId, 'session-123', 'running');
+// Session states: 'idle' | 'running' | 'suspended' | 'terminated'
+
+const channelId = await api.getAgentChannel(agentId);
+```
 
 ## Providers
 
@@ -78,14 +158,16 @@ Each provider implements the `AgentProvider` interface with `headless` and `inte
 | Service | Description |
 |---------|-------------|
 | `AgentRegistry` | Register and look up agents by role/name |
+| `RoleDefinitionService` | Store and retrieve agent role definitions |
+| `TaskAssignmentService` | Assign tasks with orchestrator metadata |
 | `DispatchService` | Match ready tasks to available workers |
 | `DispatchDaemon` | Continuous polling loop for auto-dispatch |
-| `TaskAssignmentService` | Assign tasks with orchestrator metadata |
-| `WorkerTaskService` | Worker-side task operations (complete, hand off, request help) |
+| `WorkerTaskService` | Worker-side task operations (complete, hand off) |
 | `MergeStewardService` | Review and merge completed work branches |
+| `DocsStewardService` | Documentation scanning and fixes |
 | `StewardScheduler` | Run stewards on cron-like schedules |
-| `RoleDefinitionService` | Store and retrieve agent role definitions |
 | `AgentPoolService` | Manage pools of workers with auto-scaling |
+| `PluginExecutor` | Execute steward plugins (playbooks, scripts, commands) |
 
 ## Git Worktree Isolation
 
@@ -103,10 +185,11 @@ Utilities for creating, listing, and cleaning up worktrees are available in the 
 | `@stoneforge/smithy` | Everything (re-exports all subpaths) |
 | `@stoneforge/smithy/types` | Agent roles, metadata, message types, naming utilities |
 | `@stoneforge/smithy/services` | All orchestration services |
-| `@stoneforge/smithy/runtime` | Runtime utilities for agent execution |
+| `@stoneforge/smithy/runtime` | Runtime utilities for agent execution, session management, providers |
 | `@stoneforge/smithy/git` | Git worktree management |
-| `@stoneforge/smithy/testing` | Test helpers and mocks |
 | `@stoneforge/smithy/providers` | `AgentProvider` interface, provider registry, all providers |
+| `@stoneforge/smithy/testing` | Test helpers, mocks, and orchestration test definitions |
+| `@stoneforge/smithy/server` | HTTP/WebSocket server for agent orchestration |
 
 ---
 
