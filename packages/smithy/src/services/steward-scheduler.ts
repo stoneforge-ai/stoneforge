@@ -39,6 +39,9 @@ import type { AgentRegistry, AgentEntity } from './agent-registry.js';
 import { getAgentMetadata } from './agent-registry.js';
 import type { MergeStewardService } from './merge-steward-service.js';
 import type { DocsStewardService } from './docs-steward-service.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('steward-scheduler');
 
 // ============================================================================
 // Types
@@ -542,7 +545,7 @@ export class StewardSchedulerImpl implements StewardScheduler {
       await this.registerAllStewards();
     }
 
-    console.log(`[steward-scheduler] Started with ${this.cronJobs.size} cron job(s) and ${[...this.eventSubscriptions.values()].flat().length} event subscription(s)`);
+    logger.info(`Started with ${this.cronJobs.size} cron job(s) and ${[...this.eventSubscriptions.values()].flat().length} event subscription(s)`);
   }
 
   async stop(): Promise<void> {
@@ -624,7 +627,7 @@ export class StewardSchedulerImpl implements StewardScheduler {
 
     const cronCount = triggers.filter(t => isCronTrigger(t)).length;
     const eventCount = triggers.filter(t => isEventTrigger(t)).length;
-    console.log(`[steward-scheduler] Registered steward '${agent.name}' (${stewardId}) with ${cronCount} cron trigger(s) and ${eventCount} event trigger(s)`);
+    logger.info(`Registered steward '${agent.name}' (${stewardId}) with ${cronCount} cron trigger(s) and ${eventCount} event trigger(s)`);
 
     this.emitter.emit('steward:registered', stewardId);
     return true;
@@ -678,7 +681,7 @@ export class StewardSchedulerImpl implements StewardScheduler {
       }
     }
 
-    console.log(`[steward-scheduler] Registered ${registered}/${stewards.length} steward(s)`);
+    logger.info(`Registered ${registered}/${stewards.length} steward(s)`);
     return registered;
   }
 
@@ -750,7 +753,7 @@ export class StewardSchedulerImpl implements StewardScheduler {
       if (agent) {
         // Run execution asynchronously
         this.runExecution(agent, sub.trigger, false, eventData).catch((error) => {
-          console.error(`[steward-scheduler] Event-triggered execution failed for steward '${sub.stewardName}':`, error);
+          logger.error(`Event-triggered execution failed for steward '${sub.stewardName}':`, error);
         });
         triggered++;
       }
@@ -905,36 +908,36 @@ export class StewardSchedulerImpl implements StewardScheduler {
   private scheduleNextRun(job: CronJobState): void {
     const nextTime = this.getNextCronTime(job.trigger.schedule);
     if (!nextTime) {
-      console.warn(`[steward-scheduler] Failed to compute next run time for steward '${job.stewardName}' with schedule '${job.trigger.schedule}'`);
+      logger.warn(`Failed to compute next run time for steward '${job.stewardName}' with schedule '${job.trigger.schedule}'`);
       return;
     }
 
     job.nextRunAt = nextTime;
     const delayMs = Math.max(0, nextTime.getTime() - Date.now());
 
-    console.log(`[steward-scheduler] Scheduled next run for steward '${job.stewardName}' at ${nextTime.toISOString()} (in ${Math.round(delayMs / 1000)}s)`);
+    logger.debug(`Scheduled next run for steward '${job.stewardName}' at ${nextTime.toISOString()} (in ${Math.round(delayMs / 1000)}s)`);
 
     job.intervalId = setTimeout(async () => {
       try {
         if (!this.running) return;
         if (job.isRunning) {
-          console.warn(`[steward-scheduler] Skipping overlapping execution for steward '${job.stewardName}'`);
+          logger.warn(`Skipping overlapping execution for steward '${job.stewardName}'`);
           return; // finally block will schedule the next run
         }
 
-        console.log(`[steward-scheduler] Cron firing for steward '${job.stewardName}' (schedule: ${job.trigger.schedule})`);
+        logger.debug(`Cron firing for steward '${job.stewardName}' (schedule: ${job.trigger.schedule})`);
 
         const agent = await this.agentRegistry.getAgent(job.stewardId);
         if (!agent) {
-          console.warn(`[steward-scheduler] Agent not found for steward '${job.stewardId}', skipping cron execution`);
+          logger.warn(`Agent not found for steward '${job.stewardId}', skipping cron execution`);
         }
         if (agent && this.running) {
           const result = await this.runExecution(agent, job.trigger, false);
           job.lastRunAt = createTimestamp();
-          console.log(`[steward-scheduler] Cron execution completed for steward '${job.stewardName}': success=${result.success}${result.error ? `, error=${result.error}` : ''}`);
+          logger.info(`Cron execution completed for steward '${job.stewardName}': success=${result.success}${result.error ? `, error=${result.error}` : ''}`);
         }
       } catch (error) {
-        console.error(`[steward-scheduler] Unhandled error in cron callback for steward '${job.stewardName}':`, error);
+        logger.error(`Unhandled error in cron callback for steward '${job.stewardName}':`, error);
       } finally {
         if (this.running) {
           job.intervalId = undefined;

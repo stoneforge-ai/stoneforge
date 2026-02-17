@@ -7,6 +7,9 @@
 
 import { Hono } from 'hono';
 import { stream } from 'hono/streaming';
+import { createLogger } from '../../utils/logger.js';
+
+const logger = createLogger('extensions');
 
 /** OpenVSX API base URL - can be swapped for alternative registries */
 const OPENVSX_BASE_URL = 'https://open-vsx.org';
@@ -29,14 +32,14 @@ function handleFetchError(error: unknown, operation: string): Response {
   const message = error instanceof Error ? error.message : String(error);
 
   if (message.includes('timeout') || message.includes('aborted')) {
-    console.error(`[extensions] Timeout during ${operation}:`, message);
+    logger.error(`Timeout during ${operation}:`, message);
     return Response.json(
       { error: { code: 'TIMEOUT', message: `Request timed out during ${operation}` } },
       { status: 504 }
     );
   }
 
-  console.error(`[extensions] Failed to ${operation}:`, error);
+  logger.error(`Failed to ${operation}:`, error);
   return Response.json(
     { error: { code: 'UPSTREAM_ERROR', message: `Failed to ${operation}: ${message}` } },
     { status: 502 }
@@ -86,7 +89,7 @@ export function createExtensionsRoutes() {
       });
 
       if (!response.ok) {
-        console.error(`[extensions] OpenVSX search returned ${response.status}`);
+        logger.error(`OpenVSX search returned ${response.status}`);
         return c.json(
           { error: { code: 'UPSTREAM_ERROR', message: `OpenVSX returned ${response.status}` } },
           response.status as 400 | 404 | 500 | 502 | 503
@@ -127,7 +130,7 @@ export function createExtensionsRoutes() {
             404
           );
         }
-        console.error(`[extensions] OpenVSX metadata returned ${response.status}`);
+        logger.error(`OpenVSX metadata returned ${response.status}`);
         return c.json(
           { error: { code: 'UPSTREAM_ERROR', message: `OpenVSX returned ${response.status}` } },
           response.status as 400 | 500 | 502 | 503
@@ -180,7 +183,7 @@ export function createExtensionsRoutes() {
             404
           );
         }
-        console.error(`[extensions] OpenVSX metadata for download returned ${metadataResponse.status}`);
+        logger.error(`OpenVSX metadata for download returned ${metadataResponse.status}`);
         return c.json(
           { error: { code: 'UPSTREAM_ERROR', message: `OpenVSX returned ${metadataResponse.status}` } },
           metadataResponse.status as 400 | 500 | 502 | 503
@@ -195,7 +198,7 @@ export function createExtensionsRoutes() {
       // Get download URL from metadata
       const downloadUrl = metadata.files?.download || metadata.downloads?.universal;
       if (!downloadUrl) {
-        console.error('[extensions] No download URL in metadata:', JSON.stringify(metadata, null, 2));
+        logger.error('No download URL in metadata:', JSON.stringify(metadata, null, 2));
         return c.json(
           { error: { code: 'NO_DOWNLOAD_URL', message: 'Extension metadata does not contain a download URL' } },
           404
@@ -208,7 +211,7 @@ export function createExtensionsRoutes() {
       });
 
       if (!downloadResponse.ok) {
-        console.error(`[extensions] VSIX download returned ${downloadResponse.status}`);
+        logger.error(`VSIX download returned ${downloadResponse.status}`);
         return c.json(
           { error: { code: 'DOWNLOAD_FAILED', message: `Failed to download VSIX: ${downloadResponse.status}` } },
           downloadResponse.status as 400 | 404 | 500 | 502 | 503

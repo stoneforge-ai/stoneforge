@@ -36,6 +36,9 @@ import { POOL_DEFAULTS, POOL_METADATA_KEY, isValidPoolName, isValidPoolSize } fr
 import type { SessionManager } from '../runtime/session-manager.js';
 import type { AgentRegistry, AgentEntity } from './agent-registry.js';
 import { getAgentMetadata } from './agent-registry.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('agent-pool');
 
 // ============================================================================
 // Constants
@@ -419,8 +422,8 @@ export class AgentPoolServiceImpl implements AgentPoolService {
 
     // Warn but don't prevent if agents are active
     if (pool.status.activeCount > 0) {
-      console.warn(
-        `[agent-pool] Deleting pool '${pool.config.name}' with ${pool.status.activeCount} active agents. ` +
+      logger.warn(
+        `Deleting pool '${pool.config.name}' with ${pool.status.activeCount} active agents. ` +
         `These agents will continue running but won't be tracked.`
       );
     }

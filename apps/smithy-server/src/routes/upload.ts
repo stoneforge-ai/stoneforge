@@ -8,7 +8,10 @@ import { resolve, extname } from 'node:path';
 import { writeFile, mkdir } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import { Hono } from 'hono';
+import { createLogger } from '@stoneforge/smithy';
 import { UPLOAD_DIR } from '../config.js';
+
+const logger = createLogger('orchestrator');
 
 export function createUploadRoutes() {
   const app = new Hono();
@@ -40,7 +43,7 @@ export function createUploadRoutes() {
 
       return c.json({ path: filePath, filename: originalName, size: buffer.length });
     } catch (error) {
-      console.error('[orchestrator] Failed to upload file:', error);
+      logger.error('Failed to upload file:', error);
       return c.json({ error: { code: 'UPLOAD_FAILED', message: String(error) } }, 500);
     }
   });

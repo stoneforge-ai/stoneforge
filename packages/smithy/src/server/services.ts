@@ -50,6 +50,9 @@ import { attachSessionEventSaver } from './routes/sessions.js';
 import { notifySSEClientsOfNewSession } from './routes/events.js';
 import { DB_PATH as DEFAULT_DB_PATH, PROJECT_ROOT as DEFAULT_PROJECT_ROOT, getClaudePath } from './config.js';
 import { getDaemonConfigOverrides } from './daemon-state.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('orchestrator');
 
 export interface ServicesOptions {
   dbPath?: string;
@@ -99,7 +102,7 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
   const agentRegistry = createAgentRegistry(api);
 
   const claudePath = getClaudePath();
-  console.log(`[orchestrator] Using Claude CLI at: ${claudePath}`);
+  logger.info(`Using Claude CLI at: ${claudePath}`);
 
   const spawnerService = createSpawnerService({
     workingDirectory: projectRoot,
@@ -116,10 +119,10 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
     try {
       await sessionManager.loadSessionState(agent.id as unknown as EntityId);
     } catch (err) {
-      console.warn(`[orchestrator] Failed to load session state for agent ${agent.name}:`, err);
+      logger.warn(`Failed to load session state for agent ${agent.name}:`, err);
     }
   }
-  console.log(`[orchestrator] Loaded session state for ${agents.length} agents`);
+  logger.info(`Loaded session state for ${agents.length} agents`);
 
   const taskAssignmentService = createTaskAssignmentService(api);
   const dispatchService = createDispatchService(api, taskAssignmentService, agentRegistry);
@@ -133,7 +136,7 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
     await worktreeManager.initWorkspace();
   } catch (err) {
     if (err instanceof GitRepositoryNotFoundError) {
-      console.warn('[orchestrator] Git repository not found - worktree features disabled');
+      logger.warn('Git repository not found - worktree features disabled');
       worktreeManager = undefined;
     } else {
       throw err;
@@ -198,7 +201,7 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
     outputDir: resolve(projectRoot, '.stoneforge/sync'),
   });
   autoExportService.start().catch((err: Error) => {
-    console.error('[orchestrator] Failed to start auto-export:', err);
+    logger.error('Failed to start auto-export:', err);
   });
 
   // DispatchDaemon requires worktreeManager, so only create if available
@@ -235,7 +238,7 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
       // This handles ephemeral worker sessions completing their tasks
       const onResultEvent = (event: { type: string }) => {
         if (event.type === 'result') {
-          console.log(`[orchestrator] Session ${session.id} emitted result, auto-terminating`);
+          logger.debug(`Session ${session.id} emitted result, auto-terminating`);
           sessionManager.stopSession(session.id, {
             graceful: true,
             reason: 'Completed with result',
@@ -272,10 +275,10 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
       poolService
     );
   } else {
-    console.warn('[orchestrator] DispatchDaemon disabled - no git repository');
+    logger.warn('DispatchDaemon disabled - no git repository');
   }
 
-  console.log(`[orchestrator] Connected to database: ${dbPath}`);
+  logger.info(`Connected to database: ${dbPath}`);
 
   return {
     api,

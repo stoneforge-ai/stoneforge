@@ -5,6 +5,7 @@
  */
 
 import { Hono } from 'hono';
+import { createLogger } from '@stoneforge/smithy';
 import type { Services } from '../services.js';
 import {
   createWorkflow,
@@ -25,6 +26,8 @@ import {
   getDependenciesInWorkflow,
   DependencyType,
 } from '@stoneforge/core';
+
+const logger = createLogger('workflows');
 
 // ============================================================================
 // Type Definitions
@@ -153,7 +156,7 @@ export function createWorkflowRoutes(services: Services) {
 
       return c.json(response);
     } catch (error) {
-      console.error('[workflows] Error listing workflows:', error);
+      logger.error('Error listing workflows:', error);
       return c.json({ error: { code: 'LIST_ERROR', message: String(error) } }, 500);
     }
   });
@@ -176,7 +179,7 @@ export function createWorkflowRoutes(services: Services) {
 
       return c.json(response);
     } catch (error) {
-      console.error('[workflows] Error getting workflow:', error);
+      logger.error('Error getting workflow:', error);
       return c.json({ error: { code: 'GET_ERROR', message: String(error) } }, 500);
     }
   });
@@ -255,7 +258,7 @@ export function createWorkflowRoutes(services: Services) {
 
       return c.json(response);
     } catch (error) {
-      console.error('[workflows] Error getting workflow tasks:', error);
+      logger.error('Error getting workflow tasks:', error);
       return c.json({ error: { code: 'GET_ERROR', message: String(error) } }, 500);
     }
   });
@@ -297,7 +300,7 @@ export function createWorkflowRoutes(services: Services) {
 
       return c.json(response, 201);
     } catch (error) {
-      console.error('[workflows] Error creating workflow:', error);
+      logger.error('Error creating workflow:', error);
       return c.json({ error: { code: 'CREATE_ERROR', message: String(error) } }, 500);
     }
   });
@@ -335,7 +338,7 @@ export function createWorkflowRoutes(services: Services) {
 
       return c.json(response);
     } catch (error) {
-      console.error('[workflows] Error updating workflow:', error);
+      logger.error('Error updating workflow:', error);
       return c.json({ error: { code: 'UPDATE_ERROR', message: String(error) } }, 500);
     }
   });
@@ -367,7 +370,7 @@ export function createWorkflowRoutes(services: Services) {
 
       return c.json(response);
     } catch (error) {
-      console.error('[workflows] Error starting workflow:', error);
+      logger.error('Error starting workflow:', error);
       return c.json({ error: { code: 'START_ERROR', message: String(error) } }, 500);
     }
   });
@@ -404,7 +407,7 @@ export function createWorkflowRoutes(services: Services) {
 
       return c.json(response);
     } catch (error) {
-      console.error('[workflows] Error cancelling workflow:', error);
+      logger.error('Error cancelling workflow:', error);
       return c.json({ error: { code: 'CANCEL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -425,7 +428,7 @@ export function createWorkflowRoutes(services: Services) {
 
       return c.json({ success: true });
     } catch (error) {
-      console.error('[workflows] Error deleting workflow:', error);
+      logger.error('Error deleting workflow:', error);
       return c.json({ error: { code: 'DELETE_ERROR', message: String(error) } }, 500);
     }
   });
@@ -470,7 +473,7 @@ export function createWorkflowRoutes(services: Services) {
 
       return c.json(response);
     } catch (error) {
-      console.error('[workflows] Error listing playbooks:', error);
+      logger.error('Error listing playbooks:', error);
       return c.json({ error: { code: 'LIST_ERROR', message: String(error) } }, 500);
     }
   });
@@ -493,7 +496,7 @@ export function createWorkflowRoutes(services: Services) {
 
       return c.json(response);
     } catch (error) {
-      console.error('[workflows] Error getting playbook:', error);
+      logger.error('Error getting playbook:', error);
       return c.json({ error: { code: 'GET_ERROR', message: String(error) } }, 500);
     }
   });
@@ -540,7 +543,7 @@ export function createWorkflowRoutes(services: Services) {
 
       return c.json(response, 201);
     } catch (error) {
-      console.error('[workflows] Error creating playbook:', error);
+      logger.error('Error creating playbook:', error);
       return c.json({ error: { code: 'CREATE_ERROR', message: String(error) } }, 500);
     }
   });
@@ -577,7 +580,7 @@ export function createWorkflowRoutes(services: Services) {
 
       return c.json(response);
     } catch (error) {
-      console.error('[workflows] Error updating playbook:', error);
+      logger.error('Error updating playbook:', error);
       return c.json({ error: { code: 'UPDATE_ERROR', message: String(error) } }, 500);
     }
   });
@@ -598,7 +601,7 @@ export function createWorkflowRoutes(services: Services) {
 
       return c.json({ success: true });
     } catch (error) {
-      console.error('[workflows] Error deleting playbook:', error);
+      logger.error('Error deleting playbook:', error);
       return c.json({ error: { code: 'DELETE_ERROR', message: String(error) } }, 500);
     }
   });
@@ -663,8 +666,8 @@ export function createWorkflowRoutes(services: Services) {
         });
       }
 
-      console.log(
-        `[workflows] Instantiated playbook ${playbook.name}: workflow=${savedWorkflow.id}, tasks=${savedTasks.length}, dependencies=${allDependencies.length}, skipped=${createResult.skippedSteps.length}`
+      logger.info(
+        `Instantiated playbook ${playbook.name}: workflow=${savedWorkflow.id}, tasks=${savedTasks.length}, dependencies=${allDependencies.length}, skipped=${createResult.skippedSteps.length}`
       );
 
       const response: WorkflowResponse = {
@@ -673,7 +676,7 @@ export function createWorkflowRoutes(services: Services) {
 
       return c.json(response, 201);
     } catch (error) {
-      console.error('[workflows] Error instantiating playbook:', error);
+      logger.error('Error instantiating playbook:', error);
       return c.json({ error: { code: 'INSTANTIATE_ERROR', message: String(error) } }, 500);
     }
   });

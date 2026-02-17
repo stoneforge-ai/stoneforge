@@ -8,6 +8,9 @@ import { Hono } from 'hono';
 import type { EntityId } from '@stoneforge/core';
 import type { Services } from '../services.js';
 import { formatExecutionEntry } from '../formatters.js';
+import { createLogger } from '../../utils/logger.js';
+
+const logger = createLogger('orchestrator');
 
 export function createSchedulerRoutes(services: Services) {
   const { stewardScheduler } = services;
@@ -39,7 +42,7 @@ export function createSchedulerRoutes(services: Services) {
 
       return c.json({ success: true, isRunning: stewardScheduler.isRunning() });
     } catch (error) {
-      console.error('[orchestrator] Failed to start scheduler:', error);
+      logger.error('Failed to start scheduler:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -50,7 +53,7 @@ export function createSchedulerRoutes(services: Services) {
       await stewardScheduler.stop();
       return c.json({ success: true, isRunning: stewardScheduler.isRunning() });
     } catch (error) {
-      console.error('[orchestrator] Failed to stop scheduler:', error);
+      logger.error('Failed to stop scheduler:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -65,7 +68,7 @@ export function createSchedulerRoutes(services: Services) {
         stats: stewardScheduler.getStats(),
       });
     } catch (error) {
-      console.error('[orchestrator] Failed to register stewards:', error);
+      logger.error('Failed to register stewards:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -87,7 +90,7 @@ export function createSchedulerRoutes(services: Services) {
         subscriptions: stewardScheduler.getEventSubscriptions(stewardId),
       });
     } catch (error) {
-      console.error('[orchestrator] Failed to register steward:', error);
+      logger.error('Failed to register steward:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -99,7 +102,7 @@ export function createSchedulerRoutes(services: Services) {
       const success = await stewardScheduler.unregisterSteward(stewardId);
       return c.json({ success, stewardId });
     } catch (error) {
-      console.error('[orchestrator] Failed to unregister steward:', error);
+      logger.error('Failed to unregister steward:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -113,7 +116,7 @@ export function createSchedulerRoutes(services: Services) {
       const result = await stewardScheduler.executeSteward(stewardId, body);
       return c.json({ success: result.success, result });
     } catch (error) {
-      console.error('[orchestrator] Failed to execute steward:', error);
+      logger.error('Failed to execute steward:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -133,7 +136,7 @@ export function createSchedulerRoutes(services: Services) {
       const triggered = await stewardScheduler.publishEvent(body.eventName, body.eventData ?? {});
       return c.json({ success: true, eventName: body.eventName, stewardsTriggered: triggered });
     } catch (error) {
-      console.error('[orchestrator] Failed to publish event:', error);
+      logger.error('Failed to publish event:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });

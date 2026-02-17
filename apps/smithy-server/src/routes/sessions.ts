@@ -9,10 +9,12 @@ import { streamSSE } from 'hono/streaming';
 import type { EntityId, ElementId, Task } from '@stoneforge/core';
 import { createTimestamp, ElementType } from '@stoneforge/core';
 import type { SessionFilter, SpawnedSessionEvent, AgentRole, WorkerMetadata, StewardMetadata } from '@stoneforge/smithy';
-import { loadRolePrompt, getAgentMetadata, generateSessionBranchName, generateSessionWorktreePath, trackListeners } from '@stoneforge/smithy';
+import { createLogger, loadRolePrompt, getAgentMetadata, generateSessionBranchName, generateSessionWorktreePath, trackListeners } from '@stoneforge/smithy';
 import type { Services } from '../services.js';
 import { formatSessionRecord } from '../formatters.js';
 import { notifySSEClientsOfNewSession } from './events.js';
+
+const logger = createLogger('sessions');
 
 type NotifyClientsCallback = (
   agentId: EntityId,
@@ -250,7 +252,7 @@ export function createSessionRoutes(
         ? (agentMeta as StewardMetadata)?.stewardFocus
         : undefined;
 
-      console.log('[sessions] Agent metadata:', agentMeta ? `role=${agentMeta.agentRole}${workerMode ? ` mode=${workerMode}` : ''}` : 'undefined');
+      logger.debug('Agent metadata:', agentMeta ? `role=${agentMeta.agentRole}${workerMode ? ` mode=${workerMode}` : ''}` : 'undefined');
 
       // Create worktree for persistent workers
       let worktreePath: string | undefined;
@@ -275,9 +277,9 @@ export function createSessionRoutes(
           });
 
           worktreePath = worktreeResult.worktree.path;
-          console.log(`[sessions] Created persistent worker worktree: ${worktreePath} on branch ${sessionBranch}`);
+          logger.info(`Created persistent worker worktree: ${worktreePath} on branch ${sessionBranch}`);
         } catch (err) {
-          console.warn('[sessions] Failed to create worktree for persistent worker:', err);
+          logger.warn('Failed to create worktree for persistent worker:', err);
           // Continue without worktree — don't block session start
         }
       }
@@ -287,7 +289,7 @@ export function createSessionRoutes(
       let rolePrompt: string | undefined;
       if (agentRole) {
         const roleResult = loadRolePrompt(agentRole, stewardFocus, { projectRoot: process.cwd(), workerMode });
-        console.log('[sessions] Role prompt result:', roleResult ? `${roleResult.prompt.length} chars from ${roleResult.source}` : 'undefined');
+        logger.debug('Role prompt result:', roleResult ? `${roleResult.prompt.length} chars from ${roleResult.source}` : 'undefined');
         if (roleResult) {
           rolePrompt = roleResult.prompt;
         }
@@ -398,7 +400,7 @@ Please begin working on this task. Use \`sf task get ${taskResult.id}\` to see f
         201
       );
     } catch (error) {
-      console.error('[orchestrator] Failed to start session:', error);
+      logger.error('Failed to start session:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -433,7 +435,7 @@ Please begin working on this task. Use \`sf task get ${taskResult.id}\` to see f
 
       return c.json({ success: true, sessionId: activeSession.id });
     } catch (error) {
-      console.error('[orchestrator] Failed to stop session:', error);
+      logger.error('Failed to stop session:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -487,7 +489,7 @@ Please begin working on this task. Use \`sf task get ${taskResult.id}\` to see f
         results
       });
     } catch (error) {
-      console.error('[orchestrator] Failed to stop all sessions:', error);
+      logger.error('Failed to stop all sessions:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -505,7 +507,7 @@ Please begin working on this task. Use \`sf task get ${taskResult.id}\` to see f
       await sessionManager.interruptSession(activeSession.id);
       return c.json({ success: true, sessionId: activeSession.id });
     } catch (error) {
-      console.error('[orchestrator] Failed to interrupt session:', error);
+      logger.error('Failed to interrupt session:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -585,7 +587,7 @@ Please begin working on this task. Use \`sf task get ${taskResult.id}\` to see f
 
       return c.json({ success: true, session: formatSessionRecord(session), uwpCheck }, 201);
     } catch (error) {
-      console.error('[orchestrator] Failed to resume session:', error);
+      logger.error('Failed to resume session:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -698,7 +700,7 @@ Please begin working on this task. Use \`sf task get ${taskResult.id}\` to see f
 
         await new Promise(() => {});
       } catch (error) {
-        console.error(`[orchestrator] SSE: Error in stream:`, error);
+        logger.error('SSE: Error in stream:', error);
       }
     });
   });
@@ -740,7 +742,7 @@ Please begin working on this task. Use \`sf task get ${taskResult.id}\` to see f
 
       return c.json({ success: true, sessionId: activeSession.id }, 202);
     } catch (error) {
-      console.error('[orchestrator] Failed to send input:', error);
+      logger.error('Failed to send input:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -768,7 +770,7 @@ Please begin working on this task. Use \`sf task get ${taskResult.id}\` to see f
       const sessions = sessionManager.listSessions(filter);
       return c.json({ sessions: sessions.map(formatSessionRecord) });
     } catch (error) {
-      console.error('[orchestrator] Failed to list sessions:', error);
+      logger.error('Failed to list sessions:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -823,7 +825,7 @@ Please begin working on this task. Use \`sf task get ${taskResult.id}\` to see f
 
       return c.json({ messages: messagesObj });
     } catch (error) {
-      console.error('[orchestrator] Failed to get latest messages:', error);
+      logger.error('Failed to get latest messages:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -838,7 +840,7 @@ Please begin working on this task. Use \`sf task get ${taskResult.id}\` to see f
       }
       return c.json({ session: formatSessionRecord(session) });
     } catch (error) {
-      console.error('[orchestrator] Failed to get session:', error);
+      logger.error('Failed to get session:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -911,7 +913,7 @@ Please begin working on this task. Use \`sf task get ${taskResult.id}\` to see f
 
       return c.json({ messages });
     } catch (error) {
-      console.error('[orchestrator] Failed to get session messages:', error);
+      logger.error('Failed to get session messages:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });

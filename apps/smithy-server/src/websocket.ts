@@ -6,7 +6,7 @@
 
 import type { EntityId } from '@stoneforge/core';
 import type { SpawnedSessionEvent } from '@stoneforge/smithy';
-import { trackListeners } from '@stoneforge/smithy';
+import { createLogger, trackListeners } from '@stoneforge/smithy';
 import type { Services } from './services.js';
 import type { ServerWebSocket, WSClientData } from './types.js';
 
@@ -14,6 +14,8 @@ interface WSClient {
   ws: ServerWebSocket<WSClientData>;
   cleanup?: () => void;
 }
+
+const logger = createLogger('orchestrator:ws');
 
 const wsClients = new Map<string, WSClient>();
 
@@ -69,7 +71,7 @@ export function notifyClientsOfNewSession(
         })
       );
 
-      console.log(`[orchestrator:ws] Notified client ${clientId} of new session for agent ${agentId}`);
+      logger.debug(`Notified client ${clientId} of new session for agent ${agentId}`);
     }
   }
 }
@@ -78,7 +80,7 @@ export function handleWSOpen(ws: ServerWebSocket<WSClientData>): void {
   const clientId = generateClientId();
   ws.data = { id: clientId };
   wsClients.set(clientId, { ws });
-  console.log(`[orchestrator:ws] Client connected: ${clientId}`);
+  logger.debug(`Client connected: ${clientId}`);
 }
 
 export function handleWSMessage(
@@ -180,7 +182,7 @@ export function handleWSMessage(
       }
     }
   } catch (err) {
-    console.error('[orchestrator:ws] Error handling message:', err);
+    logger.error('Error handling message:', err);
   }
 }
 
@@ -190,5 +192,5 @@ export function handleWSClose(ws: ServerWebSocket<WSClientData>): void {
     client.cleanup();
   }
   wsClients.delete(ws.data.id);
-  console.log(`[orchestrator:ws] Client disconnected: ${ws.data.id}`);
+  logger.debug(`Client disconnected: ${ws.data.id}`);
 }

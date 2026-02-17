@@ -7,6 +7,9 @@
 import { Hono } from 'hono';
 import type { Services } from '../services.js';
 import { saveDaemonState, saveDaemonConfigOverrides } from '../daemon-state.js';
+import { createLogger } from '../../utils/logger.js';
+
+const logger = createLogger('orchestrator');
 
 /**
  * Whether the daemon was started by the server (vs CLI or manual).
@@ -89,7 +92,7 @@ export function createDaemonRoutes(services: Services) {
         serverManaged,
       });
     } catch (error) {
-      console.error('[orchestrator] Failed to start daemon:', error);
+      logger.error('Failed to start daemon:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -130,7 +133,7 @@ export function createDaemonRoutes(services: Services) {
           : 'Daemon stopped.',
       });
     } catch (error) {
-      console.error('[orchestrator] Failed to stop daemon:', error);
+      logger.error('Failed to stop daemon:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -180,7 +183,7 @@ export function createDaemonRoutes(services: Services) {
 
       return c.json({ success: true, result });
     } catch (error) {
-      console.error(`[orchestrator] Failed to run ${pollType} poll:`, error);
+      logger.error(`Failed to run ${pollType} poll:`, error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -223,7 +226,7 @@ export function createDaemonRoutes(services: Services) {
         config: dispatchDaemon.getConfig(),
       });
     } catch (error) {
-      console.error('[orchestrator] Failed to update daemon config:', error);
+      logger.error('Failed to update daemon config:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });

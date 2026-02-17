@@ -7,6 +7,9 @@
 import { resolve } from 'node:path';
 import { execSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('orchestrator');
 
 export const PORT = parseInt(process.env.ORCHESTRATOR_PORT || process.env.PORT || '3457', 10);
 export const HOST = process.env.HOST || 'localhost';
@@ -62,6 +65,6 @@ export function getClaudePath(): string {
     }
   }
 
-  console.warn('[orchestrator] Claude CLI not found, falling back to PATH resolution');
+  logger.warn('Claude CLI not found, falling back to PATH resolution');
   return 'claude';
 }

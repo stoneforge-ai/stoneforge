@@ -6,8 +6,11 @@
  */
 
 import type { ChildProcess } from 'node:child_process';
+import { createLogger } from '../utils/logger.js';
 import type { LspManager } from './services/lsp-manager.js';
 import type { ServerWebSocket } from './types.js';
+
+const logger = createLogger('lsp-ws');
 
 /**
  * LSP-specific WebSocket client data
@@ -74,7 +77,7 @@ export function handleLspWSOpen(
     buffer: Buffer.alloc(0),
   });
 
-  console.log(`[lsp-ws] Client ${clientId} connected for language: ${language}`);
+  logger.debug(`Client ${clientId} connected for language: ${language}`);
 
   // Start the language server for this language
   lspManager.startServer(language).then((process) => {
@@ -85,7 +88,7 @@ export function handleLspWSOpen(
     }
 
     if (!process) {
-      console.log(`[lsp-ws] No server available for language: ${language}`);
+      logger.debug(`No server available for language: ${language}`);
       ws.send(JSON.stringify({
         jsonrpc: '2.0',
         error: {
@@ -143,9 +146,9 @@ export function handleLspWSOpen(
       process.stdout?.off('data', onData);
     };
 
-    console.log(`[lsp-ws] Server connected for client ${clientId}`);
+    logger.debug(`Server connected for client ${clientId}`);
   }).catch((error) => {
-    console.error(`[lsp-ws] Error starting server for ${language}:`, error);
+    logger.error(`Error starting server for ${language}:`, error);
     ws.send(JSON.stringify({
       jsonrpc: '2.0',
       error: {
@@ -165,13 +168,13 @@ export function handleLspWSMessage(
 ): void {
   const client = lspClients.get(ws.data.id);
   if (!client) {
-    console.error(`[lsp-ws] Unknown client: ${ws.data.id}`);
+    logger.error(`Unknown client: ${ws.data.id}`);
     return;
   }
 
   if (!client.process || !client.process.stdin) {
     // Server not ready yet, queue the message or send error
-    console.log(`[lsp-ws] Server not ready for client ${ws.data.id}, message queued`);
+    logger.debug(`Server not ready for client ${ws.data.id}, message queued`);
     return;
   }
 
@@ -182,7 +185,7 @@ export function handleLspWSMessage(
 
     client.process.stdin.write(lspMessage);
   } catch (error) {
-    console.error(`[lsp-ws] Error forwarding message:`, error);
+    logger.error(`Error forwarding message:`, error);
   }
 }
 
@@ -198,7 +201,7 @@ export function handleLspWSClose(ws: ServerWebSocket<LspWSClientData>): void {
     // Note: We don't kill the language server process here because it can serve multiple clients
     lspClients.delete(ws.data.id);
   }
-  console.log(`[lsp-ws] Client disconnected: ${ws.data.id}`);
+  logger.debug(`Client disconnected: ${ws.data.id}`);
 }
 
 /**

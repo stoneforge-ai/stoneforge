@@ -873,7 +873,8 @@ describe('StewardSchedulerImpl - logging', () => {
     await scheduler.registerSteward('steward-1' as EntityId);
 
     expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('[steward-scheduler] Failed to compute next run time'),
+      '[steward-scheduler]',
+      expect.stringContaining('Failed to compute next run time'),
     );
 
     await scheduler.stop();
@@ -892,7 +893,8 @@ describe('StewardSchedulerImpl - logging', () => {
     await scheduler.registerAllStewards();
 
     expect(logSpy).toHaveBeenCalledWith(
-      expect.stringContaining('[steward-scheduler] Registered 1/1 steward(s)'),
+      '[steward-scheduler]',
+      expect.stringContaining('Registered 1/1 steward(s)'),
     );
 
     await scheduler.stop();
@@ -908,7 +910,8 @@ describe('StewardSchedulerImpl - logging', () => {
     await scheduler.start();
 
     expect(logSpy).toHaveBeenCalledWith(
-      expect.stringContaining('[steward-scheduler] Started with'),
+      '[steward-scheduler]',
+      expect.stringContaining('Started with'),
     );
 
     await scheduler.stop();

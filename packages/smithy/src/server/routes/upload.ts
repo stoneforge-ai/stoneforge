@@ -9,6 +9,9 @@ import { writeFile, mkdir } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import { Hono } from 'hono';
 import { UPLOAD_DIR } from '../config.js';
+import { createLogger } from '../../utils/logger.js';
+
+const logger = createLogger('orchestrator');
 
 export function createUploadRoutes() {
   const app = new Hono();
@@ -40,7 +43,7 @@ export function createUploadRoutes() {
 
       return c.json({ path: filePath, filename: originalName, size: buffer.length });
     } catch (error) {
-      console.error('[orchestrator] Failed to upload file:', error);
+      logger.error('Failed to upload file:', error);
       return c.json({ error: { code: 'UPLOAD_FAILED', message: String(error) } }, 500);
     }
   });

@@ -6,8 +6,11 @@
  */
 
 import { startSmithyServer } from '@stoneforge/smithy/server';
+import { createLogger, getLogLevel } from '@stoneforge/smithy';
+
+const logger = createLogger('orchestrator');
 
 startSmithyServer().catch((err) => {
-  console.error('[orchestrator] Fatal error during startup:', err);
+  logger.error('Fatal error during startup:', err);
   process.exit(1);
 });

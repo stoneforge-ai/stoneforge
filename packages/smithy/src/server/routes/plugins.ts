@@ -8,6 +8,9 @@ import { Hono } from 'hono';
 import type { StewardPlugin } from '../../index.js';
 import type { Services } from '../services.js';
 import { formatPluginExecutionResult } from '../formatters.js';
+import { createLogger } from '../../utils/logger.js';
+
+const logger = createLogger('orchestrator');
 
 export function createPluginRoutes(services: Services) {
   const { pluginExecutor } = services;
@@ -54,7 +57,7 @@ export function createPluginRoutes(services: Services) {
       const result = pluginExecutor.validate(plugin);
       return c.json({ valid: result.valid, errors: result.errors });
     } catch (error) {
-      console.error('[orchestrator] Failed to validate plugin:', error);
+      logger.error('Failed to validate plugin:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -79,7 +82,7 @@ export function createPluginRoutes(services: Services) {
       const result = await pluginExecutor.execute(body.plugin, body.options);
       return c.json({ result: formatPluginExecutionResult(result) });
     } catch (error) {
-      console.error('[orchestrator] Failed to execute plugin:', error);
+      logger.error('Failed to execute plugin:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -113,7 +116,7 @@ export function createPluginRoutes(services: Services) {
         results: result.results.map(formatPluginExecutionResult),
       });
     } catch (error) {
-      console.error('[orchestrator] Failed to execute plugins batch:', error);
+      logger.error('Failed to execute plugins batch:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -138,7 +141,7 @@ export function createPluginRoutes(services: Services) {
       const result = await pluginExecutor.execute(plugin, body.options);
       return c.json({ result: formatPluginExecutionResult(result) });
     } catch (error) {
-      console.error('[orchestrator] Failed to execute built-in plugin:', error);
+      logger.error('Failed to execute built-in plugin:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });

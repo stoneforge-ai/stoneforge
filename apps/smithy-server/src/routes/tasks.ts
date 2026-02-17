@@ -8,10 +8,12 @@ import { Hono } from 'hono';
 import type { EntityId, ElementId, Task, Document, DocumentId } from '@stoneforge/core';
 import { createTask, createDocument, TaskStatus, ElementType, Priority, Complexity, ContentType, updateTaskStatus } from '@stoneforge/core';
 import type { OrchestratorTaskMeta } from '@stoneforge/smithy';
-import { updateOrchestratorTaskMeta } from '@stoneforge/smithy';
+import { createLogger, updateOrchestratorTaskMeta } from '@stoneforge/smithy';
 import type { Services } from '../services.js';
 import { formatTaskResponse } from '../formatters.js';
 import type { QuarryAPI } from '@stoneforge/quarry';
+
+const logger = createLogger('orchestrator');
 
 /**
  * Hydrate the description from descriptionRef if it exists
@@ -86,7 +88,7 @@ export function createTaskRoutes(services: Services) {
 
       return c.json({ tasks: filtered.map((t) => formatTaskResponse(t)) });
     } catch (error) {
-      console.error('[orchestrator] Failed to list tasks:', error);
+      logger.error('Failed to list tasks:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -97,7 +99,7 @@ export function createTaskRoutes(services: Services) {
       const tasks = await taskAssignmentService.getUnassignedTasks();
       return c.json({ tasks: tasks.map((t) => formatTaskResponse(t)) });
     } catch (error) {
-      console.error('[orchestrator] Failed to list unassigned tasks:', error);
+      logger.error('Failed to list unassigned tasks:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -191,7 +193,7 @@ export function createTaskRoutes(services: Services) {
       const savedTask = await api.create(taskData as unknown as Record<string, unknown> & { createdBy: EntityId });
       return c.json({ task: formatTaskResponse(savedTask as unknown as Task) }, 201);
     } catch (error) {
-      console.error('[orchestrator] Failed to create task:', error);
+      logger.error('Failed to create task:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -274,7 +276,7 @@ export function createTaskRoutes(services: Services) {
       const updatedTask = await api.update(taskId, updates) as unknown as Task;
       return c.json({ task: formatTaskResponse(updatedTask) });
     } catch (error) {
-      console.error('[orchestrator] Failed to update task:', error);
+      logger.error('Failed to update task:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -314,7 +316,7 @@ export function createTaskRoutes(services: Services) {
       const formattedTask = await formatTaskWithDescription(task, api);
       return c.json({ task: formattedTask, assignment: assignmentInfo });
     } catch (error) {
-      console.error('[orchestrator] Failed to get task:', error);
+      logger.error('Failed to get task:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -339,7 +341,7 @@ export function createTaskRoutes(services: Services) {
 
       return c.json({ success: true });
     } catch (error) {
-      console.error('[orchestrator] Failed to delete task:', error);
+      logger.error('Failed to delete task:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -372,7 +374,7 @@ export function createTaskRoutes(services: Services) {
 
       return c.json({ success: true, results });
     } catch (error) {
-      console.error('[orchestrator] Failed to bulk delete tasks:', error);
+      logger.error('Failed to bulk delete tasks:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -397,7 +399,7 @@ export function createTaskRoutes(services: Services) {
 
       return c.json({ task: formatTaskResponse(updatedTask) });
     } catch (error) {
-      console.error('[orchestrator] Failed to start task:', error);
+      logger.error('Failed to start task:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -450,7 +452,7 @@ export function createTaskRoutes(services: Services) {
         dispatchedAt: result.dispatchedAt,
       });
     } catch (error) {
-      console.error('[orchestrator] Failed to dispatch task:', error);
+      logger.error('Failed to dispatch task:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -524,7 +526,7 @@ export function createTaskRoutes(services: Services) {
       if (errorMessage.includes('not a worker')) {
         return c.json({ error: { code: 'INVALID_AGENT', message: 'Agent is not a worker' } }, 400);
       }
-      console.error('[orchestrator] Failed to start worker on task:', error);
+      logger.error('Failed to start worker on task:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: errorMessage } }, 500);
     }
   });
@@ -560,7 +562,7 @@ export function createTaskRoutes(services: Services) {
         completedAt: result.completedAt,
       });
     } catch (error) {
-      console.error('[orchestrator] Failed to complete task:', error);
+      logger.error('Failed to complete task:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -634,7 +636,7 @@ export function createTaskRoutes(services: Services) {
         resetAt: finalTask!.updatedAt,
       });
     } catch (error) {
-      console.error('[orchestrator] Failed to reset task:', error);
+      logger.error('Failed to reset task:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -723,7 +725,7 @@ export function createTaskRoutes(services: Services) {
         reopenedAt: finalTask!.updatedAt,
       });
     } catch (error) {
-      console.error('[orchestrator] Failed to reopen task:', error);
+      logger.error('Failed to reopen task:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -755,7 +757,7 @@ export function createTaskRoutes(services: Services) {
 
       return c.json({ task: { id: task.id, title: task.title }, context, prompt });
     } catch (error) {
-      console.error('[orchestrator] Failed to get task context:', error);
+      logger.error('Failed to get task context:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -775,7 +777,7 @@ export function createTaskRoutes(services: Services) {
 
       return c.json({ success, taskId, deletedBranch: success && (body.deleteBranch ?? false) });
     } catch (error) {
-      console.error('[orchestrator] Failed to cleanup task:', error);
+      logger.error('Failed to cleanup task:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -815,7 +817,7 @@ export function createTaskRoutes(services: Services) {
       // Filter out nulls (in case documents were deleted)
       return c.json(attachments.filter(Boolean));
     } catch (error) {
-      console.error('[orchestrator] Failed to get task attachments:', error);
+      logger.error('Failed to get task attachments:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -862,7 +864,7 @@ export function createTaskRoutes(services: Services) {
 
       return c.json(doc, 201);
     } catch (error) {
-      console.error('[orchestrator] Failed to attach document to task:', error);
+      logger.error('Failed to attach document to task:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -894,7 +896,7 @@ export function createTaskRoutes(services: Services) {
 
       return c.json({ success: true, taskId, documentId: docId });
     } catch (error) {
-      console.error('[orchestrator] Failed to remove task attachment:', error);
+      logger.error('Failed to remove task attachment:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -985,7 +987,7 @@ export function createTaskRoutes(services: Services) {
         },
       });
     } catch (error) {
-      console.error('[orchestrator] Failed to get task dependencies:', error);
+      logger.error('Failed to get task dependencies:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -1039,7 +1041,7 @@ export function createTaskRoutes(services: Services) {
         },
       });
     } catch (error) {
-      console.error('[orchestrator] Failed to add dependency:', error);
+      logger.error('Failed to add dependency:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -1075,7 +1077,7 @@ export function createTaskRoutes(services: Services) {
         blockerId,
       });
     } catch (error) {
-      console.error('[orchestrator] Failed to remove dependency:', error);
+      logger.error('Failed to remove dependency:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -1136,7 +1138,7 @@ export function createTaskRoutes(services: Services) {
 
       return c.json({ task: formatTaskResponse(updatedTask) });
     } catch (error) {
-      console.error('[orchestrator] Failed to update merge status:', error);
+      logger.error('Failed to update merge status:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });

@@ -8,6 +8,9 @@ import { Hono } from 'hono';
 import type { ElementId } from '@stoneforge/core';
 import type { Services } from '../services.js';
 import { formatWorktreeInfo } from '../formatters.js';
+import { createLogger } from '../../utils/logger.js';
+
+const logger = createLogger('orchestrator');
 
 export function createWorktreeRoutes(services: Services) {
   const { worktreeManager } = services;
@@ -23,7 +26,7 @@ export function createWorktreeRoutes(services: Services) {
       const worktrees = await worktreeManager.listWorktrees();
       return c.json({ worktrees: worktrees.map(formatWorktreeInfo) });
     } catch (error) {
-      console.error('[orchestrator] Failed to list worktrees:', error);
+      logger.error('Failed to list worktrees:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -42,7 +45,7 @@ export function createWorktreeRoutes(services: Services) {
       }
       return c.json({ worktree: formatWorktreeInfo(worktree) });
     } catch (error) {
-      console.error('[orchestrator] Failed to get worktree:', error);
+      logger.error('Failed to get worktree:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -87,7 +90,7 @@ export function createWorktreeRoutes(services: Services) {
         201
       );
     } catch (error) {
-      console.error('[orchestrator] Failed to create worktree:', error);
+      logger.error('Failed to create worktree:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
@@ -107,7 +110,7 @@ export function createWorktreeRoutes(services: Services) {
       await worktreeManager.removeWorktree(worktreePath, { force, deleteBranch });
       return c.json({ success: true });
     } catch (error) {
-      console.error('[orchestrator] Failed to remove worktree:', error);
+      logger.error('Failed to remove worktree:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
