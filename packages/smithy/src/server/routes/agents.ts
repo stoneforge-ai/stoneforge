@@ -11,7 +11,7 @@ import type { Services } from '../services.js';
 import { formatSessionRecord } from '../formatters.js';
 
 export function createAgentRoutes(services: Services) {
-  const { agentRegistry, sessionManager, taskAssignmentService } = services;
+  const { agentRegistry, sessionManager, taskAssignmentService, stewardScheduler } = services;
   const app = new Hono();
 
   // GET /api/agents
@@ -94,6 +94,13 @@ export function createAgentRoutes(services: Services) {
             provider: body.provider,
             model: body.model,
           });
+          if (stewardScheduler.isRunning()) {
+            try {
+              await stewardScheduler.registerSteward(agent.id as unknown as EntityId);
+            } catch (err) {
+              console.warn('[orchestrator] Failed to auto-register steward with scheduler:', err);
+            }
+          }
           break;
 
         default:
@@ -235,6 +242,14 @@ export function createAgentRoutes(services: Services) {
         maxConcurrentTasks: body.maxConcurrentTasks,
         reportsTo: body.reportsTo as EntityId | undefined,
       });
+
+      if (stewardScheduler.isRunning()) {
+        try {
+          await stewardScheduler.registerSteward(agent.id as unknown as EntityId);
+        } catch (err) {
+          console.warn('[orchestrator] Failed to auto-register steward with scheduler:', err);
+        }
+      }
 
       return c.json({ agent }, 201);
     } catch (error) {

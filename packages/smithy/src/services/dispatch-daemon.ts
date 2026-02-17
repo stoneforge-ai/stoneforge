@@ -676,6 +676,8 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       if (!this.stewardScheduler.isRunning()) {
         // Start the scheduler if it's not running
         await this.stewardScheduler.start();
+        const registered = await this.stewardScheduler.registerAllStewards();
+        console.log(`[dispatch-daemon] Steward scheduler started, registered ${registered} steward(s)`);
         processed++;
       }
 

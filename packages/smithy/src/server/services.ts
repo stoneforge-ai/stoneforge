@@ -179,6 +179,8 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
     mergeStewardService,
     healthStewardService,
     docsStewardService,
+    sessionManager,
+    projectRoot,
   });
   const stewardScheduler = createStewardScheduler(agentRegistry, stewardExecutor, {
     maxHistoryPerSteward: 100,

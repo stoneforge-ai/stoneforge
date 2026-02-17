@@ -27,11 +27,14 @@ import type {
   CronTrigger,
   EventTrigger,
   StewardMetadata,
+  StewardFocus,
 } from '../types/index.js';
 import {
   isCronTrigger,
   isEventTrigger,
 } from '../types/index.js';
+import type { SessionManager } from '../runtime/session-manager.js';
+import { loadRolePrompt } from '../prompts/index.js';
 import type { AgentRegistry, AgentEntity } from './agent-registry.js';
 import { getAgentMetadata } from './agent-registry.js';
 import type { MergeStewardService } from './merge-steward-service.js';
@@ -539,6 +542,8 @@ export class StewardSchedulerImpl implements StewardScheduler {
     if (this.config.startImmediately) {
       await this.registerAllStewards();
     }
+
+    console.log(`[steward-scheduler] Started with ${this.cronJobs.size} cron job(s) and ${[...this.eventSubscriptions.values()].flat().length} event subscription(s)`);
   }
 
   async stop(): Promise<void> {
@@ -618,6 +623,10 @@ export class StewardSchedulerImpl implements StewardScheduler {
       }
     }
 
+    const cronCount = triggers.filter(t => isCronTrigger(t)).length;
+    const eventCount = triggers.filter(t => isEventTrigger(t)).length;
+    console.log(`[steward-scheduler] Registered steward '${agent.name}' (${stewardId}) with ${cronCount} cron trigger(s) and ${eventCount} event trigger(s)`);
+
     this.emitter.emit('steward:registered', stewardId);
     return true;
   }
@@ -670,6 +679,7 @@ export class StewardSchedulerImpl implements StewardScheduler {
       }
     }
 
+    console.log(`[steward-scheduler] Registered ${registered}/${stewards.length} steward(s)`);
     return registered;
   }
 
@@ -740,8 +750,8 @@ export class StewardSchedulerImpl implements StewardScheduler {
       const agent = await this.agentRegistry.getAgent(sub.stewardId);
       if (agent) {
         // Run execution asynchronously
-        this.runExecution(agent, sub.trigger, false, eventData).catch(() => {
-          // Errors are handled in runExecution
+        this.runExecution(agent, sub.trigger, false, eventData).catch((error) => {
+          console.error(`[steward-scheduler] Event-triggered execution failed for steward '${sub.stewardName}':`, error);
         });
         triggered++;
       }
@@ -895,27 +905,42 @@ export class StewardSchedulerImpl implements StewardScheduler {
 
   private scheduleNextRun(job: CronJobState): void {
     const nextTime = this.getNextCronTime(job.trigger.schedule);
-    if (!nextTime) return;
+    if (!nextTime) {
+      console.warn(`[steward-scheduler] Failed to compute next run time for steward '${job.stewardName}' with schedule '${job.trigger.schedule}'`);
+      return;
+    }
 
     job.nextRunAt = nextTime;
     const delayMs = Math.max(0, nextTime.getTime() - Date.now());
 
+    console.log(`[steward-scheduler] Scheduled next run for steward '${job.stewardName}' at ${nextTime.toISOString()} (in ${Math.round(delayMs / 1000)}s)`);
+
     job.intervalId = setTimeout(async () => {
-      if (!this.running) return;
-      if (job.isRunning) {
-        // Skip this run but schedule the next one
-        job.intervalId = undefined;
-        this.scheduleNextRun(job);
-        return;
-      }
-      const agent = await this.agentRegistry.getAgent(job.stewardId);
-      if (agent && this.running) {
-        await this.runExecution(agent, job.trigger, false);
-        job.lastRunAt = createTimestamp();
-      }
-      if (this.running) {
-        job.intervalId = undefined;
-        this.scheduleNextRun(job);
+      try {
+        if (!this.running) return;
+        if (job.isRunning) {
+          console.warn(`[steward-scheduler] Skipping overlapping execution for steward '${job.stewardName}'`);
+          return; // finally block will schedule the next run
+        }
+
+        console.log(`[steward-scheduler] Cron firing for steward '${job.stewardName}' (schedule: ${job.trigger.schedule})`);
+
+        const agent = await this.agentRegistry.getAgent(job.stewardId);
+        if (!agent) {
+          console.warn(`[steward-scheduler] Agent not found for steward '${job.stewardId}', skipping cron execution`);
+        }
+        if (agent && this.running) {
+          const result = await this.runExecution(agent, job.trigger, false);
+          job.lastRunAt = createTimestamp();
+          console.log(`[steward-scheduler] Cron execution completed for steward '${job.stewardName}': success=${result.success}${result.error ? `, error=${result.error}` : ''}`);
+        }
+      } catch (error) {
+        console.error(`[steward-scheduler] Unhandled error in cron callback for steward '${job.stewardName}':`, error);
+      } finally {
+        if (this.running) {
+          job.intervalId = undefined;
+          this.scheduleNextRun(job);
+        }
       }
     }, delayMs) as unknown as ReturnType<typeof setInterval>;
   }
@@ -1210,6 +1235,8 @@ export interface StewardExecutorDeps {
   mergeStewardService: MergeStewardService;
   healthStewardService: HealthStewardService;
   docsStewardService: DocsStewardService;
+  sessionManager: SessionManager;
+  projectRoot: string;
 }
 
 /**
@@ -1217,9 +1244,10 @@ export interface StewardExecutorDeps {
  * based on the steward's focus.
  *
  * - 'merge' focus → MergeStewardService.processAllPending()
- * - 'health' focus → HealthStewardService.runHealthCheck()
- * - 'docs' focus → DocsStewardService.scanAll()
- * - 'reminder' / 'ops' → no-op (require agent sessions)
+ * - 'docs' / 'health' / 'reminder' / 'ops' → spawns an agent session via sessionManager
+ *
+ * Session-based stewards check for an existing active session before spawning
+ * to prevent overlapping runs across cron ticks.
  *
  * Each case is wrapped in try/catch so one failing steward doesn't crash
  * the scheduler.
@@ -1250,53 +1278,47 @@ export function createStewardExecutor(deps: StewardExecutorDeps): StewardExecuto
           };
         }
       }
-      case 'health': {
-        try {
-          const result = await deps.healthStewardService.runHealthCheck();
-          return {
-            success: true,
-            output: `Checked ${result.agentsChecked} agents, ${result.newIssues.length} new issues, ${result.actionsTaken.length} actions taken`,
-            durationMs: Date.now() - startTime,
-            itemsProcessed: result.agentsChecked,
-          };
-        } catch (error) {
-          return {
-            success: false,
-            error: error instanceof Error ? error.message : String(error),
-            output: `Health steward '${steward.name}' failed: ${error instanceof Error ? error.message : String(error)}`,
-            durationMs: Date.now() - startTime,
-            itemsProcessed: 0,
-          };
-        }
-      }
-      case 'docs': {
-        try {
-          const result = await deps.docsStewardService.scanAll();
-          return {
-            success: true,
-            output: `Scanned docs: ${result.issues.length} issues found`,
-            durationMs: Date.now() - startTime,
-            itemsProcessed: result.issues.length,
-          };
-        } catch (error) {
-          return {
-            success: false,
-            error: error instanceof Error ? error.message : String(error),
-            output: `Docs steward '${steward.name}' failed: ${error instanceof Error ? error.message : String(error)}`,
-            durationMs: Date.now() - startTime,
-            itemsProcessed: 0,
-          };
-        }
-      }
+      case 'docs':
+      case 'health':
       case 'reminder':
-      case 'ops':
-        // These focus types don't have dedicated services yet
-        return {
-          success: true,
-          output: `Steward focus '${focus}' has no automated service — requires agent session`,
-          durationMs: Date.now() - startTime,
-          itemsProcessed: 0,
-        };
+      case 'ops': {
+        try {
+          const stewardId = steward.id as unknown as EntityId;
+          const activeSession = deps.sessionManager.getActiveSession(stewardId);
+          if (activeSession) {
+            return {
+              success: true,
+              output: `Steward '${steward.name}' already has active session ${activeSession.id}, skipping`,
+              durationMs: Date.now() - startTime,
+              itemsProcessed: 0,
+            };
+          }
+
+          const roleResult = loadRolePrompt('steward', focus as StewardFocus, {
+            projectRoot: deps.projectRoot,
+          });
+          const initialPrompt = roleResult?.prompt ?? '';
+          const { session } = await deps.sessionManager.startSession(stewardId, {
+            workingDirectory: deps.projectRoot,
+            initialPrompt,
+            interactive: false,
+          });
+          return {
+            success: true,
+            output: `Spawned ${focus} steward session ${session.id}`,
+            durationMs: Date.now() - startTime,
+            itemsProcessed: 1,
+          };
+        } catch (error) {
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : String(error),
+            output: `${focus} steward '${steward.name}' failed: ${error instanceof Error ? error.message : String(error)}`,
+            durationMs: Date.now() - startTime,
+            itemsProcessed: 0,
+          };
+        }
+      }
       default:
         return {
           success: false,

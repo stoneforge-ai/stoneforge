@@ -782,3 +782,135 @@ describe('getNextCronTime', () => {
     expect(next!.getHours()).toBe(10);
   });
 });
+
+// ============================================================================
+// startImmediately Behavior Tests
+// ============================================================================
+
+describe('StewardSchedulerImpl - startImmediately behavior', () => {
+  afterEach(async () => {
+    vi.restoreAllMocks();
+  });
+
+  it('should register all stewards on start() when startImmediately is true', async () => {
+    const steward = createMockAgentEntity('steward-1', 'Auto Steward', 'merge', [
+      { type: 'cron', schedule: '*/20 * * * *' },
+    ]);
+    const registry = createMockAgentRegistry([steward]);
+    const executor = createMockExecutor();
+    const scheduler = createStewardScheduler(registry, executor, { startImmediately: true });
+
+    await scheduler.start();
+
+    const stats = scheduler.getStats();
+    expect(stats.registeredStewards).toBe(1);
+    expect(stats.activeCronJobs).toBe(1);
+    expect(registry.getStewards).toHaveBeenCalled();
+
+    await scheduler.stop();
+  });
+
+  it('should NOT register stewards on start() when startImmediately is false', async () => {
+    const steward = createMockAgentEntity('steward-1', 'Manual Steward', 'merge', [
+      { type: 'cron', schedule: '*/20 * * * *' },
+    ]);
+    const registry = createMockAgentRegistry([steward]);
+    const executor = createMockExecutor();
+    const scheduler = createStewardScheduler(registry, executor, { startImmediately: false });
+
+    await scheduler.start();
+
+    const stats = scheduler.getStats();
+    expect(stats.registeredStewards).toBe(0);
+    expect(stats.activeCronJobs).toBe(0);
+    expect(registry.getStewards).not.toHaveBeenCalled();
+
+    await scheduler.stop();
+  });
+
+  it('should create active cron jobs with nextRunAt when registerAllStewards() called after start()', async () => {
+    const steward = createMockAgentEntity('steward-1', 'Cron Steward', 'merge', [
+      { type: 'cron', schedule: '*/20 * * * *' },
+    ]);
+    const registry = createMockAgentRegistry([steward]);
+    const executor = createMockExecutor();
+    const scheduler = createStewardScheduler(registry, executor, { startImmediately: false });
+
+    await scheduler.start();
+    const registered = await scheduler.registerAllStewards();
+    expect(registered).toBe(1);
+
+    const jobs = scheduler.getScheduledJobs();
+    expect(jobs.length).toBe(1);
+    expect(jobs[0].nextRunAt).toBeDefined();
+    expect(jobs[0].nextRunAt).toBeInstanceOf(Date);
+
+    await scheduler.stop();
+  });
+});
+
+// ============================================================================
+// Logging Tests
+// ============================================================================
+
+describe('StewardSchedulerImpl - logging', () => {
+  afterEach(async () => {
+    vi.restoreAllMocks();
+  });
+
+  it('should warn on invalid cron schedule in scheduleNextRun', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    const steward = createMockAgentEntity('steward-1', 'Bad Cron', 'merge', [
+      { type: 'cron', schedule: 'not-valid-cron' },
+    ]);
+    const registry = createMockAgentRegistry([steward]);
+    const executor = createMockExecutor();
+    const scheduler = createStewardScheduler(registry, executor);
+
+    await scheduler.start();
+    await scheduler.registerSteward('steward-1' as EntityId);
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('[steward-scheduler] Failed to compute next run time'),
+    );
+
+    await scheduler.stop();
+  });
+
+  it('should log registration counts on registerAllStewards', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    const steward = createMockAgentEntity('steward-1', 'Log Test', 'merge', [
+      { type: 'cron', schedule: '*/5 * * * *' },
+    ]);
+    const registry = createMockAgentRegistry([steward]);
+    const executor = createMockExecutor();
+    const scheduler = createStewardScheduler(registry, executor);
+
+    await scheduler.registerAllStewards();
+
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.stringContaining('[steward-scheduler] Registered 1/1 steward(s)'),
+    );
+
+    await scheduler.stop();
+  });
+
+  it('should log on scheduler start', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    const registry = createMockAgentRegistry([]);
+    const executor = createMockExecutor();
+    const scheduler = createStewardScheduler(registry, executor);
+
+    await scheduler.start();
+
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.stringContaining('[steward-scheduler] Started with'),
+    );
+
+    await scheduler.stop();
+  });
+});
