@@ -363,7 +363,7 @@ export function createAgentRoutes(services: Services) {
           try {
             await stewardScheduler.registerSteward(agentId);
           } catch (err) {
-            console.warn('[orchestrator] Failed to re-register steward with scheduler after trigger update:', err);
+            logger.warn('Failed to re-register steward with scheduler after trigger update:', err);
           }
         }
       }

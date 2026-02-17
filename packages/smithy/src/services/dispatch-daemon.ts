@@ -1205,24 +1205,24 @@ export class DispatchDaemonImpl implements DispatchDaemon {
               completedAt: now,
             });
             processed++;
-            console.log(`[dispatch-daemon] Auto-completed plan ${plan.id} ("${plan.title}")`);
+            logger.info(`Auto-completed plan ${plan.id} ("${plan.title}")`);
           }
         } catch (error) {
           errors++;
           const errorMessage = error instanceof Error ? error.message : String(error);
           errorMessages.push(`Plan ${plan.id}: ${errorMessage}`);
-          console.error(`[dispatch-daemon] Error checking plan ${plan.id} for auto-completion:`, error);
+          logger.error(`Error checking plan ${plan.id} for auto-completion:`, error);
         }
       }
 
       if (processed > 0) {
-        console.log(`[dispatch-daemon] Auto-completed ${processed} plan(s)`);
+        logger.info(`Auto-completed ${processed} plan(s)`);
       }
     } catch (error) {
       errors++;
       const errorMessage = error instanceof Error ? error.message : String(error);
       errorMessages.push(errorMessage);
-      console.error('[dispatch-daemon] Error in pollPlanAutoComplete:', error);
+      logger.error('Error in pollPlanAutoComplete:', error);
     }
 
     const result: PollResult = {
