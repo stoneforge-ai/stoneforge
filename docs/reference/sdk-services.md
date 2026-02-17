@@ -62,7 +62,7 @@ const hasCycle = depService.detectCycle(blockedId, blockerId, type);
 - Only checked for blocking types (`blocks`, `awaits`, `parent-child`)
 - Self-referential rejected immediately with `CYCLE_DETECTED`
 
-**Note:** `api.addDependency()` checks for cycles automatically for blocking types. You can also call `detectCycle()` manually for pre-validation.
+**Note:** `api.addDependency()` does **not** check for cycles automatically. Use `detectCycle()` for pre-validation before adding blocking dependencies.
 
 ---
 

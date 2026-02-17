@@ -9,7 +9,7 @@ Common pitfalls and their solutions, organized by severity and category.
 - Closing a task auto-unblocks dependents via `BlockedCacheService`
 - Status transitions are validated - not all transitions are allowed:
   - `CLOSED` → only `OPEN` (not to IN_PROGRESS, BLOCKED, or DEFERRED)
-  - `DEFERRED` → only `OPEN` or `IN_PROGRESS`
+  - `DEFERRED` → `OPEN`, `IN_PROGRESS`, or `BACKLOG`
   - `TOMBSTONE` is terminal (no transitions allowed)
 - `api.ready()` excludes ephemeral tasks by default (use `includeEphemeral: true`)
 - `closedAt` is cleared when reopening a closed task

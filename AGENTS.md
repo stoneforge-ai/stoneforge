@@ -12,7 +12,7 @@ Context and instructions for AI coding agents working on the Stoneforge reposito
 | Core type details          | `docs/reference/core-types.md`       |
 | API usage                  | `docs/reference/quarry-api.md`    |
 | CLI commands               | `docs/reference/cli.md`              |
-| Critical pitfalls          | `docs/GOTCHAS.md`                    |
+| Critical pitfalls          | `docs/gotchas.md`                    |
 | Architecture overview      | `docs/ARCHITECTURE.md`               |
 | Agent orchestration        | `docs/reference/orchestrator-api.md` |
 
@@ -24,19 +24,19 @@ Context and instructions for AI coding agents working on the Stoneforge reposito
 packages/
 ├── core/              # @stoneforge/core - types, errors, ID generation
 ├── storage/           # @stoneforge/storage - SQLite backends (Bun, Node, Browser)
-├── sdk/               # @stoneforge/quarry - QuarryAPI, services, sync, CLI
+├── quarry/            # @stoneforge/quarry - QuarryAPI, services, sync, CLI
 ├── ui/                # @stoneforge/ui - React components, hooks, design tokens
 ├── shared-routes/     # @stoneforge/shared-routes - HTTP route factories
-└── orchestrator-sdk/  # @stoneforge/smithy - agent orchestration
+└── smithy/            # @stoneforge/smithy - agent orchestration
 
 apps/
-├── server/            # Platform HTTP + WebSocket (port 3456)
-├── web/               # Platform React SPA (port 5173)
-├── orchestrator-server/  # Orchestrator API (port 3457)
-└── orchestrator-web/     # Orchestrator dashboard (port 5174)
+├── quarry-server/     # Platform HTTP + WebSocket (port 3456)
+├── quarry-web/        # Platform React SPA (port 5173)
+├── smithy-server/     # Orchestrator API (port 3457)
+└── smithy-web/        # Orchestrator dashboard (port 5174)
 
 docs/                  # Diátaxis documentation (primary reference for agents)
-.stoneforge/            # Project data (elements.db, elements.jsonl, config.yaml)
+.stoneforge/            # Project data (stoneforge.db, elements.jsonl, config.yaml)
 ```
 
 ### Package Dependency Graph
@@ -116,7 +116,7 @@ bun run --filter @stoneforge/smithy-web dev     # Orchestrator UI (port 5174)
 
 ## Critical Gotchas
 
-See `docs/GOTCHAS.md` for the complete list. **Top 10 for agents:**
+See `docs/gotchas.md` for the complete list. **Top 10 for agents:**
 
 1. **`blocked` is computed** - Never set `status: 'blocked'` directly; it's derived from dependencies
 2. **`blocks` direction** - `sf dependency add --type=blocks A B` means A is blocked BY B (B completes first)

@@ -7,17 +7,19 @@ stoneforge/
 ├── packages/
 │   ├── core/           # @stoneforge/core - shared types, no dependencies
 │   ├── storage/        # @stoneforge/storage - SQLite backends
-│   ├── sdk/            # @stoneforge/quarry - API, services, sync, CLI
-│   └── orchestrator-sdk/  # @stoneforge/smithy - agent orchestration
+│   ├── quarry/         # @stoneforge/quarry - API, services, sync, CLI
+│   ├── ui/             # @stoneforge/ui - React components, hooks, design tokens
+│   ├── shared-routes/  # @stoneforge/shared-routes - HTTP route factories
+│   └── smithy/         # @stoneforge/smithy - agent orchestration
 │
 ├── apps/
-│   ├── server/         # Hono API server (port 3456)
-│   ├── web/            # React SPA (Vite, port 5173)
-│   ├── orchestrator-server/  # Orchestrator API server
-│   └── orchestrator-web/     # Orchestrator React SPA
+│   ├── quarry-server/  # Hono API server (port 3456)
+│   ├── quarry-web/     # React SPA (Vite, port 5173)
+│   ├── smithy-server/  # Orchestrator API server (port 3457)
+│   └── smithy-web/     # Orchestrator React SPA (port 5174)
 │
 └── .stoneforge/         # Project data directory
-    ├── elements.db     # SQLite database (cache)
+    ├── stoneforge.db   # SQLite database (cache)
     ├── elements.jsonl  # JSONL export (source of truth)
     └── config.yaml     # Project configuration
 ```
@@ -46,8 +48,8 @@ stoneforge/
 **Import Rules:**
 - `core` → no internal dependencies
 - `storage` → imports `core`
-- `sdk` → imports `core`, `storage`
-- `orchestrator-sdk` → imports `core`, `storage`, `sdk`
+- `quarry` → imports `core`, `storage`
+- `smithy` → imports `core`, `storage`, `quarry`
 
 ## Dual Storage Model
 

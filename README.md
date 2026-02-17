@@ -359,7 +359,7 @@ See [CLI Reference](docs/reference/cli.md) for complete documentation.
 | [docs/reference/](docs/reference) | API and service reference |
 | [docs/how-to/](docs/how-to) | Task-oriented guides |
 | [docs/explanation/](docs/explanation) | Conceptual documentation |
-| [docs/GOTCHAS.md](docs/GOTCHAS.md) | Common pitfalls and solutions |
+| [docs/gotchas.md](docs/gotchas.md) | Common pitfalls and solutions |
 
 ---
 

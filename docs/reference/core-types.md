@@ -53,7 +53,7 @@ interface Task extends Element {
   ephemeral: boolean;          // If true, not synced to JSONL
 }
 
-type TaskStatus = 'open' | 'in_progress' | 'blocked' | 'deferred' | 'closed' | 'tombstone';
+type TaskStatus = 'open' | 'in_progress' | 'blocked' | 'deferred' | 'backlog' | 'review' | 'closed' | 'tombstone';
 const TaskTypeValue = { BUG: 'bug', FEATURE: 'feature', TASK: 'task', CHORE: 'chore' } as const;
 type TaskTypeValue = (typeof TaskTypeValue)[keyof typeof TaskTypeValue];
 type Priority = 1 | 2 | 3 | 4 | 5;
@@ -67,8 +67,12 @@ type Complexity = 1 | 2 | 3 | 4 | 5;
 - `isTask(element)` - Type guard
 
 **Status transitions:**
-- `open` → `in_progress`, `blocked`, `deferred`, `closed`
-- `blocked` can be set via direct transition or computed automatically from dependencies
+- `open` → `in_progress`, `blocked`, `deferred`, `backlog`, `closed`
+- `in_progress` → `open`, `blocked`, `deferred`, `review`, `closed`
+- `blocked` → `open`, `in_progress`, `deferred`, `closed` (can also be set via direct transition or computed automatically from dependencies)
+- `deferred` → `open`, `in_progress`, `backlog`
+- `backlog` → `open`, `deferred`, `closed`
+- `review` → `closed`, `in_progress` (merge completes or reopen for fixes)
 - `closed` → only `open` (cannot go to in_progress, blocked, or deferred)
 - `tombstone` is terminal
 
