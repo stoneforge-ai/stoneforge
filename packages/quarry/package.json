@@ -111,7 +111,7 @@
     "vitest": "^4.0.18"
   },
   "peerDependencies": {
-    "@stoneforge/smithy": "workspace:*"
+    "@stoneforge/smithy": "workspace:^"
   },
   "peerDependenciesMeta": {
     "@stoneforge/smithy": {
