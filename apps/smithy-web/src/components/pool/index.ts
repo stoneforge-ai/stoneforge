@@ -5,3 +5,5 @@
  */
 
 export { PoolCard } from './PoolCard';
+export { CreatePoolDialog } from './CreatePoolDialog';
+export type { CreatePoolDialogProps } from './CreatePoolDialog';
