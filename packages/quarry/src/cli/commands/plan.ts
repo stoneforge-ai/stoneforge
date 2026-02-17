@@ -11,12 +11,13 @@
  * - plan add-task: Add a task to a plan
  * - plan remove-task: Remove a task from a plan
  * - plan tasks: List tasks in a plan
+ * - plan auto-complete: Auto-complete active plans where all tasks are closed
  */
 
 import type { Command, GlobalOptions, CommandResult, CommandOption } from '../types.js';
 import { success, failure, ExitCode } from '../types.js';
 import { getFormatter, getOutputMode, getStatusIcon } from '../formatter.js';
-import { createPlan, PlanStatus, type CreatePlanInput, type Plan } from '@stoneforge/core';
+import { createPlan, PlanStatus, canAutoComplete, TaskStatus, type CreatePlanInput, type Plan } from '@stoneforge/core';
 import type { Task } from '@stoneforge/core';
 import type { Element, ElementId, EntityId } from '@stoneforge/core';
 import type { QuarryAPI, TaskFilter } from '../../api/types.js';
@@ -840,6 +841,150 @@ Examples:
 };
 
 // ============================================================================
+// Plan Auto-Complete Command
+// ============================================================================
+
+interface PlanAutoCompleteOptions {
+  dryRun?: boolean;
+}
+
+const planAutoCompleteOptions: CommandOption[] = [
+  {
+    name: 'dry-run',
+    description: 'Show what would be auto-completed without making changes',
+    hasValue: false,
+  },
+];
+
+async function planAutoCompleteHandler(
+  _args: string[],
+  options: GlobalOptions & PlanAutoCompleteOptions
+): Promise<CommandResult> {
+  const { api, error } = createAPI(options, true);
+  if (error) {
+    return failure(error, ExitCode.GENERAL_ERROR);
+  }
+
+  const isDryRun = !!(options as Record<string, unknown>)['dry-run'] || !!options.dryRun;
+
+  try {
+    const actor = resolveActor(options);
+
+    // 1. List all active plans
+    const allPlans = await api.list<Plan>({ type: 'plan' });
+    const activePlans = allPlans.filter((p) => p.status === PlanStatus.ACTIVE);
+
+    if (activePlans.length === 0) {
+      return success(
+        { checked: 0, autoCompleted: [], skipped: [], dryRun: isDryRun },
+        'No active plans found. Nothing to do.'
+      );
+    }
+
+    // 2. Check each active plan for auto-completion eligibility
+    const autoCompleted: Array<{ id: string; title: string }> = [];
+    const skipped: Array<{ id: string; title: string; reason: string }> = [];
+
+    for (const plan of activePlans) {
+      try {
+        // Get tasks and build status counts
+        const tasks = await api.getTasksInPlan(plan.id, { includeDeleted: false });
+
+        const statusCounts: Record<string, number> = {
+          [TaskStatus.OPEN]: 0,
+          [TaskStatus.IN_PROGRESS]: 0,
+          [TaskStatus.BLOCKED]: 0,
+          [TaskStatus.CLOSED]: 0,
+          [TaskStatus.DEFERRED]: 0,
+          [TaskStatus.TOMBSTONE]: 0,
+        };
+
+        for (const task of tasks) {
+          if (task.status in statusCounts) {
+            statusCounts[task.status]++;
+          }
+        }
+
+        // 3. Check if plan can be auto-completed
+        if (canAutoComplete(statusCounts as Record<TaskStatus, number>)) {
+          if (!isDryRun) {
+            const now = new Date().toISOString();
+            await api.update<Plan>(
+              plan.id,
+              { status: PlanStatus.COMPLETED, completedAt: now },
+              { actor }
+            );
+          }
+          autoCompleted.push({ id: plan.id, title: plan.title });
+        } else {
+          const nonClosed = tasks.filter((t) => t.status !== TaskStatus.CLOSED);
+          const reason =
+            tasks.length === 0
+              ? 'no tasks'
+              : `${nonClosed.length} non-closed task(s)`;
+          skipped.push({ id: plan.id, title: plan.title, reason });
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        skipped.push({ id: plan.id, title: plan.title, reason: `error: ${message}` });
+      }
+    }
+
+    // 4. Build summary output
+    const mode = getOutputMode(options);
+
+    if (mode === 'json') {
+      return success({ checked: activePlans.length, autoCompleted, skipped, dryRun: isDryRun });
+    }
+
+    const prefix = isDryRun ? '[DRY RUN] ' : '';
+    let output = `${prefix}Plan auto-complete sweep\n`;
+    output += `${'─'.repeat(40)}\n`;
+    output += `Checked:        ${activePlans.length} active plan(s)\n`;
+    output += `Auto-completed: ${autoCompleted.length}\n`;
+
+    if (autoCompleted.length > 0) {
+      output += `\n${isDryRun ? 'Would auto-complete' : 'Auto-completed'}:\n`;
+      for (const plan of autoCompleted) {
+        output += `  ✓ ${plan.id}  ${plan.title}\n`;
+      }
+    }
+
+    if (autoCompleted.length === 0) {
+      output += `\nNo plans eligible for auto-completion.`;
+    }
+
+    return success(
+      { checked: activePlans.length, autoCompleted, skipped, dryRun: isDryRun },
+      output
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return failure(`Failed to run auto-complete sweep: ${message}`, ExitCode.GENERAL_ERROR);
+  }
+}
+
+const planAutoCompleteCommand: Command = {
+  name: 'auto-complete',
+  description: 'Auto-complete active plans where all tasks are closed',
+  usage: 'sf plan auto-complete [options]',
+  help: `Scan all active plans and transition those with all tasks closed to completed status.
+
+This command is idempotent and safe to run at any time. It serves as both a
+backfill tool for stuck plans and an ongoing maintenance command.
+
+Options:
+      --dry-run    Show what would be auto-completed without making changes
+
+Examples:
+  sf plan auto-complete
+  sf plan auto-complete --dry-run
+  sf plan auto-complete --json`,
+  options: planAutoCompleteOptions,
+  handler: planAutoCompleteHandler as Command['handler'],
+};
+
+// ============================================================================
 // Plan Root Command
 // ============================================================================
 
@@ -850,22 +995,24 @@ export const planCommand: Command = {
   help: `Manage plans - collections of related tasks.
 
 Subcommands:
-  create       Create a new plan
-  list         List plans
-  show         Show plan details with progress
-  activate     Activate a draft plan
-  complete     Complete an active plan
-  cancel       Cancel a plan
-  add-task     Add a task to a plan
-  remove-task  Remove a task from a plan
-  tasks        List tasks in a plan
+  create        Create a new plan
+  list          List plans
+  show          Show plan details with progress
+  activate      Activate a draft plan
+  complete      Complete an active plan
+  cancel        Cancel a plan
+  add-task      Add a task to a plan
+  remove-task   Remove a task from a plan
+  tasks         List tasks in a plan
+  auto-complete Sweep active plans and auto-complete eligible ones
 
 Examples:
   sf plan create --title "Q1 Roadmap"
   sf plan list --status active
   sf plan show el-abc123 --tasks
   sf plan activate el-abc123
-  sf plan add-task el-plan123 el-task456`,
+  sf plan add-task el-plan123 el-task456
+  sf plan auto-complete --dry-run`,
   subcommands: {
     create: planCreateCommand,
     list: planListCommand,
@@ -876,12 +1023,14 @@ Examples:
     'add-task': planAddTaskCommand,
     'remove-task': planRemoveTaskCommand,
     tasks: planTasksCommand,
+    'auto-complete': planAutoCompleteCommand,
     // Aliases (hidden from --help via dedup in getCommandHelp)
     new: planCreateCommand,
     add: planCreateCommand,
     ls: planListCommand,
     get: planShowCommand,
     view: planShowCommand,
+    sweep: planAutoCompleteCommand,
   },
   handler: async (args, options): Promise<CommandResult> => {
     // Default to list if no subcommand

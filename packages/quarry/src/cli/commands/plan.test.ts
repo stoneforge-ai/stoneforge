@@ -11,6 +11,7 @@
  * - plan add-task: Add a task to a plan
  * - plan remove-task: Remove a task from a plan
  * - plan tasks: List tasks in a plan
+ * - plan auto-complete: Auto-complete stale plans
  */
 
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
@@ -1102,5 +1103,223 @@ describe('plan status transition validation scenarios', () => {
     const cancelResult = await cancelSubCmd.handler([planId], createTestOptions());
     expect(cancelResult.exitCode).toBe(ExitCode.SUCCESS);
     expect(cancelResult.message).toContain('already cancelled');
+  });
+});
+
+// ============================================================================
+// Plan Auto-Complete Command Tests
+// ============================================================================
+
+describe('plan auto-complete command', () => {
+  const autoCompleteSubCmd = planCommand.subcommands!['auto-complete'];
+  const addTaskSubCmd = planCommand.subcommands!['add-task'];
+  const showSubCmd = planCommand.subcommands!['show'];
+
+  test('auto-completes active plan where all tasks are closed', async () => {
+    const { createQuarryAPI } = await import('../../api/quarry-api.js');
+    const { createStorage, initializeSchema } = await import('@stoneforge/storage');
+    const { TaskStatus } = await import('@stoneforge/core');
+    const backend = createStorage({ path: DB_PATH, create: true });
+    initializeSchema(backend);
+    const api = createQuarryAPI(backend);
+
+    // Create active plan with tasks
+    const planId = await createTestPlan('Auto-Complete Plan', { status: 'active' });
+    const task1Id = await createTestTask('Task 1');
+    const task2Id = await createTestTask('Task 2');
+
+    await addTaskSubCmd.handler([planId, task1Id], createTestOptions());
+    await addTaskSubCmd.handler([planId, task2Id], createTestOptions());
+
+    // Close all tasks
+    await api.update(task1Id as unknown as ElementId, { status: TaskStatus.CLOSED });
+    await api.update(task2Id as unknown as ElementId, { status: TaskStatus.CLOSED });
+
+    backend.close();
+
+    // Run auto-complete
+    const result = await autoCompleteSubCmd.handler([], createTestOptions());
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    const data = result.data as { checked: number; autoCompleted: Array<{ id: string }> };
+    expect(data.autoCompleted.length).toBe(1);
+    expect(data.autoCompleted[0].id).toBe(planId);
+
+    // Verify plan is now completed
+    const showResult = await showSubCmd.handler([planId], createTestOptions({ json: true }));
+    const plan = (showResult.data as { plan: Plan }).plan;
+    expect(plan.status).toBe(PlanStatus.COMPLETED);
+    expect(plan.completedAt).toBeDefined();
+  });
+
+  test('does not auto-complete plan with non-closed tasks', async () => {
+    const { createQuarryAPI } = await import('../../api/quarry-api.js');
+    const { createStorage, initializeSchema } = await import('@stoneforge/storage');
+    const { TaskStatus } = await import('@stoneforge/core');
+    const backend = createStorage({ path: DB_PATH, create: true });
+    initializeSchema(backend);
+    const api = createQuarryAPI(backend);
+
+    // Create active plan with mixed-status tasks
+    const planId = await createTestPlan('Mixed Plan', { status: 'active' });
+    const task1Id = await createTestTask('Closed Task');
+    const task2Id = await createTestTask('Open Task');
+
+    await addTaskSubCmd.handler([planId, task1Id], createTestOptions());
+    await addTaskSubCmd.handler([planId, task2Id], createTestOptions());
+
+    // Close only one task
+    await api.update(task1Id as unknown as ElementId, { status: TaskStatus.CLOSED });
+
+    backend.close();
+
+    // Run auto-complete
+    const result = await autoCompleteSubCmd.handler([], createTestOptions());
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    const data = result.data as { checked: number; autoCompleted: Array<{ id: string }> };
+    expect(data.autoCompleted.length).toBe(0);
+
+    // Verify plan is still active
+    const showResult = await showSubCmd.handler([planId], createTestOptions({ json: true }));
+    const plan = (showResult.data as { plan: Plan }).plan;
+    expect(plan.status).toBe(PlanStatus.ACTIVE);
+  });
+
+  test('returns clean message when no active plans exist', async () => {
+    // Create a draft plan (not active) so DB exists
+    await createTestPlan('Draft Plan');
+
+    const result = await autoCompleteSubCmd.handler([], createTestOptions());
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    expect(result.message).toContain('No active plans');
+  });
+
+  test('is idempotent - running again after completion does nothing', async () => {
+    const { createQuarryAPI } = await import('../../api/quarry-api.js');
+    const { createStorage, initializeSchema } = await import('@stoneforge/storage');
+    const { TaskStatus } = await import('@stoneforge/core');
+    const backend = createStorage({ path: DB_PATH, create: true });
+    initializeSchema(backend);
+    const api = createQuarryAPI(backend);
+
+    // Create active plan with closed tasks
+    const planId = await createTestPlan('Idempotent Plan', { status: 'active' });
+    const taskId = await createTestTask('Done Task');
+    await addTaskSubCmd.handler([planId, taskId], createTestOptions());
+    await api.update(taskId as unknown as ElementId, { status: TaskStatus.CLOSED });
+
+    backend.close();
+
+    // First run - should auto-complete
+    const result1 = await autoCompleteSubCmd.handler([], createTestOptions());
+    expect(result1.exitCode).toBe(ExitCode.SUCCESS);
+    const data1 = result1.data as { autoCompleted: Array<{ id: string }> };
+    expect(data1.autoCompleted.length).toBe(1);
+
+    // Second run - nothing to do
+    const result2 = await autoCompleteSubCmd.handler([], createTestOptions());
+    expect(result2.exitCode).toBe(ExitCode.SUCCESS);
+    const data2 = result2.data as { checked: number; autoCompleted: Array<{ id: string }> };
+    expect(data2.checked).toBe(0);
+    expect(data2.autoCompleted.length).toBe(0);
+  });
+
+  test('dry-run shows eligible plans without completing them', async () => {
+    const { createQuarryAPI } = await import('../../api/quarry-api.js');
+    const { createStorage, initializeSchema } = await import('@stoneforge/storage');
+    const { TaskStatus } = await import('@stoneforge/core');
+    const backend = createStorage({ path: DB_PATH, create: true });
+    initializeSchema(backend);
+    const api = createQuarryAPI(backend);
+
+    // Create active plan with closed tasks
+    const planId = await createTestPlan('Dry Run Plan', { status: 'active' });
+    const taskId = await createTestTask('Done Task');
+    await addTaskSubCmd.handler([planId, taskId], createTestOptions());
+    await api.update(taskId as unknown as ElementId, { status: TaskStatus.CLOSED });
+
+    backend.close();
+
+    // Run with dry-run
+    const result = await autoCompleteSubCmd.handler([], createTestOptions({ 'dry-run': true }));
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    const data = result.data as { autoCompleted: Array<{ id: string }>; dryRun: boolean };
+    expect(data.dryRun).toBe(true);
+    expect(data.autoCompleted.length).toBe(1);
+
+    // Verify plan is still active (not completed)
+    const showResult = await showSubCmd.handler([planId], createTestOptions({ json: true }));
+    const plan = (showResult.data as { plan: Plan }).plan;
+    expect(plan.status).toBe(PlanStatus.ACTIVE);
+  });
+
+  test('auto-completes multiple eligible plans', async () => {
+    const { createQuarryAPI } = await import('../../api/quarry-api.js');
+    const { createStorage, initializeSchema } = await import('@stoneforge/storage');
+    const { TaskStatus } = await import('@stoneforge/core');
+    const backend = createStorage({ path: DB_PATH, create: true });
+    initializeSchema(backend);
+    const api = createQuarryAPI(backend);
+
+    // Create multiple active plans with closed tasks
+    const plan1Id = await createTestPlan('Plan A', { status: 'active' });
+    const plan2Id = await createTestPlan('Plan B', { status: 'active' });
+    const plan3Id = await createTestPlan('Plan C (not ready)', { status: 'active' });
+
+    const task1Id = await createTestTask('Task A');
+    const task2Id = await createTestTask('Task B');
+    const task3Id = await createTestTask('Task C');
+
+    await addTaskSubCmd.handler([plan1Id, task1Id], createTestOptions());
+    await addTaskSubCmd.handler([plan2Id, task2Id], createTestOptions());
+    await addTaskSubCmd.handler([plan3Id, task3Id], createTestOptions());
+
+    // Close tasks for plan 1 and 2 only
+    await api.update(task1Id as unknown as ElementId, { status: TaskStatus.CLOSED });
+    await api.update(task2Id as unknown as ElementId, { status: TaskStatus.CLOSED });
+
+    backend.close();
+
+    // Run auto-complete
+    const result = await autoCompleteSubCmd.handler([], createTestOptions());
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    const data = result.data as { checked: number; autoCompleted: Array<{ id: string }>; skipped: Array<{ id: string }> };
+    expect(data.checked).toBe(3);
+    expect(data.autoCompleted.length).toBe(2);
+    expect(data.skipped.length).toBe(1);
+  });
+
+  test('sweep alias also works', () => {
+    const sweepSubCmd = planCommand.subcommands!['sweep'];
+    expect(sweepSubCmd).toBeDefined();
+    expect(sweepSubCmd.name).toBe('auto-complete');
+  });
+
+  test('returns JSON in JSON mode', async () => {
+    // Create a draft plan so the database exists
+    await createTestPlan('Draft Plan');
+
+    const result = await autoCompleteSubCmd.handler([], createTestOptions({ json: true }));
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    const data = result.data as { checked: number; autoCompleted: unknown[]; plans: unknown[] };
+    expect(data.checked).toBe(0);
+    expect(data.autoCompleted).toBeDefined();
+  });
+
+  test('does not auto-complete plan with no tasks', async () => {
+    // Create active plan with no tasks
+    await createTestPlan('Empty Plan', { status: 'active' });
+
+    // Run auto-complete
+    const result = await autoCompleteSubCmd.handler([], createTestOptions());
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    const data = result.data as { autoCompleted: Array<{ id: string }> };
+    expect(data.autoCompleted.length).toBe(0);
   });
 });
