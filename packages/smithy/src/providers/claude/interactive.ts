@@ -8,6 +8,9 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { chmodSync, existsSync, readdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { createRequire } from 'node:module';
 import * as pty from 'node-pty';
 import type { IPty } from 'node-pty';
 import type {
@@ -26,6 +29,32 @@ import type {
  */
 function shellQuote(s: string): string {
   return "'" + s.replace(/'/g, "'\\''") + "'";
+}
+
+/**
+ * Ensures node-pty's spawn-helper binary has execute permissions.
+ * Package managers (especially bun) can strip the execute bit from native
+ * binaries, and bun doesn't run postinstall scripts by default.
+ * Only runs once per process.
+ */
+let spawnHelperFixed = false;
+function ensureSpawnHelperPermissions(): void {
+  if (spawnHelperFixed || process.platform === 'win32') return;
+  spawnHelperFixed = true;
+  try {
+    const require = createRequire(import.meta.url);
+    const nodePtyDir = dirname(require.resolve('node-pty/package.json'));
+    const prebuildsDir = join(nodePtyDir, 'prebuilds');
+    if (!existsSync(prebuildsDir)) return;
+    for (const entry of readdirSync(prebuildsDir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const helper = join(prebuildsDir, entry.name, 'spawn-helper');
+      if (existsSync(helper)) chmodSync(helper, 0o755);
+    }
+  } catch {
+    // Best-effort — if we can't fix permissions, pty.spawn() will throw
+    // a clear error anyway.
+  }
 }
 
 // ============================================================================
@@ -121,6 +150,8 @@ export class ClaudeInteractiveProvider implements InteractiveProvider {
       : options.initialPrompt
         ? ['-l', '-c', claudeCommand + ' "$1"', '_', options.initialPrompt]
         : ['-l', '-c', claudeCommand];
+
+    ensureSpawnHelperPermissions();
 
     const ptyProcess = pty.spawn(shell, shellArgs, {
       name: 'xterm-256color',
