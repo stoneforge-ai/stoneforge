@@ -1843,13 +1843,13 @@ export class DispatchDaemonImpl implements DispatchDaemon {
    *
    * @param task - The task being reviewed
    * @param stewardId - The steward's entity ID
-   * @param stewardFocus - The steward's focus area (merge or docs)
+   * @param stewardFocus - The steward's focus area (merge, docs, or custom)
    * @param syncResult - Optional result from pre-spawn branch sync
    */
   private async buildStewardPrompt(
     task: Task,
     stewardId: EntityId,
-    stewardFocus: 'merge' | 'docs' = 'merge',
+    stewardFocus: 'merge' | 'docs' | 'custom' = 'merge',
     syncResult?: SyncResult
   ): Promise<string> {
     const parts: string[] = [];
@@ -2036,7 +2036,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
     }
 
     // Build the steward prompt with full context including sync result
-    const initialPrompt = await this.buildStewardPrompt(task, stewardId, stewardFocus as 'merge' | 'docs', syncResult);
+    const initialPrompt = await this.buildStewardPrompt(task, stewardId, stewardFocus as 'merge' | 'docs' | 'custom', syncResult);
 
     const workingDirectory = worktreePath;
 

@@ -67,12 +67,13 @@ describe('WorkerMode', () => {
 
 describe('StewardFocus', () => {
   test('StewardFocusValues contains all valid focus areas', () => {
-    expect(StewardFocusValues).toEqual(['merge', 'docs']);
+    expect(StewardFocusValues).toEqual(['merge', 'docs', 'custom']);
   });
 
   test('isStewardFocus returns true for valid focus areas', () => {
     expect(isStewardFocus('merge')).toBe(true);
     expect(isStewardFocus('docs')).toBe(true);
+    expect(isStewardFocus('custom')).toBe(true);
   });
 
   test('isStewardFocus returns false for invalid focus areas', () => {

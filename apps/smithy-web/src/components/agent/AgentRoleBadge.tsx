@@ -58,6 +58,10 @@ const stewardFocusConfig: Record<StewardFocus, { label: string; icon: React.Comp
     label: 'Docs',
     icon: Bot,
   },
+  custom: {
+    label: 'Custom',
+    icon: Bot,
+  },
 };
 
 export function AgentRoleBadge({ role, workerMode, stewardFocus, size = 'md' }: AgentRoleBadgeProps) {

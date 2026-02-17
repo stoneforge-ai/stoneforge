@@ -259,7 +259,7 @@ export function isValidPoolAgentTypeConfig(value: unknown): value is PoolAgentTy
   }
 
   if (config.stewardFocus !== undefined) {
-    const validFocuses = ['merge', 'docs'];
+    const validFocuses = ['merge', 'docs', 'custom'];
     if (!validFocuses.includes(config.stewardFocus as string)) {
       return false;
     }

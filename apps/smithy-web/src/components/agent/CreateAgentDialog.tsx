@@ -4,7 +4,7 @@
  * Provides forms for creating:
  * - Director (strategic agent)
  * - Worker (ephemeral or persistent)
- * - Steward (merge, docs)
+ * - Steward (merge, docs, custom)
  *
  * TB-O22: Steward Configuration UI
  */
@@ -73,6 +73,10 @@ const stewardFocusOptions: Record<StewardFocus, { label: string; description: st
   docs: {
     label: 'Documentation Steward',
     description: 'Reviews, updates, and maintains workspace documents.',
+  },
+  custom: {
+    label: 'Custom Steward',
+    description: 'User-defined steward with a custom playbook executed when triggers fire.',
   },
 };
 
@@ -146,6 +150,8 @@ interface FormState {
   // Steward fields
   stewardFocus: StewardFocus;
   triggers: StewardTrigger[];
+  // Custom steward playbook
+  playbook: string;
   // Tags
   tags: string;
   // Provider
@@ -160,6 +166,7 @@ const defaultState: FormState = {
   workerMode: 'ephemeral',
   stewardFocus: 'merge',
   triggers: [],
+  playbook: '',
   tags: '',
   provider: 'claude',
   model: '',
@@ -269,6 +276,11 @@ export function CreateAgentDialog({
       return;
     }
 
+    if (form.role === 'steward' && form.stewardFocus === 'custom' && !form.playbook.trim()) {
+      setError('Playbook is required for custom stewards');
+      return;
+    }
+
     // Build input
     const input: CreateAgentInput = {
       name: form.name.trim(),
@@ -285,6 +297,9 @@ export function CreateAgentDialog({
       input.stewardFocus = form.stewardFocus;
       if (form.triggers.length > 0) {
         input.triggers = form.triggers;
+      }
+      if (form.stewardFocus === 'custom' && form.playbook.trim()) {
+        input.playbook = form.playbook.trim();
       }
     }
 
@@ -540,6 +555,36 @@ export function CreateAgentDialog({
               </div>
             )}
 
+            {/* Custom Steward: Playbook */}
+            {form.role === 'steward' && form.stewardFocus === 'custom' && (
+              <div className="space-y-2">
+                <label htmlFor="steward-playbook" className="text-sm font-medium text-[var(--color-text)]">
+                  Playbook
+                </label>
+                <textarea
+                  id="steward-playbook"
+                  value={form.playbook}
+                  onChange={e => setForm(prev => ({ ...prev, playbook: e.target.value }))}
+                  placeholder="Describe what this steward should do when triggered. Supports markdown.&#10;&#10;Example:&#10;1. Check for stale branches older than 7 days&#10;2. Post a reminder message to the branch owner&#10;3. Archive branches with no activity for 30 days"
+                  rows={6}
+                  className="
+                    w-full px-3 py-2
+                    text-sm font-mono
+                    bg-[var(--color-surface)]
+                    border border-[var(--color-border)]
+                    rounded-lg
+                    placeholder:text-[var(--color-text-tertiary)]
+                    focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30
+                    resize-y
+                  "
+                  data-testid="steward-playbook"
+                />
+                <p className="text-xs text-[var(--color-text-tertiary)]">
+                  The playbook defines the steward&apos;s behavior when its triggers fire. Use markdown to describe the workflow steps.
+                </p>
+              </div>
+            )}
+
             {/* Steward-specific: Triggers */}
             {form.role === 'steward' && (
               <div className="space-y-2">
@@ -780,7 +825,7 @@ export function CreateAgentDialog({
               </button>
               <button
                 type="submit"
-                disabled={createAgent.isPending || !form.name.trim()}
+                disabled={createAgent.isPending || !form.name.trim() || (form.role === 'steward' && form.stewardFocus === 'custom' && !form.playbook.trim())}
                 className="
                   flex items-center gap-2
                   px-4 py-2

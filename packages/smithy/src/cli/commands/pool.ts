@@ -95,7 +95,7 @@ function parseAgentTypeConfig(configStr: string): PoolAgentTypeConfig | null {
         priority = parseInt(parts[1], 10);
       }
     } else if (role === 'steward') {
-      if (['merge', 'docs'].includes(parts[1])) {
+      if (['merge', 'docs', 'custom'].includes(parts[1])) {
         stewardFocus = parts[1] as StewardFocus;
       } else if (!isNaN(parseInt(parts[1], 10))) {
         priority = parseInt(parts[1], 10);

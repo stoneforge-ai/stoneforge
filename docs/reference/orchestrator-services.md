@@ -816,7 +816,7 @@ interface AgentPoolConfig {
 interface PoolAgentTypeConfig {
   role: 'worker' | 'steward';        // Agent role (not director)
   workerMode?: 'ephemeral' | 'persistent';  // For workers
-  stewardFocus?: 'merge' | 'docs';  // For stewards
+  stewardFocus?: 'merge' | 'docs' | 'custom';  // For stewards
   priority?: number;                 // Spawn priority (higher = higher priority)
   maxSlots?: number;                 // Max slots for this type within the pool
 }

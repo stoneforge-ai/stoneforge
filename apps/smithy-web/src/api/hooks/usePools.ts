@@ -17,7 +17,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 export interface PoolAgentTypeConfig {
   role: 'worker' | 'steward';
   workerMode?: 'ephemeral' | 'persistent';
-  stewardFocus?: 'merge' | 'docs';
+  stewardFocus?: 'merge' | 'docs' | 'custom';
   priority?: number;
   maxSlots?: number;
 }

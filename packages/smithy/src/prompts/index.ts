@@ -345,6 +345,11 @@ export function hasBuiltInPrompt(
       return false;
     }
     if (stewardFocus) {
+      // Custom stewards use the base prompt + user-provided playbook,
+      // so they have a built-in prompt as long as the base exists.
+      if (stewardFocus === 'custom') {
+        return true;
+      }
       const focusKey = `steward-${stewardFocus}` as keyof typeof PROMPT_FILES;
       const focusPath = getBuiltInPromptPath(PROMPT_FILES[focusKey]);
       return existsSync(focusPath);

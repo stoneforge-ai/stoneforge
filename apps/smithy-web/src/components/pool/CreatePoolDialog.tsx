@@ -36,7 +36,7 @@ export interface CreatePoolDialogProps {
 interface AgentTypeFormState {
   role: 'worker' | 'steward';
   workerMode: 'ephemeral' | 'persistent' | '';
-  stewardFocus: 'merge' | 'docs' | '';
+  stewardFocus: 'merge' | 'docs' | 'custom' | '';
   priority: string;
   maxSlots: string;
 }
@@ -192,7 +192,7 @@ export function CreatePoolDialog({ isOpen, onClose, onSuccess }: CreatePoolDialo
       return {
         role: at.role,
         ...(at.role === 'worker' && at.workerMode ? { workerMode: at.workerMode as 'ephemeral' | 'persistent' } : {}),
-        ...(at.role === 'steward' && at.stewardFocus ? { stewardFocus: at.stewardFocus as 'merge' | 'docs' } : {}),
+        ...(at.role === 'steward' && at.stewardFocus ? { stewardFocus: at.stewardFocus as 'merge' | 'docs' | 'custom' } : {}),
         ...(at.priority.trim() ? { priority: parseInt(at.priority, 10) } : {}),
         ...(at.maxSlots.trim() ? { maxSlots: parseInt(at.maxSlots, 10) } : {}),
       };

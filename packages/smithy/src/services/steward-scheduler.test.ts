@@ -37,7 +37,7 @@ import {
 function createMockAgentEntity(
   id: string,
   name: string,
-  focus: 'merge' | 'docs',
+  focus: 'merge' | 'docs' | 'custom',
   triggers: StewardTrigger[] = []
 ): AgentEntity {
   const metadata: StewardMetadata = {

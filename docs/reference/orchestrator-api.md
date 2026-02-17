@@ -48,12 +48,23 @@ const worker = await api.registerWorker({
 ```typescript
 const steward = await api.registerSteward({
   name: 'MergeSteward',
-  stewardFocus: 'merge',  // 'merge' | 'docs'
+  stewardFocus: 'merge',  // 'merge' | 'docs' | 'custom'
   triggers: [
     { type: 'event', event: 'task_completed' },
   ],
   createdBy: directorEntityId,
   maxConcurrentTasks: 1,  // Optional, default: 1
+});
+
+// Custom steward with playbook
+const customSteward = await api.registerSteward({
+  name: 'CleanupSteward',
+  stewardFocus: 'custom',
+  playbook: '## Stale Branch Cleanup\n\n1. List branches older than 14 days\n2. Archive those with no open tasks',
+  triggers: [
+    { type: 'cron', schedule: '0 2 * * *' },
+  ],
+  createdBy: directorEntityId,
 });
 ```
 
@@ -178,7 +189,7 @@ type AgentRole = 'director' | 'worker' | 'steward';
 interface AgentMetadata {
   role: AgentRole;
   workerMode?: 'ephemeral' | 'persistent';
-  stewardFocus?: 'merge' | 'docs';
+  stewardFocus?: 'merge' | 'docs' | 'custom';
   maxConcurrentTasks?: number;  // Default: 1
   sessionState?: SessionState;
   currentSessionId?: string;

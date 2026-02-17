@@ -1314,6 +1314,63 @@ export function createStewardExecutor(deps: StewardExecutorDeps): StewardExecuto
           };
         }
       }
+      case 'custom': {
+        try {
+          const stewardId = steward.id as unknown as EntityId;
+          const activeSession = deps.sessionManager.getActiveSession(stewardId);
+          if (activeSession) {
+            return {
+              success: true,
+              output: `Steward '${steward.name}' already has active session ${activeSession.id}, skipping`,
+              durationMs: Date.now() - startTime,
+              itemsProcessed: 0,
+            };
+          }
+
+          // Build prompt from steward base + custom playbook
+          const playbook = metadata?.playbook;
+          if (!playbook) {
+            return {
+              success: false,
+              error: 'Custom steward has no playbook configured',
+              output: `Custom steward '${steward.name}' has no playbook configured`,
+              durationMs: Date.now() - startTime,
+              itemsProcessed: 0,
+            };
+          }
+
+          // Load the steward base prompt for shared context
+          const roleResult = loadRolePrompt('steward', undefined, {
+            projectRoot: deps.projectRoot,
+          });
+          const basePrompt = roleResult?.prompt ?? '';
+
+          // Combine base steward prompt with the custom playbook
+          const initialPrompt = basePrompt
+            ? `${basePrompt}\n\n---\n\n## Custom Steward Playbook\n\n${playbook}`
+            : `## Custom Steward Playbook\n\n${playbook}`;
+
+          const { session } = await deps.sessionManager.startSession(stewardId, {
+            workingDirectory: deps.projectRoot,
+            initialPrompt,
+            interactive: false,
+          });
+          return {
+            success: true,
+            output: `Spawned custom steward session ${session.id}`,
+            durationMs: Date.now() - startTime,
+            itemsProcessed: 1,
+          };
+        } catch (error) {
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : String(error),
+            output: `Custom steward '${steward.name}' failed: ${error instanceof Error ? error.message : String(error)}`,
+            durationMs: Date.now() - startTime,
+            itemsProcessed: 0,
+          };
+        }
+      }
       default:
         return {
           success: false,

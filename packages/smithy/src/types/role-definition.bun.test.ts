@@ -152,7 +152,7 @@ describe('StewardRoleDefinition', () => {
   });
 
   test('isStewardRoleDefinition returns true with stewardFocus', () => {
-    const focuses = ['merge', 'docs'] as const;
+    const focuses = ['merge', 'docs', 'custom'] as const;
     for (const focus of focuses) {
       const definition: StewardRoleDefinition = {
         ...createValidBaseDefinition(),

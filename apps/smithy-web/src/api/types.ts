@@ -18,7 +18,7 @@ export type ElementId = string;
 
 export type AgentRole = 'director' | 'steward' | 'worker';
 export type WorkerMode = 'ephemeral' | 'persistent';
-export type StewardFocus = 'merge' | 'docs';
+export type StewardFocus = 'merge' | 'docs' | 'custom';
 /** Agent metadata session status (simpler set) */
 export type AgentSessionStatus = 'idle' | 'running' | 'suspended' | 'terminated';
 /** Full session status including transitional states */
@@ -63,6 +63,8 @@ export interface StewardMetadata extends BaseAgentMetadata {
   agentRole: 'steward';
   stewardFocus: StewardFocus;
   triggers?: StewardTrigger[];
+  /** Custom playbook content for 'custom' stewards */
+  playbook?: string;
   lastExecutedAt?: Timestamp;
   nextScheduledAt?: Timestamp;
 }
@@ -189,6 +191,8 @@ export interface CreateAgentInput {
   // Steward-specific
   stewardFocus?: StewardFocus;
   triggers?: StewardTrigger[];
+  /** Custom playbook content for 'custom' stewards */
+  playbook?: string;
   // Provider
   provider?: string;
   // Model override (if not set, uses provider default)

@@ -71,13 +71,14 @@ export function isWorkerMode(value: unknown): value is WorkerMode {
  *
  * - `merge`: Handles merging completed branches, running tests, cleanup
  * - `docs`: Scans and fixes documentation issues, auto-merges fixes
+ * - `custom`: User-defined steward with a custom playbook and trigger configuration
  */
-export type StewardFocus = 'merge' | 'docs';
+export type StewardFocus = 'merge' | 'docs' | 'custom';
 
 /**
  * All valid steward focus values
  */
-export const StewardFocusValues = ['merge', 'docs'] as const;
+export const StewardFocusValues = ['merge', 'docs', 'custom'] as const;
 
 /**
  * Type guard to check if a value is a valid StewardFocus
@@ -212,6 +213,12 @@ export interface StewardMetadata extends BaseAgentMetadata {
   readonly stewardFocus: StewardFocus;
   /** Triggers that activate this steward */
   readonly triggers?: StewardTrigger[];
+  /**
+   * Custom playbook content (markdown/plain text) for 'custom' stewards.
+   * Describes what the steward should do when triggered.
+   * Only used when stewardFocus is 'custom'.
+   */
+  readonly playbook?: string;
   /** Timestamp of last execution */
   readonly lastExecutedAt?: Timestamp;
   /** Timestamp of next scheduled execution (for cron triggers) */
@@ -302,6 +309,11 @@ export interface RegisterStewardInput {
   readonly stewardFocus: StewardFocus;
   /** Triggers that activate this steward */
   readonly triggers?: StewardTrigger[];
+  /**
+   * Custom playbook content (markdown/plain text) for 'custom' stewards.
+   * Describes what the steward should do when triggered.
+   */
+  readonly playbook?: string;
   /** Optional tags for the agent entity */
   readonly tags?: string[];
   /** Entity ID of the creator */
