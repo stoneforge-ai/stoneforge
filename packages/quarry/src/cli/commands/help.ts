@@ -2,6 +2,7 @@
  * help command - Display help information
  */
 
+import { createRequire } from 'node:module';
 import type { Command, CommandResult } from '../types.js';
 import { success } from '../types.js';
 import { getGlobalOptionsHelp } from '../parser.js';
@@ -11,7 +12,8 @@ import { getAllCommands } from '../runner.js';
 // Version Info
 // ============================================================================
 
-const VERSION = '0.1.0';
+const require = createRequire(import.meta.url);
+const { version: VERSION } = require('@stoneforge/quarry/package.json');
 
 // ============================================================================
 // Help Text

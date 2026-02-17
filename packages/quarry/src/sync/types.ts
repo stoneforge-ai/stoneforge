@@ -194,8 +194,8 @@ export interface ImportResult {
  * Import error record
  */
 export interface ImportError {
-  /** Line number in file (1-indexed) */
-  line: number;
+  /** Line number in file (1-indexed), omitted for non-line-specific errors */
+  line?: number;
   /** File type */
   file: 'elements' | 'dependencies';
   /** Error message */

@@ -351,11 +351,28 @@ export class SyncService {
         }
 
         // Process dependencies
+        // Build set of element IDs that exist in the database so we can
+        // skip dependencies with dangling references (e.g. JSONL files
+        // exported at different times, or elements deleted after export).
+        // blocked_id has a FK constraint — INSERT OR IGNORE does NOT
+        // suppress FK violations, so we must filter before inserting.
+        const existingIds = new Set(
+          this.backend.query<{ id: string }>('SELECT id FROM elements').map(r => r.id)
+        );
+
         const localDependencies = this.getAllDependencies();
         const mergeResult = mergeDependencies(localDependencies, parsedDependencies);
 
-        // Add new dependencies
+        // Add new dependencies (skip those with dangling references)
         for (const dep of mergeResult.added) {
+          if (!existingIds.has(dep.blockedId)) {
+            errors.push({
+              file: 'dependencies',
+              message: `Skipped dependency: blocked element ${dep.blockedId} does not exist`,
+            });
+            dependenciesSkipped++;
+            continue;
+          }
           this.insertDependency(tx, dep);
           dependenciesImported++;
         }

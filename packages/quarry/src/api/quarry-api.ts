@@ -4741,7 +4741,7 @@ export class QuarryAPIImpl implements QuarryAPI {
         remoteHash?: string;
       }>;
       errors: Array<{
-        line: number;
+        line?: number;
         file: string;
         message: string;
         content?: string;
@@ -4758,7 +4758,7 @@ export class QuarryAPIImpl implements QuarryAPI {
 
     // Convert errors to string format
     const errors = syncResult.errors.map((e) =>
-      `${e.file}:${e.line}: ${e.message}${e.content ? ` (${e.content.substring(0, 50)}...)` : ''}`
+      `${e.file}${e.line != null ? `:${e.line}` : ''}: ${e.message}${e.content ? ` (${e.content.substring(0, 50)}...)` : ''}`
     );
 
     return {

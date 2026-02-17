@@ -48,3 +48,4 @@ checkpoints/
 OPENCODE_CONFIG_CONTENT
 
 .npmrc
+/.stoneforge/.worktrees/
