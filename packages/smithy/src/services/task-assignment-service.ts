@@ -498,6 +498,7 @@ export class TaskAssignmentServiceImpl implements TaskAssignmentService {
     const metaUpdates: Record<string, unknown> = {
       completedAt: createTimestamp(),
       mergeStatus: 'pending' as MergeStatus,
+      resumeCount: 0, // Reset resume count on status change
     };
 
     // Add optional completion info
@@ -621,6 +622,8 @@ export class TaskAssignmentServiceImpl implements TaskAssignmentService {
       lastSessionId: sessionId,
       handoffAt: createTimestamp(),
       handoffHistory,
+      // Reset resume count on status change (handoff resets to OPEN)
+      resumeCount: 0,
     };
 
     // Apply metadata updates on top of the closed session history

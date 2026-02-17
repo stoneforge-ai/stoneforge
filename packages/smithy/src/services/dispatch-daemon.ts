@@ -167,6 +167,14 @@ export interface DispatchDaemonConfig {
   readonly stuckMergeRecoveryGracePeriodMs?: number;
 
   /**
+   * Maximum number of consecutive resume attempts for the same task
+   * before the daemon stops resuming the worker and spawns a recovery
+   * steward instead. Set to 0 to disable recovery steward spawning.
+   * Default: 3
+   */
+  readonly maxResumeAttemptsBeforeRecovery?: number;
+
+  /**
    * Maximum session duration in ms before the daemon terminates it.
    * Prevents stuck workers from blocking their slot indefinitely.
    * Default: 0 (disabled).
@@ -234,6 +242,7 @@ interface NormalizedConfig {
   closedUnmergedGracePeriodMs: number;
   stuckMergeRecoveryEnabled: boolean;
   stuckMergeRecoveryGracePeriodMs: number;
+  maxResumeAttemptsBeforeRecovery: number;
   maxSessionDurationMs: number;
   onSessionStarted?: OnSessionStartedCallback;
   projectRoot: string;
@@ -878,16 +887,44 @@ export class DispatchDaemonImpl implements DispatchDaemon {
         });
         if (workerTasks.length === 0) continue;
 
-        // 4. Recover the first orphaned task
+        // 4. Check if the task is stuck in a resume loop
         const taskAssignment = workerTasks[0];
-        try {
-          await this.recoverOrphanedTask(worker, taskAssignment.task, taskAssignment.orchestratorMeta);
-          processed++;
-        } catch (error) {
-          errors++;
-          const errorMessage = error instanceof Error ? error.message : String(error);
-          errorMessages.push(`Worker ${worker.name}: ${errorMessage}`);
-          logger.error(`Error recovering orphaned task for worker ${worker.name}:`, error);
+        const resumeCount = taskAssignment.orchestratorMeta?.resumeCount ?? 0;
+        const maxResumes = this.config.maxResumeAttemptsBeforeRecovery;
+
+        if (maxResumes > 0 && resumeCount >= maxResumes) {
+          // Task has been resumed too many times without status change —
+          // spawn a recovery steward instead of resuming the worker again
+          try {
+            await this.spawnRecoveryStewardForTask(worker, taskAssignment.task, taskAssignment.orchestratorMeta);
+            processed++;
+            logger.info(
+              `[dispatch-daemon] Spawning recovery steward for stuck task ${taskAssignment.task.id} after ${resumeCount} resume attempts`
+            );
+          } catch (error) {
+            errors++;
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            errorMessages.push(`Recovery steward for ${worker.name}: ${errorMessage}`);
+            logger.error(`Error spawning recovery steward for worker ${worker.name}:`, error);
+          }
+        } else {
+          // Normal recovery: increment resume count and re-spawn the worker
+          try {
+            // Increment resumeCount before recovering so the counter is persisted
+            await this.api.update<Task>(taskAssignment.task.id, {
+              metadata: updateOrchestratorTaskMeta(
+                taskAssignment.task.metadata as Record<string, unknown> | undefined,
+                { resumeCount: resumeCount + 1 }
+              ),
+            });
+            await this.recoverOrphanedTask(worker, taskAssignment.task, taskAssignment.orchestratorMeta);
+            processed++;
+          } catch (error) {
+            errors++;
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            errorMessages.push(`Worker ${worker.name}: ${errorMessage}`);
+            logger.error(`Error recovering orphaned task for worker ${worker.name}:`, error);
+          }
         }
       }
 
@@ -1311,6 +1348,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       closedUnmergedGracePeriodMs: config?.closedUnmergedGracePeriodMs ?? 120_000,
       stuckMergeRecoveryEnabled: config?.stuckMergeRecoveryEnabled ?? true,
       stuckMergeRecoveryGracePeriodMs: config?.stuckMergeRecoveryGracePeriodMs ?? 600_000,
+      maxResumeAttemptsBeforeRecovery: config?.maxResumeAttemptsBeforeRecovery ?? 3,
       maxSessionDurationMs: config?.maxSessionDurationMs ?? 0,
       onSessionStarted: config?.onSessionStarted,
       projectRoot: config?.projectRoot ?? process.cwd(),
@@ -2094,6 +2132,274 @@ export class DispatchDaemonImpl implements DispatchDaemon {
 
     this.emitter.emit('agent:spawned', stewardId, worktreePath);
     logger.info(`Spawned merge steward ${steward.name} for task ${task.id}`);
+  }
+
+  /**
+   * Spawns a recovery steward for a task stuck in a resume loop.
+   *
+   * When a worker session exits without calling `sf task complete` or
+   * `sf task handoff`, the orphan recovery loop resumes it. After
+   * maxResumeAttemptsBeforeRecovery consecutive resumes without a status
+   * change, this method is called instead to:
+   * 1. Unassign the worker from the task
+   * 2. Find an available recovery steward (or any available steward)
+   * 3. Spawn a recovery steward session with full task context
+   *
+   * @param worker - The worker that was assigned to the stuck task
+   * @param task - The stuck task
+   * @param taskMeta - The task's orchestrator metadata
+   */
+  private async spawnRecoveryStewardForTask(
+    worker: AgentEntity,
+    task: Task,
+    taskMeta: import('../types/task-meta.js').OrchestratorTaskMeta | undefined
+  ): Promise<void> {
+    const workerId = asEntityId(worker.id);
+
+    // 1. Find an available recovery steward
+    const stewards = await this.agentRegistry.listAgents({
+      role: 'steward',
+      stewardFocus: 'recovery',
+    });
+
+    // Find a steward without an active session
+    let recoverySteward: AgentEntity | undefined;
+    for (const steward of stewards) {
+      const session = this.sessionManager.getActiveSession(asEntityId(steward.id));
+      if (!session) {
+        recoverySteward = steward;
+        break;
+      }
+    }
+
+    if (!recoverySteward) {
+      // No recovery steward available — emit a notification and leave the task as-is
+      this.emitter.emit('daemon:notification', {
+        type: 'warning' as const,
+        title: 'Recovery steward unavailable',
+        message: `Task ${task.id} is stuck after ${taskMeta?.resumeCount ?? 0} resume attempts, but no recovery steward is available. The task will not be resumed again until a recovery steward is available.`,
+      });
+      logger.warn(
+        `No available recovery steward for stuck task ${task.id}. ` +
+        `Task has been resumed ${taskMeta?.resumeCount ?? 0} times without status change.`
+      );
+      return;
+    }
+
+    const stewardId = asEntityId(recoverySteward.id);
+
+    // 2. Check pool capacity before spawning
+    const stewardMeta = getAgentMetadata(recoverySteward) as StewardMetadata | undefined;
+    if (this.poolService && stewardMeta) {
+      const spawnRequest: PoolSpawnRequest = {
+        role: 'steward',
+        stewardFocus: stewardMeta.stewardFocus,
+        agentId: stewardId,
+      };
+
+      const poolCheck = await this.poolService.canSpawn(spawnRequest);
+      if (!poolCheck.canSpawn) {
+        logger.debug(
+          `Pool capacity reached for recovery steward ${recoverySteward.name}: ${poolCheck.reason}`
+        );
+        return;
+      }
+    }
+
+    // 3. Resolve worktree — reuse the worker's existing worktree
+    let worktreePath = taskMeta?.worktree ?? taskMeta?.handoffWorktree;
+    const branch = taskMeta?.branch ?? taskMeta?.handoffBranch;
+
+    if (worktreePath) {
+      const exists = await this.worktreeManager.worktreeExists(worktreePath);
+      if (!exists) {
+        logger.warn(`Worktree ${worktreePath} no longer exists for stuck task ${task.id}`);
+        // Try to create a read-only worktree for the steward
+        if (branch) {
+          try {
+            const result = await this.worktreeManager.createReadOnlyWorktree({
+              agentName: stewardId,
+              purpose: `recovery-${task.id}`,
+            });
+            worktreePath = result.path;
+          } catch (e) {
+            logger.error(`Failed to create recovery steward worktree: ${e}`);
+            worktreePath = undefined;
+          }
+        } else {
+          worktreePath = undefined;
+        }
+      }
+    }
+
+    // Guard: never spawn a steward without a worktree
+    if (!worktreePath) {
+      this.emitter.emit('daemon:notification', {
+        type: 'warning' as const,
+        title: 'Recovery steward skipped',
+        message: `Cannot spawn recovery steward for task ${task.id}: worktree missing and no branch info available to create a new one.`,
+      });
+      return;
+    }
+
+    // 4. Unassign the worker from the task
+    await this.api.update<Task>(task.id, {
+      assignee: undefined,
+      metadata: updateOrchestratorTaskMeta(
+        task.metadata as Record<string, unknown> | undefined,
+        {
+          assignedAgent: stewardId,
+        }
+      ),
+    });
+
+    // 5. Build the recovery steward prompt
+    const initialPrompt = await this.buildRecoveryStewardPrompt(task, stewardId, taskMeta);
+
+    // 6. Start the recovery steward session
+    const { session, events } = await this.sessionManager.startSession(stewardId, {
+      workingDirectory: worktreePath,
+      worktree: worktreePath,
+      initialPrompt,
+      interactive: false, // Stewards use headless mode
+    });
+
+    // 7. Record steward assignment and session history on the task
+    const taskAfterUpdate = await this.api.get<Task>(task.id);
+    const sessionHistoryEntry: TaskSessionHistoryEntry = {
+      sessionId: session.id,
+      providerSessionId: session.providerSessionId,
+      agentId: stewardId,
+      agentName: recoverySteward.name,
+      agentRole: 'steward',
+      startedAt: createTimestamp(),
+    };
+
+    const metadataWithHistory = appendTaskSessionHistory(
+      taskAfterUpdate?.metadata as Record<string, unknown> | undefined,
+      sessionHistoryEntry
+    );
+    const finalMetadata = updateOrchestratorTaskMeta(
+      metadataWithHistory,
+      {
+        assignedAgent: stewardId,
+        sessionId: session.providerSessionId ?? session.id,
+      }
+    );
+    await this.api.update<Task>(task.id, {
+      assignee: stewardId,
+      metadata: finalMetadata,
+    });
+
+    // 8. Callbacks and notifications
+    if (this.config.onSessionStarted) {
+      this.config.onSessionStarted(session, events, stewardId, initialPrompt);
+    }
+
+    if (this.poolService) {
+      await this.poolService.onAgentSpawned(stewardId);
+    }
+
+    this.emitter.emit('agent:spawned', stewardId, worktreePath);
+  }
+
+  /**
+   * Builds the initial prompt for a recovery steward session.
+   * Includes the steward-recovery role prompt followed by task context,
+   * session history, and resume count information.
+   *
+   * @param task - The stuck task
+   * @param stewardId - The recovery steward's entity ID
+   * @param taskMeta - The task's orchestrator metadata
+   */
+  private async buildRecoveryStewardPrompt(
+    task: Task,
+    stewardId: EntityId,
+    taskMeta: import('../types/task-meta.js').OrchestratorTaskMeta | undefined
+  ): Promise<string> {
+    const parts: string[] = [];
+
+    // Load the recovery steward role prompt
+    const roleResult = loadRolePrompt('steward', 'recovery' as StewardFocus, { projectRoot: this.config.projectRoot });
+    if (roleResult) {
+      parts.push(
+        'Please read and internalize the following operating instructions. These define your role and how you should behave:',
+        '',
+        roleResult.prompt,
+        '',
+        '---',
+        ''
+      );
+    }
+
+    // Get the director ID for context
+    const director = await this.agentRegistry.getDirector();
+    const directorId = director?.id ?? 'unknown';
+
+    const branch = taskMeta?.branch ?? taskMeta?.handoffBranch;
+    const worktree = taskMeta?.worktree ?? taskMeta?.handoffWorktree;
+    const resumeCount = taskMeta?.resumeCount ?? 0;
+
+    parts.push(
+      '## Recovery Assignment',
+      '',
+      `**Steward ID:** ${stewardId}`,
+      `**Director ID:** ${directorId}`,
+      `**Task ID:** ${task.id}`,
+      `**Title:** ${task.title}`,
+      `**Status:** ${task.status}`,
+    );
+
+    if (branch) {
+      parts.push(`**Branch:** ${branch}`);
+    }
+
+    if (worktree) {
+      parts.push(`**Worktree:** ${worktree}`);
+    }
+
+    if (task.priority !== undefined) {
+      parts.push(`**Priority:** ${task.priority}`);
+    }
+
+    parts.push(
+      '',
+      '## Recovery Context',
+      '',
+      `This task has been resumed **${resumeCount} times** without a status change.`,
+      'The previous worker session exited without calling `sf task complete` or `sf task handoff`.',
+      'This indicates the worker may have crashed, lost context, or encountered an unrecoverable error.',
+      '',
+    );
+
+    // Include session history if available
+    if (taskMeta?.sessionHistory && taskMeta.sessionHistory.length > 0) {
+      parts.push('### Session History', '');
+      for (const entry of taskMeta.sessionHistory) {
+        const ended = entry.endedAt ? ` → ${entry.endedAt}` : ' (may still be running)';
+        parts.push(`- **${entry.agentRole}** ${entry.agentName} (${entry.sessionId}): ${entry.startedAt}${ended}`);
+      }
+      parts.push('');
+    }
+
+    // Fetch and include the description content
+    if (task.descriptionRef) {
+      try {
+        const doc = await this.api.get<Document>(asElementId(task.descriptionRef));
+        if (doc?.content) {
+          parts.push('### Task Description', doc.content);
+        }
+      } catch {
+        parts.push(`**Description Document:** ${task.descriptionRef}`);
+      }
+    }
+
+    // Include acceptance criteria if any
+    if (task.acceptanceCriteria) {
+      parts.push('', '### Acceptance Criteria', task.acceptanceCriteria);
+    }
+
+    return parts.join('\n');
   }
 
   /**

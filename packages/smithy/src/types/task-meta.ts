@@ -69,6 +69,13 @@ export interface OrchestratorTaskMeta {
   readonly stuckMergeRecoveryCount?: number;
 
   /**
+   * Number of consecutive times the orphan recovery loop has resumed this task
+   * without a status change. When this exceeds the configured threshold,
+   * the daemon spawns a recovery steward instead of resuming the worker.
+   */
+  readonly resumeCount?: number;
+
+  /**
    * Set of issue types that have been reported for this task.
    * Prevents duplicate messages/fix tasks for the same type of issue.
    * Format: "test_failure", "merge_conflict", etc.
