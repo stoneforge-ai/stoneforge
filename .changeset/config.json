@@ -15,11 +15,5 @@
   "linked": [],
   "access": "public",
   "baseBranch": "master",
-  "updateInternalDependencies": "patch",
-  "ignore": [
-    "@stoneforge/quarry-server",
-    "@stoneforge/quarry-web",
-    "@stoneforge/smithy-server",
-    "@stoneforge/smithy-web"
-  ]
+  "updateInternalDependencies": "patch"
 }

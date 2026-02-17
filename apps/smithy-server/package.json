@@ -1,6 +1,7 @@
 {
   "name": "@stoneforge/smithy-server",
   "version": "0.1.0",
+  "private": true,
   "type": "module",
   "description": "Stoneforge Smithy server - AI agent orchestration platform",
   "license": "Apache-2.0",
