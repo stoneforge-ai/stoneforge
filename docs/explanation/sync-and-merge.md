@@ -63,7 +63,7 @@ SQLite can always be rebuilt from JSONL. If the cache corrupts, regenerate it.
 
 ### Elements File
 
-`.stoneforge/elements.jsonl`:
+`.stoneforge/sync/elements.jsonl`:
 
 ```jsonl
 {"type":"element","id":"task-abc123","type":"task","title":"Fix login bug","status":"open","createdAt":"2024-01-15T10:00:00.000Z","updatedAt":"2024-01-15T10:00:00.000Z","createdBy":"director-1","tags":[],"metadata":{}}
@@ -74,7 +74,7 @@ Each line is a complete, self-contained JSON object. No dependencies between lin
 
 ### Dependencies File
 
-`.stoneforge/dependencies.jsonl`:
+`.stoneforge/sync/dependencies.jsonl`:
 
 ```jsonl
 {"type":"dependency","blockedId":"task-abc123","blockerId":"task-def456","type":"blocks","createdAt":"2024-01-15T10:30:00.000Z","createdBy":"director-1","metadata":{}}

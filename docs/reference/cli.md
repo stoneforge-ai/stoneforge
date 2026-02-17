@@ -71,6 +71,8 @@ sf delete abc123
 | -------------------------------- | ---------------------------------- |
 | `sf task ready`                  | List ready (unblocked, open) tasks |
 | `sf task blocked`                | List blocked tasks                 |
+| `sf task backlog`                | List backlog tasks                 |
+| `sf task activate <id>`          | Move a task from backlog to open   |
 | `sf task close <id>`             | Close task                         |
 | `sf task reopen <id>`            | Reopen task                        |
 | `sf task assign <task> <entity>` | Assign task                        |
@@ -105,7 +107,7 @@ Set or show a task's description. Descriptions are stored as versioned documents
 | `-c, --content <text>` | Description content (inline)                        |
 | `-f, --file <path>`    | Read description from file                          |
 | `-s, --show`           | Show current description instead of setting         |
-| `-a, --append`         | Append to existing description instead of replacing |
+| `--append`             | Append to existing description instead of replacing |
 
 ```bash
 # Set description inline
@@ -119,7 +121,7 @@ sf task describe el-abc123 --show
 
 # Append to existing description
 sf task describe el-abc123 --append --content "Additional implementation notes"
-sf task describe el-abc123 -a -f additional-notes.md
+sf task describe el-abc123 --append -f additional-notes.md
 ```
 
 ## Dependency Commands
@@ -140,9 +142,9 @@ sf dependency add --type=blocks A B
 sf dependency remove A B --type=blocks
 
 # List dependencies
-sf dependency list abc123 --direction out    # Outgoing
-sf dependency list abc123 --direction in     # Incoming
-sf dependency list abc123 --direction both   # Both
+sf dependency list abc123 -d out     # Outgoing
+sf dependency list abc123 -d in      # Incoming
+sf dependency list abc123 -d both    # Both
 
 # Show tree
 sf dependency tree abc123
@@ -316,7 +318,7 @@ List inbox items with message content preview.
 | ------------------------ | ---------------------------------------------------- |
 | `-a, --all`              | Include read and archived items (default: unread only) |
 | `-s, --status <status>`  | Filter by status: unread, read, or archived          |
-| `-n, --limit <n>`        | Maximum number of items to return                    |
+| `-l, --limit <n>`        | Maximum number of items to return                    |
 | `-F, --full`             | Show complete message content instead of truncated   |
 
 ```bash
@@ -348,12 +350,22 @@ sf show inbox-abc123
 
 #### channel create
 
-| Option                     | Description                              |
-| -------------------------- | ---------------------------------------- |
-| `-D, --description <text>` | Plain string description for the channel |
+| Option                     | Description                                      |
+| -------------------------- | ------------------------------------------------ |
+| `-n, --name <name>`        | Channel name (required for group channels)       |
+| `-D, --description <text>` | Channel description                              |
+| `-t, --type <type>`        | Channel type: group (default) or direct          |
+| `-V, --visibility <vis>`   | Visibility: public or private (default)          |
+| `-p, --policy <policy>`    | Join policy: open, invite-only (default), or request |
+| `-m, --member <id>`        | Add member (can be repeated)                     |
+| `-d, --direct <entity>`    | Create direct channel with entity (for --type direct) |
+| `--tag <tag>`              | Add tag (can be repeated)                        |
 
 ```bash
 sf channel create --name general --description "General discussion"
+sf channel create --name private-ops -V private -p invite-only
+sf channel create --type direct --direct el-user123
+sf channel create --name team --member el-a --member el-b
 ```
 
 #### channel merge
@@ -595,7 +607,7 @@ List registered agents with optional filters.
 | `-r, --role <role>`       | Filter by role: director, worker, steward                      |
 | `-s, --status <status>`   | Filter by session status: idle, running, suspended, terminated |
 | `-m, --workerMode <mode>` | Filter by worker mode: ephemeral, persistent                   |
-| `-f, --focus <focus>`     | Filter by steward focus: merge, health, reminder, ops          |
+| `-f, --focus <focus>`     | Filter by steward focus: merge, health, reminder, ops, docs    |
 | `--reportsTo <id>`        | Filter by manager entity ID                                    |
 | `--hasSession`            | Filter to agents with active sessions                          |
 
@@ -616,12 +628,14 @@ Register a new orchestrator agent.
 | --------------------- | ------------------------------------------------------- |
 | `-r, --role <role>`   | Agent role: director, worker, steward (required)        |
 | `-m, --mode <mode>`   | Worker mode: ephemeral, persistent (default: ephemeral) |
-| `-f, --focus <focus>` | Steward focus: merge, health, reminder, ops             |
+| `-f, --focus <focus>` | Steward focus: merge, health, reminder, ops, docs       |
 | `-t, --maxTasks <n>`  | Maximum concurrent tasks (default: 1)                   |
 | `--tags <tags>`       | Comma-separated tags                                    |
 | `--reportsTo <id>`    | Manager entity ID (for workers/stewards)                |
 | `--roleDef <id>`      | Role definition document ID                             |
 | `--trigger <cron>`    | Steward cron trigger (e.g., "0 2 \* \* \*")             |
+| `--provider <name>`   | Agent provider (e.g., claude, opencode)                 |
+| `--model <model>`     | LLM model to use (e.g., claude-sonnet-4-5-20250929)     |
 
 ```bash
 sf agent register MyWorker --role worker --mode ephemeral
@@ -630,6 +644,8 @@ sf agent register HealthChecker --role steward --focus health
 sf agent register MyWorker --role worker --tags "frontend,urgent"
 sf agent register TeamWorker --role worker --reportsTo el-director123
 sf agent register DailyChecker --role steward --focus health --trigger "0 9 * * *"
+sf agent register OcWorker --role worker --provider opencode
+sf agent register MyWorker --role worker --model claude-sonnet-4-5-20250929
 ```
 
 #### agent start
@@ -640,7 +656,7 @@ Start a Claude Code process for an agent.
 | ----------------------- | ---------------------------------------------------- |
 | `-p, --prompt <text>`   | Initial prompt to send to the agent                  |
 | `-m, --mode <mode>`     | Start mode: headless, interactive                    |
-| `-r, --resume <id>`     | Resume a previous Claude session                     |
+| `-r, --resume <id>`     | Provider session ID to resume                        |
 | `-w, --workdir <path>`  | Working directory for the agent                      |
 | `--cols <n>`            | Terminal columns for interactive mode (default: 120) |
 | `--rows <n>`            | Terminal rows for interactive mode (default: 30)     |
@@ -648,6 +664,8 @@ Start a Claude Code process for an agent.
 | `-e, --env <KEY=VALUE>` | Environment variable to set                          |
 | `-t, --taskId <id>`     | Task ID to assign to this agent                      |
 | `--stream`              | Stream agent output after starting                   |
+| `--provider <name>`     | Override agent provider for this session              |
+| `--model <model>`       | Override model for this session                       |
 
 ```bash
 sf agent start el-abc123
@@ -659,6 +677,8 @@ sf agent start el-abc123 --workdir /path/to/project
 sf agent start el-abc123 --env MY_VAR=value
 sf agent start el-abc123 --taskId el-task456
 sf agent start el-abc123 --stream
+sf agent start el-abc123 --provider opencode
+sf agent start el-abc123 --model claude-opus-4-6
 ```
 
 #### agent stop
