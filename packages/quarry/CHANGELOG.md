@@ -1,5 +1,19 @@
 # @stoneforge/quarry
 
+## 1.1.0
+
+### Minor Changes
+
+- 24ca206: Add `sf plan auto-complete` CLI command that scans all active plans and transitions those with 100% task completion to completed status. Includes `--dry-run` mode and `sweep` alias.
+
+### Patch Changes
+
+- 2af42ec: - Fix `sf init` to import JSONL files from `.stoneforge/sync/` (where auto-export writes) instead of the stale root `.stoneforge/` directory.
+  - @stoneforge/smithy@1.1.0
+  - @stoneforge/core@1.1.0
+  - @stoneforge/storage@1.1.0
+  - @stoneforge/shared-routes@1.1.0
+
 ## 1.0.3
 
 ### Patch Changes
