@@ -18,7 +18,6 @@ export const serveSmithyCommand = {
   options: [
     { name: 'port', short: 'p', description: 'Port to listen on', hasValue: true, defaultValue: '3457' },
     { name: 'host', short: 'H', description: 'Host to bind to', hasValue: true, defaultValue: 'localhost' },
-    { name: 'no-open', description: 'Do not open browser automatically' },
   ],
   handler: async (_args: string[], options: Record<string, unknown>) => {
     try {

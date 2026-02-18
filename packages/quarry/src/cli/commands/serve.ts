@@ -88,7 +88,6 @@ export const serveCommand: Command = {
   options: [
     { name: 'port', short: 'p', description: 'Port to listen on', hasValue: true },
     { name: 'host', short: 'H', description: 'Host to bind to', hasValue: true, defaultValue: 'localhost' },
-    { name: 'no-open', description: 'Do not open browser automatically' },
   ],
   handler: async (args: string[], options: GlobalOptions): Promise<CommandResult> => {
     const target = args[0];

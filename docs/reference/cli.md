@@ -84,7 +84,6 @@ sf serve [quarry|smithy] [options]
 | -------------- | ------------------------------------ |
 | `-p, --port <port>` | Port to listen on                |
 | `-H, --host <host>` | Host to bind to                  |
-| `--no-open`          | Do not open browser automatically |
 
 ```bash
 # Start the quarry server
@@ -95,9 +94,6 @@ sf serve smithy
 
 # Start on a specific port
 sf serve quarry --port 8080
-
-# Start without opening browser
-sf serve smithy --no-open
 
 # Bind to a specific host
 sf serve quarry --host 0.0.0.0 --port 3000
