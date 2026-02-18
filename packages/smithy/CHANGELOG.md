@@ -1,5 +1,25 @@
 # @stoneforge/smithy
 
+## 1.3.0
+
+### Minor Changes
+
+- 9bd5c22: Add optional executablePath field to agent metadata and registration inputs, allowing each agent to store a custom executable path for its provider CLI
+- 8e6aa99: Add server-side settings API with SettingsService and GET/PUT /api/settings/agent-defaults routes for workspace-wide executable path configuration
+- 7e0053c: Wire executable paths into provider resolution during spawn: resolve from agent metadata, workspace defaults, or provider built-in default. Pass pathToClaudeCodeExecutable to Claude SDK for headless sessions.
+
+### Patch Changes
+
+- 0ab3792: Add ID collision detection to agent registry to prevent intermittent SQLITE_CONSTRAINT_PRIMARYKEY errors during rapid agent registration
+- cfb1ee2: Remove dead --no-open flag from serve command schema
+- Updated dependencies [8e6aa99]
+- Updated dependencies [1949799]
+- Updated dependencies [cfb1ee2]
+  - @stoneforge/storage@1.3.0
+  - @stoneforge/quarry@1.3.0
+  - @stoneforge/shared-routes@1.3.0
+  - @stoneforge/core@1.3.0
+
 ## 1.2.0
 
 ### Minor Changes

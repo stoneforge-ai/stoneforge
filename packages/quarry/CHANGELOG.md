@@ -1,5 +1,22 @@
 # @stoneforge/quarry
 
+## 1.3.0
+
+### Patch Changes
+
+- 1949799: Register missing CLI aliases (add, new, ls, complete) and add undocumented aliases (dep, msg, doc) to help text
+- cfb1ee2: Remove dead --no-open flag from serve command schema
+- Updated dependencies [9bd5c22]
+- Updated dependencies [8e6aa99]
+- Updated dependencies [8e6aa99]
+- Updated dependencies [0ab3792]
+- Updated dependencies [cfb1ee2]
+- Updated dependencies [7e0053c]
+  - @stoneforge/smithy@1.3.0
+  - @stoneforge/storage@1.3.0
+  - @stoneforge/shared-routes@1.3.0
+  - @stoneforge/core@1.3.0
+
 ## 1.2.0
 
 ### Minor Changes
