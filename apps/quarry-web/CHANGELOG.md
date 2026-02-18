@@ -1,5 +1,12 @@
 # @stoneforge/quarry-web
 
+## 1.6.0
+
+### Patch Changes
+
+- Updated dependencies [d625816]
+  - @stoneforge/ui@1.6.0
+
 ## 1.5.0
 
 ### Patch Changes

@@ -1,5 +1,17 @@
 # @stoneforge/smithy
 
+## 1.6.0
+
+### Patch Changes
+
+- 8a9c57d: Fix agent registration to persist provider, model, and executablePath fields in agent metadata
+- e4d7815: Add git worktree prune after worktree removal in removeWorktree() for defensive cleanup of stale entries
+- Updated dependencies [e1d7d77]
+  - @stoneforge/quarry@1.6.0
+  - @stoneforge/core@1.6.0
+  - @stoneforge/storage@1.6.0
+  - @stoneforge/shared-routes@1.6.0
+
 ## 1.5.0
 
 ### Minor Changes
