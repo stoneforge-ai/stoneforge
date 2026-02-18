@@ -366,7 +366,7 @@ Archived documents are excluded from default list and search results.
 ### Register Embedding Service
 
 ```typescript
-import { EmbeddingService, LocalEmbeddingProvider } from '@stoneforge/quarry';
+import { EmbeddingService, LocalEmbeddingProvider } from '@stoneforge/quarry/services';
 
 const provider = new LocalEmbeddingProvider('/path/to/model');
 const embeddingService = new EmbeddingService(storage, { provider });

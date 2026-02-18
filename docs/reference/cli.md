@@ -352,6 +352,7 @@ sf dependency tree abc123
 | `sf document rollback <id> <version>` | Rollback to version                           |
 | `sf document archive <id>`            | Archive document                              |
 | `sf document unarchive <id>`          | Unarchive document                            |
+| `sf document delete <id>`             | Delete document (soft-delete via tombstone)    |
 | `sf document reindex`                 | Reindex documents for FTS5 search             |
 
 ```bash
@@ -377,6 +378,10 @@ sf document update el-doc123 --file updated-spec.md
 sf document archive abc123
 sf document unarchive abc123
 
+# Delete document (soft-delete)
+sf document delete el-doc123
+sf document delete el-doc123 --reason "outdated"
+
 # Reindex FTS5
 sf document reindex
 ```
@@ -395,6 +400,21 @@ Update a document's content, creating a new version. Documents are versioned - e
 sf document update el-doc123 --content "New content here"
 sf document update el-doc123 --file path/to/updated.md
 sf document update el-doc123 --metadata '{"reviewer": "alice"}'
+```
+
+#### document delete
+
+Delete a document via soft-delete (tombstone). The document's content is preserved but marked as deleted.
+
+| Option                  | Description              |
+| ----------------------- | ------------------------ |
+| `-r, --reason <text>`   | Reason for deletion      |
+| `-f, --force`           | Skip confirmation        |
+
+```bash
+sf document delete el-doc123
+sf document delete el-doc123 --reason "outdated"
+sf document delete el-doc123 --force
 ```
 
 ## Embeddings Commands
@@ -434,6 +454,20 @@ sf embeddings search "authentication flow"
 | `sf plan remove-task <id> <task>` | Remove task                       |
 | `sf plan tasks <id>`              | List tasks in plan                |
 | `sf plan auto-complete`           | Auto-complete active plans        |
+
+#### plan show
+
+Show plan details, optionally including its task list.
+
+| Option           | Description              |
+| ---------------- | ------------------------ |
+| `-t, --tasks`    | Include task list        |
+
+```bash
+sf plan show el-abc123
+sf plan show el-abc123 --tasks
+sf plan show el-abc123 --json
+```
 
 #### plan auto-complete
 
@@ -640,7 +674,7 @@ sf channel merge -s el-ch111 -t el-ch222 --name "combined-channel"
 | ----------------------- | -------------------------------------------------------------------------------- |
 | `-c, --channel <id>`    | Channel to send to                                                               |
 | `-T, --to <entity>`     | Entity to send DM to (finds or creates DM channel)                               |
-| `-r, --replyTo <msg>`   | Message ID to reply to (auto-sets channel, thread, swaps sender/recipient in DM) |
+| `-r, --reply-to <msg>`  | Message ID to reply to (auto-sets channel, thread, swaps sender/recipient in DM) |
 | `-m, --content <text>`  | Message content                                                                  |
 | `--file <path>`         | Read content from file                                                           |
 | `-t, --thread <id>`     | Reply to message (creates thread)                                                |
@@ -787,6 +821,22 @@ sf playbook create -n deploy -t "Deploy" -v "env:string" -v "debug:boolean:false
 | `sf import`        | Import from JSONL |
 | `sf status`        | Show sync status  |
 
+#### export
+
+| Option                    | Description                                        |
+| ------------------------- | -------------------------------------------------- |
+| `-o, --output <dir>`      | Output directory (default: `.stoneforge/sync`)    |
+| `-f, --full`              | Full export (ignore dirty tracking)                |
+| `--include-ephemeral`     | Include ephemeral elements (excluded by default)   |
+
+#### import
+
+| Option                  | Description                                          |
+| ----------------------- | ---------------------------------------------------- |
+| `-i, --input <dir>`     | Input directory (default: `.stoneforge/sync`)        |
+| `-n, --dry-run`         | Show what would be imported without making changes   |
+| `-f, --force`           | Force import (remote always wins)                    |
+
 ```bash
 # Export dirty elements
 sf export
@@ -794,8 +844,14 @@ sf export
 # Full export
 sf export --full
 
+# Include ephemeral elements
+sf export --include-ephemeral
+
 # Import from default sync directory
 sf import
+
+# Preview import changes
+sf import --dry-run
 
 # Import from specific directory
 sf import --input /path/to/sync
