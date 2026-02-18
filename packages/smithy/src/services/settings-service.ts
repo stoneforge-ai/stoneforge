@@ -32,6 +32,8 @@ export interface Setting {
 export interface ServerAgentDefaults {
   /** Provider name → executable path (e.g. { claude: '/usr/local/bin/claude-dev' }) */
   defaultExecutablePaths: Record<string, string>;
+  /** Ordered list of executable names/paths for rate limit fallback. When one hits its limit, the next available is used. */
+  fallbackChain?: string[];
 }
 
 /**
@@ -151,12 +153,21 @@ export function createSettingsService(storage: StorageBackend): SettingsService 
       const value = setting.value as Record<string, unknown>;
       const paths = value?.defaultExecutablePaths;
 
-      return {
+      const result: ServerAgentDefaults = {
         defaultExecutablePaths:
           paths && typeof paths === 'object' && !Array.isArray(paths)
             ? (paths as Record<string, string>)
             : {},
       };
+
+      // Include fallbackChain if it's a valid array
+      if (Array.isArray(value?.fallbackChain)) {
+        result.fallbackChain = (value.fallbackChain as unknown[]).filter(
+          (entry): entry is string => typeof entry === 'string'
+        );
+      }
+
+      return result;
     },
 
     setAgentDefaults(defaults: ServerAgentDefaults): ServerAgentDefaults {
@@ -172,6 +183,13 @@ export function createSettingsService(storage: StorageBackend): SettingsService 
       const validated: ServerAgentDefaults = {
         defaultExecutablePaths: sanitized,
       };
+
+      // Validate fallbackChain — must be an array; filter out non-string entries
+      if (Array.isArray(defaults.fallbackChain)) {
+        validated.fallbackChain = defaults.fallbackChain.filter(
+          (entry): entry is string => typeof entry === 'string'
+        );
+      }
 
       this.setSetting(SETTING_KEYS.AGENT_DEFAULTS, validated);
       return validated;
