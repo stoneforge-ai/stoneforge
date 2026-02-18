@@ -459,6 +459,10 @@ export class WorktreeManagerImpl implements WorktreeManager {
       // origin/<baseBranch> doesn't exist — use local branch
     }
 
+    // Prune stale worktree entries before adding, in case git's list is stale
+    // (directory was deleted but git still has it registered)
+    await this.execGit(['worktree', 'prune']);
+
     try {
       // Check if branch exists
       const branchExists = await this.branchExists(branch);
