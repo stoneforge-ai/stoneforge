@@ -19,3 +19,4 @@ export { createPoolRoutes } from './pools.js';
 export { createLspRoutes } from './lsp.js';
 export { createWorkspaceFilesRoutes } from './workspace-files.js';
 export { createExtensionsRoutes } from './extensions.js';
+export { createSettingsRoutes } from './settings.js';
