@@ -8,7 +8,7 @@ import { Hono } from 'hono';
 import type { EntityId, ElementId, Task, Document, DocumentId } from '@stoneforge/core';
 import { createTask, createDocument, TaskStatus, ElementType, Priority, Complexity, ContentType, updateTaskStatus } from '@stoneforge/core';
 import type { OrchestratorTaskMeta } from '@stoneforge/smithy';
-import { createLogger, updateOrchestratorTaskMeta } from '@stoneforge/smithy';
+import { createLogger, updateOrchestratorTaskMeta, getOrchestratorTaskMeta } from '@stoneforge/smithy';
 import type { Services } from '../services.js';
 import { formatTaskResponse } from '../formatters.js';
 import type { QuarryAPI } from '@stoneforge/quarry';
@@ -41,7 +41,7 @@ async function formatTaskWithDescription(task: Task, api: QuarryAPI) {
 }
 
 export function createTaskRoutes(services: Services) {
-  const { api, agentRegistry, taskAssignmentService, dispatchService, workerTaskService } = services;
+  const { api, agentRegistry, taskAssignmentService, dispatchService, workerTaskService, worktreeManager } = services;
   const app = new Hono();
 
   // GET /api/tasks - List tasks
@@ -596,6 +596,16 @@ export function createTaskRoutes(services: Services) {
       // Clear assignee
       updated.assignee = undefined;
       updated.closeReason = undefined;
+
+      // Clean up worktree directory before clearing metadata
+      const taskMeta = getOrchestratorTaskMeta(task.metadata as Record<string, unknown> | undefined);
+      if (taskMeta?.worktree && worktreeManager) {
+        try {
+          await worktreeManager.removeWorktree(taskMeta.worktree, { force: true, deleteBranch: true, forceBranchDelete: true });
+        } catch {
+          // Ignore cleanup errors — worktree may already be removed
+        }
+      }
 
       // Clear all orchestrator metadata
       const existingMeta = (updated.metadata as Record<string, unknown> | undefined)?.orchestrator as OrchestratorTaskMeta | undefined;

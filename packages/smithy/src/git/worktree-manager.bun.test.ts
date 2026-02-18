@@ -316,18 +316,20 @@ describe('WorktreeManager Operations', () => {
       expect(fs.existsSync(result.path)).toBe(true);
     });
 
-    test('throws error if worktree already exists', async () => {
-      await manager.createWorktree({
+    test('removes stale worktree and recreates if worktree already exists', async () => {
+      const first = await manager.createWorktree({
         agentName: 'alice',
         taskId: 'task-123' as ElementId,
       });
+      expect(fs.existsSync(first.path)).toBe(true);
 
-      await expect(
-        manager.createWorktree({
-          agentName: 'alice',
-          taskId: 'task-123' as ElementId,
-        })
-      ).rejects.toThrow('Worktree already exists');
+      // Creating the same worktree again should succeed by removing the stale one
+      const second = await manager.createWorktree({
+        agentName: 'alice',
+        taskId: 'task-123' as ElementId,
+      });
+      expect(fs.existsSync(second.path)).toBe(true);
+      expect(second.path).toBe(first.path);
     });
 
     test('uses existing branch if it already exists', async () => {

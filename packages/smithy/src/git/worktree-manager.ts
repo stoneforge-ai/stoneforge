@@ -419,12 +419,17 @@ export class WorktreeManagerImpl implements WorktreeManager {
     const relativePath = options.customPath ?? generateWorktreePath(options.agentName, slug);
     const fullPath = path.join(this.config.workspaceRoot, relativePath);
 
-    // Check if worktree already exists
+    // Check if worktree already exists — try to remove stale worktree and retry
+    // (may be left over from a task reset or crash)
     if (fs.existsSync(fullPath)) {
-      throw new WorktreeError(
-        `Worktree already exists at ${relativePath}`,
-        'WORKTREE_EXISTS'
-      );
+      try {
+        await this.removeWorktree(relativePath, { force: true });
+      } catch {
+        throw new WorktreeError(
+          `Worktree already exists at ${relativePath} and could not be removed`,
+          'WORKTREE_EXISTS'
+        );
+      }
     }
 
     // Track state
