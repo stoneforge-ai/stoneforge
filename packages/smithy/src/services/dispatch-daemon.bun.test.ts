@@ -29,10 +29,12 @@ import {
 
 import {
   createDispatchDaemon,
+  DispatchDaemonImpl,
   type DispatchDaemon,
   type DispatchDaemonConfig,
   type PollResult,
 } from './dispatch-daemon.js';
+import type { SettingsService, ServerAgentDefaults } from './settings-service.js';
 import { createAgentRegistry, type AgentRegistry, type AgentEntity } from './agent-registry.js';
 import { createTaskAssignmentService, type TaskAssignmentService } from './task-assignment-service.js';
 import { createDispatchService, type DispatchService } from './dispatch-service.js';
@@ -1668,5 +1670,371 @@ describe('DispatchDaemon Plan Auto-Complete', () => {
       expect(startEvents).toContain('plan-auto-complete');
       expect(completeEvents.some(r => r.pollType === 'plan-auto-complete')).toBe(true);
     });
+  });
+});
+
+// ============================================================================
+// Rate Limit Integration Tests
+// ============================================================================
+
+/**
+ * Creates a mock SettingsService with a configurable fallback chain and
+ * executable path defaults.
+ */
+function createMockSettingsService(overrides?: {
+  fallbackChain?: string[];
+  defaultExecutablePaths?: Record<string, string>;
+}): SettingsService {
+  const agentDefaults: ServerAgentDefaults = {
+    defaultExecutablePaths: overrides?.defaultExecutablePaths ?? {},
+    fallbackChain: overrides?.fallbackChain,
+  };
+
+  return {
+    getSetting: mock(() => undefined),
+    setSetting: mock(() => agentDefaults),
+    getAgentDefaults: mock(() => agentDefaults),
+    setAgentDefaults: mock(() => agentDefaults),
+  } as unknown as SettingsService;
+}
+
+describe('DispatchDaemon Rate Limit Integration', () => {
+  let api: QuarryAPI;
+  let inboxService: InboxService;
+  let agentRegistry: AgentRegistry;
+  let taskAssignment: TaskAssignmentService;
+  let dispatchService: DispatchService;
+  let sessionManager: SessionManager;
+  let worktreeManager: WorktreeManager;
+  let stewardScheduler: StewardScheduler;
+  let settingsService: SettingsService;
+  let daemon: DispatchDaemon;
+  let testDbPath: string;
+  let systemEntity: EntityId;
+
+  beforeEach(async () => {
+    testDbPath = `/tmp/dispatch-daemon-ratelimit-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`;
+    const storage = createStorage({ path: testDbPath, create: true });
+    initializeSchema(storage);
+
+    api = createQuarryAPI(storage);
+    inboxService = createInboxService(storage);
+    agentRegistry = createAgentRegistry(api);
+    taskAssignment = createTaskAssignmentService(api);
+    dispatchService = createDispatchService(api, taskAssignment, agentRegistry);
+    sessionManager = createMockSessionManager();
+    worktreeManager = createMockWorktreeManager();
+    stewardScheduler = createMockStewardScheduler();
+    settingsService = createMockSettingsService({
+      fallbackChain: ['claude2', 'claude'],
+    });
+
+    const { createEntity, EntityTypeValue } = await import('@stoneforge/core');
+    const entity = await createEntity({
+      name: 'test-system-ratelimit',
+      entityType: EntityTypeValue.SYSTEM,
+      createdBy: 'system:test' as EntityId,
+    });
+    const saved = await api.create(entity as unknown as Record<string, unknown> & { createdBy: EntityId });
+    systemEntity = saved.id as unknown as EntityId;
+
+    const config: DispatchDaemonConfig = {
+      pollIntervalMs: 100,
+      workerAvailabilityPollEnabled: true,
+      inboxPollEnabled: false,
+      stewardTriggerPollEnabled: false,
+      workflowTaskPollEnabled: false,
+    };
+
+    // Use DispatchDaemonImpl directly so we can pass the settingsService (11th arg)
+    daemon = new DispatchDaemonImpl(
+      api,
+      agentRegistry,
+      sessionManager,
+      dispatchService,
+      worktreeManager,
+      taskAssignment,
+      stewardScheduler,
+      inboxService,
+      config,
+      undefined, // poolService
+      settingsService
+    );
+  });
+
+  afterEach(async () => {
+    await daemon.stop();
+    if (fs.existsSync(testDbPath)) {
+      fs.unlinkSync(testDbPath);
+    }
+  });
+
+  async function createTestWorker(name: string): Promise<AgentEntity> {
+    return agentRegistry.registerWorker({
+      name,
+      workerMode: 'ephemeral',
+      createdBy: systemEntity,
+      maxConcurrentTasks: 1,
+    });
+  }
+
+  async function createTestTask(title: string, assignee?: EntityId): Promise<Task> {
+    const task = await createTask({
+      title,
+      createdBy: systemEntity,
+      status: TaskStatus.OPEN,
+      assignee,
+    });
+    return api.create(task as unknown as Record<string, unknown> & { createdBy: EntityId }) as Promise<Task>;
+  }
+
+  // --------------------------------------------------------------------------
+  // 1. Rate limit event updates tracker
+  // --------------------------------------------------------------------------
+
+  test('handleRateLimitDetected marks executable as limited in tracker', () => {
+    const resetsAt = new Date(Date.now() + 60_000);
+    daemon.handleRateLimitDetected('claude2', resetsAt);
+
+    const status = daemon.getRateLimitStatus();
+    expect(status.limits).toHaveLength(1);
+    expect(status.limits[0]!.executable).toBe('claude2');
+    expect(status.limits[0]!.resetsAt).toBe(resetsAt.toISOString());
+  });
+
+  // --------------------------------------------------------------------------
+  // 2. Fallback selection at dispatch time
+  // --------------------------------------------------------------------------
+
+  test('dispatches worker with fallback executable when primary is limited', async () => {
+    // Configure fallback chain: ['claude2', 'claude']
+    // Mark 'claude2' as limited so 'claude' should be used instead
+    const worker = await createTestWorker('fallback-alice');
+    await createTestTask('Task for fallback test');
+
+    const resetsAt = new Date(Date.now() + 60_000);
+    daemon.handleRateLimitDetected('claude2', resetsAt);
+
+    // The worker uses 'claude' as default provider (no executablePath set),
+    // which resolves to 'claude'. Since 'claude' is not limited, the primary is fine.
+    // Let's instead mark 'claude' (the default provider name) as limited:
+    daemon.handleRateLimitDetected('claude', new Date(Date.now() + 60_000));
+
+    // Now 'claude' (the effective executable for a default worker) is limited.
+    // The fallback chain is ['claude2', 'claude']. 'claude2' is also limited.
+    // So actually both are limited and dispatch should be skipped.
+    // Let me rethink: we need only the primary to be limited, not the fallback.
+
+    // Clear and start fresh:
+    // Use a fresh daemon with only claude2 limited
+    await daemon.stop();
+
+    // Mark only 'claude' as limited (that's the effective executable for default workers)
+    // The fallback chain is ['claude2', 'claude']. 'claude2' is available.
+    const daemon2 = new DispatchDaemonImpl(
+      api,
+      agentRegistry,
+      sessionManager,
+      dispatchService,
+      worktreeManager,
+      taskAssignment,
+      stewardScheduler,
+      inboxService,
+      { pollIntervalMs: 100, workerAvailabilityPollEnabled: true, inboxPollEnabled: false, stewardTriggerPollEnabled: false, workflowTaskPollEnabled: false },
+      undefined,
+      settingsService
+    );
+
+    // Mark 'claude' (the default provider) as limited
+    daemon2.handleRateLimitDetected('claude', new Date(Date.now() + 60_000));
+
+    const result = await daemon2.pollWorkerAvailability();
+
+    // The worker should have been dispatched using the fallback 'claude2'
+    expect(result.processed).toBe(1);
+
+    // Verify the session was started with the fallback executable override
+    expect(sessionManager.startSession).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        executablePathOverride: 'claude2',
+      })
+    );
+
+    await daemon2.stop();
+    daemon = daemon2; // so afterEach cleanup works
+  });
+
+  // --------------------------------------------------------------------------
+  // 3. All limited skips dispatch
+  // --------------------------------------------------------------------------
+
+  test('skips worker dispatch when all executables in fallback chain are limited', async () => {
+    const worker = await createTestWorker('all-limited-bob');
+    await createTestTask('Task for all-limited test');
+
+    // Mark all executables in the fallback chain as limited
+    const resetsAt = new Date(Date.now() + 60_000);
+    daemon.handleRateLimitDetected('claude2', resetsAt);
+    daemon.handleRateLimitDetected('claude', resetsAt);
+
+    const result = await daemon.pollWorkerAvailability();
+
+    // Dispatch should have been attempted but skipped due to all_limited
+    expect(result.processed).toBe(0);
+
+    // Session should NOT have been started
+    expect(sessionManager.startSession).not.toHaveBeenCalled();
+  });
+
+  // --------------------------------------------------------------------------
+  // 4. Pause state in poll cycle — dispatch polls skipped, non-dispatch still run
+  // --------------------------------------------------------------------------
+
+  test('pauses dispatch polls when all executables are limited but runs non-dispatch polls', async () => {
+    // Enable closed-unmerged reconciliation (a non-dispatch poll)
+    await daemon.stop();
+
+    const pauseDaemon = new DispatchDaemonImpl(
+      api,
+      agentRegistry,
+      sessionManager,
+      dispatchService,
+      worktreeManager,
+      taskAssignment,
+      stewardScheduler,
+      inboxService,
+      {
+        pollIntervalMs: 100,
+        workerAvailabilityPollEnabled: true,
+        inboxPollEnabled: true,
+        stewardTriggerPollEnabled: false,
+        workflowTaskPollEnabled: true,
+        closedUnmergedReconciliationEnabled: true,
+        planAutoCompleteEnabled: true,
+      },
+      undefined,
+      settingsService
+    );
+
+    // Mark all executables in the fallback chain as limited
+    const resetsAt = new Date(Date.now() + 60_000);
+    pauseDaemon.handleRateLimitDetected('claude2', resetsAt);
+    pauseDaemon.handleRateLimitDetected('claude', resetsAt);
+
+    // Verify the daemon reports paused state
+    const status = pauseDaemon.getRateLimitStatus();
+    expect(status.isPaused).toBe(true);
+
+    // Track which poll events fire during a single poll cycle
+    const pollTypes: string[] = [];
+    pauseDaemon.on('poll:start', (pollType: string) => {
+      pollTypes.push(pollType);
+    });
+
+    // Start daemon to trigger a poll cycle, then stop immediately after
+    await pauseDaemon.start();
+    // Give it enough time for one cycle
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await pauseDaemon.stop();
+
+    // Non-dispatch polls should have run (inbox, closed-unmerged, plan-auto-complete)
+    // Dispatch polls (worker-availability, workflow-task) should NOT have run
+    expect(pollTypes).toContain('inbox');
+    expect(pollTypes).not.toContain('worker-availability');
+    expect(pollTypes).not.toContain('workflow-task');
+
+    daemon = pauseDaemon; // for cleanup
+  });
+
+  // --------------------------------------------------------------------------
+  // 5. Auto-resume after reset — time advances past rate limit reset
+  // --------------------------------------------------------------------------
+
+  test('resumes normal dispatch after rate limit resets', async () => {
+    const worker = await createTestWorker('resume-charlie');
+    await createTestTask('Task for resume test');
+
+    // Mark all executables limited with a reset time in the very near past
+    // (simulate that the rate limit has already expired)
+    const alreadyExpired = new Date(Date.now() - 1_000); // 1 second ago
+    daemon.handleRateLimitDetected('claude2', alreadyExpired);
+    daemon.handleRateLimitDetected('claude', alreadyExpired);
+
+    // Status should show NOT paused since limits have expired
+    const status = daemon.getRateLimitStatus();
+    expect(status.isPaused).toBe(false);
+    expect(status.limits).toHaveLength(0);
+
+    // Dispatch should proceed normally since all limits have expired
+    const result = await daemon.pollWorkerAvailability();
+    expect(result.processed).toBe(1);
+
+    // Verify session was started (no executable override needed since nothing is limited)
+    expect(sessionManager.startSession).toHaveBeenCalled();
+  });
+
+  // --------------------------------------------------------------------------
+  // 6. getRateLimitStatus returns correct data
+  // --------------------------------------------------------------------------
+
+  test('getRateLimitStatus returns correct data when executables are limited', () => {
+    // Initially no limits
+    const initialStatus = daemon.getRateLimitStatus();
+    expect(initialStatus.isPaused).toBe(false);
+    expect(initialStatus.limits).toHaveLength(0);
+    expect(initialStatus.soonestReset).toBeUndefined();
+
+    // Mark one executable as limited
+    const resetTime1 = new Date(Date.now() + 120_000); // 2 minutes from now
+    daemon.handleRateLimitDetected('claude2', resetTime1);
+
+    const partialStatus = daemon.getRateLimitStatus();
+    expect(partialStatus.isPaused).toBe(false); // Only one of two is limited
+    expect(partialStatus.limits).toHaveLength(1);
+    expect(partialStatus.limits[0]!.executable).toBe('claude2');
+    expect(partialStatus.soonestReset).toBe(resetTime1.toISOString());
+
+    // Mark the second executable as limited (sooner reset time)
+    const resetTime2 = new Date(Date.now() + 30_000); // 30 seconds from now
+    daemon.handleRateLimitDetected('claude', resetTime2);
+
+    const fullStatus = daemon.getRateLimitStatus();
+    expect(fullStatus.isPaused).toBe(true); // Both are limited
+    expect(fullStatus.limits).toHaveLength(2);
+    expect(fullStatus.soonestReset).toBe(resetTime2.toISOString()); // Soonest is claude's
+
+    // Verify both executables are in the limits list
+    const executables = fullStatus.limits.map((l) => l.executable).sort();
+    expect(executables).toEqual(['claude', 'claude2']);
+  });
+
+  test('getRateLimitStatus isPaused is false when no fallback chain is configured', async () => {
+    // Create a daemon with no settings service (fallbackChain defaults to [])
+    await daemon.stop();
+
+    const noSettingsDaemon = createDispatchDaemon(
+      api,
+      agentRegistry,
+      sessionManager,
+      dispatchService,
+      worktreeManager,
+      taskAssignment,
+      stewardScheduler,
+      inboxService,
+      { pollIntervalMs: 100 }
+      // No poolService, no settingsService
+    );
+
+    // Even marking executables as limited should not cause isPaused
+    // because there's no fallback chain to check against
+    noSettingsDaemon.handleRateLimitDetected('claude', new Date(Date.now() + 60_000));
+
+    const status = noSettingsDaemon.getRateLimitStatus();
+    expect(status.isPaused).toBe(false);
+    expect(status.limits).toHaveLength(1);
+
+    await noSettingsDaemon.stop();
+    daemon = noSettingsDaemon;
   });
 });
