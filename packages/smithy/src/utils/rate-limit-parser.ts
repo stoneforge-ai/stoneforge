@@ -2,17 +2,20 @@
  * Rate Limit Parser Utility
  *
  * Detects and parses Claude Code rate limit messages emitted during
- * headless SDK sessions. Supports two known message formats:
+ * headless SDK sessions. Supports three known message formats:
  *
  *   1. Hourly/5-hour limit:  "You've hit your limit · resets 12am"
  *   2. Weekly limit:         "Weekly limit reached · resets Feb 22 at 9:30am"
+ *   3. Tomorrow reset:       "resets tomorrow at 3pm"
+ *
+ * Also provides a fallback function for when parsing fails, so callers
+ * can always obtain a conservative reset time estimate.
  *
  * Usage:
- *   import { isRateLimitMessage, parseRateLimitResetTime } from '../utils/rate-limit-parser.js';
+ *   import { isRateLimitMessage, parseRateLimitResetTime, getFallbackResetTime } from '../utils/rate-limit-parser.js';
  *
  *   if (isRateLimitMessage(text)) {
- *     const resetAt = parseRateLimitResetTime(text);
- *     // resetAt is a Date or undefined
+ *     const resetAt = parseRateLimitResetTime(text) ?? getFallbackResetTime(text);
  *   }
  *
  * @module
@@ -70,17 +73,30 @@ export function isRateLimitMessage(content: string): boolean {
 // ============================================================================
 
 /**
- * Format B regex: "resets Mon DD at H:MMam/pm" or "resets Mon DD at Ham/pm"
+ * Format B regex: "resets Mon DD at H:MMam/pm" or "resets Mon DD Ham/pm"
+ *
+ * The "at" keyword is optional to handle both "resets Feb 22 at 8pm"
+ * and "resets Feb 22 8pm".
  *
  * Captures:
- *   [1] month name (e.g. "Feb")
+ *   [1] month name (e.g. "Feb" or "February")
  *   [2] day number  (e.g. "22")
  *   [3] hour        (e.g. "9" or "12")
  *   [4] minutes     (optional, e.g. "30")
  *   [5] am/pm       (e.g. "am")
  */
 const FORMAT_B_REGEX =
-  /resets?\s+([A-Za-z]+)\s+(\d{1,2})\s+at\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i;
+  /resets?\s+([A-Za-z]+)\s+(\d{1,2})\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i;
+
+/**
+ * Format C regex: "resets tomorrow at H:MMam/pm" or "resets tomorrow at Ham/pm"
+ *
+ * Captures:
+ *   [1] hour    (e.g. "3" or "12")
+ *   [2] minutes (optional, e.g. "30")
+ *   [3] am/pm
+ */
+const FORMAT_C_REGEX = /resets?\s+tomorrow\s+at\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i;
 
 /**
  * Format A regex: "resets Ham/pm" or "resets H:MMam/pm" (time only, no date)
@@ -102,10 +118,16 @@ const FORMAT_A_REGEX = /resets?\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i;
  * @returns The parsed reset `Date`, or `undefined` if parsing fails
  */
 export function parseRateLimitResetTime(content: string): Date | undefined {
-  // Try Format B first (more specific — includes a date)
+  // Try Format B first (most specific — includes a date)
   const formatB = FORMAT_B_REGEX.exec(content);
   if (formatB) {
     return parseDateAndTime(formatB);
+  }
+
+  // Try Format C (tomorrow + time — more specific than time-only)
+  const formatC = FORMAT_C_REGEX.exec(content);
+  if (formatC) {
+    return parseTomorrowTime(formatC);
   }
 
   // Fall back to Format A (time only)
@@ -115,6 +137,20 @@ export function parseRateLimitResetTime(content: string): Date | undefined {
   }
 
   return undefined;
+}
+
+/**
+ * Returns a fallback reset time when the exact time cannot be parsed.
+ * Uses the message content to determine the type of limit and applies
+ * a conservative default sleep duration.
+ *
+ * - Weekly limit ("weekly"): 6 hours from now
+ * - Hourly/daily limit (default): 1 hour from now
+ */
+export function getFallbackResetTime(content: string): Date {
+  const isWeekly = /weekly/i.test(content);
+  const fallbackMs = isWeekly ? 6 * 60 * 60 * 1000 : 1 * 60 * 60 * 1000;
+  return new Date(Date.now() + fallbackMs);
 }
 
 // ============================================================================
@@ -160,6 +196,38 @@ function parseDateAndTime(match: RegExpExecArray): Date | undefined {
     if (result.getTime() < now.getTime()) {
       result.setFullYear(year + 1);
     }
+
+    return result;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Parses a Format C match (tomorrow + time) into a Date.
+ *
+ * Computes tomorrow's date and sets the parsed time on it.
+ */
+function parseTomorrowTime(match: RegExpExecArray): Date | undefined {
+  try {
+    const hour12 = parseInt(match[1], 10);
+    const minutes = match[2] ? parseInt(match[2], 10) : 0;
+    const ampm = match[3];
+
+    if (isNaN(hour12) || isNaN(minutes)) return undefined;
+
+    const hour24 = to24Hour(hour12, ampm);
+    const now = new Date();
+
+    const result = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() + 1, // tomorrow
+      hour24,
+      minutes,
+      0,
+      0,
+    );
 
     return result;
   } catch {

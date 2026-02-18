@@ -53,6 +53,7 @@ import { notifySSEClientsOfNewSession } from './routes/events.js';
 import { DB_PATH as DEFAULT_DB_PATH, PROJECT_ROOT as DEFAULT_PROJECT_ROOT, getClaudePath } from './config.js';
 import { getDaemonConfigOverrides } from './daemon-state.js';
 import { createLogger } from '../utils/logger.js';
+import { getFallbackResetTime } from '../utils/rate-limit-parser.js';
 
 const logger = createLogger('orchestrator');
 
@@ -265,9 +266,10 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
       });
 
       // Listen for rate_limited events from sessions and forward to daemon's tracker
-      const onRateLimited = (data: { executablePath?: string; resetsAt?: Date }) => {
-        if (dispatchDaemon && data.executablePath && data.resetsAt) {
-          dispatchDaemon.handleRateLimitDetected(data.executablePath, data.resetsAt);
+      const onRateLimited = (data: { executablePath?: string; resetsAt?: Date; message?: string }) => {
+        if (dispatchDaemon && data.executablePath) {
+          const resetTime = data.resetsAt ?? getFallbackResetTime(data.message ?? '');
+          dispatchDaemon.handleRateLimitDetected(data.executablePath, resetTime);
         }
       };
 

@@ -10,6 +10,7 @@ import {
   RATE_LIMIT_PATTERNS,
   isRateLimitMessage,
   parseRateLimitResetTime,
+  getFallbackResetTime,
 } from './rate-limit-parser.js';
 
 // ============================================================================
@@ -208,6 +209,7 @@ describe('parseRateLimitResetTime — Edge cases', () => {
     expect(
       parseRateLimitResetTime("You've hit your limit · resets soon"),
     ).toBeUndefined();
+    // "resets tomorrow" without a time is still unparseable
     expect(
       parseRateLimitResetTime("You've hit your limit · resets tomorrow"),
     ).toBeUndefined();
@@ -217,5 +219,146 @@ describe('parseRateLimitResetTime — Edge cases', () => {
     expect(
       parseRateLimitResetTime('Weekly limit reached · resets Foo 22 at 9:30am'),
     ).toBeUndefined();
+  });
+});
+
+// ============================================================================
+// parseRateLimitResetTime — Format C (tomorrow + time)
+// ============================================================================
+
+describe('parseRateLimitResetTime — Format C (tomorrow + time)', () => {
+  it('parses "resets tomorrow at 3pm" as tomorrow 15:00', () => {
+    const result = parseRateLimitResetTime("You've hit your limit · resets tomorrow at 3pm");
+    expect(result).toBeInstanceOf(Date);
+
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    expect(result!.getFullYear()).toBe(tomorrow.getFullYear());
+    expect(result!.getMonth()).toBe(tomorrow.getMonth());
+    expect(result!.getDate()).toBe(tomorrow.getDate());
+    expect(result!.getHours()).toBe(15);
+    expect(result!.getMinutes()).toBe(0);
+  });
+
+  it('parses "resets tomorrow at 3:30pm" as tomorrow 15:30', () => {
+    const result = parseRateLimitResetTime("You've hit your limit · resets tomorrow at 3:30pm");
+    expect(result).toBeInstanceOf(Date);
+
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    expect(result!.getFullYear()).toBe(tomorrow.getFullYear());
+    expect(result!.getMonth()).toBe(tomorrow.getMonth());
+    expect(result!.getDate()).toBe(tomorrow.getDate());
+    expect(result!.getHours()).toBe(15);
+    expect(result!.getMinutes()).toBe(30);
+  });
+
+  it('returns a date that is always in the future', () => {
+    const now = new Date();
+    const result = parseRateLimitResetTime('resets tomorrow at 12am');
+    expect(result).toBeInstanceOf(Date);
+    expect(result!.getTime()).toBeGreaterThan(now.getTime());
+  });
+});
+
+// ============================================================================
+// parseRateLimitResetTime — Format B without "at"
+// ============================================================================
+
+describe('parseRateLimitResetTime — Format B without "at"', () => {
+  it('parses "resets Feb 22 8pm" (no "at") as Feb 22 20:00', () => {
+    const result = parseRateLimitResetTime('Weekly limit reached · resets Feb 22 8pm');
+    expect(result).toBeInstanceOf(Date);
+    expect(result!.getMonth()).toBe(1); // February
+    expect(result!.getDate()).toBe(22);
+    expect(result!.getHours()).toBe(20);
+    expect(result!.getMinutes()).toBe(0);
+  });
+});
+
+// ============================================================================
+// parseRateLimitResetTime — Full month names
+// ============================================================================
+
+describe('parseRateLimitResetTime — Full month names', () => {
+  it('parses "resets February 22 at 9:30am" (full month name)', () => {
+    const result = parseRateLimitResetTime(
+      'Weekly limit reached · resets February 22 at 9:30am',
+    );
+    expect(result).toBeInstanceOf(Date);
+    expect(result!.getMonth()).toBe(1); // February
+    expect(result!.getDate()).toBe(22);
+    expect(result!.getHours()).toBe(9);
+    expect(result!.getMinutes()).toBe(30);
+  });
+
+  it('parses "resets January 5 at 3pm" (full month name)', () => {
+    const result = parseRateLimitResetTime(
+      'Weekly limit reached · resets January 5 at 3pm',
+    );
+    expect(result).toBeInstanceOf(Date);
+    expect(result!.getMonth()).toBe(0); // January
+    expect(result!.getDate()).toBe(5);
+    expect(result!.getHours()).toBe(15);
+    expect(result!.getMinutes()).toBe(0);
+  });
+
+  it('parses "resets December 31 at 11:59pm" (full month name)', () => {
+    const result = parseRateLimitResetTime(
+      'Weekly limit reached · resets December 31 at 11:59pm',
+    );
+    expect(result).toBeInstanceOf(Date);
+    expect(result!.getMonth()).toBe(11); // December
+    expect(result!.getDate()).toBe(31);
+    expect(result!.getHours()).toBe(23);
+    expect(result!.getMinutes()).toBe(59);
+  });
+});
+
+// ============================================================================
+// getFallbackResetTime
+// ============================================================================
+
+describe('getFallbackResetTime', () => {
+  it('returns ~6 hours from now for weekly limit messages', () => {
+    const before = Date.now();
+    const result = getFallbackResetTime('Weekly limit reached');
+    const after = Date.now();
+
+    const sixHoursMs = 6 * 60 * 60 * 1000;
+    expect(result).toBeInstanceOf(Date);
+    expect(result.getTime()).toBeGreaterThanOrEqual(before + sixHoursMs);
+    expect(result.getTime()).toBeLessThanOrEqual(after + sixHoursMs);
+  });
+
+  it('returns ~1 hour from now for non-weekly limit messages', () => {
+    const before = Date.now();
+    const result = getFallbackResetTime("You've hit your limit");
+    const after = Date.now();
+
+    const oneHourMs = 1 * 60 * 60 * 1000;
+    expect(result).toBeInstanceOf(Date);
+    expect(result.getTime()).toBeGreaterThanOrEqual(before + oneHourMs);
+    expect(result.getTime()).toBeLessThanOrEqual(after + oneHourMs);
+  });
+
+  it('returns ~1 hour from now for empty string (default)', () => {
+    const before = Date.now();
+    const result = getFallbackResetTime('');
+    const after = Date.now();
+
+    const oneHourMs = 1 * 60 * 60 * 1000;
+    expect(result).toBeInstanceOf(Date);
+    expect(result.getTime()).toBeGreaterThanOrEqual(before + oneHourMs);
+    expect(result.getTime()).toBeLessThanOrEqual(after + oneHourMs);
+  });
+
+  it('is case-insensitive for "weekly" detection', () => {
+    const before = Date.now();
+    const result = getFallbackResetTime('WEEKLY limit reached');
+    const sixHoursMs = 6 * 60 * 60 * 1000;
+    expect(result.getTime()).toBeGreaterThanOrEqual(before + sixHoursMs);
   });
 });
