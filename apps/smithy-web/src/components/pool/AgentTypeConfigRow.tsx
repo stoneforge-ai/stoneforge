@@ -12,6 +12,7 @@
 import { useMemo } from 'react';
 import { Trash2, ChevronDown, Loader2 } from 'lucide-react';
 import { useProviders, useProviderModels } from '../../api/hooks/useAgents';
+import { getProviderLabel } from '../../lib/providers';
 
 // ============================================================================
 // Types
@@ -106,7 +107,7 @@ export const defaultAgentType: AgentTypeFormState = {
   stewardFocus: '',
   priority: '0',
   maxSlots: '',
-  provider: '',
+  provider: 'claude',
   model: '',
 };
 
@@ -311,7 +312,7 @@ export function AgentTypeConfigRow({ index, agentType, onUpdate, onRemove }: Age
               <option value="">Any</option>
               {providers.map(p => (
                 <option key={p.name} value={p.name} disabled={!p.available}>
-                  {p.name}{!p.available ? ' (not installed)' : ''}
+                  {getProviderLabel(p.name)}{!p.available ? ' (not installed)' : ''}
                 </option>
               ))}
             </select>

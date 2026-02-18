@@ -5,6 +5,7 @@
 import { useState, useEffect } from 'react';
 import { X, Loader2, AlertCircle, ArrowLeftRight } from 'lucide-react';
 import { useChangeAgentProvider, useProviders } from '../../api/hooks/useAgents';
+import { getProviderLabel } from '../../lib/providers';
 
 export interface ChangeProviderDialogProps {
   isOpen: boolean;
@@ -145,7 +146,7 @@ export function ChangeProviderDialog({
                 >
                   {providers.map(p => (
                     <option key={p.name} value={p.name} disabled={!p.available}>
-                      {p.name}{!p.available ? ' (not installed)' : ''}
+                      {getProviderLabel(p.name)}{!p.available ? ' (not installed)' : ''}
                     </option>
                   ))}
                 </select>

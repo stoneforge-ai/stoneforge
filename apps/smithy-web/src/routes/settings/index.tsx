@@ -37,6 +37,7 @@ import {
   type AgentProvider,
 } from '../../api/hooks/useSettings';
 import { useProviders, useProviderModels } from '../../api/hooks/useAgents';
+import { PROVIDER_LABELS } from '../../lib/providers';
 import { DEFAULT_SHORTCUTS } from '../../lib/keyboard';
 import { useDaemonStatus, useUpdateDaemonConfig } from '../../api/hooks/useDaemon';
 
@@ -246,12 +247,6 @@ function PreferencesTab() {
 // ============================================================================
 // Agent Defaults Section
 // ============================================================================
-
-const PROVIDER_LABELS: Record<string, string> = {
-  claude: 'Claude',
-  opencode: 'OpenCode',
-  codex: 'Codex',
-};
 
 interface AgentDefaultsSectionProps {
   settings: {

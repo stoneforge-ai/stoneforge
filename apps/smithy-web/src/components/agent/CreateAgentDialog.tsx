@@ -33,6 +33,7 @@ import type {
   Agent,
 } from '../../api/types';
 import { useCreateAgent, useAgents, useProviders, useProviderModels } from '../../api/hooks/useAgents';
+import { getProviderLabel } from '../../lib/providers';
 import { useAgentDefaultsSettings } from '../../api/hooks/useSettings';
 import { usePlaybooks } from '@stoneforge/ui/workflows';
 import { Link } from '@tanstack/react-router';
@@ -783,7 +784,7 @@ export function CreateAgentDialog({
                         >
                           {providers.map(p => (
                             <option key={p.name} value={p.name} disabled={!p.available}>
-                              {p.name}{!p.available ? ' (not installed)' : ''}
+                              {getProviderLabel(p.name)}{!p.available ? ' (not installed)' : ''}
                             </option>
                           ))}
                         </select>
