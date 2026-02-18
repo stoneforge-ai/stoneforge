@@ -1,5 +1,15 @@
 # @stoneforge/smithy-web
 
+## 1.4.0
+
+### Minor Changes
+
+- 5bb96e6: Add per-provider executable path inputs to the Settings page Agent Defaults section, backed by the server-side settings API
+
+### Patch Changes
+
+- @stoneforge/ui@1.4.0
+
 ## 1.3.0
 
 ### Minor Changes
