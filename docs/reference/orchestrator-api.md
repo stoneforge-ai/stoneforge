@@ -10,7 +10,7 @@ Extends QuarryAPI with agent orchestration capabilities.
 import { createOrchestratorAPI } from '@stoneforge/smithy';
 import { createStorage, initializeSchema } from '@stoneforge/storage';
 
-const storage = createStorage('./project/.stoneforge/db.sqlite');
+const storage = createStorage({ path: './project/.stoneforge/db.sqlite' });
 initializeSchema(storage);
 
 const api = createOrchestratorAPI(storage);

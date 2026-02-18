@@ -10,7 +10,7 @@ The main API for working with Stoneforge elements.
 import { createQuarryAPI } from '@stoneforge/quarry';
 import { createStorage, initializeSchema } from '@stoneforge/storage';
 
-const storage = createStorage('.stoneforge/stoneforge.db');
+const storage = createStorage({ path: '.stoneforge/stoneforge.db' });
 initializeSchema(storage);
 const api = createQuarryAPI(storage);
 ```

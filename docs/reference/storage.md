@@ -42,7 +42,7 @@ SQLite storage layer with multiple backend implementations.
 import { createStorage, initializeSchema } from '@stoneforge/storage';
 
 // Auto-detects runtime (Bun, Node, Browser)
-const storage = createStorage('./project/.stoneforge/db.sqlite');
+const storage = createStorage({ path: './project/.stoneforge/db.sqlite' });
 
 // Initialize schema
 initializeSchema(storage);
@@ -307,9 +307,9 @@ interface SerializedElement {
 Content hash is computed for merge conflict detection:
 
 ```typescript
-import { computeContentHash } from '@stoneforge/quarry';
+import { computeContentHashSync } from '@stoneforge/quarry';
 
-const hash = computeContentHash(element);
+const hash = computeContentHashSync(element);
 ```
 
 **Excluded from hash:**
@@ -377,7 +377,7 @@ const backend = new NodeStorageBackend('./db.sqlite');
 import { BrowserStorageBackend } from '@stoneforge/storage/browser';
 
 // Uses OPFS (Origin Private File System)
-const backend = await BrowserStorageBackend.create('./db.sqlite');
+const backend = await BrowserStorageBackend.create({ path: './db.sqlite' });
 ```
 
 ---

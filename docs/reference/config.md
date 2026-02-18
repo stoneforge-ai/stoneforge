@@ -30,7 +30,7 @@ Configuration precedence (highest to lowest):
 ```typescript
 interface Configuration {
   actor?: string;                    // Default actor for operations
-  database: string;                  // Database path (default: 'db.sqlite')
+  database: string;                  // Database path (default: 'stoneforge.db')
   sync: {
     autoExport: boolean;             // Auto-export on mutation (default: true)
     exportDebounce: number;          // Debounce ms (default: 300000 / 5 minutes)
@@ -162,12 +162,10 @@ const discovery = discoverConfigFile('/project');
 | Variable | Config Path | Example |
 |----------|-------------|---------|
 | `STONEFORGE_ACTOR` | `actor` | `agent-1` |
-| `STONEFORGE_DATABASE` | `database` | `db.sqlite` |
+| `STONEFORGE_DB` | `database` | `stoneforge.db` |
 | `STONEFORGE_SYNC_AUTO_EXPORT` | `sync.autoExport` | `true` |
-| `STONEFORGE_SYNC_EXPORT_DEBOUNCE` | `sync.exportDebounce` | `300000` |
 | `STONEFORGE_IDENTITY_MODE` | `identity.mode` | `cryptographic` |
-| `STONEFORGE_IDENTITY_TIME_TOLERANCE` | `identity.timeTolerance` | `300000` |
-| `STONEFORGE_CONFIG_PATH` | - | `/path/to/config.yaml` |
+| `STONEFORGE_CONFIG` | - | `/path/to/config.yaml` |
 
 ```typescript
 import { loadEnvConfig, getEnvConfigPath } from '@stoneforge/quarry';
@@ -175,7 +173,7 @@ import { loadEnvConfig, getEnvConfigPath } from '@stoneforge/quarry';
 // Load config from env vars
 const envConfig = loadEnvConfig();
 
-// Get config path from STONEFORGE_CONFIG_PATH
+// Get config path from STONEFORGE_CONFIG
 const path = getEnvConfigPath();
 ```
 
@@ -186,7 +184,7 @@ const path = getEnvConfigPath();
 ```yaml
 actor: default-agent
 
-database: db.sqlite
+database: stoneforge.db
 
 sync:
   autoExport: true
@@ -201,7 +199,7 @@ playbooks:
 
 tombstone:
   ttl: 2592000000  # 30 days in ms
-  minTtl: 86400000 # 1 day in ms
+  minTtl: 604800000 # 7 days in ms
 
 identity:
   mode: soft
@@ -219,7 +217,7 @@ parseDuration('5m');   // 300000 (5 minutes)
 parseDuration('1h');   // 3600000 (1 hour)
 parseDuration('7d');   // 604800000 (7 days)
 parseDuration('30s');  // 30000 (30 seconds)
-parseDuration('100');  // 100 (raw milliseconds)
+parseDuration('100ms'); // 100 (100 milliseconds)
 ```
 
 **Supported units:**
@@ -228,7 +226,6 @@ parseDuration('100');  // 100 (raw milliseconds)
 - `m` - minutes
 - `h` - hours
 - `d` - days
-- `w` - weeks
 
 ## Validation
 

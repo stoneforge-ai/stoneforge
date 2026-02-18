@@ -233,9 +233,6 @@ type DependencyType =
 ```typescript
 interface AwaitsMetadataBase {
   gateType: GateType;  // Required, not optional
-  satisfied?: boolean;
-  satisfiedAt?: Timestamp;
-  satisfiedBy?: EntityId;
 }
 
 interface TimerGateMetadata extends AwaitsMetadataBase {
@@ -245,21 +242,27 @@ interface TimerGateMetadata extends AwaitsMetadataBase {
 
 interface ApprovalGateMetadata extends AwaitsMetadataBase {
   gateType: 'approval';
-  requiredApprovers: string[];  // Required, min 1
-  currentApprovers?: string[];
-  requiredCount?: number;
+  requiredApprovers: EntityId[];  // Required, min 1
+  currentApprovers?: EntityId[];
+  approvalCount?: number;
 }
 
 interface ExternalGateMetadata extends AwaitsMetadataBase {
   gateType: 'external';
   externalSystem: string;  // Required
   externalId: string;      // Required
+  satisfied?: boolean;
+  satisfiedAt?: Timestamp;
+  satisfiedBy?: EntityId;
 }
 
 interface WebhookGateMetadata extends AwaitsMetadataBase {
   gateType: 'webhook';
   webhookUrl?: string;
   callbackId?: string;
+  satisfied?: boolean;
+  satisfiedAt?: Timestamp;
+  satisfiedBy?: EntityId;
 }
 
 type AwaitsMetadata =

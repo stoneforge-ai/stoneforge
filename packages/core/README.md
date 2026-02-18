@@ -25,13 +25,13 @@ import type { Task, Entity } from '@stoneforge/core/types';
 import { notFound, invalidInput } from '@stoneforge/core/errors';
 
 // Generate a root ID
-const taskId = generateId({ type: 'task', title: 'Implement auth' });
+const taskId = await generateId({ identifier: 'implement-auth', createdBy: 'el-abc' });
 
 // Generate a child ID scoped to a parent
-const subtaskId = generateChildId(taskId, { type: 'task', title: 'Add login form' });
+const subtaskId = generateChildId(taskId, 1);
 
 // Parse an ID back into its components
-const { root, depth } = parseId(subtaskId);
+const { hash, depth, isRoot } = parseId(subtaskId);
 
 // Throw structured errors with factory functions
 throw notFound('task', taskId);
@@ -91,9 +91,9 @@ Collision-resistant, hierarchical, human-readable IDs:
 
 | Export | Description |
 |--------|-------------|
-| `generateId(input)` | Create a root ID from type + title |
-| `generateChildId(parentId, input)` | Create a scoped child ID |
-| `generateIdHash(input)` | Raw hash without prefix |
+| `generateId(input)` | Create a root ID from identifier + createdBy |
+| `generateChildId(parentId, childNumber)` | Create a scoped child ID |
+| `generateIdHash(components)` | Hash from ID components (identifier, createdBy, timestampNs, nonce) |
 | `parseId(id)` | Extract root, depth, components |
 | `getIdRoot(id)` | Get the root segment |
 | `getIdParent(id)` | Get the parent ID |

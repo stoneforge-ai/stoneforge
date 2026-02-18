@@ -472,13 +472,13 @@ app.route('/', createMyFeatureRoutes(services));
 
 | Component | Purpose |
 |-----------|---------|
-| `AppShell.tsx` | Main layout |
-| `Sidebar.tsx` | Navigation |
-| `DirectorPanel.tsx` | Director terminal |
-| `XTerminal.tsx` | Terminal emulator |
-| `WorkspacePane.tsx` | Workspace panes |
-| `StreamViewer.tsx` | Agent output viewer |
-| `AgentWorkspaceGraph.tsx` | Agent hierarchy graph visualization |
+| `layout/AppShell.tsx` | Main layout |
+| `layout/Sidebar.tsx` | Navigation |
+| `layout/DirectorPanel.tsx` | Director terminal |
+| `terminal/XTerminal.tsx` | Terminal emulator |
+| `workspace/WorkspacePane.tsx` | Workspace panes |
+| `workspace/StreamViewer.tsx` | Agent output viewer |
+| `agent-graph/AgentWorkspaceGraph.tsx` | Agent hierarchy graph visualization |
 
 ### Routes
 
@@ -521,9 +521,9 @@ The Documents page supports drag-and-drop for organizing documents and libraries
 
 | File | Purpose |
 |------|---------|
-| `LibraryTree.tsx` | Tree sidebar with react-arborist |
-| `DocumentListItem.tsx` | Draggable document item |
-| `MoveToTopLevelDialog.tsx` | Confirmation for removing from library |
+| `routes/documents/components/LibraryTree.tsx` | Tree sidebar with react-arborist |
+| `routes/documents/components/DocumentListItem.tsx` | Draggable document item |
+| `routes/documents/components/MoveToTopLevelDialog.tsx` | Confirmation for removing from library |
 
 **Key Features:**
 - Drag handle appears on hover for documents
