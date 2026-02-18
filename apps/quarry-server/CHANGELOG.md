@@ -1,5 +1,14 @@
 # @stoneforge/quarry-server
 
+## 1.5.0
+
+### Patch Changes
+
+- @stoneforge/core@1.5.0
+- @stoneforge/storage@1.5.0
+- @stoneforge/quarry@1.5.0
+- @stoneforge/shared-routes@1.5.0
+
 ## 1.4.1
 
 ### Patch Changes
