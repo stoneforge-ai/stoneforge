@@ -7,11 +7,19 @@ import { X, Loader2, AlertCircle, ArrowLeftRight } from 'lucide-react';
 import { useChangeAgentProvider, useProviders } from '../../api/hooks/useAgents';
 import { getProviderLabel } from '../../lib/providers';
 
+/** Default executable name per provider (used as placeholder text) */
+const providerDefaultExecutable: Record<string, string> = {
+  claude: 'claude',
+  opencode: 'opencode',
+  codex: 'codex',
+};
+
 export interface ChangeProviderDialogProps {
   isOpen: boolean;
   onClose: () => void;
   agentId: string;
   currentProvider: string;
+  currentExecutablePath?: string;
   onSuccess?: () => void;
 }
 
@@ -20,9 +28,11 @@ export function ChangeProviderDialog({
   onClose,
   agentId,
   currentProvider,
+  currentExecutablePath,
   onSuccess,
 }: ChangeProviderDialogProps) {
   const [provider, setProvider] = useState(currentProvider);
+  const [executablePath, setExecutablePath] = useState(currentExecutablePath ?? '');
   const [error, setError] = useState<string | null>(null);
   const changeProvider = useChangeAgentProvider();
   const { data: providersData, isLoading: providersLoading } = useProviders();
@@ -31,9 +41,10 @@ export function ChangeProviderDialog({
   useEffect(() => {
     if (isOpen) {
       setProvider(currentProvider);
+      setExecutablePath(currentExecutablePath ?? '');
       setError(null);
     }
-  }, [isOpen, currentProvider]);
+  }, [isOpen, currentProvider, currentExecutablePath]);
 
   if (!isOpen) return null;
 
@@ -42,17 +53,40 @@ export function ChangeProviderDialog({
     onClose();
   };
 
+  const handleProviderChange = (newProvider: string) => {
+    setProvider(newProvider);
+    // Clear executable path when provider changes (it's provider-specific)
+    setExecutablePath('');
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    if (provider === currentProvider) {
+    const trimmedPath = executablePath.trim();
+    const currentPath = currentExecutablePath ?? '';
+    const pathChanged = trimmedPath !== currentPath;
+
+    if (provider === currentProvider && !pathChanged) {
       handleClose();
       return;
     }
 
     try {
-      await changeProvider.mutateAsync({ agentId, provider });
+      // Determine executablePath value to send:
+      // - If user cleared the field, send null to remove the override
+      // - If user set a value, send it
+      // - If unchanged, don't include it
+      let executablePathValue: string | null | undefined;
+      if (pathChanged) {
+        executablePathValue = trimmedPath || null; // empty string → null (clear override)
+      }
+
+      await changeProvider.mutateAsync({
+        agentId,
+        provider,
+        executablePath: executablePathValue,
+      });
       onSuccess?.();
       handleClose();
     } catch (err) {
@@ -61,6 +95,7 @@ export function ChangeProviderDialog({
   };
 
   const providers = providersData?.providers ?? [];
+  const hasChanges = provider !== currentProvider || executablePath.trim() !== (currentExecutablePath ?? '');
 
   return (
     <>
@@ -133,7 +168,7 @@ export function ChangeProviderDialog({
                 <select
                   id="agent-provider"
                   value={provider}
-                  onChange={e => setProvider(e.target.value)}
+                  onChange={e => handleProviderChange(e.target.value)}
                   className="
                     w-full px-3 py-2
                     text-sm
@@ -151,6 +186,33 @@ export function ChangeProviderDialog({
                   ))}
                 </select>
               )}
+            </div>
+
+            {/* Executable path */}
+            <div className="space-y-1">
+              <label htmlFor="change-provider-executable-path" className="text-sm font-medium text-[var(--color-text)]">
+                Executable Path (optional)
+              </label>
+              <input
+                id="change-provider-executable-path"
+                type="text"
+                value={executablePath}
+                onChange={e => setExecutablePath(e.target.value)}
+                placeholder={providerDefaultExecutable[provider] ?? provider}
+                className="
+                  w-full px-3 py-2
+                  text-sm
+                  bg-[var(--color-surface)]
+                  border border-[var(--color-border)]
+                  rounded-lg
+                  placeholder:text-[var(--color-text-tertiary)]
+                  focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30
+                "
+                data-testid="change-provider-executable-path"
+              />
+              <p className="text-xs text-[var(--color-text-tertiary)]">
+                Custom path to the provider CLI executable. Leave empty to use the default.
+              </p>
             </div>
 
             {/* Actions */}
@@ -173,7 +235,7 @@ export function ChangeProviderDialog({
               </button>
               <button
                 type="submit"
-                disabled={changeProvider.isPending || provider === currentProvider}
+                disabled={changeProvider.isPending || !hasChanges}
                 className="
                   flex items-center gap-2
                   px-4 py-2

@@ -165,7 +165,16 @@ interface FormState {
   provider: string;
   // Model override (empty string means use provider default)
   model: string;
+  // Custom executable path (empty string means use default)
+  executablePath: string;
 }
+
+/** Default executable name per provider (used as placeholder text) */
+const providerDefaultExecutable: Record<string, string> = {
+  claude: 'claude',
+  opencode: 'opencode',
+  codex: 'codex',
+};
 
 const defaultState: FormState = {
   name: '',
@@ -177,6 +186,7 @@ const defaultState: FormState = {
   tags: '',
   provider: 'claude',
   model: '',
+  executablePath: '',
 };
 
 export function CreateAgentDialog({
@@ -271,10 +281,10 @@ export function CreateAgentDialog({
     onClose();
   };
 
-  // Handler for provider change - apply default model from settings for the new provider
+  // Handler for provider change - apply default model from settings for the new provider and clear executable path
   const handleProviderChange = (newProvider: string) => {
     const defaultModelForProvider = agentDefaults.defaultModels[newProvider] ?? '';
-    setForm(prev => ({ ...prev, provider: newProvider, model: defaultModelForProvider }));
+    setForm(prev => ({ ...prev, provider: newProvider, model: defaultModelForProvider, executablePath: '' }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -299,6 +309,7 @@ export function CreateAgentDialog({
       tags: form.tags.trim() ? form.tags.split(',').map(t => t.trim()).filter(Boolean) : undefined,
       provider: form.provider !== 'claude' ? form.provider : undefined,
       model: form.model || undefined, // Only include if not empty (not using default)
+      executablePath: form.executablePath.trim() || undefined, // Only include if not empty (not using default)
     };
 
     // Add role-specific fields
@@ -835,6 +846,32 @@ export function CreateAgentDialog({
                         <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-tertiary)] pointer-events-none" />
                       )}
                     </div>
+                  </div>
+                  {/* Executable path */}
+                  <div className="space-y-1">
+                    <label htmlFor="agent-executable-path" className="text-xs font-medium text-[var(--color-text-secondary)]">
+                      Executable Path (optional)
+                    </label>
+                    <input
+                      id="agent-executable-path"
+                      type="text"
+                      value={form.executablePath}
+                      onChange={e => setForm(prev => ({ ...prev, executablePath: e.target.value }))}
+                      placeholder={providerDefaultExecutable[form.provider] ?? form.provider}
+                      className="
+                        w-full px-3 py-1.5
+                        text-sm
+                        bg-[var(--color-surface)]
+                        border border-[var(--color-border)]
+                        rounded-lg
+                        placeholder:text-[var(--color-text-tertiary)]
+                        focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30
+                      "
+                      data-testid="agent-executable-path"
+                    />
+                    <p className="text-xs text-[var(--color-text-tertiary)]">
+                      Custom path to the provider CLI executable. Leave empty to use the default.
+                    </p>
                   </div>
                 </div>
               )}

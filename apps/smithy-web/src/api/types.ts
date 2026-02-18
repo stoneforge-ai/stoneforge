@@ -47,6 +47,7 @@ export interface BaseAgentMetadata {
   roleDefinitionRef?: ElementId;
   provider?: string;
   model?: string;
+  executablePath?: string;
 }
 
 export interface DirectorMetadata extends BaseAgentMetadata {
@@ -201,6 +202,8 @@ export interface CreateAgentInput {
   provider?: string;
   // Model override (if not set, uses provider default)
   model?: string;
+  // Custom executable path for the provider CLI (if not set, uses default)
+  executablePath?: string;
 }
 
 // ============================================================================

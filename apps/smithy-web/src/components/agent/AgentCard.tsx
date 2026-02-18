@@ -119,6 +119,15 @@ export function AgentCard({
               </span>
             )}
           </div>
+          {agentMeta?.executablePath && (
+            <div
+              className="mt-1 text-xs text-[var(--color-text-tertiary)] font-mono truncate"
+              data-testid={`agent-executable-path-${agent.id}`}
+              title={agentMeta.executablePath}
+            >
+              Path: {agentMeta.executablePath}
+            </div>
+          )}
         </div>
 
         {/* Actions dropdown */}
@@ -333,6 +342,7 @@ export function AgentCard({
         onClose={() => setChangeProviderOpen(false)}
         agentId={agent.id}
         currentProvider={agentMeta?.provider ?? 'claude'}
+        currentExecutablePath={agentMeta?.executablePath}
       />
 
       {/* Change Model Dialog */}

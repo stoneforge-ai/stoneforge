@@ -353,16 +353,20 @@ export function useRenameAgent() {
 }
 
 /**
- * Hook to change an agent's provider
+ * Hook to change an agent's provider (and optionally its executable path)
  */
 export function useChangeAgentProvider() {
   const queryClient = useQueryClient();
 
-  return useMutation<AgentResponse, Error, { agentId: string; provider: string }>({
-    mutationFn: async ({ agentId, provider }) => {
+  return useMutation<AgentResponse, Error, { agentId: string; provider: string; executablePath?: string | null }>({
+    mutationFn: async ({ agentId, provider, executablePath }) => {
+      const body: Record<string, unknown> = { provider };
+      if (executablePath !== undefined) {
+        body.executablePath = executablePath;
+      }
       return fetchApi<AgentResponse>(`/agents/${agentId}`, {
         method: 'PATCH',
-        body: JSON.stringify({ provider }),
+        body: JSON.stringify(body),
       });
     },
     onSuccess: (_, { agentId }) => {
