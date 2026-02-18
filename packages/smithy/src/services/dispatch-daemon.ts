@@ -904,7 +904,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       const unclaimedReviewTasks = reviewTasks.filter((ta) => !ta.task.assignee);
 
       const sortedReviewTasks = [...unclaimedReviewTasks].sort(
-        (a, b) => (b.task.priority ?? 0) - (a.task.priority ?? 0)
+        (a, b) => (a.task.priority ?? 0) - (b.task.priority ?? 0)
       );
 
       for (const steward of mergeStewards) {
@@ -948,7 +948,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
 
           if (matchingTasks.length > 0) {
             // Assign the highest priority task to this steward
-            const sortedTasks = [...matchingTasks].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+            const sortedTasks = [...matchingTasks].sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0));
             const task = sortedTasks[0];
             const stewardId = asEntityId(steward.id);
 
