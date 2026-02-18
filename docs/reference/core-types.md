@@ -47,6 +47,7 @@ interface Task extends Element {
   deadline?: Timestamp;
   scheduledFor?: Timestamp;
   closedAt?: Timestamp;
+  deletedAt?: Timestamp;
   deletedBy?: EntityId;
   deleteReason?: string;
   externalRef?: string;
@@ -74,7 +75,7 @@ type Complexity = 1 | 2 | 3 | 4 | 5;
 - `closed` → only `open` (cannot go to in_progress, blocked, or deferred)
 - `tombstone` is terminal
 
-**Note:** `deletedAt` is inherited from Element (soft-delete support).
+**Note:** `deletedAt` is also defined on Element (soft-delete support). Task re-declares it along with `deletedBy` and `deleteReason` for explicit soft-delete handling.
 
 ---
 
@@ -345,7 +346,7 @@ interface ChannelPermissions {
 type ChannelType = 'direct' | 'group';
 ```
 
-**Direct channels:** Names are deterministic `[entityA:entityB]` (sorted alphabetically).
+**Direct channels:** Names are deterministic `entityA:entityB` (sorted alphabetically, no brackets).
 
 **Note:** Channel uses a plain `description` string rather than a `descriptionRef` Document reference (as used by Task, Plan, and Library). As a result, `HydratedChannel` is simply a type alias for `Channel` since the description no longer requires hydration.
 

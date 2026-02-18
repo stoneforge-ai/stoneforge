@@ -17,8 +17,8 @@ const depService = createDependencyService(storage);
 ### Methods
 
 ```typescript
-// Add dependency
-depService.add({
+// Add dependency (automatically checks for cycles on blocking types)
+depService.addDependency({
   blockedId,
   blockerId,
   type: 'blocks',
@@ -27,7 +27,7 @@ depService.add({
 });
 
 // Remove dependency
-depService.remove(blockedId, blockerId, type);
+depService.removeDependency(blockedId, blockerId, type, actorId);
 
 // Check existence
 const exists = depService.exists(blockedId, blockerId, type);
@@ -36,10 +36,10 @@ const exists = depService.exists(blockedId, blockerId, type);
 const dep = depService.getDependency(blockedId, blockerId, type);
 
 // Get outgoing dependencies
-const deps = depService.getDependencies(blockedId, types?);
+const deps = depService.getDependencies(blockedId, type?);
 
 // Get incoming dependencies (what depends on this)
-const dependents = depService.getDependents(blockerId, types?);
+const dependents = depService.getDependents(blockerId, type?);
 
 // Bulk get for multiple sources
 const deps = depService.getDependenciesForMany(blockedIds, type?);
@@ -62,7 +62,7 @@ const hasCycle = depService.detectCycle(blockedId, blockerId, type);
 - Only checked for blocking types (`blocks`, `awaits`, `parent-child`)
 - Self-referential rejected immediately with `CYCLE_DETECTED`
 
-**Note:** `api.addDependency()` does **not** check for cycles automatically. Use `detectCycle()` for pre-validation before adding blocking dependencies.
+**Note:** `addDependency()` **automatically** checks for cycles on blocking dependency types (`blocks`, `awaits`, `parent-child`). You can also use `detectCycle()` for manual pre-validation.
 
 ---
 
@@ -260,15 +260,15 @@ Calculates minimum unique ID prefix length.
 import { createIdLengthCache } from '@stoneforge/quarry';
 
 const idLengthCache = createIdLengthCache(storage, {
-  refreshIntervalMs: 60000,  // Default: 60 seconds
+  ttlMs: 60000,  // Default: 60 seconds
 });
 ```
 
 ### Methods
 
 ```typescript
-// Get minimum ID length for unique prefix
-const minLength = idLengthCache.getMinIdLength();
+// Get minimum ID hash length for unique prefix
+const hashLength = idLengthCache.getHashLength();
 
 // Force refresh
 idLengthCache.refresh();

@@ -186,7 +186,6 @@ const assignments = await assignmentService.listAssignments({
   taskStatus: 'in_progress',
   assignmentStatus: ['assigned', 'in_progress'],
   mergeStatus: 'pending',
-  includeEphemeral: true,
 });
 ```
 
@@ -303,7 +302,7 @@ daemon.updateConfig({ pollIntervalMs: 10000 });
 
 ### Polling Loops
 
-The daemon runs six polling loops:
+The daemon runs several polling loops (additional loops enabled via config):
 
 | Loop | Purpose |
 |------|---------|
@@ -313,6 +312,8 @@ The daemon runs six polling loops:
 | **Steward Triggers** | Check for triggered conditions and create workflows from playbooks |
 | **Workflow Tasks** | Assign workflow tasks to available stewards |
 | **Closed-Unmerged Reconciliation** | Detect CLOSED tasks with non-merged mergeStatus and move them back to REVIEW |
+| **Plan Auto-Completion** | Auto-complete plans when all tasks are closed (enable via `planAutoCompleteEnabled`) |
+| **Stuck-Merge Recovery** | Detect and recover stalled merge operations (enable via `stuckMergeRecoveryEnabled`) |
 
 ### Worker Dispatch Behavior
 
@@ -363,30 +364,13 @@ For directors:
 
 ### Triage Spawn
 
-The daemon can spawn triage sessions to evaluate and categorize incoming messages.
+The daemon spawns triage sessions internally to evaluate and categorize incoming messages. The triage methods are private implementation details:
 
-```typescript
-// Process a batch of messages awaiting triage
-await daemon.processTriageBatch();
+- **`processTriageBatch()`** — Polls for messages that need triage, groups them, and spawns triage sessions. Called automatically as part of the daemon's polling loops.
+- **`spawnTriageSession(context)`** — Spawns a headless agent session in a read-only worktree (see `WorktreeManager.createReadOnlyWorktree()`). The session receives the triage prompt and evaluates messages, then cleans up on exit.
+- **`buildTriagePrompt(context)`** — Constructs the prompt for a triage session using the `message-triage.md` prompt template.
 
-// Spawn a single triage session for a specific message or context
-await daemon.spawnTriageSession(triageContext);
-
-// Build the prompt used by triage sessions
-const prompt = daemon.buildTriagePrompt(triageContext);
-```
-
-#### `processTriageBatch()`
-
-Polls for messages that need triage, groups them, and spawns triage sessions to evaluate them. Called automatically as part of the daemon's polling loops.
-
-#### `spawnTriageSession(context)`
-
-Spawns a headless agent session in a read-only worktree (see `WorktreeManager.createReadOnlyWorktree()`). The session receives the triage prompt and evaluates messages, then cleans up on exit.
-
-#### `buildTriagePrompt(context)`
-
-Constructs the prompt for a triage session using the `message-triage.md` prompt template. Includes the messages to evaluate and any relevant project context.
+**Note:** These methods are internal to the daemon and not exposed on the public `DispatchDaemon` interface. Triage is triggered automatically by the daemon's polling loop.
 
 ### Closed-Unmerged Reconciliation Behavior
 
@@ -528,8 +512,8 @@ import { createStewardExecutor } from '@stoneforge/smithy';
 // Creates an executor that dispatches to the appropriate service based on steward focus:
 // - 'merge'    → MergeStewardService.processAllPending()
 // - 'docs'     → spawns an agent session via sessionManager
-// - 'recovery' → spawns a recovery agent session
 // - 'custom'   → spawns a session with a custom playbook prompt
+// Note: Unrecognized focus values (e.g., 'recovery') return an error result
 const executor = createStewardExecutor({
   mergeStewardService,
   docsStewardService,

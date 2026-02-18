@@ -333,4 +333,9 @@ listBuiltInPrompts(): string[]
 buildAgentPrompt(
   options: BuildAgentPromptOptions
 ): string | undefined
+
+// Load triage prompt (used by dispatch daemon for triage sessions)
+loadTriagePrompt(
+  options?: LoadPromptOptions
+): RolePromptResult | undefined
 ```

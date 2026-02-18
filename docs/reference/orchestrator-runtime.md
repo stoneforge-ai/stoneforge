@@ -12,7 +12,8 @@ Manages Claude Code process spawning and lifecycle.
 import { createSpawnerService } from '@stoneforge/smithy';
 
 const spawner = createSpawnerService({
-  claudePath: 'claude',           // Path to Claude Code binary
+  provider: 'claude-code',        // Agent provider (preferred)
+  claudePath: 'claude',           // @deprecated - use provider instead
   workingDirectory: '/workspace', // Default working directory
   timeout: 30000,                 // Timeout for init (30s)
   stoneforgeRoot: '/workspace',    // Sets STONEFORGE_ROOT env var
@@ -93,6 +94,9 @@ await spawner.terminate(sessionId, false);  // force (SIGKILL)
 
 // Suspend session
 await spawner.suspend(sessionId);
+
+// Interrupt session (sends interrupt signal)
+await spawner.interrupt(sessionId);
 
 // Send input (headless)
 await spawner.sendInput(sessionId, 'Please continue');
@@ -176,7 +180,7 @@ Higher-level session lifecycle management with resume support.
 ```typescript
 import { createSessionManager } from '@stoneforge/smithy';
 
-const sessionManager = createSessionManager(spawner, api, agentRegistry);
+const sessionManager = createSessionManager(spawner, api, agentRegistry, settingsService?);
 ```
 
 ### Starting Sessions
@@ -275,26 +279,29 @@ Session handoffs for context preservation.
 ```typescript
 import { createHandoffService } from '@stoneforge/smithy';
 
-const handoffService = createHandoffService(sessionManager, api);
+const handoffService = createHandoffService(sessionManager, agentRegistry, api);
 ```
 
 ### Self-Handoff
 
 ```typescript
-const result = await handoffService.selfHandoff(agentId, {
+const result = await handoffService.selfHandoff(agentId, sessionId, {
+  contextSummary: 'Current progress on feature X...',
+  nextSteps: 'Continue with step 3',
   reason: 'Context overflow',
-  preserveContext: true,
-  summaryPrompt: 'Summarize current progress',
+  metadata: { iteration: 2 },
 });
 ```
 
 ### Agent-to-Agent Handoff
 
 ```typescript
-const result = await handoffService.handoffTo(fromAgentId, toAgentId, {
+const result = await handoffService.handoffToAgent(fromAgentId, toAgentId, sessionId, {
+  contextSummary: 'Current state and progress...',
+  nextSteps: 'Review and merge the PR',
   reason: 'Specialization required',
-  taskId: taskId,
-  context: 'Current state and progress...',
+  taskIds: [taskId1, taskId2],
+  triggerTarget: true,  // Wake up target agent (default: true)
 });
 ```
 
@@ -365,8 +372,8 @@ const event = mapSDKMessageToEvent(sdkMessage);
 
 | SDK Message Type | Stoneforge EventType |
 |------------------|---------------------|
-| `assistant` | `assistant_message` |
+| `assistant` | `assistant` |
 | `tool_use` | `tool_use` |
 | `tool_result` | `tool_result` |
-| `system` | `system_message` |
+| `system` | `system` |
 | `error` | `error` |

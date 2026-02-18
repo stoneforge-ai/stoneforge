@@ -48,7 +48,7 @@ const storage = createStorage({ path: './project/.stoneforge/db.sqlite' });
 initializeSchema(storage);
 
 // Async variant (for browser WASM)
-const storage = await createStorageAsync('./db.sqlite');
+const storage = await createStorageAsync({ path: './db.sqlite' });
 ```
 
 ## StorageBackend Interface
@@ -139,7 +139,7 @@ Default: `.stoneforge/` directory in project root
 
 ## Schema
 
-Current version: 8
+Current version: 9
 
 ### Key Tables
 
@@ -154,8 +154,11 @@ Current version: 8
 | `tags` | Tag index for fast filtering |
 | `events` | System events for audit/history |
 | `inbox_items` | Notification items per entity |
+| `comments` | Inline document comments with text anchoring (migration 5) |
+| `session_messages` | Persistent session event storage for agent sessions (migration 6) |
 | `documents_fts` | FTS5 virtual table for full-text document search (migration 7) |
 | `document_embeddings` | Vector embeddings for semantic document search (migration 8) |
+| `settings` | Server-side key-value configuration store (migration 9) |
 
 ### Elements Table
 
@@ -166,7 +169,12 @@ CREATE TABLE elements (
   data TEXT NOT NULL,  -- JSON blob
   content_hash TEXT,
   created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
+  updated_at TEXT NOT NULL,
+  created_by TEXT NOT NULL,
+  deleted_at TEXT,
+  CHECK (type IN ('task', 'message', 'document', 'entity',
+                  'plan', 'workflow', 'playbook',
+                  'channel', 'library', 'team'))
 );
 ```
 
@@ -174,19 +182,17 @@ CREATE TABLE elements (
 
 ```sql
 CREATE TABLE dependencies (
-  blocked_id TEXT NOT NULL,
+  blocked_id TEXT NOT NULL REFERENCES elements(id) ON DELETE CASCADE,
   blocker_id TEXT NOT NULL,
   type TEXT NOT NULL,
   created_at TEXT NOT NULL,
   created_by TEXT NOT NULL,
   metadata TEXT,  -- JSON blob
-  PRIMARY KEY (blocked_id, blocker_id, type),
-  FOREIGN KEY (blocked_id) REFERENCES elements(id) ON DELETE CASCADE,
-  FOREIGN KEY (blocker_id) REFERENCES elements(id) ON DELETE CASCADE
+  PRIMARY KEY (blocked_id, blocker_id, type)
 );
 ```
 
-**Note:** Deleting elements CASCADE deletes dependencies (FK constraint).
+**Note:** Only `blocked_id` has a CASCADE foreign key constraint. Deleting the blocked element removes its dependencies.
 
 ### FTS5 Virtual Table (Migration 7)
 

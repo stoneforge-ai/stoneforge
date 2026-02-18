@@ -26,7 +26,10 @@ const api = createOrchestratorAPI(storage);
 const director = await api.registerDirector({
   name: 'MainDirector',
   createdBy: humanEntityId,
-  maxConcurrentTasks: 1,  // Optional, default: 1
+  maxConcurrentTasks: 1,    // Optional, default: 1
+  provider: 'claude-code',  // Optional: agent provider
+  model: 'sonnet',          // Optional: LLM model
+  executablePath: 'claude', // Optional: executable path
 });
 ```
 
@@ -89,6 +92,7 @@ const ephemeralWorkers = await api.listAgents({
 const director = await api.getDirector();
 const stewards = await api.getStewards();
 const availableWorkers = await api.getAvailableWorkers();
+const allWorkers = await api.getAgentsByRole('worker');
 ```
 
 ---
@@ -98,15 +102,17 @@ const availableWorkers = await api.getAvailableWorkers();
 Each agent gets a dedicated channel on registration.
 
 ```typescript
+// Via OrchestratorAPI: returns ChannelId
+const channelId = await api.getAgentChannel(agentId);
+
+// Via AgentRegistry: returns full Channel object
 import { createAgentRegistry } from '@stoneforge/smithy';
 
 const registry = createAgentRegistry(api);
+const channel = await registry.getAgentChannel(agentId);     // Channel | undefined
+const channelId = await registry.getAgentChannelId(agentId); // ChannelId | undefined
 
-// Get channel
-const channel = await registry.getAgentChannel(agentId);
-const channelId = await registry.getAgentChannelId(agentId);
-
-// Channel name utilities
+// Channel name utilities (from AgentRegistry module)
 import { generateAgentChannelName, parseAgentChannelName } from '@stoneforge/smithy';
 
 generateAgentChannelName('Worker-1');  // 'agent-Worker-1'
@@ -130,9 +136,15 @@ const task = await api.assignTaskToAgent(taskId, workerId, {
   sessionId: 'claude-session-123',
 });
 
-// Get/update orchestrator metadata
+// With markAsStarted option
+const task = await api.assignTaskToAgent(taskId, workerId, {
+  markAsStarted: true,  // Also sets task status to 'in_progress'
+});
+
+// Get/set/update orchestrator metadata
 const meta = await api.getTaskOrchestratorMeta(taskId);
-await api.updateTaskOrchestratorMeta(taskId, {
+await api.setTaskOrchestratorMeta(taskId, fullMeta);    // Replace entire metadata
+await api.updateTaskOrchestratorMeta(taskId, {           // Partial update
   mergeStatus: 'pending',
 });
 ```
@@ -224,6 +236,7 @@ interface BaseAgentMetadata {
   roleDefinitionRef?: ElementId;
   provider?: string;
   model?: string;
+  executablePath?: string;
 }
 
 interface DirectorMetadata extends BaseAgentMetadata {
@@ -240,7 +253,8 @@ interface StewardMetadata extends BaseAgentMetadata {
   agentRole: 'steward';
   stewardFocus: StewardFocus;
   triggers?: StewardTrigger[];
-  playbook?: string;          // For 'custom' stewards
+  playbook?: string;          // @deprecated - use playbookId instead
+  playbookId?: string;        // Playbook element ID for 'custom' stewards
   lastExecutedAt?: Timestamp;
   nextScheduledAt?: Timestamp;
 }

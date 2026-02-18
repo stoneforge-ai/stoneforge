@@ -48,6 +48,9 @@ interface Configuration {
     mode: IdentityMode;              // 'soft' | 'cryptographic' | 'hybrid'
     timeTolerance: number;           // Signature tolerance ms (default: 5 min)
   };
+  plugins: {
+    packages: string[];              // CLI plugin package names
+  };
 }
 ```
 
@@ -117,7 +120,8 @@ type ConfigPath =
   | 'tombstone.ttl'
   | 'tombstone.minTtl'
   | 'identity.mode'
-  | 'identity.timeTolerance';
+  | 'identity.timeTolerance'
+  | 'plugins.packages';
 ```
 
 ## Modifying Configuration
@@ -165,6 +169,8 @@ const discovery = discoverConfigFile('/project');
 | `STONEFORGE_DB` | `database` | `stoneforge.db` |
 | `STONEFORGE_SYNC_AUTO_EXPORT` | `sync.autoExport` | `true` |
 | `STONEFORGE_IDENTITY_MODE` | `identity.mode` | `cryptographic` |
+| `STONEFORGE_JSON` | - | `true` (JSON output mode) |
+| `STONEFORGE_VERBOSE` | - | `true` (verbose/debug mode) |
 | `STONEFORGE_CONFIG` | - | `/path/to/config.yaml` |
 
 ```typescript
