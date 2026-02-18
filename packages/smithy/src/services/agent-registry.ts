@@ -275,6 +275,7 @@ export class AgentRegistryImpl implements AgentRegistry {
       roleDefinitionRef: input.roleDefinitionRef,
       provider: input.provider,
       model: input.model,
+      executablePath: input.executablePath,
     };
 
     const entity = await createEntity({
@@ -306,6 +307,7 @@ export class AgentRegistryImpl implements AgentRegistry {
       roleDefinitionRef: input.roleDefinitionRef,
       provider: input.provider,
       model: input.model,
+      executablePath: input.executablePath,
     };
 
     const entity = await createEntity({
@@ -341,6 +343,7 @@ export class AgentRegistryImpl implements AgentRegistry {
       roleDefinitionRef: input.roleDefinitionRef,
       provider: input.provider,
       model: input.model,
+      executablePath: input.executablePath,
     };
 
     const entity = await createEntity({

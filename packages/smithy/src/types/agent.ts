@@ -185,6 +185,8 @@ export interface BaseAgentMetadata {
   readonly provider?: string;
   /** Model identifier to use (e.g., 'claude-sonnet-4-20250514'). If not set, uses provider default. */
   readonly model?: string;
+  /** Custom executable path for the agent's provider CLI (e.g., '/usr/local/bin/claude'). If not set, uses provider default. */
+  readonly executablePath?: string;
 }
 
 /**
@@ -280,6 +282,8 @@ export interface RegisterDirectorInput {
   readonly provider?: string;
   /** Model identifier to use (e.g., 'claude-sonnet-4-20250514'). If not set, uses provider default. */
   readonly model?: string;
+  /** Custom executable path for the agent's provider CLI. If not set, uses provider default. */
+  readonly executablePath?: string;
 }
 
 /**
@@ -304,6 +308,8 @@ export interface RegisterWorkerInput {
   readonly provider?: string;
   /** Model identifier to use (e.g., 'claude-sonnet-4-20250514'). If not set, uses provider default. */
   readonly model?: string;
+  /** Custom executable path for the agent's provider CLI. If not set, uses provider default. */
+  readonly executablePath?: string;
 }
 
 /**
@@ -341,6 +347,8 @@ export interface RegisterStewardInput {
   readonly provider?: string;
   /** Model identifier to use (e.g., 'claude-sonnet-4-20250514'). If not set, uses provider default. */
   readonly model?: string;
+  /** Custom executable path for the agent's provider CLI. If not set, uses provider default. */
+  readonly executablePath?: string;
 }
 
 // ============================================================================
