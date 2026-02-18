@@ -47,6 +47,7 @@ export function createAgentRoutes(services: Services) {
         createdBy?: string;
         provider?: string;
         model?: string;
+        executablePath?: string;
       };
 
       if (!body.role || !body.name) {
@@ -65,6 +66,7 @@ export function createAgentRoutes(services: Services) {
             maxConcurrentTasks: body.maxConcurrentTasks,
             provider: body.provider,
             model: body.model,
+            executablePath: body.executablePath,
           });
           break;
 
@@ -81,6 +83,7 @@ export function createAgentRoutes(services: Services) {
             reportsTo: body.reportsTo as EntityId | undefined,
             provider: body.provider,
             model: body.model,
+            executablePath: body.executablePath,
           });
           break;
 
@@ -100,6 +103,7 @@ export function createAgentRoutes(services: Services) {
             reportsTo: body.reportsTo as EntityId | undefined,
             provider: body.provider,
             model: body.model,
+            executablePath: body.executablePath,
           });
           if (stewardScheduler.isRunning()) {
             try {
@@ -302,6 +306,7 @@ export function createAgentRoutes(services: Services) {
         name?: string;
         provider?: string;
         model?: string | null;
+        executablePath?: string | null;
         triggers?: Array<{ type: 'cron'; schedule: string } | { type: 'event'; event: string; condition?: string }>;
       };
 
@@ -322,6 +327,10 @@ export function createAgentRoutes(services: Services) {
         return c.json({ error: { code: 'VALIDATION_ERROR', message: 'Model must be a non-empty string or null' } }, 400);
       }
 
+      if (body.executablePath !== undefined && body.executablePath !== null && (typeof body.executablePath !== 'string' || body.executablePath.trim().length === 0)) {
+        return c.json({ error: { code: 'VALIDATION_ERROR', message: 'executablePath must be a non-empty string or null' } }, 400);
+      }
+
       // Update name if provided
       let updatedAgent = agent;
       if (body.name !== undefined) {
@@ -337,6 +346,13 @@ export function createAgentRoutes(services: Services) {
       if (body.model !== undefined) {
         updatedAgent = await agentRegistry.updateAgentMetadata(agentId, {
           model: body.model === null ? undefined : body.model.trim(),
+        });
+      }
+
+      // Update executablePath in agent metadata if provided (null clears the override)
+      if (body.executablePath !== undefined) {
+        updatedAgent = await agentRegistry.updateAgentMetadata(agentId, {
+          executablePath: body.executablePath === null ? undefined : body.executablePath.trim(),
         });
       }
 
