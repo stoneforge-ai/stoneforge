@@ -5,7 +5,7 @@
  * Settings are persisted to localStorage for immediate availability.
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 
 // ============================================================================
 // Types
@@ -311,6 +311,129 @@ export function useAgentDefaultsSettings() {
     setSettings,
     setDefaultModel,
     resetToDefaults,
+  };
+}
+
+// ============================================================================
+// Server-backed Executable Path Settings
+// ============================================================================
+
+const API_BASE = '/api';
+
+/**
+ * Response shape from GET /api/settings/agent-defaults
+ */
+export interface ServerAgentDefaults {
+  defaultExecutablePaths: Record<string, string>;
+}
+
+/**
+ * Hook for managing executable path settings via the server API.
+ *
+ * Unlike other settings hooks that use localStorage, executable paths are
+ * persisted to the server (SQLite) because the daemon needs access to them
+ * when spawning agents server-side.
+ */
+export function useExecutablePathSettings() {
+  const [executablePaths, setExecutablePathsState] = useState<Record<string, string>>({});
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Fetch on mount
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchDefaults() {
+      try {
+        const res = await fetch(`${API_BASE}/settings/agent-defaults`, {
+          headers: { 'Content-Type': 'application/json' },
+        });
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+        const data: ServerAgentDefaults = await res.json();
+        if (!cancelled) {
+          setExecutablePathsState(data.defaultExecutablePaths ?? {});
+          setIsLoading(false);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(String(err));
+          setIsLoading(false);
+        }
+      }
+    }
+
+    fetchDefaults();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Persist to server
+  const persistToServer = useCallback(async (paths: Record<string, string>) => {
+    try {
+      setError(null);
+      const res = await fetch(`${API_BASE}/settings/agent-defaults`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ defaultExecutablePaths: paths }),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({ error: { message: 'Unknown error' } }));
+        throw new Error(errData.error?.message || `HTTP ${res.status}`);
+      }
+    } catch (err) {
+      setError(String(err));
+    }
+  }, []);
+
+  // Debounced persist
+  const debouncedPersist = useCallback((paths: Record<string, string>) => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    debounceTimerRef.current = setTimeout(() => {
+      persistToServer(paths);
+    }, 500);
+  }, [persistToServer]);
+
+  // Cleanup debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
+
+  const setExecutablePath = useCallback((provider: string, path: string) => {
+    setExecutablePathsState((prev) => {
+      const next = { ...prev };
+      if (path.trim() === '') {
+        delete next[provider];
+      } else {
+        next[provider] = path;
+      }
+      debouncedPersist(next);
+      return next;
+    });
+  }, [debouncedPersist]);
+
+  const clearExecutablePath = useCallback((provider: string) => {
+    setExecutablePathsState((prev) => {
+      const next = { ...prev };
+      delete next[provider];
+      debouncedPersist(next);
+      return next;
+    });
+  }, [debouncedPersist]);
+
+  return {
+    executablePaths,
+    isLoading,
+    error,
+    setExecutablePath,
+    clearExecutablePath,
   };
 }
 

@@ -29,10 +29,13 @@ import {
   ChevronDown,
   Loader2,
   MessageSquare,
+  Terminal,
+  AlertCircle,
 } from 'lucide-react';
 import { useIsMobile, ShortcutsSection } from '@stoneforge/ui';
 import {
   useSettings,
+  useExecutablePathSettings,
   type Theme,
   type AgentProvider,
 } from '../../api/hooks/useSettings';
@@ -258,9 +261,22 @@ interface AgentDefaultsSectionProps {
   resetToDefaults: () => void;
 }
 
+/** Default executable names for each provider (used as placeholders) */
+const PROVIDER_DEFAULT_EXECUTABLES: Record<string, string> = {
+  claude: 'claude',
+  opencode: 'opencode',
+  codex: 'codex',
+};
+
 function AgentDefaultsSection({ settings, setSettings, setDefaultModel, resetToDefaults }: AgentDefaultsSectionProps) {
   const { data: providersData } = useProviders();
   const providers = useMemo(() => providersData?.providers ?? [], [providersData?.providers]);
+  const {
+    executablePaths,
+    isLoading: execPathsLoading,
+    error: execPathsError,
+    setExecutablePath,
+  } = useExecutablePathSettings();
 
   // Get available provider names (from API or fallback to known providers)
   const availableProviders = useMemo(() => {
@@ -333,6 +349,46 @@ function AgentDefaultsSection({ settings, setSettings, setDefaultModel, resetToD
           </p>
         </div>
 
+        {/* Executable Paths */}
+        <div className="pt-2 border-t border-[var(--color-border)]">
+          <div className="flex items-center gap-2 mb-2">
+            <Terminal className="w-4 h-4 text-[var(--color-text-secondary)]" />
+            <label className="block text-sm text-[var(--color-text-secondary)]">
+              Custom Executable Paths
+            </label>
+          </div>
+          <p className="text-xs text-[var(--color-text-tertiary)] mb-3">
+            Override the default executable path for each provider. Leave empty to use the system default.
+          </p>
+
+          {execPathsError && (
+            <div className="flex items-center gap-2 mb-3 px-3 py-2 text-xs text-[var(--color-danger-text)] bg-[var(--color-danger-muted)] border border-[var(--color-danger)] rounded-md">
+              <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+              <span>Failed to load executable paths: {execPathsError}</span>
+            </div>
+          )}
+
+          {execPathsLoading ? (
+            <div className="flex items-center gap-2 py-2 text-xs text-[var(--color-text-tertiary)]">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              Loading executable paths...
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {availableProviders.map((provider) => (
+                <ExecutablePathInput
+                  key={provider.name}
+                  providerName={provider.name}
+                  providerLabel={PROVIDER_LABELS[provider.name] ?? provider.name}
+                  currentPath={executablePaths[provider.name] ?? ''}
+                  defaultExecutable={PROVIDER_DEFAULT_EXECUTABLES[provider.name] ?? provider.name}
+                  onPathChange={(path) => setExecutablePath(provider.name, path)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Reset */}
         <div className="pt-2">
           <button
@@ -402,6 +458,49 @@ function ProviderModelSelector({
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Executable path input for a specific provider
+ */
+function ExecutablePathInput({
+  providerName,
+  providerLabel,
+  currentPath,
+  defaultExecutable,
+  onPathChange,
+}: {
+  providerName: string;
+  providerLabel: string;
+  currentPath: string;
+  defaultExecutable: string;
+  onPathChange: (path: string) => void;
+}) {
+  const hasCustomPath = currentPath.trim() !== '';
+
+  return (
+    <div className="flex items-center gap-3">
+      <span className="text-sm text-[var(--color-text)] w-24 flex-shrink-0 font-medium flex items-center gap-1.5">
+        {providerLabel}
+        {hasCustomPath && (
+          <span
+            className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded bg-[var(--color-success-muted)] text-[var(--color-success)]"
+            title="Custom executable path is set"
+          >
+            custom
+          </span>
+        )}
+      </span>
+      <input
+        type="text"
+        value={currentPath}
+        onChange={(e) => onPathChange(e.target.value)}
+        placeholder={defaultExecutable}
+        className="flex-1 px-3 py-1.5 text-sm rounded-md border border-[var(--color-border)] bg-[var(--color-input-bg)] text-[var(--color-text)] placeholder:text-[var(--color-text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent"
+        data-testid={`settings-executable-path-${providerName}`}
+      />
     </div>
   );
 }
