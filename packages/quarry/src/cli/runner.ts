@@ -254,7 +254,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<neve
   const { resetCommand } = await import('./commands/reset.js');
   const { configCommand } = await import('./commands/config.js');
   const { helpCommand, versionCommand } = await import('./commands/help.js');
-  const { showCommand, updateCommand, deleteCommand } = await import('./commands/crud.js');
+  const { createCommand, listCommand, showCommand, updateCommand, deleteCommand } = await import('./commands/crud.js');
   const {
     readyCommand,
     blockedCommand,
@@ -294,6 +294,8 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<neve
   registerCommand(configCommand);
   registerCommand(helpCommand);
   registerCommand(versionCommand);
+  registerCommand(createCommand);
+  registerCommand(listCommand);
   registerCommand(showCommand);
   registerCommand(updateCommand);
   registerCommand(deleteCommand);
@@ -359,13 +361,17 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<neve
   registerCommand(serveCommand);
 
   // Command aliases
+  registerAlias('add', 'create');    // User-friendly alias
+  registerAlias('new', 'create');    // User-friendly alias
   registerAlias('rm', 'delete');     // Common shell convention
   registerAlias('remove', 'delete'); // Alternative delete alias
+  registerAlias('ls', 'list');       // Common shell convention
   registerAlias('s', 'show');        // Short form
   registerAlias('get', 'show');      // Alternative show alias
   registerAlias('todo', 'ready');    // User-friendly alias
   registerAlias('tasks', 'ready');   // User-friendly alias
   registerAlias('done', 'close');    // User-friendly alias
+  registerAlias('complete', 'close'); // User-friendly alias
   registerAlias('st', 'status');     // Short form for sync status
   registerAlias('dep', 'dependency'); // Short form
   registerAlias('msg', 'message');   // Short form

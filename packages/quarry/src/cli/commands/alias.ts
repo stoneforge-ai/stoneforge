@@ -82,7 +82,10 @@ Built-in aliases:
   s, get       -> show
   todo, tasks  -> ready
   done, complete -> close
-  st           -> status`,
+  st           -> status
+  dep          -> dependency
+  msg          -> message
+  doc          -> document`,
   options: [],
   handler: aliasHandler,
 };
