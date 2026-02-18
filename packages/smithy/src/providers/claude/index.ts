@@ -25,7 +25,7 @@ export class ClaudeAgentProvider implements AgentProvider {
   readonly interactive: InteractiveProvider;
 
   constructor(executablePath = 'claude') {
-    this.headless = new ClaudeHeadlessProvider();
+    this.headless = new ClaudeHeadlessProvider(executablePath);
     this.interactive = new ClaudeInteractiveProvider(executablePath);
   }
 

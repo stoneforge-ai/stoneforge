@@ -113,7 +113,10 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
     claudePath,
   });
 
-  const sessionManager = createSessionManager(spawnerService, api, agentRegistry);
+  // Create settings service early so it can be injected into session manager
+  const settingsService = createSettingsService(storageBackend);
+
+  const sessionManager = createSessionManager(spawnerService, api, agentRegistry, settingsService);
   const sessionInitialPrompts = new Map<string, string>();
 
   // Load session state for all agents to restore session history after restart
@@ -216,7 +219,6 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
 
   const inboxService = createInboxService(storageBackend);
   const sessionMessageService = createSessionMessageService(storageBackend);
-  const settingsService = createSettingsService(storageBackend);
 
   // Create sync and auto-export services
   const { resolve } = await import('node:path');
