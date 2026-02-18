@@ -141,24 +141,49 @@ await api.updateTaskOrchestratorMeta(taskId, {
 
 ```typescript
 interface OrchestratorTaskMeta {
-  agentId?: EntityId;
+  assignedAgent?: EntityId;
   branch?: string;
   worktree?: string;
   sessionId?: string;
-  mergeStatus?: MergeStatus;
+  startedAt?: Timestamp;
+  completedAt?: Timestamp;
   mergedAt?: Timestamp;
-  mergedBy?: EntityId;
+  mergeStatus?: MergeStatus;
+  mergeFailureReason?: string;
+  testRunCount?: number;
+  lastTestResult?: TestResult;
+  reconciliationCount?: number;
+  stuckMergeRecoveryCount?: number;
+  resumeCount?: number;
+  reportedIssues?: readonly string[];
+  // Handoff context
+  handoffBranch?: string;
+  handoffWorktree?: string;
+  lastSessionId?: string;
+  handoffAt?: Timestamp;
+  handoffFrom?: EntityId;
+  handoffHistory?: HandoffHistoryEntry[];
+  // Merge request info
+  mergeRequestUrl?: string;
+  mergeRequestId?: number;
+  mergeRequestProvider?: string;
+  completionSummary?: string;
+  lastCommitHash?: string;
+  // Session history
+  sessionHistory?: readonly TaskSessionHistoryEntry[];
+  // Branch sync
+  lastSyncResult?: SyncResultMeta;
 }
 
 type MergeStatus =
   | 'pending'         // Task completed, awaiting merge
   | 'testing'         // Steward is running tests on the branch
   | 'merging'         // Tests passed, merge in progress
-  | 'merged'          // Successfully merged (closes task)
+  | 'merged'          // Successfully merged
   | 'conflict'        // Merge conflict detected
   | 'test_failed'     // Tests failed, needs attention
   | 'failed'          // Merge failed for other reason
-  | 'not_applicable'; // No merge needed, e.g., fix already on master (closes task)
+  | 'not_applicable'; // No merge needed, e.g., fix already on master
 ```
 
 ---

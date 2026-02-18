@@ -15,15 +15,18 @@ bun packages/quarry/src/bin/sf.ts
 
 ## Global Flags
 
-| Flag                | Description            |
-| ------------------- | ---------------------- |
-| `--help, -h`        | Show help              |
-| `--json`            | Output as JSON         |
-| `--quiet, -q`       | Minimal output         |
-| `--verbose, -v`     | Verbose output         |
-| `--actor <name>`    | Specify acting entity  |
-| `--from <name>`     | Alias for `--actor`    |
-| `--db <path>`       | Override database path |
+| Flag                       | Description                         |
+| -------------------------- | ----------------------------------- |
+| `--help, -h`               | Show help                           |
+| `--version, -V`            | Show version                        |
+| `--json`                   | Output as JSON                      |
+| `--quiet, -q`              | Minimal output (IDs only)           |
+| `--verbose, -v`            | Enable debug output                 |
+| `--actor <name>`           | Specify acting entity               |
+| `--from <name>`            | Alias for `--actor`                 |
+| `--db <path>`              | Override database path              |
+| `--sign-key <key>`         | Private key for signing (base64 PKCS8) |
+| `--sign-key-file <path>`   | Path to file containing private key |
 
 ## Basic Commands
 
@@ -494,12 +497,57 @@ sf library delete el-lib123 --force
 
 ## Playbook Commands
 
-| Command                       | Description    |
-| ----------------------------- | -------------- |
-| `sf playbook list`            | List playbooks |
-| `sf playbook show <name>`     | Show details   |
-| `sf playbook validate <file>` | Validate       |
-| `sf playbook create <file>`   | Create new     |
+| Command                             | Description                                    |
+| ----------------------------------- | ---------------------------------------------- |
+| `sf playbook list`                  | List playbooks                                 |
+| `sf playbook show <name\|id>`       | Show playbook details                          |
+| `sf playbook validate <name\|id>`   | Validate playbook structure and variables      |
+| `sf playbook create`                | Create a new playbook                          |
+
+```bash
+# List all playbooks
+sf playbook list
+sf playbook list --limit 10
+
+# Show playbook details
+sf playbook show deploy
+sf playbook show el-abc123 --steps --variables
+
+# Validate playbook structure
+sf playbook validate deploy
+sf playbook validate deploy --create
+sf playbook validate deploy --var env=production --var debug=true
+
+# Create a new playbook
+sf playbook create --name deploy --title "Deployment Process"
+sf playbook create -n deploy -t "Deploy" -s "build:Build app" -s "test:Run tests:build"
+sf playbook create -n deploy -t "Deploy" -v "env:string" -v "debug:boolean:false:false"
+```
+
+#### playbook show
+
+| Option               | Description              |
+| -------------------- | ------------------------ |
+| `-s, --steps`        | Include step definitions |
+| `-v, --variables`    | Include variable definitions |
+
+#### playbook validate
+
+| Option                   | Description                                              |
+| ------------------------ | -------------------------------------------------------- |
+| `--var <name=value>`     | Set variable for create-time validation (can be repeated) |
+| `-c, --create`           | Perform create-time validation                           |
+
+#### playbook create
+
+| Option                    | Description                                                |
+| ------------------------- | ---------------------------------------------------------- |
+| `-n, --name <name>`       | Playbook name (unique identifier, required)               |
+| `-t, --title <title>`     | Playbook title (display name, required)                   |
+| `-s, --step <spec>`       | Add step (format: `id:title[:dependsOn,...]`, repeatable) |
+| `-v, --variable <spec>`   | Add variable (format: `name:type[:default][:required]`, repeatable) |
+| `-e, --extends <name>`    | Extend playbook (can be repeated)                         |
+| `--tag <tag>`             | Add tag (can be repeated)                                 |
 
 ## Sync Commands
 
