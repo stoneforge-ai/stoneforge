@@ -875,7 +875,7 @@ describe('recoverOrphanedAssignments - merge steward recovery', () => {
   async function createOrphanedStewardTask(
     title: string,
     stewardId: EntityId,
-    meta?: { sessionId?: string; worktree?: string }
+    meta?: { sessionId?: string; worktree?: string; stewardRecoveryCount?: number }
   ): Promise<Task> {
     const task = await createTask({
       title,
@@ -892,6 +892,7 @@ describe('recoverOrphanedAssignments - merge steward recovery', () => {
         sessionId: meta?.sessionId ?? 'steward-session-123',
         worktree: meta?.worktree,
         branch: 'agent/worker/task-branch',
+        stewardRecoveryCount: meta?.stewardRecoveryCount,
       }),
     });
 
@@ -997,6 +998,93 @@ describe('recoverOrphanedAssignments - merge steward recovery', () => {
     expect(result.processed).toBe(0);
     expect(sessionManager.resumeSession).not.toHaveBeenCalled();
     expect(sessionManager.startSession).not.toHaveBeenCalled();
+  });
+
+  test('increments stewardRecoveryCount on each recovery attempt', async () => {
+    const steward = await createTestSteward('count-steward');
+    const stewardId = steward.id as unknown as EntityId;
+
+    // Create an orphaned steward task with stewardRecoveryCount = 1
+    const task = await createOrphanedStewardTask('Review task to count recovery', stewardId, {
+      sessionId: 'steward-count-session',
+      worktree: '/worktrees/worker/task',
+      stewardRecoveryCount: 1,
+    });
+
+    const result = await daemon.recoverOrphanedAssignments();
+
+    expect(result.processed).toBe(1);
+    expect(result.errors).toBe(0);
+
+    // Verify stewardRecoveryCount was incremented from 1 to 2
+    const updatedTask = await api.get<Task>(task.id);
+    const meta = getOrchestratorTaskMeta(updatedTask!.metadata as Record<string, unknown> | undefined);
+    expect(meta!.stewardRecoveryCount).toBe(2);
+  });
+
+  test('sets mergeStatus to failed when stewardRecoveryCount reaches max (3)', async () => {
+    const steward = await createTestSteward('maxed-steward');
+    const stewardId = steward.id as unknown as EntityId;
+
+    // Create an orphaned steward task already at the recovery limit (count = 3)
+    const task = await createOrphanedStewardTask('Review task at limit', stewardId, {
+      sessionId: 'steward-maxed-session',
+      worktree: '/worktrees/worker/task',
+      stewardRecoveryCount: 3,
+    });
+
+    const result = await daemon.recoverOrphanedAssignments();
+
+    // Should still count as processed (the failure update is a processing action)
+    expect(result.processed).toBe(1);
+    expect(result.errors).toBe(0);
+
+    // Verify mergeStatus was set to 'failed' instead of re-dispatching
+    const updatedTask = await api.get<Task>(task.id);
+    const meta = getOrchestratorTaskMeta(updatedTask!.metadata as Record<string, unknown> | undefined);
+    expect(meta!.mergeStatus).toBe('failed');
+    expect(meta!.mergeFailureReason).toContain('Steward recovery limit reached');
+    expect(meta!.mergeFailureReason).toContain('3');
+
+    // Verify assignee was cleared (steward unassigned)
+    expect(updatedTask!.assignee).toBeUndefined();
+
+    // Should NOT have tried to resume or start a session
+    expect(sessionManager.resumeSession).not.toHaveBeenCalled();
+    expect(sessionManager.startSession).not.toHaveBeenCalled();
+  });
+
+  test('does not set failed when stewardRecoveryCount is below max', async () => {
+    const steward = await createTestSteward('below-max-steward');
+    const stewardId = steward.id as unknown as EntityId;
+
+    // Create a task with count = 2 (below the cap of 3)
+    const task = await createOrphanedStewardTask('Review task below limit', stewardId, {
+      sessionId: 'steward-below-session',
+      worktree: '/worktrees/worker/task',
+      stewardRecoveryCount: 2,
+    });
+
+    const result = await daemon.recoverOrphanedAssignments();
+
+    expect(result.processed).toBe(1);
+    expect(result.errors).toBe(0);
+
+    // Verify task was recovered (not failed), count incremented to 3
+    const updatedTask = await api.get<Task>(task.id);
+    const meta = getOrchestratorTaskMeta(updatedTask!.metadata as Record<string, unknown> | undefined);
+    expect(meta!.stewardRecoveryCount).toBe(3);
+    // mergeStatus should still be 'testing' (not 'failed') since we haven't hit the cap yet
+    expect(meta!.mergeStatus).toBe('testing');
+
+    // Should have tried to resume the session (normal recovery path)
+    expect(sessionManager.resumeSession).toHaveBeenCalledWith(
+      stewardId,
+      expect.objectContaining({
+        providerSessionId: 'steward-below-session',
+        checkReadyQueue: false,
+      })
+    );
   });
 });
 
