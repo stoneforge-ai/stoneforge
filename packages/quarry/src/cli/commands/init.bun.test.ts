@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { existsSync, rmSync, readFileSync, mkdirSync, writeFileSync, mkdtempSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { initCommand } from './init.js';
+import { initCommand, DEFAULT_AGENTS_MD } from './init.js';
 import { ExitCode, DEFAULT_GLOBAL_OPTIONS } from '../types.js';
 
 describe('initCommand', () => {
@@ -283,6 +283,97 @@ describe('initCommand', () => {
       expect(result.exitCode).toBe(ExitCode.SUCCESS);
       expect(result.message).toContain('existing files');
       expect(result.message).not.toContain('Imported');
+    });
+  });
+
+  describe('AGENTS.md creation', () => {
+    it('should create AGENTS.md when neither AGENTS.md nor CLAUDE.md exists', async () => {
+      const result = await initCommand.handler([], { ...DEFAULT_GLOBAL_OPTIONS });
+      expect(result.exitCode).toBe(ExitCode.SUCCESS);
+
+      const agentsMdPath = join(testDir, 'AGENTS.md');
+      expect(existsSync(agentsMdPath)).toBe(true);
+
+      const content = readFileSync(agentsMdPath, 'utf-8');
+      expect(content).toBe(DEFAULT_AGENTS_MD);
+    });
+
+    it('should skip AGENTS.md when AGENTS.md already exists', async () => {
+      const customContent = '# My Custom AGENTS.md\nDo not overwrite me.\n';
+      writeFileSync(join(testDir, 'AGENTS.md'), customContent);
+
+      const result = await initCommand.handler([], { ...DEFAULT_GLOBAL_OPTIONS });
+      expect(result.exitCode).toBe(ExitCode.SUCCESS);
+
+      const content = readFileSync(join(testDir, 'AGENTS.md'), 'utf-8');
+      expect(content).toBe(customContent);
+    });
+
+    it('should skip AGENTS.md when CLAUDE.md exists', async () => {
+      writeFileSync(join(testDir, 'CLAUDE.md'), '# Claude instructions\n');
+
+      const result = await initCommand.handler([], { ...DEFAULT_GLOBAL_OPTIONS });
+      expect(result.exitCode).toBe(ExitCode.SUCCESS);
+
+      expect(existsSync(join(testDir, 'AGENTS.md'))).toBe(false);
+    });
+
+    it('should write AGENTS.md to workspace root, not .stoneforge/', async () => {
+      const result = await initCommand.handler([], { ...DEFAULT_GLOBAL_OPTIONS });
+      expect(result.exitCode).toBe(ExitCode.SUCCESS);
+
+      // AGENTS.md should be at workspace root
+      expect(existsSync(join(testDir, 'AGENTS.md'))).toBe(true);
+      // AGENTS.md should NOT be inside .stoneforge/
+      expect(existsSync(join(testDir, '.stoneforge', 'AGENTS.md'))).toBe(false);
+    });
+
+    it('should report AGENTS.md creation in result message', async () => {
+      const result = await initCommand.handler([], { ...DEFAULT_GLOBAL_OPTIONS });
+      expect(result.exitCode).toBe(ExitCode.SUCCESS);
+      expect(result.message).toContain('AGENTS.md');
+
+      const data = result.data as { agentsMdCreated: boolean };
+      expect(data.agentsMdCreated).toBe(true);
+    });
+
+    it('should report agentsMdCreated as false when skipped', async () => {
+      writeFileSync(join(testDir, 'AGENTS.md'), '# existing\n');
+
+      const result = await initCommand.handler([], { ...DEFAULT_GLOBAL_OPTIONS });
+      expect(result.exitCode).toBe(ExitCode.SUCCESS);
+
+      const data = result.data as { agentsMdCreated: boolean };
+      expect(data.agentsMdCreated).toBe(false);
+    });
+  });
+
+  describe('skills installation during init', () => {
+    it('should attempt skills installation during init and succeed', async () => {
+      const result = await initCommand.handler([], { ...DEFAULT_GLOBAL_OPTIONS });
+      expect(result.exitCode).toBe(ExitCode.SUCCESS);
+
+      // The message should mention skills in some form (installed or skipped or warning)
+      expect(result.message).toMatch(/[Ss]kill/);
+    });
+
+    it('should not fail init when skills source is not found', async () => {
+      // In a temp directory with no node_modules or monorepo context for skills,
+      // the skills source may not be found — but init should still succeed
+      const result = await initCommand.handler([], { ...DEFAULT_GLOBAL_OPTIONS });
+      expect(result.exitCode).toBe(ExitCode.SUCCESS);
+
+      // Init succeeded even if skills installation was skipped
+      expect(existsSync(join(testDir, '.stoneforge'))).toBe(true);
+      expect(existsSync(join(testDir, '.stoneforge', 'stoneforge.db'))).toBe(true);
+    });
+
+    it('should include skillsInstalled count in result data', async () => {
+      const result = await initCommand.handler([], { ...DEFAULT_GLOBAL_OPTIONS });
+      expect(result.exitCode).toBe(ExitCode.SUCCESS);
+
+      const data = result.data as { skillsInstalled: number };
+      expect(typeof data.skillsInstalled).toBe('number');
     });
   });
 });
