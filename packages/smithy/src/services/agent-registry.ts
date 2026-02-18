@@ -15,7 +15,7 @@
  * @module
  */
 
-import type { Entity, EntityId, ElementId, Channel, ChannelId } from '@stoneforge/core';
+import type { Entity, EntityId, ElementId, Channel, ChannelId, IdGeneratorConfig } from '@stoneforge/core';
 import { EntityTypeValue, createEntity, createTimestamp, createDirectChannel, generateDirectChannelName, duplicateName, asEntityId, asElementId } from '@stoneforge/core';
 import type { QuarryAPI } from '@stoneforge/quarry';
 import type {
@@ -284,7 +284,7 @@ export class AgentRegistryImpl implements AgentRegistry {
       createdBy: input.createdBy,
       tags: input.tags,
       metadata: { [AGENT_META_KEY]: agentMetadata },
-    });
+    }, this.getIdGeneratorConfig());
 
     return this.registerAgentWithRollback(
       entity as unknown as Record<string, unknown> & { createdBy: EntityId },
@@ -317,7 +317,7 @@ export class AgentRegistryImpl implements AgentRegistry {
       tags: input.tags,
       metadata: { [AGENT_META_KEY]: agentMetadata },
       reportsTo: input.reportsTo,
-    });
+    }, this.getIdGeneratorConfig());
 
     return this.registerAgentWithRollback(
       entity as unknown as Record<string, unknown> & { createdBy: EntityId },
@@ -353,7 +353,7 @@ export class AgentRegistryImpl implements AgentRegistry {
       tags: input.tags,
       metadata: { [AGENT_META_KEY]: agentMetadata },
       reportsTo: input.reportsTo,
-    });
+    }, this.getIdGeneratorConfig());
 
     return this.registerAgentWithRollback(
       entity as unknown as Record<string, unknown> & { createdBy: EntityId },
@@ -574,6 +574,25 @@ export class AgentRegistryImpl implements AgentRegistry {
   // ----------------------------------------
 
   /**
+   * Creates an IdGeneratorConfig with a collision checker that queries the
+   * database for existing element IDs. Without this, generateId() has no way
+   * to detect that a truncated hash already exists, leading to
+   * SQLITE_CONSTRAINT_PRIMARYKEY errors on INSERT.
+   */
+  private getIdGeneratorConfig(): IdGeneratorConfig {
+    return {
+      checkCollision: (id: ElementId) => {
+        const existing = this.api.get(id);
+        // api.get returns a Promise; resolve to boolean
+        if (existing instanceof Promise) {
+          return existing.then((result) => result !== null);
+        }
+        return existing !== null;
+      },
+    };
+  }
+
+  /**
    * Creates an agent entity, its channel, and links them via metadata.
    * Rolls back on partial failure to prevent orphaned resources.
    */
@@ -632,7 +651,7 @@ export class AgentRegistryImpl implements AgentRegistry {
         agentName,
         purpose: 'Agent direct messaging channel',
       },
-    });
+    }, this.getIdGeneratorConfig());
 
     // Save the channel
     const savedChannel = await this.api.create<Channel>(
