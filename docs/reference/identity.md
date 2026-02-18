@@ -32,12 +32,12 @@ IdentityMode.HYBRID         // 'hybrid'
 ```typescript
 import {
   IdentityConfig,
-  DEFAULT_IDENTITY_CONFIG,
+  DEFAULT_IDENTITY_SYSTEM_CONFIG,
   createIdentityConfig,
 } from '@stoneforge/quarry';
 
 // Default configuration
-const config = DEFAULT_IDENTITY_CONFIG;
+const config = DEFAULT_IDENTITY_SYSTEM_CONFIG;
 // {
 //   mode: 'soft',
 //   timeTolerance: 300000,  // 5 minutes

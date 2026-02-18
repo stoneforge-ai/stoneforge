@@ -212,6 +212,9 @@ sf install skills --force
 | `sf task activate <id>`          | Move a task from backlog to open   |
 | `sf task close <id>`             | Close task                         |
 | `sf task reopen <id>`            | Reopen task                        |
+| `sf task show <id>`              | Show task details                  |
+| `sf task update <id>`            | Update task fields                 |
+| `sf task delete <id>`            | Delete task                        |
 | `sf task assign <task> <entity>` | Assign task                        |
 | `sf task defer <id>`             | Defer task                         |
 | `sf task undefer <id>`           | Remove deferral                    |
@@ -956,10 +959,11 @@ Both commands garbage collect ephemeral workflows, but differ in defaults and av
 | ---------- | --------------------------- |
 | `sf reset` | Reset a Stoneforge workspace |
 
-| Option       | Description                                |
-| ------------ | ------------------------------------------ |
-| `-f, --force` | Skip confirmation prompt                   |
-| `--full`      | Delete everything and reinitialize         |
+| Option              | Description                                          |
+| ------------------- | ---------------------------------------------------- |
+| `-f, --force`       | Skip confirmation prompt                             |
+| `--full`            | Delete everything and reinitialize                   |
+| `-s, --server <url>`| Server URL for remote reset (default: http://localhost:3456) |
 
 ```bash
 # Reset workspace (preserves config)
@@ -970,6 +974,9 @@ sf reset --force
 
 # Full reset (deletes .stoneforge and reinitializes)
 sf reset --full --force
+
+# Reset with server URL
+sf reset --server http://localhost:8080
 ```
 
 **Default reset** removes the database, sync files, uploads, and worktrees but preserves `.stoneforge/config.yaml`. **Full reset** deletes the entire `.stoneforge/` folder and reinitializes.
@@ -980,12 +987,12 @@ sf reset --full --force
 sf history <id> [options]
 
 Options:
-  --type <type>      Filter by event type
-  --actor <name>     Filter by actor
-  --after <date>     Events after date
-  --before <date>    Events before date
-  --format <fmt>     Output format (timeline/table)
-  -l, --limit <n>    Maximum number of events to return
+  -t, --type <type>      Filter by event type
+  -a, --actor <name>     Filter by actor
+  --after <date>         Events after date
+  --before <date>        Events before date
+  -f, --format <fmt>     Output format (timeline/table)
+  -l, --limit <n>        Maximum number of events to return
 ```
 
 ## CLI Plugins
@@ -1365,6 +1372,43 @@ sf merge --cleanup --message "docs: automated documentation fixes"
 | `sf task merge <id>`                       | Squash-merge task branch and close it  |
 | `sf task reject <id>`                      | Mark merge as failed and reopen task   |
 | `sf task merge-status <id> <status>`       | Update the merge status of a task      |
+
+#### task complete
+
+Complete a task and create a merge request. The task must be in OPEN or IN_PROGRESS status.
+
+| Option                    | Description                                          |
+| ------------------------- | ---------------------------------------------------- |
+| `-s, --summary <text>`    | Summary of the completed work                        |
+| `-c, --commitHash <hash>` | Commit hash for the completed work                   |
+| `--no-mr`                 | Skip merge request creation                          |
+| `--mr-title <text>`       | Custom merge request title                           |
+| `--mr-body <text>`        | Custom merge request body                            |
+| `-b, --baseBranch <name>` | Base branch for the merge request                    |
+
+```bash
+sf task complete el-abc123
+sf task complete el-abc123 --summary "Implemented OAuth login"
+sf task complete el-abc123 --no-mr
+sf task complete el-abc123 --mr-title "feat: OAuth login" --baseBranch main
+```
+
+#### task handoff
+
+Hand off a task to another agent.
+
+| Option                    | Description                                          |
+| ------------------------- | ---------------------------------------------------- |
+| `-m, --message <text>`    | Handoff message for the next agent                   |
+| `-b, --branch <name>`     | Branch associated with the task                      |
+| `-w, --worktree <path>`   | Worktree path for the task                           |
+| `-s, --sessionId <id>`    | Session ID to associate with the handoff             |
+
+```bash
+sf task handoff el-abc123
+sf task handoff el-abc123 --message "Auth module done, needs tests"
+sf task handoff el-abc123 --branch feature/auth --worktree /path/to/worktree
+```
 
 #### task merge
 
