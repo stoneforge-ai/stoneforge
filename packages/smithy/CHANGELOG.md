@@ -1,5 +1,29 @@
 # @stoneforge/smithy
 
+## 1.5.0
+
+### Minor Changes
+
+- ac2db90: Add fallbackChain field to ServerAgentDefaults for executable rate-limit fallback configuration
+- a5a8ff0: Add daemon sleep and wake CLI commands for manual control of dispatch rate-limit state
+- f5eb10f: Add rate limit detection to headless session spawner. The spawner now detects rate limit messages in the headless session message stream using the rate-limit-parser utility and emits `rate_limited` events with the message content, parsed reset time, and executable path. Events are forwarded through the session manager's event pipeline.
+- 87e2883: Integrate rate limit detection, fallback selection, and dispatch pause into the dispatch daemon. The daemon now tracks rate-limited executables, resolves fallback alternatives at dispatch time, and pauses worker/steward spawning when all executables are limited while continuing non-dispatch polling. Rate limit status is exposed in the daemon status API.
+- 9a147df: Add rate limit message parser utility for detecting and parsing Claude Code rate limit messages
+- 4cded6a: Add in-memory rate limit tracker service for tracking executable rate limits and fallback chain resolution
+
+### Patch Changes
+
+- dcd3a8c: Clear stale sessionId from task metadata on failed resume to prevent infinite retry loops in orphan recovery
+- a40b09e: Detect already-merged branches before squash-merge attempt to prevent empty commits and infinite orphan recovery loops
+- 1ac72cc: Prune stale git worktree entries before creating new worktrees to prevent failures when a worktree directory was deleted but git's registry still has it registered
+- 6c22879: Expand rate limit parser with tomorrow format, optional "at" in date format, and fallback defaults when parsing fails
+- 53c79f5: Add retry cap for steward orphan recovery in dispatch daemon to prevent infinite re-dispatch loops
+- 3a909a2: Handle WORKTREE_EXISTS gracefully in createWorktree by removing stale worktrees instead of throwing
+  - @stoneforge/core@1.5.0
+  - @stoneforge/storage@1.5.0
+  - @stoneforge/quarry@1.5.0
+  - @stoneforge/shared-routes@1.5.0
+
 ## 1.4.1
 
 ### Patch Changes

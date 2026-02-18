@@ -1,5 +1,26 @@
 # @stoneforge/quarry
 
+## 1.5.0
+
+### Patch Changes
+
+- Updated dependencies [ac2db90]
+- Updated dependencies [dcd3a8c]
+- Updated dependencies [a5a8ff0]
+- Updated dependencies [a40b09e]
+- Updated dependencies [1ac72cc]
+- Updated dependencies [f5eb10f]
+- Updated dependencies [87e2883]
+- Updated dependencies [6c22879]
+- Updated dependencies [9a147df]
+- Updated dependencies [4cded6a]
+- Updated dependencies [53c79f5]
+- Updated dependencies [3a909a2]
+  - @stoneforge/smithy@1.5.0
+  - @stoneforge/core@1.5.0
+  - @stoneforge/storage@1.5.0
+  - @stoneforge/shared-routes@1.5.0
+
 ## 1.4.1
 
 ### Patch Changes
