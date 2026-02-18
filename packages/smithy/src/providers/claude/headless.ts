@@ -307,6 +307,11 @@ class ClaudeHeadlessSession implements HeadlessSession {
  */
 export class ClaudeHeadlessProvider implements HeadlessProvider {
   readonly name = 'claude-headless';
+  private readonly executablePath?: string;
+
+  constructor(executablePath?: string) {
+    this.executablePath = executablePath;
+  }
 
   async spawn(options: HeadlessSpawnOptions): Promise<HeadlessSession> {
     const initialPrompt = options.initialPrompt ?? 'You are an AI agent. Await further instructions.';
@@ -330,6 +335,11 @@ export class ClaudeHeadlessProvider implements HeadlessProvider {
       permissionMode: 'bypassPermissions',
       allowDangerouslySkipPermissions: true,
     };
+
+    // Pass custom executable path if configured (skip the default 'claude' to preserve existing behavior)
+    if (this.executablePath && this.executablePath !== 'claude') {
+      sdkOptions.pathToClaudeCodeExecutable = this.executablePath;
+    }
 
     // Pass model if specified
     if (options.model) {

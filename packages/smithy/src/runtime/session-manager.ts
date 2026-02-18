@@ -29,7 +29,12 @@ import type {
   UWPTaskInfo,
 } from './spawner.js';
 import type { AgentRegistry } from '../services/agent-registry.js';
+import type { AgentProvider } from '../providers/types.js';
 import { getProviderRegistry } from '../providers/registry.js';
+import { ClaudeAgentProvider } from '../providers/claude/index.js';
+import { OpenCodeAgentProvider } from '../providers/opencode/index.js';
+import { CodexAgentProvider } from '../providers/codex/index.js';
+import type { SettingsService } from '../services/settings-service.js';
 import { trackListeners } from './event-utils.js';
 
 // ============================================================================
@@ -484,7 +489,8 @@ export class SessionManagerImpl implements SessionManager {
   constructor(
     private readonly spawner: SpawnerService,
     private readonly api: QuarryAPI, // Used for message operations in messageSession
-    private readonly registry: AgentRegistry
+    private readonly registry: AgentRegistry,
+    private readonly settingsService?: SettingsService
   ) {
     // Subscribe to spawner events to track session state
     this.setupSpawnerEventHandlers();
@@ -532,13 +538,10 @@ export class SessionManagerImpl implements SessionManager {
       (meta.agentRole === 'worker' && (meta as { workerMode?: WorkerMode }).workerMode === 'persistent');
     const useInteractive = options?.interactive ?? isInteractiveByRole;
 
-    // Resolve provider from agent metadata
+    // Resolve provider from agent metadata, with executable path resolution
     const providerName = (meta as { provider?: string }).provider;
-    let providerOverride: import('../providers/types.js').AgentProvider | undefined;
-    if (providerName && providerName !== 'claude') {
-      const registry = getProviderRegistry();
-      providerOverride = await registry.getOrThrow(providerName);
-    }
+    const agentExecutablePath = (meta as { executablePath?: string }).executablePath;
+    const providerOverride = await this.resolveProvider(providerName, agentExecutablePath);
 
     // Resolve model: use options override, or fall back to agent metadata
     const modelOverride = options?.model ?? (meta as { model?: string }).model;
@@ -555,7 +558,8 @@ export class SessionManagerImpl implements SessionManager {
       model: modelOverride,
     };
 
-    console.log('[session-manager] Starting session for agent', agentId, 'mode:', spawnOptions.mode, 'provider:', providerName ?? 'claude', 'model:', modelOverride ?? 'default', 'prompt length:', options?.initialPrompt?.length ?? 0);
+    const resolvedPath = this.resolveExecutablePath(providerName ?? 'claude', agentExecutablePath);
+    console.log('[session-manager] Starting session for agent', agentId, 'mode:', spawnOptions.mode, 'provider:', providerName ?? 'claude', 'model:', modelOverride ?? 'default', 'executablePath:', resolvedPath ?? 'default', 'prompt length:', options?.initialPrompt?.length ?? 0);
 
     // Spawn the session
     const result = await this.spawner.spawn(agentId, meta.agentRole, spawnOptions);
@@ -652,13 +656,10 @@ export class SessionManagerImpl implements SessionManager {
       }
     }
 
-    // Resolve provider from agent metadata
+    // Resolve provider from agent metadata, with executable path resolution
     const providerName = (meta as { provider?: string }).provider;
-    let providerOverride: import('../providers/types.js').AgentProvider | undefined;
-    if (providerName && providerName !== 'claude') {
-      const registry = getProviderRegistry();
-      providerOverride = await registry.getOrThrow(providerName);
-    }
+    const agentExecutablePath = (meta as { executablePath?: string }).executablePath;
+    const providerOverride = await this.resolveProvider(providerName, agentExecutablePath);
 
     // Resolve model from agent metadata (resume doesn't allow model override)
     const modelFromMeta = (meta as { model?: string }).model;
@@ -1245,6 +1246,81 @@ export class SessionManagerImpl implements SessionManager {
   // Private Helpers
   // ----------------------------------------
 
+  /**
+   * Resolves the executable path for a provider using the priority chain:
+   * 1. Agent-specific executablePath from metadata
+   * 2. Workspace-wide defaultExecutablePaths[providerName] from settings service
+   * 3. undefined (provider will use its built-in default)
+   */
+  private resolveExecutablePath(
+    providerName: string,
+    agentExecutablePath?: string
+  ): string | undefined {
+    // Priority 1: Agent-specific override
+    if (agentExecutablePath) {
+      return agentExecutablePath;
+    }
+
+    // Priority 2: Workspace-wide default from settings
+    if (this.settingsService) {
+      const defaults = this.settingsService.getAgentDefaults();
+      const workspacePath = defaults.defaultExecutablePaths[providerName];
+      if (workspacePath) {
+        return workspacePath;
+      }
+    }
+
+    // Priority 3: No custom path — provider will use its built-in default
+    return undefined;
+  }
+
+  /**
+   * Creates a fresh provider instance with a custom executable path.
+   * Returns undefined if no custom path is needed (use registry singleton instead).
+   */
+  private createProviderWithPath(
+    providerName: string,
+    executablePath: string
+  ): AgentProvider {
+    switch (providerName) {
+      case 'claude':
+        return new ClaudeAgentProvider(executablePath);
+      case 'opencode':
+        return new OpenCodeAgentProvider({ executablePath });
+      case 'codex':
+        return new CodexAgentProvider({ executablePath });
+      default:
+        throw new Error(`Unknown provider '${providerName}' — cannot create with custom executable path`);
+    }
+  }
+
+  /**
+   * Resolves the provider for a session, creating a custom instance if a non-default
+   * executable path is configured (agent-specific or workspace-wide).
+   * Falls back to the registry singleton when no custom path is needed.
+   */
+  private async resolveProvider(
+    providerName: string | undefined,
+    agentExecutablePath?: string
+  ): Promise<AgentProvider | undefined> {
+    const effectiveProvider = providerName ?? 'claude';
+    const resolvedPath = this.resolveExecutablePath(effectiveProvider, agentExecutablePath);
+
+    if (resolvedPath) {
+      // Custom path configured — create a fresh provider instance with it
+      return this.createProviderWithPath(effectiveProvider, resolvedPath);
+    }
+
+    // No custom path — use registry singleton for non-default providers
+    if (effectiveProvider !== 'claude') {
+      const registry = getProviderRegistry();
+      return registry.getOrThrow(effectiveProvider);
+    }
+
+    // Default claude provider — no override needed (spawner uses claude by default)
+    return undefined;
+  }
+
   private scheduleTerminatedSessionCleanup(sessionId: string): void {
     setTimeout(() => {
       const session = this.sessions.get(sessionId);
@@ -1602,7 +1678,8 @@ export class SessionManagerImpl implements SessionManager {
 export function createSessionManager(
   spawner: SpawnerService,
   api: QuarryAPI,
-  registry: AgentRegistry
+  registry: AgentRegistry,
+  settingsService?: SettingsService
 ): SessionManager {
-  return new SessionManagerImpl(spawner, api, registry);
+  return new SessionManagerImpl(spawner, api, registry, settingsService);
 }
