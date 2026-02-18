@@ -107,6 +107,43 @@ describe('SettingsService', () => {
       const result = service.getAgentDefaults();
       expect(result).toEqual({ defaultExecutablePaths: {} });
     });
+
+    test('returns stored fallbackChain', () => {
+      const agentDefaults: ServerAgentDefaults = {
+        defaultExecutablePaths: { claude: '/usr/local/bin/claude-dev' },
+        fallbackChain: ['claude', 'codex', '/opt/backup/agent'],
+      };
+      service.setSetting(SETTING_KEYS.AGENT_DEFAULTS, agentDefaults);
+      const result = service.getAgentDefaults();
+      expect(result.fallbackChain).toEqual(['claude', 'codex', '/opt/backup/agent']);
+    });
+
+    test('returns undefined fallbackChain when not set (backward compatible)', () => {
+      service.setSetting(SETTING_KEYS.AGENT_DEFAULTS, {
+        defaultExecutablePaths: { claude: '/path' },
+      });
+      const result = service.getAgentDefaults();
+      expect(result.fallbackChain).toBeUndefined();
+    });
+
+    test('filters non-string entries from fallbackChain on read', () => {
+      // Directly store malformed data to test read-side validation
+      service.setSetting(SETTING_KEYS.AGENT_DEFAULTS, {
+        defaultExecutablePaths: {},
+        fallbackChain: ['valid', 42, null, 'also-valid'],
+      });
+      const result = service.getAgentDefaults();
+      expect(result.fallbackChain).toEqual(['valid', 'also-valid']);
+    });
+
+    test('ignores non-array fallbackChain on read', () => {
+      service.setSetting(SETTING_KEYS.AGENT_DEFAULTS, {
+        defaultExecutablePaths: {},
+        fallbackChain: 'not-an-array',
+      });
+      const result = service.getAgentDefaults();
+      expect(result.fallbackChain).toBeUndefined();
+    });
   });
 
   describe('setAgentDefaults', () => {
@@ -155,6 +192,47 @@ describe('SettingsService', () => {
       const result = service.getAgentDefaults();
       expect(result.defaultExecutablePaths).toEqual({ codex: '/new/path' });
       expect(result.defaultExecutablePaths.claude).toBeUndefined();
+    });
+
+    test('stores and retrieves fallbackChain', () => {
+      const result = service.setAgentDefaults({
+        defaultExecutablePaths: { claude: '/path' },
+        fallbackChain: ['claude', 'codex'],
+      });
+      expect(result.fallbackChain).toEqual(['claude', 'codex']);
+      const retrieved = service.getAgentDefaults();
+      expect(retrieved.fallbackChain).toEqual(['claude', 'codex']);
+    });
+
+    test('filters out non-string entries from fallbackChain', () => {
+      const result = service.setAgentDefaults({
+        defaultExecutablePaths: {},
+        fallbackChain: ['valid', 123 as unknown as string, null as unknown as string, 'also-valid'],
+      });
+      expect(result.fallbackChain).toEqual(['valid', 'also-valid']);
+    });
+
+    test('ignores non-array fallbackChain value', () => {
+      const result = service.setAgentDefaults({
+        defaultExecutablePaths: {},
+        fallbackChain: 'not-an-array' as unknown as string[],
+      });
+      expect(result.fallbackChain).toBeUndefined();
+    });
+
+    test('does not include fallbackChain when not provided', () => {
+      const result = service.setAgentDefaults({
+        defaultExecutablePaths: { claude: '/path' },
+      });
+      expect(result.fallbackChain).toBeUndefined();
+    });
+
+    test('stores empty fallbackChain array', () => {
+      const result = service.setAgentDefaults({
+        defaultExecutablePaths: {},
+        fallbackChain: [],
+      });
+      expect(result.fallbackChain).toEqual([]);
     });
   });
 

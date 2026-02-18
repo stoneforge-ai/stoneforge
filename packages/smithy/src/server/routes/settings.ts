@@ -69,9 +69,28 @@ export function createSettingsRoutes(services: Services) {
         }
       }
 
-      const updated = settingsService.setAgentDefaults({
+      // Validate fallbackChain if provided — must be an array
+      if (body.fallbackChain !== undefined && !Array.isArray(body.fallbackChain)) {
+        return c.json(
+          {
+            error: {
+              code: 'INVALID_INPUT',
+              message: 'fallbackChain must be an array of executable names/paths',
+            },
+          },
+          400
+        );
+      }
+
+      const defaults: ServerAgentDefaults = {
         defaultExecutablePaths: body.defaultExecutablePaths ?? {},
-      });
+      };
+
+      if (body.fallbackChain !== undefined) {
+        defaults.fallbackChain = body.fallbackChain;
+      }
+
+      const updated = settingsService.setAgentDefaults(defaults);
 
       return c.json(updated);
     } catch (error) {
