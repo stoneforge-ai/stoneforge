@@ -61,7 +61,7 @@ All factories accept a `CollaborateServices` (or `CollaborateServicesWithBroadca
 import { EventBroadcaster, initializeBroadcaster, getBroadcaster } from '@stoneforge/shared-routes';
 import type { EventListener } from '@stoneforge/shared-routes';
 
-const broadcaster = initializeBroadcaster();
+const broadcaster = initializeBroadcaster(api);
 const services: CollaborateServicesWithBroadcast = { api, broadcast: (event) => broadcaster.broadcast(event) };
 ```
 

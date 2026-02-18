@@ -109,7 +109,7 @@ Common pitfalls and their solutions, organized by severity and category.
 
 ## Services
 
-- **`BlockedCacheService` not exported from `src/services/index.ts`** - import directly from `src/services/blocked-cache.ts`
+- **`BlockedCacheService` not exported from `packages/quarry/src/services/index.ts`** - import directly from `packages/quarry/src/services/blocked-cache.ts`
 - **`sortByEffectivePriority()` mutates array in place** - returns same reference
 - **Effective priority walks upstream** (tasks that depend on this task)
 - **Aggregate complexity walks downstream** (tasks this task depends on) - opposite directions!

@@ -57,7 +57,7 @@ Core domain types used across all Stoneforge packages:
 | `Team` | Named group of entities with roles |
 | `Library` | Collection of related documents |
 | `Playbook` | Templated multi-step process definition |
-| `Inbox` | Notification items for entities |
+| `InboxItem` | Notification items for entities |
 | `Dependency` | Blocking relationship between elements |
 | `Event` | Immutable record of a state change |
 
