@@ -11,6 +11,7 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "clean": "turbo run clean && rm -rf node_modules",
+    "dev:smithy": "turbo run dev --filter=@stoneforge/smithy-server --filter=@stoneforge/smithy-web",
     "dev:platform": "turbo run dev --filter=@stoneforge/quarry-server --filter=@stoneforge/quarry-web",
     "postinstall": "node packages/smithy/scripts/fix-node-pty-permissions.cjs",
     "release": "bun run scripts/release.ts"
