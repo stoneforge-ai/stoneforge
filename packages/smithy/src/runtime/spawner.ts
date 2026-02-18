@@ -548,9 +548,15 @@ export class SpawnerServiceImpl implements SpawnerService {
         events: session.events,
       };
     } catch (error) {
-      // Clean up on failure
-      session.status = 'terminated';
-      session.endedAt = createTimestamp();
+      // Clean up on failure — guard against double-termination since
+      // spawnHeadless/spawnInteractive catch blocks may have already
+      // transitioned the session to 'terminated'.
+      if (session.status !== 'terminated') {
+        session.status = 'terminated';
+      }
+      if (!session.endedAt) {
+        session.endedAt = createTimestamp();
+      }
       throw error;
     }
   }
@@ -905,8 +911,12 @@ export class SpawnerServiceImpl implements SpawnerService {
       // Wait for the init event to get the provider session ID
       await this.waitForInit(session, options?.timeout ?? this.defaultConfig.timeout!);
     } catch (error) {
-      this.transitionStatus(session, 'terminated');
-      session.endedAt = createTimestamp();
+      if (session.status !== 'terminated') {
+        this.transitionStatus(session, 'terminated');
+      }
+      if (!session.endedAt) {
+        session.endedAt = createTimestamp();
+      }
       throw error;
     }
   }
@@ -1088,8 +1098,12 @@ export class SpawnerServiceImpl implements SpawnerService {
       this.transitionStatus(session, 'running');
       session.startedAt = createTimestamp();
     } catch (error) {
-      this.transitionStatus(session, 'terminated');
-      session.endedAt = createTimestamp();
+      if (session.status !== 'terminated') {
+        this.transitionStatus(session, 'terminated');
+      }
+      if (!session.endedAt) {
+        session.endedAt = createTimestamp();
+      }
       throw error;
     }
   }

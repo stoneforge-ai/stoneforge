@@ -16,6 +16,7 @@ import { createTimestamp } from '@stoneforge/core';
 import {
   createSpawnerService,
   buildHeadlessArgs,
+  SpawnerServiceImpl,
   type SpawnerService,
   type SpawnedSession,
   type SpawnConfig,
@@ -29,6 +30,17 @@ import {
   isTerminalStatus,
   getStatusDescription,
 } from './spawner.js';
+import type {
+  AgentProvider,
+  HeadlessProvider,
+  HeadlessSession,
+  HeadlessSpawnOptions,
+  InteractiveProvider,
+  InteractiveSession,
+  InteractiveSpawnOptions,
+  AgentMessage,
+  ModelInfo,
+} from '../providers/types.js';
 
 // Mock agent ID for tests
 const testAgentId = 'agent-test-001' as EntityId;
@@ -837,5 +849,299 @@ describe('checkReadyQueue (UWP)', () => {
       expect(options3.limit).toBe(5);
       expect(options4.getReadyTasks).toBeDefined();
     });
+  });
+});
+
+// ============================================================================
+// Race Condition Guard Tests
+// ============================================================================
+
+/**
+ * Creates a mock headless session that immediately finishes iterating
+ * (simulating a stale/invalid resume session that exits without sending init).
+ * The async iterator yields no init event, causing waitForInit to timeout.
+ */
+function createImmediateExitHeadlessSession(): HeadlessSession {
+  return {
+    sendMessage: () => {},
+    [Symbol.asyncIterator]() {
+      let done = false;
+      return {
+        async next(): Promise<IteratorResult<AgentMessage>> {
+          if (!done) {
+            done = true;
+            // Yield a result error (simulating stale session resume failure)
+            return {
+              done: false,
+              value: {
+                type: 'result',
+                subtype: 'error_during_execution',
+                content: 'No conversation found with session ID stale-session-123',
+                raw: { errors: ['No conversation found with session ID stale-session-123'] },
+              },
+            };
+          }
+          // Stream ends — processProviderMessages will exit the for-await loop
+          return { done: true, value: undefined };
+        },
+      };
+    },
+    interrupt: async () => {},
+    close: () => {},
+  };
+}
+
+/**
+ * Creates a mock headless provider for testing.
+ */
+function createMockHeadlessProvider(
+  sessionFactory: () => HeadlessSession
+): HeadlessProvider {
+  return {
+    name: 'mock-headless',
+    spawn: async (_options: HeadlessSpawnOptions) => sessionFactory(),
+    isAvailable: async () => true,
+  };
+}
+
+/**
+ * Creates a mock interactive provider for testing.
+ */
+function createMockInteractiveProvider(): InteractiveProvider {
+  return {
+    name: 'mock-interactive',
+    spawn: async (_options: InteractiveSpawnOptions): Promise<InteractiveSession> => {
+      throw new Error('Interactive spawn not implemented in mock');
+    },
+    isAvailable: async () => true,
+  };
+}
+
+/**
+ * Creates a mock AgentProvider combining headless and interactive mocks.
+ */
+function createMockProvider(
+  headlessSessionFactory: () => HeadlessSession
+): AgentProvider {
+  return {
+    name: 'mock-provider',
+    headless: createMockHeadlessProvider(headlessSessionFactory),
+    interactive: createMockInteractiveProvider(),
+    isAvailable: async () => true,
+    getInstallInstructions: () => 'No install needed for mock',
+    listModels: async (): Promise<ModelInfo[]> => [],
+  };
+}
+
+describe('Race condition guards (terminated->terminated)', () => {
+  test('spawnHeadless catch block does not throw when session is already terminated', async () => {
+    // This test simulates the race condition:
+    // 1. processProviderMessages finishes (fire-and-forget) → transitions to terminated
+    // 2. waitForInit times out → catch block tries to transition to terminated again
+    // Without the guard, this would throw "Invalid status transition: terminated -> terminated"
+    const mockProvider = createMockProvider(createImmediateExitHeadlessSession);
+
+    const spawner = new SpawnerServiceImpl({
+      provider: mockProvider,
+      workingDirectory: '/tmp',
+      timeout: 100, // Very short timeout to trigger waitForInit timeout quickly
+    });
+
+    // The spawn should reject with a timeout error (from waitForInit),
+    // NOT with "Invalid status transition: terminated -> terminated"
+    await expect(
+      spawner.spawn(testAgentId, 'worker', {
+        mode: 'headless',
+        resumeSessionId: 'stale-session-123',
+      })
+    ).rejects.toThrow('Timeout waiting for agent init');
+
+    // Verify the session ended up in terminated state
+    const sessions = spawner.listAllSessions(testAgentId);
+    expect(sessions.length).toBe(1);
+    expect(sessions[0].status).toBe('terminated');
+    expect(sessions[0].endedAt).toBeDefined();
+  });
+
+  test('spawnHeadless catch block does not overwrite endedAt when already set', async () => {
+    // When processProviderMessages finishes first, it sets endedAt.
+    // The catch block should not overwrite it.
+    const mockProvider = createMockProvider(createImmediateExitHeadlessSession);
+
+    const spawner = new SpawnerServiceImpl({
+      provider: mockProvider,
+      workingDirectory: '/tmp',
+      timeout: 100,
+    });
+
+    try {
+      await spawner.spawn(testAgentId, 'worker', {
+        mode: 'headless',
+        resumeSessionId: 'stale-session-456',
+      });
+    } catch {
+      // Expected to throw
+    }
+
+    const sessions = spawner.listAllSessions(testAgentId);
+    expect(sessions.length).toBe(1);
+    // endedAt should be set exactly once (not overwritten)
+    expect(sessions[0].endedAt).toBeDefined();
+  });
+
+  test('spawn() catch block handles already-terminated session from spawnHeadless', async () => {
+    // The outer spawn() catch block should also handle the case where
+    // spawnHeadless already terminated the session.
+    const mockProvider = createMockProvider(createImmediateExitHeadlessSession);
+
+    const spawner = new SpawnerServiceImpl({
+      provider: mockProvider,
+      workingDirectory: '/tmp',
+      timeout: 100,
+    });
+
+    // spawn() should propagate the timeout error cleanly
+    let thrownError: Error | undefined;
+    try {
+      await spawner.spawn(testAgentId, 'worker', {
+        mode: 'headless',
+        resumeSessionId: 'stale-session-789',
+      });
+    } catch (error) {
+      thrownError = error as Error;
+    }
+
+    expect(thrownError).toBeDefined();
+    expect(thrownError!.message).toContain('Timeout waiting for agent init');
+
+    // Session should be cleanly terminated
+    const sessions = spawner.listAllSessions(testAgentId);
+    expect(sessions.length).toBe(1);
+    expect(sessions[0].status).toBe('terminated');
+  });
+
+  test('spawnInteractive catch block handles already-terminated session', async () => {
+    // Create a mock interactive provider that simulates an exit callback
+    // firing before the catch block runs.
+    let exitCallback: ((code: number, signal?: number) => void) | undefined;
+
+    const mockInteractiveProvider: InteractiveProvider = {
+      name: 'mock-interactive',
+      spawn: async (_options: InteractiveSpawnOptions): Promise<InteractiveSession> => {
+        return {
+          pid: 12345,
+          write: () => {},
+          resize: () => {},
+          kill: () => {},
+          onData: () => {},
+          onExit: (cb: (code: number, signal?: number) => void) => {
+            exitCallback = cb;
+          },
+          getSessionId: () => undefined,
+        };
+      },
+      isAvailable: async () => true,
+    };
+
+    const mockProvider: AgentProvider = {
+      name: 'mock-provider',
+      headless: createMockHeadlessProvider(createImmediateExitHeadlessSession),
+      interactive: mockInteractiveProvider,
+      isAvailable: async () => true,
+      getInstallInstructions: () => 'No install needed for mock',
+      listModels: async (): Promise<ModelInfo[]> => [],
+    };
+
+    const spawner = new SpawnerServiceImpl({
+      provider: mockProvider,
+      workingDirectory: '/tmp',
+      timeout: 100,
+    });
+
+    // Spawn in interactive mode — the spawn will succeed because transitionStatus(running) works
+    const result = await spawner.spawn(testAgentId, 'director', {
+      mode: 'interactive',
+    });
+
+    expect(result.session.status).toBe('running');
+
+    // Simulate the exit callback firing (transitioning to terminated)
+    if (exitCallback) {
+      exitCallback(1, undefined);
+    }
+
+    // Verify the session is now terminated
+    const sessions = spawner.listAllSessions(testAgentId);
+    expect(sessions.length).toBe(1);
+    expect(sessions[0].status).toBe('terminated');
+  });
+
+  test('normal headless spawn with init event succeeds without guard interference', async () => {
+    // Ensure the guard doesn't break normal flow where session is NOT yet terminated.
+    // The mock delays the result message so spawn() can return while session is still running.
+    const mockHeadlessSession: HeadlessSession = {
+      sendMessage: () => {},
+      [Symbol.asyncIterator]() {
+        let sentInit = false;
+        let sentResult = false;
+        return {
+          async next(): Promise<IteratorResult<AgentMessage>> {
+            if (!sentInit) {
+              sentInit = true;
+              return {
+                done: false,
+                value: {
+                  type: 'system',
+                  subtype: 'init',
+                  sessionId: 'provider-session-abc',
+                  content: 'Session initialized',
+                  raw: { type: 'system', subtype: 'init', session_id: 'provider-session-abc' },
+                },
+              };
+            }
+            if (!sentResult) {
+              sentResult = true;
+              // Delay the result message so spawn() can return with running status
+              await new Promise((resolve) => setTimeout(resolve, 100));
+              return {
+                done: false,
+                value: {
+                  type: 'result',
+                  content: 'Task completed',
+                  raw: { type: 'result', result: 'Task completed' },
+                },
+              };
+            }
+            return { done: true, value: undefined };
+          },
+        };
+      },
+      interrupt: async () => {},
+      close: () => {},
+    };
+
+    const mockProvider = createMockProvider(() => mockHeadlessSession);
+
+    const spawner = new SpawnerServiceImpl({
+      provider: mockProvider,
+      workingDirectory: '/tmp',
+      timeout: 5000,
+    });
+
+    // Normal spawn should succeed — session is running after init
+    const result = await spawner.spawn(testAgentId, 'worker', {
+      mode: 'headless',
+    });
+
+    expect(result.session.status).toBe('running');
+    expect(result.session.providerSessionId).toBe('provider-session-abc');
+
+    // Wait for processProviderMessages to process the result and terminate
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    // After the result message, processProviderMessages should terminate the session
+    const sessions = spawner.listAllSessions(testAgentId);
+    expect(sessions.length).toBe(1);
+    expect(sessions[0].status).toBe('terminated');
   });
 });
