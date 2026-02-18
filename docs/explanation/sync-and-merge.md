@@ -369,8 +369,8 @@ If SQLite corrupts or gets out of sync:
 # Delete the cache
 rm .stoneforge/stoneforge.db
 
-# Rebuild from JSONL
-sf sync rebuild
+# Re-import from JSONL
+sf sync import
 ```
 
 The JSONL files are the source of truth. SQLite can always be regenerated.

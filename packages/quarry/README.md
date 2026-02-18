@@ -117,7 +117,7 @@ Creates a QuarryAPI instance. Requires a `StorageBackend` from `@stoneforge/stor
 
 | Method | Description |
 |--------|-------------|
-| `addDependency(dep)` | Create a dependency (with cycle detection) |
+| `addDependency(dep)` | Create a dependency |
 | `removeDependency(blockedId, blockerId, type, actor?)` | Remove a dependency |
 | `getDependencies(id, types?)` | Get outgoing dependencies |
 | `getDependents(id, types?)` | Get incoming dependencies |

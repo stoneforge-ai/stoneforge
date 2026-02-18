@@ -56,7 +56,7 @@ interface HydrationOptions {
 ```typescript
 const updated = await api.update(taskId, {
   status: 'in_progress',
-  assigneeId: entityId,
+  assignee: entityId,
 });
 ```
 
@@ -76,21 +76,15 @@ await api.delete(taskId);
 const tasks = await api.list({
   type: 'task',
   status: 'open',
-  priority: { lte: 2 },       // Comparison operators
+  priority: 2,                 // Exact match
   tags: ['urgent'],           // AND logic (all required)
   tagsAny: ['a', 'b'],        // OR logic (any matches)
 });
 ```
 
-**Filter operators:**
-- `{ eq: value }` - Equal
-- `{ neq: value }` - Not equal
-- `{ lt: value }` - Less than
-- `{ lte: value }` - Less than or equal
-- `{ gt: value }` - Greater than
-- `{ gte: value }` - Greater than or equal
-- `{ in: [values] }` - In list
-- `{ nin: [values] }` - Not in list
+**Filter values:**
+- Direct values for exact match: `status: 'open'`, `priority: 2`
+- Arrays for OR matching: `status: ['open', 'in_progress']`, `priority: [1, 2]`
 
 ### List with pagination
 
@@ -197,7 +191,7 @@ Use `update()` - there are no dedicated `close()`, `assign()`, or `defer()` meth
 
 ```typescript
 await api.update(taskId, { status: 'closed', closeReason: 'Done' });
-await api.update(taskId, { assigneeId: entityId });
+await api.update(taskId, { assignee: entityId });
 await api.update(taskId, { status: 'deferred', scheduledFor: '2024-01-15' });
 ```
 
@@ -550,9 +544,9 @@ const task = await api.create({
 ```typescript
 const tasks = await api.list({
   type: 'task',
-  status: { in: ['open', 'in_progress'] },
-  priority: { lte: 2 },
-  assigneeId: agentId,
+  status: ['open', 'in_progress'],
+  priority: [1, 2],
+  assignee: agentId,
   tags: ['urgent'],
 });
 ```
@@ -564,7 +558,7 @@ const blockedTasks = await api.blocked();
 const isBlocked = blockedTasks.some(t => t.id === taskId);
 
 // Or check via BlockedCacheService directly
-import { createBlockedCacheService } from '@stoneforge/quarry/services/blocked-cache';
+import { createBlockedCacheService } from '@stoneforge/quarry';
 const blockedCache = createBlockedCacheService(storage);
 const isBlocked = blockedCache.isBlocked(taskId);
 ```

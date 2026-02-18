@@ -120,7 +120,7 @@ const result = storage.transaction((tx) => {
   tx.run('INSERT INTO dependencies ...');
   return 'success';
 }, {
-  mode: 'immediate',  // 'deferred' | 'immediate' | 'exclusive'
+  isolation: 'immediate',  // 'deferred' | 'immediate' | 'exclusive'
 });
 ```
 

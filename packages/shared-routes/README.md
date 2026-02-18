@@ -58,10 +58,11 @@ All factories accept a `CollaborateServices` (or `CollaborateServicesWithBroadca
 ## WebSocket
 
 ```typescript
-import { createWsBroadcaster, type WsEventHandler } from '@stoneforge/shared-routes';
+import { EventBroadcaster, initializeBroadcaster, getBroadcaster } from '@stoneforge/shared-routes';
+import type { EventListener } from '@stoneforge/shared-routes';
 
-const broadcast = createWsBroadcaster(wsConnections);
-const services: CollaborateServicesWithBroadcast = { api, broadcast };
+const broadcaster = initializeBroadcaster();
+const services: CollaborateServicesWithBroadcast = { api, broadcast: (event) => broadcaster.broadcast(event) };
 ```
 
 ---
