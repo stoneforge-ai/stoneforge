@@ -30,13 +30,17 @@ bun packages/quarry/src/bin/sf.ts
 
 ## Basic Commands
 
-| Command      | Description                     |
-| ------------ | ------------------------------- |
-| `sf init`    | Initialize .stoneforge directory |
-| `sf help`    | Show help                       |
-| `sf version` | Show version                    |
-| `sf stats`   | Show statistics                 |
-| `sf whoami`  | Show current actor              |
+| Command         | Description                       |
+| --------------- | --------------------------------- |
+| `sf init`       | Initialize .stoneforge directory  |
+| `sf help`       | Show help                         |
+| `sf version`    | Show version                      |
+| `sf stats`      | Show statistics                   |
+| `sf whoami`     | Show current actor                |
+| `sf serve`      | Start a Stoneforge server         |
+| `sf completion` | Generate shell completion scripts |
+| `sf alias`      | Show command aliases              |
+| `sf install`    | Install stoneforge extensions     |
 
 ## CRUD Commands
 
@@ -66,6 +70,135 @@ sf update abc123 --status closed
 
 # Delete element
 sf delete abc123
+```
+
+## Serve Command
+
+Start a Stoneforge server. Supports starting either the quarry (core) or smithy (orchestrator) server.
+
+```bash
+sf serve [quarry|smithy] [options]
+```
+
+| Option         | Description                          |
+| -------------- | ------------------------------------ |
+| `-p, --port <port>` | Port to listen on                |
+| `-H, --host <host>` | Host to bind to                  |
+| `--no-open`          | Do not open browser automatically |
+
+```bash
+# Start the quarry server
+sf serve quarry
+
+# Start the smithy orchestrator server
+sf serve smithy
+
+# Start on a specific port
+sf serve quarry --port 8080
+
+# Start without opening browser
+sf serve smithy --no-open
+
+# Bind to a specific host
+sf serve quarry --host 0.0.0.0 --port 3000
+```
+
+## Completion Command
+
+Generate shell completion scripts for bash, zsh, or fish.
+
+```bash
+sf completion <shell>
+```
+
+| Argument | Description                          |
+| -------- | ------------------------------------ |
+| `shell`  | Shell type: `bash`, `zsh`, or `fish` |
+
+```bash
+# Generate bash completions
+sf completion bash
+
+# Generate zsh completions
+sf completion zsh
+
+# Generate fish completions
+sf completion fish
+```
+
+**Installation:**
+
+```bash
+# Bash — add to ~/.bashrc or ~/.bash_profile:
+source <(sf completion bash)
+# Or save to a file:
+sf completion bash > ~/.local/share/bash-completion/completions/sf
+
+# Zsh — add to ~/.zshrc:
+source <(sf completion zsh)
+# Or save to a file in your fpath:
+sf completion zsh > ~/.zsh/completions/_sf
+
+# Fish — save to completions directory:
+sf completion fish > ~/.config/fish/completions/sf.fish
+```
+
+## Alias Command
+
+Display all available command aliases. Aliases provide shorter or more intuitive names for existing commands.
+
+```bash
+sf alias
+```
+
+**Built-in aliases:**
+
+| Alias              | Maps to   |
+| ------------------ | --------- |
+| `add`, `new`       | `create`  |
+| `rm`, `remove`     | `delete`  |
+| `ls`               | `list`    |
+| `s`, `get`         | `show`    |
+| `todo`, `tasks`    | `ready`   |
+| `done`, `complete` | `close`   |
+| `st`               | `status`  |
+
+```bash
+# Show all aliases
+sf alias
+
+# Output as JSON
+sf alias --json
+```
+
+Plugins can register additional aliases. See [CLI Plugins](#cli-plugins) for details.
+
+## Install Command
+
+Install stoneforge extensions to the workspace.
+
+```bash
+sf install <subcommand> [options]
+```
+
+| Subcommand | Description                          |
+| ---------- | ------------------------------------ |
+| `skills`   | Install Claude skills to `.claude/skills/` |
+
+#### install skills
+
+Install Claude skills files to the workspace's `.claude/skills/` directory.
+
+| Option          | Description                  |
+| --------------- | ---------------------------- |
+| `-f, --force`   | Overwrite existing skill files |
+
+```bash
+# Install Claude skills
+sf install skills
+
+# Overwrite existing skills
+sf install skills --force
 ```
 
 ## Task Commands
@@ -125,6 +258,47 @@ sf task describe el-abc123 --show
 # Append to existing description
 sf task describe el-abc123 --append --content "Additional implementation notes"
 sf task describe el-abc123 --append -f additional-notes.md
+```
+
+#### task list
+
+List tasks with optional filtering.
+
+| Option                  | Description                                                                                                                  |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `-s, --status <status>` | Filter by status                                                                                                             |
+| `--ready`               | Show only dispatch-ready tasks (accounts for blocked cache, draft plans, scheduled-for-future, ephemeral workflows, and plan-level blocking). Mutually exclusive with `--status`. |
+| `-t, --type <type>`     | Filter by element type                                                                                                       |
+| `-p, --priority <1-5>`  | Filter by priority                                                                                                           |
+| `-a, --assignee <id>`   | Filter by assignee                                                                                                           |
+| `--tag <tag>`           | Filter by tag (can be repeated for AND logic)                                                                                |
+| `-l, --limit <n>`       | Maximum results (default: 50)                                                                                                |
+| `-o, --offset <n>`      | Skip first n results (for pagination)                                                                                        |
+
+```bash
+# List all tasks
+sf task list
+
+# Filter by status
+sf task list --status open
+
+# Show dispatch-ready tasks (more precise than --status open)
+sf task list --ready
+
+# Ready tasks assigned to a specific agent
+sf task list --ready --assignee alice
+
+# Filter by priority and status
+sf task list --priority 1 --status in_progress
+
+# Filter by type
+sf task list --type bug
+
+# Filter by tag
+sf task list --tag frontend --tag urgent
+
+# Paginate results
+sf task list --status open --limit 20 --offset 40
 ```
 
 ## Dependency Commands
@@ -260,6 +434,28 @@ sf embeddings search "authentication flow"
 | `sf plan add-task <id> <task>`    | Add task to plan                  |
 | `sf plan remove-task <id> <task>` | Remove task                       |
 | `sf plan tasks <id>`              | List tasks in plan                |
+| `sf plan auto-complete`           | Auto-complete active plans        |
+
+#### plan auto-complete
+
+Auto-complete active plans where all tasks are closed. Scans all active plans and transitions those with all tasks in a closed state to completed status.
+
+This command is idempotent and safe to run at any time. It serves as both a backfill tool for stuck plans and an ongoing maintenance command.
+
+| Option      | Description                                           |
+| ----------- | ----------------------------------------------------- |
+| `--dry-run` | Show what would be auto-completed without making changes |
+
+```bash
+# Auto-complete eligible plans
+sf plan auto-complete
+
+# Preview what would be completed
+sf plan auto-complete --dry-run
+
+# With JSON output
+sf plan auto-complete --json
+```
 
 ### Draft Plan Workflow
 
@@ -295,13 +491,48 @@ sf plan activate <plan-id>
 | `sf workflow promote <id>`      | Promote to durable        |
 | `sf workflow gc`                | Garbage collect           |
 
+#### workflow create
+
+Instantiate a playbook into a workflow.
+
+| Option                  | Description                               |
+| ----------------------- | ----------------------------------------- |
+| `--var <name=value>`    | Set variable (can be repeated)            |
+| `-e, --ephemeral`       | Create as ephemeral (not synced to JSONL) |
+| `-t, --title <text>`    | Override workflow title                   |
+
 ```bash
 # Instantiate workflow
 sf workflow create my-playbook --var name=value
 
+# Create as ephemeral (not persisted to sync)
+sf workflow create deploy --ephemeral
+
+# Override the workflow title
+sf workflow create deploy --title "Production Deploy v1.2"
+
+# Combine options
+sf workflow create deploy --var env=prod --var version=1.2 --ephemeral
+```
+
+#### workflow gc
+
+Garbage collect old ephemeral workflows. Deletes workflows that are in a terminal state (completed, failed, or cancelled) and older than the specified age.
+
+| Option              | Description                                      |
+| ------------------- | ------------------------------------------------ |
+| `-a, --age <days>`  | Maximum age in days (default: 7)                 |
+| `--dry-run`         | Show what would be deleted without deleting      |
+
+```bash
 # Garbage collect (default 7 days)
 sf workflow gc --age 14
+
+# Preview deletions
+sf workflow gc --dry-run
 ```
+
+**Note:** See also [`sf gc workflows`](#gc-commands) which provides the same functionality with different defaults (1 day) and an additional `--limit` flag. See the [GC Commands](#gc-commands) section for details on when to use each.
 
 ## Inbox Commands
 
@@ -623,6 +854,16 @@ sf migrate --dry-run
 | `sf gc workflows`   | Garbage collect ephemeral workflows|
 | `sf gc tasks`       | _(deprecated, no-op)_              |
 
+#### gc workflows
+
+Garbage collect old ephemeral workflows. Only workflows in a terminal state (completed, failed, cancelled) are eligible. Deleting a workflow also deletes all tasks that belong to it.
+
+| Option              | Description                                      |
+| ------------------- | ------------------------------------------------ |
+| `-a, --age <days>`  | Maximum age in days (default: **1**)             |
+| `-l, --limit <n>`   | Maximum number of workflows to delete            |
+| `--dry-run`         | Show what would be deleted without deleting      |
+
 ```bash
 # Garbage collect old workflows (default: 1 day old)
 sf gc workflows
@@ -637,7 +878,20 @@ sf gc workflows --dry-run
 sf gc workflows --limit 10
 ```
 
-**Note:** Only workflows in a terminal state (completed, failed, cancelled) are eligible. Deleting a workflow also deletes all tasks that belong to it.
+#### `sf gc workflows` vs `sf workflow gc`
+
+Both commands garbage collect ephemeral workflows, but differ in defaults and available options:
+
+| Feature         | `sf gc workflows`         | `sf workflow gc`          |
+| --------------- | ------------------------- | ------------------------- |
+| Default age     | **1 day**                 | **7 days**                |
+| `--limit` flag  | Yes                       | No                        |
+| `--dry-run`     | Yes                       | Yes                       |
+| `--age`         | Yes                       | Yes                       |
+
+**When to use each:**
+- Use `sf gc workflows` for aggressive, frequent cleanup (e.g., cron jobs) — its 1-day default and `--limit` flag make it suitable for automated maintenance.
+- Use `sf workflow gc` for manual or less frequent cleanup — its 7-day default is more conservative.
 
 ## Reset Command
 
@@ -930,7 +1184,7 @@ Create a new agent pool.
 - `steward:docs:80` — Docs stewards with priority 80
 - `steward:merge:100:2:opencode` — Merge stewards with provider only
 
-The optional `provider` and `model` fields allow specifying which AI provider and model each agent type should use. If omitted, the system default is used.
+The optional `provider` and `model` fields allow specifying which AI provider and model each agent type should use. If omitted, the system default is used. Note: the `--help` text shows a shorter format (`role[:mode|focus][:priority][:maxSlots]`), but the `[:provider][:model]` fields are fully supported in the implementation.
 
 ```bash
 sf pool create default --size 5
@@ -1050,6 +1304,7 @@ sf merge --cleanup --message "docs: automated documentation fixes"
 | ------------------------------------------ | -------------------------------------- |
 | `sf task handoff <id>`                     | Hand off task to another agent         |
 | `sf task complete <id>`                    | Complete task and create merge request (OPEN/IN_PROGRESS only) |
+| `sf task sync <id>`                        | Sync task branch with main             |
 | `sf task merge <id>`                       | Squash-merge task branch and close it  |
 | `sf task reject <id>`                      | Mark merge as failed and reopen task   |
 | `sf task merge-status <id> <status>`       | Update the merge status of a task      |
@@ -1114,6 +1369,44 @@ sf task merge-status el-abc123 merged
 sf task merge-status el-abc123 pending
 sf task merge-status el-abc123 not_applicable
 ```
+
+#### task sync
+
+Sync a task's branch with the main branch (master/main).
+
+This command:
+1. Looks up the task's worktree path and branch from metadata
+2. Runs `git fetch origin` in the worktree
+3. Attempts `git merge origin/main` (or `origin/master`)
+4. Reports success, conflicts, or errors
+
+Typically run by the dispatch daemon before spawning a merge steward, or by the steward during review if master advances.
+
+| Argument    | Description             |
+| ----------- | ----------------------- |
+| `<task-id>` | Task identifier to sync |
+
+```bash
+# Sync a task branch with main
+sf task sync el-abc123
+
+# Sync with JSON output (useful for automation)
+sf task sync el-abc123 --json
+```
+
+**JSON output format:**
+
+```json
+{
+  "success": true,
+  "conflicts": [],
+  "message": "human-readable status",
+  "worktreePath": "/path/to/worktree",
+  "branch": "agent/bob/el-123-feature"
+}
+```
+
+When conflicts are detected, the `conflicts` array lists the affected files and `success` is `false`.
 
 ## Short IDs
 
