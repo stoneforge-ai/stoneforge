@@ -343,6 +343,27 @@ await api.setEntityManager(entityId, managerId, actor);  // actor required
 await api.clearEntityManager(entityId, actor);           // actor required
 const reports = await api.getDirectReports(managerId);
 const chain = await api.getManagementChain(entityId);
+
+// Get organizational chart tree
+const orgChart = await api.getOrgChart(rootEntityId?);
+// Returns OrgChartNode[] — tree of entities with their reports
+```
+
+### Send Direct Message
+
+Convenience method that finds or creates a direct channel and sends a message in one call.
+
+```typescript
+const result = await api.sendDirectMessage(senderEntityId, {
+  recipient: recipientEntityId,
+  contentRef: documentId,      // Reference to content Document (must be created first)
+  attachments?: [docId1],      // Optional: attachment Document references
+  tags?: ['urgent'],           // Optional: tags
+  metadata?: { key: 'value' }, // Optional: metadata
+});
+// result.channel   — the direct Channel used
+// result.message   — the created Message
+// result.created   — whether the channel was newly created
 ```
 
 ---

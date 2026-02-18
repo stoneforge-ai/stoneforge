@@ -115,7 +115,7 @@ Comprehensive task assignment management.
 ```typescript
 import { createTaskAssignmentService } from '@stoneforge/smithy';
 
-const assignmentService = createTaskAssignmentService(api);
+const assignmentService = createTaskAssignmentService(api, mergeRequestProvider?);
 ```
 
 ### Assignment Operations
@@ -526,9 +526,10 @@ scheduler.on('steward:unregistered', (stewardId) => { /* ... */ });
 import { createStewardExecutor } from '@stoneforge/smithy';
 
 // Creates an executor that dispatches to the appropriate service based on steward focus:
-// - 'merge' → MergeStewardService.processAllPending()
-// - 'docs'  → spawns an agent session via sessionManager
-// - 'custom' → spawns a session with a custom playbook prompt
+// - 'merge'    → MergeStewardService.processAllPending()
+// - 'docs'     → spawns an agent session via sessionManager
+// - 'recovery' → spawns a recovery agent session
+// - 'custom'   → spawns a session with a custom playbook prompt
 const executor = createStewardExecutor({
   mergeStewardService,
   docsStewardService,
@@ -775,7 +776,11 @@ Creates a detached HEAD worktree on the default branch without creating a new br
 ```typescript
 import { createWorktreeManager } from '@stoneforge/smithy';
 
-const worktreeManager = createWorktreeManager(projectRoot);
+const worktreeManager = createWorktreeManager({
+  workspaceRoot: '/project',
+  worktreeDir: '.stoneforge/.worktrees',  // optional, this is the default
+  defaultBaseBranch: 'master',             // optional, auto-detected from git
+});
 
 const worktreeResult = await worktreeManager.createReadOnlyWorktree({
   agentName: 'worker-alice',
@@ -980,7 +985,7 @@ interface AgentPoolConfig {
 interface PoolAgentTypeConfig {
   role: 'worker' | 'steward';        // Agent role (not director)
   workerMode?: 'ephemeral' | 'persistent';  // For workers
-  stewardFocus?: 'merge' | 'docs' | 'custom';  // For stewards
+  stewardFocus?: 'merge' | 'docs' | 'recovery' | 'custom';  // For stewards
   priority?: number;                 // Spawn priority (higher = higher priority)
   maxSlots?: number;                 // Max slots for this type within the pool
 }
