@@ -58,6 +58,7 @@ Claude Code now has an experimental [agent teams](https://docs.anthropic.com/en/
 | **Knowledge base** | CLAUDE.md only | Versioned document libraries with FTS5 + semantic search |
 | **Structured processes** | Ad-hoc task lists | Playbook templates → resumable workflows with durable state |
 | **Provider lock-in** | Claude Code only | Claude Code, OpenCode, or OpenAI Codex |
+| **Scaling** | Single plan — limited by one account's rate limits | Multi-plan — split agents across multiple Claude MAX/Pro plans via custom executable paths ([setup guide](packages/smithy/README.md#scaling-with-multiple-plans)) |
 | **Status** | Experimental, known limitations (no session resumption, task lag) | Production-ready |
 
 Compared to running a single agent (Claude Code, Cursor), Stoneforge gives you parallel execution with coordination. Compared to background agents (Cursor background agents, Codex), it adds dependency-aware scheduling, merge automation, and a persistent knowledge layer. Compared to custom scripts and task runners, you get a web dashboard, event-sourced state, and merge review built in.
