@@ -371,6 +371,20 @@ export interface DispatchDaemon {
     soonestReset?: string;
   };
 
+  /**
+   * Manually put the daemon to sleep until the specified time.
+   * Marks all executables in the fallback chain as rate-limited until the given time.
+   * This reuses the existing rate limit tracker and pause logic.
+   */
+  sleepUntil(resetTime: Date): void;
+
+  /**
+   * Immediately wake the daemon from a sleep/rate-limit pause.
+   * Clears all rate limit tracker entries and the sleep timer.
+   * The next poll cycle will resume normal dispatch.
+   */
+  wake(): void;
+
   // ----------------------------------------
   // Configuration
   // ----------------------------------------
@@ -584,6 +598,44 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       })),
       soonestReset: soonestReset?.toISOString(),
     };
+  }
+
+  sleepUntil(resetTime: Date): void {
+    const fallbackChain = this.settingsService?.getAgentDefaults().fallbackChain ?? [];
+    if (fallbackChain.length === 0) {
+      logger.warn('sleepUntil: No fallback chain configured — nothing to mark as limited');
+      return;
+    }
+
+    // Mark all executables in the fallback chain as rate-limited until the given time
+    for (const executable of fallbackChain) {
+      this.rateLimitTracker.markLimited(executable, resetTime);
+    }
+
+    // Clear any existing sleep timer and set a new one
+    if (this.rateLimitSleepTimer) {
+      clearTimeout(this.rateLimitSleepTimer);
+    }
+    const sleepMs = Math.max(0, resetTime.getTime() - Date.now());
+    logger.info(
+      `Manual sleep: pausing dispatch for ${Math.round(sleepMs / 1000)}s (until ${resetTime.toISOString()})`
+    );
+    this.rateLimitSleepTimer = setTimeout(() => {
+      this.rateLimitSleepTimer = undefined;
+    }, sleepMs);
+  }
+
+  wake(): void {
+    // Clear all rate limit entries
+    this.rateLimitTracker.clear();
+
+    // Clear the sleep timer
+    if (this.rateLimitSleepTimer) {
+      clearTimeout(this.rateLimitSleepTimer);
+      this.rateLimitSleepTimer = undefined;
+    }
+
+    logger.info('Manual wake: cleared all rate limits, dispatch will resume on next poll cycle');
   }
 
   // ----------------------------------------

@@ -1313,22 +1313,37 @@ sf pool refresh
 
 ### Daemon Commands
 
-| Command            | Description              |
-| ------------------ | ------------------------ |
-| `sf daemon start`  | Start the dispatch daemon |
-| `sf daemon stop`   | Stop the dispatch daemon  |
-| `sf daemon status` | Show daemon status        |
+| Command            | Description                           |
+| ------------------ | ------------------------------------- |
+| `sf daemon start`  | Start the dispatch daemon             |
+| `sf daemon stop`   | Stop the dispatch daemon              |
+| `sf daemon status` | Show daemon status (incl. rate limit) |
+| `sf daemon sleep`  | Pause dispatch until a specified time |
+| `sf daemon wake`   | Immediately resume dispatch           |
 
-| Option                 | Description                                            |
-| ---------------------- | ------------------------------------------------------ |
-| `-s, --server <url>`   | Orchestrator server URL (default: http://localhost:3456)|
-| `-f, --force`          | Skip confirmation (for stop)                           |
+| Option                  | Description                                             |
+| ----------------------- | ------------------------------------------------------- |
+| `-s, --server <url>`    | Orchestrator server URL (default: http://localhost:3456) |
+| `-f, --force`           | Skip confirmation (for stop)                            |
+| `-u, --until <time>`    | Sleep until a specific time (for sleep)                 |
+| `-d, --duration <secs>` | Sleep for a duration in seconds (for sleep)             |
 
 ```bash
 sf daemon start
 sf daemon status
 sf daemon stop
 sf daemon stop --force
+
+# Pause dispatch until a specific time
+sf daemon sleep --until "3am"
+sf daemon sleep --until "Feb 22 at 9:30am"
+sf daemon sleep --until "tomorrow at 3pm"
+
+# Pause dispatch for a duration (seconds)
+sf daemon sleep --duration 3600
+
+# Immediately resume dispatch (clear rate limits)
+sf daemon wake
 ```
 
 ---

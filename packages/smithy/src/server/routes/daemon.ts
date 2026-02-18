@@ -8,6 +8,7 @@ import { Hono } from 'hono';
 import type { Services } from '../services.js';
 import { saveDaemonState, saveDaemonConfigOverrides } from '../daemon-state.js';
 import { createLogger } from '../../utils/logger.js';
+import { parseRateLimitResetTime } from '../../utils/rate-limit-parser.js';
 
 const logger = createLogger('orchestrator');
 
@@ -229,6 +230,110 @@ export function createDaemonRoutes(services: Services) {
       });
     } catch (error) {
       logger.error('Failed to update daemon config:', error);
+      return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
+    }
+  });
+
+  // POST /api/daemon/sleep - Manually pause dispatch until a specified time
+  app.post('/api/daemon/sleep', async (c) => {
+    if (!dispatchDaemon) {
+      return c.json(
+        {
+          error: {
+            code: 'DAEMON_UNAVAILABLE',
+            message: 'DispatchDaemon not available (no git repository)',
+          },
+        },
+        503
+      );
+    }
+
+    try {
+      const body = (await c.req.json()) as {
+        until?: string;
+        duration?: number;
+      };
+
+      let resetTime: Date | undefined;
+
+      if (body.until) {
+        // Prepend "resets " to match the rate limit parser's expected format
+        const input = body.until.toLowerCase().startsWith('resets')
+          ? body.until
+          : `resets ${body.until}`;
+        resetTime = parseRateLimitResetTime(input);
+        if (!resetTime) {
+          return c.json(
+            {
+              error: {
+                code: 'INVALID_TIME',
+                message: `Could not parse time: "${body.until}". Supported formats: "3am", "Feb 22 at 9:30am", "tomorrow at 3pm"`,
+              },
+            },
+            400
+          );
+        }
+      } else if (body.duration !== undefined) {
+        if (typeof body.duration !== 'number' || body.duration <= 0) {
+          return c.json(
+            {
+              error: {
+                code: 'INVALID_DURATION',
+                message: 'Duration must be a positive number (seconds)',
+              },
+            },
+            400
+          );
+        }
+        resetTime = new Date(Date.now() + body.duration * 1000);
+      } else {
+        return c.json(
+          {
+            error: {
+              code: 'MISSING_PARAMETER',
+              message: 'Either "until" (time string) or "duration" (seconds) is required',
+            },
+          },
+          400
+        );
+      }
+
+      dispatchDaemon.sleepUntil(resetTime);
+
+      return c.json({
+        success: true,
+        sleepUntil: resetTime.toISOString(),
+        message: `Daemon dispatch paused until ${resetTime.toISOString()}`,
+      });
+    } catch (error) {
+      logger.error('Failed to put daemon to sleep:', error);
+      return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
+    }
+  });
+
+  // POST /api/daemon/wake - Immediately resume dispatch
+  app.post('/api/daemon/wake', async (c) => {
+    if (!dispatchDaemon) {
+      return c.json(
+        {
+          error: {
+            code: 'DAEMON_UNAVAILABLE',
+            message: 'DispatchDaemon not available (no git repository)',
+          },
+        },
+        503
+      );
+    }
+
+    try {
+      dispatchDaemon.wake();
+
+      return c.json({
+        success: true,
+        message: 'Daemon dispatch resumed. Rate limits cleared.',
+      });
+    } catch (error) {
+      logger.error('Failed to wake daemon:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });

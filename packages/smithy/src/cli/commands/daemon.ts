@@ -4,7 +4,9 @@
  * Provides commands for daemon management:
  * - daemon start: Start the dispatch daemon
  * - daemon stop: Stop the dispatch daemon
- * - daemon status: Show daemon status
+ * - daemon status: Show daemon status (including rate limit info)
+ * - daemon sleep: Pause dispatch until a specified time
+ * - daemon wake: Immediately resume dispatch
  */
 
 import * as readline from 'node:readline';
@@ -266,10 +268,16 @@ async function daemonStatusHandler(
   const mode = getOutputMode(options);
   const data = result.data as {
     status?: string;
+    isRunning?: boolean;
     running?: boolean;
     uptime?: number;
     tasksDispatched?: number;
     lastDispatchAt?: string;
+    rateLimit?: {
+      isPaused: boolean;
+      limits: Array<{ executable: string; resetsAt: string }>;
+      soonestReset?: string;
+    };
   };
 
   if (mode === 'json') {
@@ -277,12 +285,12 @@ async function daemonStatusHandler(
   }
 
   if (mode === 'quiet') {
-    return success(data.status ?? (data.running ? 'running' : 'stopped'));
+    return success(data.status ?? ((data.isRunning ?? data.running) ? 'running' : 'stopped'));
   }
 
   // Human-readable output
   const lines: string[] = [];
-  const isRunning = data.running ?? data.status === 'running';
+  const isRunning = data.isRunning ?? data.running ?? data.status === 'running';
 
   lines.push(`Status:    ${isRunning ? 'running' : 'stopped'}`);
 
@@ -302,7 +310,51 @@ async function daemonStatusHandler(
     lines.push(`Last dispatch: ${data.lastDispatchAt}`);
   }
 
+  // Rate limit / sleep status
+  if (data.rateLimit) {
+    const rl = data.rateLimit;
+    lines.push('');
+    lines.push(`Dispatch:  ${rl.isPaused ? '⏸ paused (rate limited)' : '▶ active'}`);
+
+    if (rl.limits.length > 0) {
+      lines.push('Rate-limited executables:');
+      for (const limit of rl.limits) {
+        const resetDate = new Date(limit.resetsAt);
+        lines.push(`  - ${limit.executable}: resets ${formatRelativeTime(resetDate)}`);
+      }
+    }
+
+    if (rl.soonestReset) {
+      const soonest = new Date(rl.soonestReset);
+      lines.push(`Soonest reset: ${formatRelativeTime(soonest)}`);
+    }
+  }
+
   return success(data, lines.join('\n'));
+}
+
+/**
+ * Formats a date as a human-readable relative time string.
+ */
+function formatRelativeTime(date: Date): string {
+  const now = Date.now();
+  const diff = date.getTime() - now;
+
+  if (diff <= 0) {
+    return 'now (expired)';
+  }
+
+  const seconds = Math.floor(diff / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+
+  const parts: string[] = [];
+  if (hours > 0) parts.push(`${hours}h`);
+  if (minutes % 60 > 0) parts.push(`${minutes % 60}m`);
+  if (hours === 0 && minutes < 5) parts.push(`${seconds % 60}s`);
+
+  const timeStr = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return `${timeStr} (in ${parts.join(' ')})`;
 }
 
 export const daemonStatusCommand: Command = {
@@ -311,7 +363,9 @@ export const daemonStatusCommand: Command = {
   usage: 'sf daemon status [options]',
   help: `Show the current status of the dispatch daemon.
 
-Displays whether the daemon is running, uptime, and dispatch statistics.
+Displays whether the daemon is running, dispatch statistics, and
+rate limit/sleep status including which executables are limited
+and when they reset.
 
 Options:
   -s, --server <url>    Orchestrator server URL (default: ${DEFAULT_SERVER_URL})
@@ -322,6 +376,177 @@ Examples:
   sf daemon status --server http://localhost:8080`,
   options: daemonOptions,
   handler: daemonStatusHandler as Command['handler'],
+};
+
+// ============================================================================
+// Daemon Sleep Command
+// ============================================================================
+
+interface DaemonSleepOptions extends DaemonOptions {
+  until?: string;
+  duration?: string;
+}
+
+const daemonSleepOptions: CommandOption[] = [
+  ...daemonOptions,
+  {
+    name: 'until',
+    short: 'u',
+    description: 'Sleep until a specific time (e.g., "3am", "Feb 22 at 9:30am", "tomorrow at 3pm")',
+    hasValue: true,
+  },
+  {
+    name: 'duration',
+    short: 'd',
+    description: 'Sleep for a duration in seconds',
+    hasValue: true,
+  },
+];
+
+async function daemonSleepHandler(
+  _args: string[],
+  options: GlobalOptions & DaemonSleepOptions
+): Promise<CommandResult> {
+  const serverUrl = getServerUrl(options);
+  const url = `${serverUrl}/api/daemon/sleep`;
+
+  if (!options.until && !options.duration) {
+    return failure(
+      'Either --until or --duration is required.\n' +
+      'Examples:\n' +
+      '  sf daemon sleep --until "3am"\n' +
+      '  sf daemon sleep --until "Feb 22 at 9:30am"\n' +
+      '  sf daemon sleep --until "tomorrow at 3pm"\n' +
+      '  sf daemon sleep --duration 3600',
+      ExitCode.INVALID_ARGUMENTS
+    );
+  }
+
+  if (options.until && options.duration) {
+    return failure(
+      'Specify either --until or --duration, not both.',
+      ExitCode.INVALID_ARGUMENTS
+    );
+  }
+
+  const body: { until?: string; duration?: number } = {};
+
+  if (options.until) {
+    body.until = String(options.until);
+  } else if (options.duration) {
+    const duration = Number(options.duration);
+    if (isNaN(duration) || duration <= 0) {
+      return failure('Duration must be a positive number (seconds)', ExitCode.INVALID_ARGUMENTS);
+    }
+    body.duration = duration;
+  }
+
+  const result = await serverRequest(url, 'POST', body);
+
+  if (!result.ok) {
+    return failure(`Failed to put daemon to sleep: ${result.error}`, ExitCode.GENERAL_ERROR);
+  }
+
+  const mode = getOutputMode(options);
+  const data = result.data as { sleepUntil?: string; message?: string };
+
+  if (mode === 'json') {
+    return success(data);
+  }
+
+  if (mode === 'quiet') {
+    return success(data.sleepUntil ?? 'sleeping');
+  }
+
+  const sleepUntilDate = data.sleepUntil ? new Date(data.sleepUntil) : undefined;
+  const message = sleepUntilDate
+    ? `Daemon dispatch paused until ${sleepUntilDate.toLocaleString()}`
+    : (data.message ?? 'Daemon dispatch paused');
+
+  return success(data, message);
+}
+
+export const daemonSleepCommand: Command = {
+  name: 'sleep',
+  description: 'Pause dispatch until a specified time',
+  usage: 'sf daemon sleep [options]',
+  help: `Pause the dispatch daemon until a specified time.
+
+This manually puts the daemon into a rate-limit sleep state,
+pausing all task dispatch until the specified time. Non-dispatch
+polls (inbox, plan auto-complete, etc.) continue running.
+
+Use this as a manual escape hatch when rate limit time parsing
+fails or produces incorrect results.
+
+Options:
+  -s, --server <url>      Orchestrator server URL (default: ${DEFAULT_SERVER_URL})
+  -u, --until <time>      Sleep until a specific time
+  -d, --duration <secs>   Sleep for a duration in seconds
+
+Time formats for --until:
+  "3am"                   Next occurrence of 3:00 AM
+  "9:30pm"                Next occurrence of 9:30 PM
+  "Feb 22 at 9:30am"      Specific date and time
+  "tomorrow at 3pm"       Tomorrow at 3:00 PM
+
+Examples:
+  sf daemon sleep --until "3am"
+  sf daemon sleep --until "Feb 22 at 9:30am"
+  sf daemon sleep --until "tomorrow at 3pm"
+  sf daemon sleep --duration 3600`,
+  options: daemonSleepOptions,
+  handler: daemonSleepHandler as Command['handler'],
+};
+
+// ============================================================================
+// Daemon Wake Command
+// ============================================================================
+
+async function daemonWakeHandler(
+  _args: string[],
+  options: GlobalOptions & DaemonOptions
+): Promise<CommandResult> {
+  const serverUrl = getServerUrl(options);
+  const url = `${serverUrl}/api/daemon/wake`;
+
+  const result = await serverRequest(url, 'POST');
+
+  if (!result.ok) {
+    return failure(`Failed to wake daemon: ${result.error}`, ExitCode.GENERAL_ERROR);
+  }
+
+  const mode = getOutputMode(options);
+  const data = result.data as { message?: string };
+
+  if (mode === 'json') {
+    return success(data);
+  }
+
+  if (mode === 'quiet') {
+    return success('awake');
+  }
+
+  return success(data, data.message ?? 'Daemon dispatch resumed. Rate limits cleared.');
+}
+
+export const daemonWakeCommand: Command = {
+  name: 'wake',
+  description: 'Immediately resume dispatch',
+  usage: 'sf daemon wake [options]',
+  help: `Immediately resume daemon dispatch.
+
+Clears all rate limit entries and the sleep timer, allowing
+the daemon to resume normal task dispatch on the next poll cycle.
+
+Options:
+  -s, --server <url>    Orchestrator server URL (default: ${DEFAULT_SERVER_URL})
+
+Examples:
+  sf daemon wake
+  sf daemon wake --server http://localhost:8080`,
+  options: daemonOptions,
+  handler: daemonWakeHandler as Command['handler'],
 };
 
 // ============================================================================
@@ -340,7 +565,9 @@ based on configured rules and agent availability.
 Subcommands:
   start     Start the dispatch daemon
   stop      Stop the dispatch daemon
-  status    Show daemon status
+  status    Show daemon status (including rate limit info)
+  sleep     Pause dispatch until a specified time
+  wake      Immediately resume dispatch
 
 Options:
   -s, --server <url>    Orchestrator server URL (default: ${DEFAULT_SERVER_URL})
@@ -348,11 +575,16 @@ Options:
 Examples:
   sf daemon start
   sf daemon stop
-  sf daemon status`,
+  sf daemon status
+  sf daemon sleep --until "3am"
+  sf daemon sleep --duration 3600
+  sf daemon wake`,
   subcommands: {
     start: daemonStartCommand,
     stop: daemonStopCommand,
     status: daemonStatusCommand,
+    sleep: daemonSleepCommand,
+    wake: daemonWakeCommand,
   },
   handler: daemonStatusHandler as Command['handler'], // Default to status
   options: daemonOptions,
