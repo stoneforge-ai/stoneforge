@@ -9,6 +9,7 @@
 </p>
 
 <p align="center">
+  <a href="#why-stoneforge">Why Stoneforge?</a> &nbsp;&middot;&nbsp;
   <a href="#quick-start">Quick Start</a> &nbsp;&middot;&nbsp;
   <a href="#how-it-works">How It Works</a> &nbsp;&middot;&nbsp;
   <a href="#the-web-dashboard">Web Dashboard</a> &nbsp;&middot;&nbsp;
@@ -26,21 +27,47 @@
 
 ---
 
-## What is Stoneforge?
+## Why Stoneforge?
 
-Stoneforge is a **multi-agent orchestration platform** that lets you coordinate AI coding agents from a web dashboard. Install it, start the server, point agents at your codebase, and watch them plan, execute, and merge work in parallel.
+Running one AI coding agent is simple. Running several in parallel — a planner, coders, a reviewer — breaks down fast:
+
+- **Merge conflicts** — agents edit the same files on the same branch
+- **Wasted work** — two agents grab the same task, or one starts on work that's blocked
+- **Lost context** — when an agent fails mid-task, the next one starts from scratch
+- **No visibility** — you can't see what's happening until you check each terminal
+
+Stoneforge is a multi-agent orchestration platform that solves these problems. Install it, start the server, and use the web dashboard to direct a team of AI coding agents. A Director plans the work, Workers execute in isolated git worktrees, Stewards auto-merge and clean up, and a dispatch daemon keeps everyone busy.
 
 Stoneforge has two main layers:
 
 - **Smithy** (`@stoneforge/smithy`) — the orchestrator. Spawns agents, dispatches tasks, manages sessions, handles worktree isolation and merge review. **This is what you install.**
 - **Quarry** (`@stoneforge/quarry`) — the underlying data SDK. Event-sourced task management, sync, and storage. Used by smithy internally; also available standalone for custom integrations.
 
-**Key differentiators:**
+### How is it different?
 
-- **Web dashboard** for real-time monitoring and control of all agent activity
-- **Automatic dispatch** — daemon assigns tasks to idle workers by priority
-- **Git worktree isolation** — parallel workers, no conflicts
-- **Event-sourced dual storage** — SQLite cache for speed, JSONL for Git-friendly persistence and merge
+Claude Code now has an experimental [agent teams](https://docs.anthropic.com/en/docs/claude-code/agent-teams) feature — here's how Stoneforge compares:
+
+| | Claude Code Agent Teams | Stoneforge |
+|---|---|---|
+| **State** | Ephemeral — file-based task list, no persistence across sessions | Event-sourced — SQLite + JSONL, survives restarts, full audit trail |
+| **UI** | Terminal-only (tmux split panes or inline) | Web dashboard with real-time agent output, kanban boards, metrics |
+| **Branch isolation** | Manual — "avoid editing the same file" | Automatic — each worker gets its own git worktree |
+| **Task dispatch** | Lead assigns or teammates self-claim | Dispatch daemon auto-assigns by priority, respects dependencies |
+| **Merge** | Manual | Merge steward runs tests, squash-merges on pass, creates fix task on fail |
+| **Communication** | Lead-mediated messages, broadcast | Persistent channels with threading, inbox triage, searchable history |
+| **Knowledge base** | CLAUDE.md only | Versioned document libraries with FTS5 + semantic search |
+| **Structured processes** | Ad-hoc task lists | Playbook templates → resumable workflows with durable state |
+| **Provider lock-in** | Claude Code only | Claude Code, OpenCode, or OpenAI Codex |
+| **Status** | Experimental, known limitations (no session resumption, task lag) | Production-ready |
+
+Compared to running a single agent (Claude Code, Cursor), Stoneforge gives you parallel execution with coordination. Compared to background agents (Cursor background agents, Codex), it adds dependency-aware scheduling, merge automation, and a persistent knowledge layer. Compared to custom scripts and task runners, you get a web dashboard, event-sourced state, and merge review built in.
+
+**What you get:**
+
+- **Real-time cross-agent communication** — channels, threads, and inbox triage so agents share context and escalate blockers without losing messages
+- **Linear-like issue tracking** — priorities, dependencies, scheduling, kanban views, and plan grouping — all visible in the web dashboard
+- **Evergreen documentation** — versioned document libraries with full-text and semantic search, so agents always have up-to-date project context
+- **Structured workflows** — playbook templates that instantiate into resumable task sequences with durable state — if a step fails, the workflow resumes from there, not from scratch
 
 ---
 
