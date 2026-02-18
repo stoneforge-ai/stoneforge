@@ -42,6 +42,9 @@ import type { SyncResult } from '../cli/commands/task.js';
 import type { TaskAssignmentService } from './task-assignment-service.js';
 import type { StewardScheduler } from './steward-scheduler.js';
 import type { AgentPoolService } from './agent-pool-service.js';
+import type { SettingsService } from './settings-service.js';
+import type { RateLimitTracker } from './rate-limit-tracker.js';
+import { createRateLimitTracker } from './rate-limit-tracker.js';
 import type { WorkerMetadata, StewardMetadata, StewardFocus } from '../types/agent.js';
 import type { PoolSpawnRequest } from '../types/agent-pool.js';
 import {
@@ -350,6 +353,25 @@ export interface DispatchDaemon {
   pollPlanAutoComplete(): Promise<PollResult>;
 
   // ----------------------------------------
+  // Rate Limiting
+  // ----------------------------------------
+
+  /**
+   * Notify the daemon that a rate limit was detected for an executable.
+   * Called externally (e.g., from event listeners on session events).
+   */
+  handleRateLimitDetected(executable: string, resetsAt: Date): void;
+
+  /**
+   * Returns the current rate limit status for the daemon.
+   */
+  getRateLimitStatus(): {
+    isPaused: boolean;
+    limits: Array<{ executable: string; resetsAt: string }>;
+    soonestReset?: string;
+  };
+
+  // ----------------------------------------
   // Configuration
   // ----------------------------------------
 
@@ -402,6 +424,8 @@ export class DispatchDaemonImpl implements DispatchDaemon {
   private readonly stewardScheduler: StewardScheduler;
   private readonly inboxService: InboxService;
   private readonly poolService: AgentPoolService | undefined;
+  private readonly settingsService: SettingsService | undefined;
+  private readonly rateLimitTracker: RateLimitTracker;
   private readonly emitter: EventEmitter;
 
   private config: NormalizedConfig;
@@ -409,6 +433,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
   private polling = false;
   private pollIntervalHandle?: NodeJS.Timeout;
   private currentPollCycle?: Promise<void>;
+  private rateLimitSleepTimer?: NodeJS.Timeout;
 
   /**
    * Tracks inbox item IDs that are currently being forwarded to persistent agents.
@@ -432,7 +457,8 @@ export class DispatchDaemonImpl implements DispatchDaemon {
     stewardScheduler: StewardScheduler,
     inboxService: InboxService,
     config?: DispatchDaemonConfig,
-    poolService?: AgentPoolService
+    poolService?: AgentPoolService,
+    settingsService?: SettingsService
   ) {
     this.api = api;
     this.agentRegistry = agentRegistry;
@@ -443,6 +469,8 @@ export class DispatchDaemonImpl implements DispatchDaemon {
     this.stewardScheduler = stewardScheduler;
     this.inboxService = inboxService;
     this.poolService = poolService;
+    this.settingsService = settingsService;
+    this.rateLimitTracker = createRateLimitTracker();
     this.emitter = new EventEmitter();
     this.config = this.normalizeConfig(config);
   }
@@ -504,6 +532,11 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       this.pollIntervalHandle = undefined;
     }
 
+    if (this.rateLimitSleepTimer) {
+      clearTimeout(this.rateLimitSleepTimer);
+      this.rateLimitSleepTimer = undefined;
+    }
+
     // Wait for in-flight poll cycle to complete (M-8)
     if (this.currentPollCycle) {
       try {
@@ -520,6 +553,37 @@ export class DispatchDaemonImpl implements DispatchDaemon {
 
   isRunning(): boolean {
     return this.running;
+  }
+
+  // ----------------------------------------
+  // Rate Limiting
+  // ----------------------------------------
+
+  handleRateLimitDetected(executable: string, resetsAt: Date): void {
+    this.rateLimitTracker.markLimited(executable, resetsAt);
+    logger.info(
+      `Rate limit detected for executable '${executable}', resets at ${resetsAt.toISOString()}`
+    );
+  }
+
+  getRateLimitStatus(): {
+    isPaused: boolean;
+    limits: Array<{ executable: string; resetsAt: string }>;
+    soonestReset?: string;
+  } {
+    const fallbackChain = this.settingsService?.getAgentDefaults().fallbackChain ?? [];
+    const isPaused = fallbackChain.length > 0 && this.rateLimitTracker.isAllLimited(fallbackChain);
+    const allLimits = this.rateLimitTracker.getAllLimits();
+    const soonestReset = this.rateLimitTracker.getSoonestResetTime();
+
+    return {
+      isPaused,
+      limits: allLimits.map((entry) => ({
+        executable: entry.executable,
+        resetsAt: entry.resetsAt.toISOString(),
+      })),
+      soonestReset: soonestReset?.toISOString(),
+    };
   }
 
   // ----------------------------------------
@@ -1409,6 +1473,46 @@ export class DispatchDaemonImpl implements DispatchDaemon {
     if (this.polling) return;
     this.polling = true;
     try {
+      // Check if all executables in the fallback chain are rate-limited.
+      // When paused, skip dispatch-related polls but still run non-dispatch work.
+      const fallbackChain = this.settingsService?.getAgentDefaults().fallbackChain ?? [];
+      const allLimited = fallbackChain.length > 0 && this.rateLimitTracker.isAllLimited(fallbackChain);
+
+      if (allLimited) {
+        // Schedule a wake-up timer so we re-check when the soonest limit expires
+        const soonestReset = this.rateLimitTracker.getSoonestResetTime();
+        if (soonestReset && !this.rateLimitSleepTimer) {
+          const sleepMs = Math.max(0, soonestReset.getTime() - Date.now());
+          logger.info(
+            `All executables rate-limited. Pausing dispatch polls for ${Math.round(sleepMs / 1000)}s (until ${soonestReset.toISOString()})`
+          );
+          this.rateLimitSleepTimer = setTimeout(() => {
+            this.rateLimitSleepTimer = undefined;
+          }, sleepMs);
+        }
+
+        // Run non-dispatch polls only
+        if (this.config.inboxPollEnabled) {
+          await this.pollInboxes();
+        }
+        if (this.config.closedUnmergedReconciliationEnabled) {
+          await this.reconcileClosedUnmergedTasks();
+        }
+        if (this.config.stuckMergeRecoveryEnabled) {
+          await this.recoverStuckMergeTasks();
+        }
+        if (this.config.planAutoCompleteEnabled) {
+          await this.pollPlanAutoComplete();
+        }
+        return;
+      }
+
+      // Clear sleep timer if limits have expired
+      if (this.rateLimitSleepTimer) {
+        clearTimeout(this.rateLimitSleepTimer);
+        this.rateLimitSleepTimer = undefined;
+      }
+
       // Recover orphaned assignments first — workers with tasks but no session
       // (e.g. from mid-cycle crashes). Runs before availability polling so
       // orphans are handled before they'd be skipped.
@@ -1457,6 +1561,56 @@ export class DispatchDaemonImpl implements DispatchDaemon {
     } finally {
       this.polling = false;
     }
+  }
+
+  /**
+   * Resolves the executable path for a session, checking rate limits and applying
+   * fallback selection when the primary executable is rate-limited.
+   *
+   * @param agent - The agent to resolve the executable for
+   * @returns The executable path override if fallback was needed, undefined if primary is OK,
+   *          or 'all_limited' if all executables in the fallback chain are rate-limited.
+   */
+  private resolveExecutableWithFallback(agent: AgentEntity): string | undefined | 'all_limited' {
+    const meta = getAgentMetadata(agent);
+    if (!meta) return undefined;
+
+    // Get the configured executable for this agent
+    const agentExecutablePath = (meta as { executablePath?: string }).executablePath;
+    const providerName = (meta as { provider?: string }).provider ?? 'claude';
+
+    // Determine the effective executable path that would be used
+    // Priority: agent-specific → workspace-wide default → provider default
+    let effectiveExecutable = agentExecutablePath;
+    if (!effectiveExecutable && this.settingsService) {
+      const defaults = this.settingsService.getAgentDefaults();
+      effectiveExecutable = defaults.defaultExecutablePaths[providerName];
+    }
+    if (!effectiveExecutable) {
+      effectiveExecutable = providerName;
+    }
+
+    // Check if the effective executable is rate-limited
+    if (!this.rateLimitTracker.isLimited(effectiveExecutable)) {
+      return undefined; // Primary is fine, no override needed
+    }
+
+    // Primary is limited — try fallback chain
+    const fallbackChain = this.settingsService?.getAgentDefaults().fallbackChain ?? [];
+    if (fallbackChain.length === 0) {
+      // No fallback chain configured, can't dispatch
+      return 'all_limited';
+    }
+
+    const available = this.rateLimitTracker.getAvailableExecutable(fallbackChain);
+    if (!available) {
+      return 'all_limited';
+    }
+
+    logger.info(
+      `Executable '${effectiveExecutable}' is rate-limited, falling back to '${available}'`
+    );
+    return available;
   }
 
   /**
@@ -1609,13 +1763,22 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       }
     }
 
-    // 3. Fall back to fresh spawn
+    // 3. Fall back to fresh spawn (with rate limit fallback)
+    const orphanExecutableOverride = this.resolveExecutableWithFallback(worker);
+    if (orphanExecutableOverride === 'all_limited') {
+      logger.warn(
+        `All executables rate-limited, deferring orphan recovery for worker ${worker.name}`
+      );
+      return;
+    }
+
     const initialPrompt = await this.buildTaskPrompt(task, workerId);
 
     const { session, events } = await this.sessionManager.startSession(workerId, {
       workingDirectory: worktreePath,
       worktree: worktreePath,
       initialPrompt,
+      executablePathOverride: orphanExecutableOverride ?? undefined,
     });
 
     // Record session history entry for fresh spawned worker session
@@ -1760,6 +1923,15 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       }
     }
 
+    // Check rate limits and determine executable path override if needed
+    const executableOverride = this.resolveExecutableWithFallback(worker);
+    if (executableOverride === 'all_limited') {
+      logger.warn(
+        `All executables rate-limited, skipping dispatch for worker ${worker.name}`
+      );
+      return false;
+    }
+
     // Check for existing worktree/branch in task metadata
     // Priority: handoff > existing assignment > create new
     const taskMeta = getOrchestratorTaskMeta(task.metadata as Record<string, unknown> | undefined);
@@ -1816,6 +1988,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       workingDirectory: worktreePath,
       worktree: worktreePath,
       initialPrompt,
+      executablePathOverride: executableOverride ?? undefined,
     });
 
     // Session started successfully — now dispatch the task (assigns + sends message)
@@ -2084,6 +2257,15 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       }
     }
 
+    // Check rate limits and determine executable path override if needed
+    const stewardExecutableOverride = this.resolveExecutableWithFallback(steward);
+    if (stewardExecutableOverride === 'all_limited') {
+      logger.warn(
+        `All executables rate-limited, skipping merge steward dispatch for ${steward.name}`
+      );
+      return;
+    }
+
     // Get task metadata for worktree path
     const taskMeta = task.metadata as Record<string, unknown> | undefined;
     const orchestratorMeta = taskMeta?.orchestrator as Record<string, unknown> | undefined;
@@ -2157,6 +2339,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       worktree: worktreePath,
       initialPrompt,
       interactive: false, // Stewards use headless mode
+      executablePathOverride: stewardExecutableOverride ?? undefined,
     });
 
     // Record steward assignment and session history on the task to prevent double-dispatch and enable recovery.
@@ -2276,6 +2459,15 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       }
     }
 
+    // 2b. Check rate limits and determine executable path override
+    const recoveryExecutableOverride = this.resolveExecutableWithFallback(recoverySteward);
+    if (recoveryExecutableOverride === 'all_limited') {
+      logger.warn(
+        `All executables rate-limited, deferring recovery steward spawn for ${recoverySteward.name}`
+      );
+      return;
+    }
+
     // 3. Resolve worktree — reuse the worker's existing worktree
     let worktreePath = taskMeta?.worktree ?? taskMeta?.handoffWorktree;
     const branch = taskMeta?.branch ?? taskMeta?.handoffBranch;
@@ -2332,6 +2524,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       worktree: worktreePath,
       initialPrompt,
       interactive: false, // Stewards use headless mode
+      executablePathOverride: recoveryExecutableOverride ?? undefined,
     });
 
     // 7. Record steward assignment and session history on the task
@@ -2991,7 +3184,8 @@ export function createDispatchDaemon(
   stewardScheduler: StewardScheduler,
   inboxService: InboxService,
   config?: DispatchDaemonConfig,
-  poolService?: AgentPoolService
+  poolService?: AgentPoolService,
+  settingsService?: SettingsService
 ): DispatchDaemon {
   return new DispatchDaemonImpl(
     api,
@@ -3003,6 +3197,7 @@ export function createDispatchDaemon(
     stewardScheduler,
     inboxService,
     config,
-    poolService
+    poolService,
+    settingsService
   );
 }

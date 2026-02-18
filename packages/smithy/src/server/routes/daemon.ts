@@ -40,6 +40,7 @@ export function createDaemonRoutes(services: Services) {
     }
 
     const config = dispatchDaemon.getConfig();
+    const rateLimitStatus = dispatchDaemon.getRateLimitStatus();
     return c.json({
       isRunning: dispatchDaemon.isRunning(),
       available: true,
@@ -52,6 +53,7 @@ export function createDaemonRoutes(services: Services) {
         workflowTaskPollEnabled: config.workflowTaskPollEnabled,
         directorInboxForwardingEnabled: config.directorInboxForwardingEnabled,
       },
+      rateLimit: rateLimitStatus,
     });
   });
 

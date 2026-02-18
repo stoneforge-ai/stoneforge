@@ -97,6 +97,8 @@ export interface StartSessionOptions {
   readonly rows?: number;
   /** LLM model to use for this session (overrides agent metadata) */
   readonly model?: string;
+  /** Executable path override for rate limit fallback (takes highest priority in path resolution) */
+  readonly executablePathOverride?: string;
 }
 
 /**
@@ -538,9 +540,10 @@ export class SessionManagerImpl implements SessionManager {
       (meta.agentRole === 'worker' && (meta as { workerMode?: WorkerMode }).workerMode === 'persistent');
     const useInteractive = options?.interactive ?? isInteractiveByRole;
 
-    // Resolve provider from agent metadata, with executable path resolution
+    // Resolve provider from agent metadata, with executable path resolution.
+    // executablePathOverride (from rate limit fallback) takes highest priority.
     const providerName = (meta as { provider?: string }).provider;
-    const agentExecutablePath = (meta as { executablePath?: string }).executablePath;
+    const agentExecutablePath = options?.executablePathOverride ?? (meta as { executablePath?: string }).executablePath;
     const providerOverride = await this.resolveProvider(providerName, agentExecutablePath);
 
     // Resolve model: use options override, or fall back to agent metadata

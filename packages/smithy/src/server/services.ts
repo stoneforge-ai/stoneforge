@@ -264,6 +264,13 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
         isError: false,
       });
 
+      // Listen for rate_limited events from sessions and forward to daemon's tracker
+      const onRateLimited = (data: { executablePath?: string; resetsAt?: Date }) => {
+        if (dispatchDaemon && data.executablePath && data.resetsAt) {
+          dispatchDaemon.handleRateLimitDetected(data.executablePath, data.resetsAt);
+        }
+      };
+
       // Auto-terminate sessions when they emit a 'result' event
       // This handles ephemeral worker sessions completing their tasks
       const onResultEvent = (event: { type: string }) => {
@@ -286,6 +293,7 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
       };
 
       const cleanup = trackListeners(events, {
+        'rate_limited': onRateLimited,
         'event': onResultEvent,
         'exit': onExit,
       });
@@ -302,7 +310,8 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
       stewardScheduler,
       inboxService,
       { pollIntervalMs: 5000, onSessionStarted, ...configOverrides },
-      poolService
+      poolService,
+      settingsService
     );
   } else {
     logger.warn('DispatchDaemon disabled - no git repository');
