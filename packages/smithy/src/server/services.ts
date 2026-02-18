@@ -27,6 +27,7 @@ import {
   createAgentPoolService,
   createMergeStewardService,
   createDocsStewardService,
+  createSettingsService,
   GitRepositoryNotFoundError,
   type OrchestratorAPI,
   type AgentRegistry,
@@ -43,6 +44,7 @@ import {
   type AgentPoolService,
   type MergeStewardService,
   type DocsStewardService,
+  type SettingsService,
   type OnSessionStartedCallback,
   trackListeners,
 } from '../index.js';
@@ -81,6 +83,7 @@ export interface Services {
   dispatchDaemon: DispatchDaemon | undefined;
   sessionInitialPrompts: Map<string, string>;
   sessionMessageService: SessionMessageService;
+  settingsService: SettingsService;
   storageBackend: StorageBackend;
 }
 
@@ -213,6 +216,7 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
 
   const inboxService = createInboxService(storageBackend);
   const sessionMessageService = createSessionMessageService(storageBackend);
+  const settingsService = createSettingsService(storageBackend);
 
   // Create sync and auto-export services
   const { resolve } = await import('node:path');
@@ -326,6 +330,7 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
     dispatchDaemon,
     sessionInitialPrompts,
     sessionMessageService,
+    settingsService,
     storageBackend,
   };
 }

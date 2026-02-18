@@ -219,3 +219,15 @@ export {
   // Factory
   createAgentPoolService,
 } from './agent-pool-service.js';
+
+// Settings service
+export {
+  // Types
+  type Setting,
+  type ServerAgentDefaults,
+  type SettingsService,
+  // Constants
+  SETTING_KEYS,
+  // Factory
+  createSettingsService,
+} from './settings-service.js';

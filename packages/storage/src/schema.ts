@@ -14,7 +14,7 @@ import type { Migration, MigrationResult, StorageBackend } from './index.js';
 /**
  * Current schema version
  */
-export const CURRENT_SCHEMA_VERSION = 8;
+export const CURRENT_SCHEMA_VERSION = 9;
 
 // ============================================================================
 // Migrations
@@ -380,9 +380,32 @@ DROP TABLE IF EXISTS document_embeddings;
 };
 
 /**
+ * Migration 9: Add settings table for server-side key-value settings
+ *
+ * Stores workspace-wide configuration as key-value pairs.
+ * Used for settings that need to be accessible server-side (e.g., default executable paths).
+ * Values are stored as JSON strings to support structured data.
+ */
+const migration009: Migration = {
+  version: 9,
+  description: 'Add settings table for server-side key-value configuration',
+  up: `
+-- Server-side settings (key-value store with JSON values)
+CREATE TABLE settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+`,
+  down: `
+DROP TABLE IF EXISTS settings;
+`,
+};
+
+/**
  * All migrations in order
  */
-export const MIGRATIONS: readonly Migration[] = [migration001, migration002, migration003, migration004, migration005, migration006, migration007, migration008];
+export const MIGRATIONS: readonly Migration[] = [migration001, migration002, migration003, migration004, migration005, migration006, migration007, migration008, migration009];
 
 // ============================================================================
 // Schema Functions
@@ -472,6 +495,7 @@ export const EXPECTED_TABLES = [
   'session_messages',
   'documents_fts',
   'document_embeddings',
+  'settings',
 ] as const;
 
 /**
