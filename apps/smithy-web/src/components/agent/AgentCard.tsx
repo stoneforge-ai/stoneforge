@@ -13,6 +13,7 @@ import { Tooltip } from '@stoneforge/ui';
 import { useAgentInboxCount } from '../../api/hooks/useAgentInbox';
 import { AgentInboxDrawer } from './AgentInboxDrawer';
 import { ChangeProviderDialog } from './ChangeProviderDialog';
+import { getProviderLabel } from '../../lib/providers';
 import { ChangeModelDialog } from './ChangeModelDialog';
 import { ChangeTriggerDialog } from './ChangeTriggerDialog';
 
@@ -107,7 +108,7 @@ export function AgentCard({
               className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded bg-[var(--color-surface-elevated)] text-[var(--color-text-tertiary)] border border-[var(--color-border)]"
               data-testid={`agent-provider-${agent.id}`}
             >
-              {(!agentMeta?.provider || agentMeta.provider === 'claude') ? 'claude code' : agentMeta.provider}
+              {getProviderLabel(agentMeta?.provider || 'claude').toLowerCase()}
             </span>
             {agentMeta?.model && (
               <span

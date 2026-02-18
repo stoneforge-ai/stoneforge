@@ -35,6 +35,12 @@ export {
   getAllShortcuts,
 } from './keyboard';
 
+// Provider display labels
+export {
+  PROVIDER_LABELS,
+  getProviderLabel,
+} from './providers';
+
 // Language detection for Monaco editor
 export {
   type MonacoLanguage,
