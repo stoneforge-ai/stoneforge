@@ -268,10 +268,20 @@ Continuously running process that coordinates task assignment and message delive
 ```typescript
 import { createDispatchDaemon } from '@stoneforge/smithy';
 
-const daemon = createDispatchDaemon(api, spawner, sessionManager, {
-  pollIntervalMs: 5000,
-  projectRoot: process.cwd(), // For project-level prompt overrides
-});
+const daemon = createDispatchDaemon(
+  api,
+  agentRegistry,
+  sessionManager,
+  dispatchService,
+  worktreeManager,
+  taskAssignment,
+  stewardScheduler,
+  inboxService,
+  {
+    pollIntervalMs: 5000,
+  },
+  poolService  // optional
+);
 ```
 
 ### Starting the Daemon
@@ -402,31 +412,105 @@ The reconciliation poll detects and recovers these stuck tasks:
 
 **File:** `services/steward-scheduler.ts`
 
-Schedules steward execution based on triggers.
+Executes stewards on schedule (cron) or in response to events. Manages the lifecycle of scheduled steward executions and tracks execution history.
 
 ```typescript
 import { createStewardScheduler } from '@stoneforge/smithy';
 
-const scheduler = createStewardScheduler(api);
+const scheduler = createStewardScheduler(agentRegistry, executor, config?);
 ```
 
-### Methods
+### Configuration
 
 ```typescript
-// Register steward for scheduling
-scheduler.register(stewardId, triggers);
+interface StewardSchedulerConfig {
+  maxHistoryPerSteward?: number;   // Max execution history entries per steward (default: 100)
+  defaultTimeoutMs?: number;       // Default timeout for steward execution in ms (default: 300000)
+  startImmediately?: boolean;      // Register all stewards on start() (default: false)
+}
+```
 
-// Unregister
-scheduler.unregister(stewardId);
+### Lifecycle
 
-// Check if steward should run
-const shouldRun = await scheduler.shouldRun(stewardId, context);
+```typescript
+// Start the scheduler (activates cron jobs and event listeners)
+await scheduler.start();
 
-// Get execution history
-const history = scheduler.getExecutionHistory(stewardId);
+// Stop the scheduler (running executions are allowed to complete)
+await scheduler.stop();
 
-// Record execution
-scheduler.recordExecution(stewardId, result);
+// Check if scheduler is running
+const running = scheduler.isRunning();
+```
+
+### Steward Management
+
+```typescript
+// Register a steward (sets up cron jobs and event subscriptions from triggers)
+const registered = await scheduler.registerSteward(stewardId);
+
+// Unregister a steward (removes cron jobs and event subscriptions)
+const unregistered = await scheduler.unregisterSteward(stewardId);
+
+// Refresh a steward's registration (useful if triggers changed)
+await scheduler.refreshSteward(stewardId);
+
+// Register all stewards from the agent registry
+const count = await scheduler.registerAllStewards();
+```
+
+### Manual Execution
+
+```typescript
+// Manually trigger a steward execution
+const result = await scheduler.executeSteward(stewardId, context?);
+// Returns StewardExecutionResult { success, error?, output?, durationMs, itemsProcessed? }
+```
+
+### Event Publishing
+
+```typescript
+// Publish an event that may trigger stewards with matching event triggers
+const triggeredCount = await scheduler.publishEvent('task_completed', { task: taskData });
+```
+
+### Status & Queries
+
+```typescript
+// Get scheduled job info (optionally filter by stewardId)
+const jobs = scheduler.getScheduledJobs(stewardId?);
+
+// Get event subscriptions (optionally filter by stewardId)
+const subscriptions = scheduler.getEventSubscriptions(stewardId?);
+
+// Get execution history with optional filtering
+const history = scheduler.getExecutionHistory({
+  stewardId?,
+  triggerType?: 'cron' | 'event',
+  success?: boolean,
+  startedAfter?: timestamp,
+  startedBefore?: timestamp,
+  limit?: number,
+});
+
+// Get last execution for a steward
+const lastExec = scheduler.getLastExecution(stewardId);
+
+// Get scheduler statistics
+const stats = scheduler.getStats();
+// stats.registeredStewards, stats.activeCronJobs, stats.activeEventSubscriptions,
+// stats.totalExecutions, stats.successfulExecutions, stats.failedExecutions, stats.runningExecutions
+```
+
+### Events
+
+```typescript
+// Subscribe to scheduler events
+scheduler.on('execution:started', (entry) => { /* ... */ });
+scheduler.on('execution:completed', (entry) => { /* ... */ });
+scheduler.on('execution:failed', (entry) => { /* ... */ });
+scheduler.on('steward:registered', (stewardId) => { /* ... */ });
+scheduler.on('steward:unregistered', (stewardId) => { /* ... */ });
 ```
 
 ### Trigger Types
@@ -434,8 +518,27 @@ scheduler.recordExecution(stewardId, result);
 | Type | Description |
 |------|-------------|
 | `cron` | Time-based (e.g., `'0 */15 * * *'`) |
-| `event` | On specific events (e.g., `'task_completed'`) |
-| `condition` | When condition is met |
+| `event` | On specific events with optional condition (e.g., `'task_completed'`) |
+
+### Steward Executor Factory
+
+```typescript
+import { createStewardExecutor } from '@stoneforge/smithy';
+
+// Creates an executor that dispatches to the appropriate service based on steward focus:
+// - 'merge' → MergeStewardService.processAllPending()
+// - 'docs'  → spawns an agent session via sessionManager
+// - 'custom' → spawns a session with a custom playbook prompt
+const executor = createStewardExecutor({
+  mergeStewardService,
+  docsStewardService,
+  sessionManager,
+  projectRoot: '/project',
+  resolvePlaybookContent?,       // Optional callback for resolving playbook templates
+  stewardSessionIdleTimeoutMs?,  // Idle timeout for sessions (default: 120000)
+  stewardSessionMaxDurationMs?,  // Max session duration (default: 1800000)
+});
+```
 
 ---
 
@@ -443,39 +546,57 @@ scheduler.recordExecution(stewardId, result);
 
 **File:** `services/plugin-executor.ts`
 
-Executes steward plugins.
+Executes steward plugins. Plugins enable custom automated maintenance tasks via playbooks, scripts, or commands.
 
 ```typescript
 import { createPluginExecutor } from '@stoneforge/smithy';
 
-const executor = createPluginExecutor(api);
+const executor = createPluginExecutor({
+  api?,             // Optional QuarryAPI (required for playbook plugins)
+  workspaceRoot?,   // Working directory (defaults to process.cwd())
+});
 ```
+
+### Plugin Types
+
+| Type | Description | Required Fields |
+|------|-------------|-----------------|
+| `playbook` | Executes a playbook by ID | `playbookId` |
+| `script` | Executes a script file | `path` |
+| `command` | Executes a CLI command | `command` |
 
 ### Built-in Plugins
 
-| Plugin | Focus | Purpose |
-|--------|-------|---------|
-| `merge-plugin` | `merge` | Merge completed branches |
-| `docs-plugin` | `docs` | Scan and fix documentation |
+| Plugin | Type | Purpose |
+|--------|------|---------|
+| `gc-ephemeral-tasks` | `command` | Garbage collect old ephemeral workflows |
+| `cleanup-stale-worktrees` | `command` | Clean up stale worktree references |
+| `gc-ephemeral-workflows` | `command` | Garbage collect old ephemeral workflows |
+| `health-check-agents` | `command` | Check health status of all registered agents |
 
 ### Methods
 
 ```typescript
-// Execute plugin
-const result = await executor.execute(stewardId, pluginName, context);
+// Execute a single plugin
+const result = await executor.execute(plugin, options?);
+// plugin: StewardPlugin (PlaybookPlugin | ScriptPlugin | CommandPlugin)
+// options?: PluginExecutionOptions { workspaceRoot?, defaultTimeout?, env?, context?, stopOnError? }
+// Returns PluginExecutionResult { pluginName, pluginType, success, error?, stdout?, stderr?, exitCode?, durationMs, startedAt, completedAt }
 
-// Register custom plugin
-executor.registerPlugin({
-  name: 'custom-plugin',
-  focus: 'docs',
-  execute: async (context) => {
-    // Plugin logic
-    return { success: true };
-  },
-});
+// Execute multiple plugins in sequence
+const batchResult = await executor.executeBatch(plugins, options?);
+// Returns BatchPluginExecutionResult { total, succeeded, failed, skipped, results, durationMs, allSucceeded }
 
-// List available plugins
-const plugins = executor.listPlugins();
+// Validate a plugin configuration
+const validation = executor.validate(plugin);
+// Returns { valid: boolean, errors: string[] }
+
+// Get a built-in plugin by name
+const plugin = executor.getBuiltIn('gc-ephemeral-tasks');
+
+// List all built-in plugin names
+const names = executor.listBuiltIns();
+// Returns string[]
 ```
 
 ---
@@ -489,10 +610,12 @@ Scans documentation for issues and provides automated fixes. The docs steward cr
 ```typescript
 import { createDocsStewardService } from '@stoneforge/smithy';
 
-const docsSteward = createDocsStewardService(api, {
+const docsSteward = createDocsStewardService({
   workspaceRoot: '/project',
   docsDir: 'docs',
-  packagesDir: 'packages',
+  sourceDirs: ['packages', 'apps'],
+  autoPush: true,
+  targetBranch: 'main',  // optional, auto-detected if omitted
 });
 ```
 
@@ -502,17 +625,18 @@ const docsSteward = createDocsStewardService(api, {
 |--------|------|---------|-------------|
 | `workspaceRoot` | `string` | *required* | Workspace root directory (git repo) |
 | `docsDir` | `string` | `'docs'` | Documentation directory relative to workspace |
-| `packagesDir` | `string` | `'packages'` | Packages directory for source verification |
-| `mergeStrategy` | `'squash' \| 'merge'` | `'squash'` | Merge strategy for self-merge |
+| `sourceDirs` | `string[]` | `['packages', 'apps']` | Source directories to verify against |
 | `autoPush` | `boolean` | `true` | Push after merge |
+| `targetBranch` | `string` | *auto-detect* | Target branch to merge into |
 
 ### Verification Methods
 
 ```typescript
 // Scan all documentation for issues
-const issues = await docsSteward.scanAll();
+const result = await docsSteward.scanAll();
+// Returns VerificationResult { issues: DocIssue[], filesScanned: number, durationMs: number }
 
-// Individual verification methods
+// Individual verification methods (each returns DocIssue[])
 const filePathIssues = await docsSteward.verifyFilePaths();
 const linkIssues = await docsSteward.verifyInternalLinks();
 const exportIssues = await docsSteward.verifyExports();
@@ -526,7 +650,7 @@ const apiIssues = await docsSteward.verifyApiMethods();
 ```typescript
 // Create session worktree and branch
 const worktree = await docsSteward.createSessionWorktree('d-steward-1');
-// Creates: .stoneforge/.worktrees/d-steward-1-docs/
+// Creates: .stoneforge/.worktrees/docs-steward-{timestamp}/
 // Branch: d-steward-1/docs/auto-updates
 
 // Commit a fix
@@ -538,8 +662,8 @@ const result = await docsSteward.mergeAndCleanup(
   'docs: fix documentation issues'
 );
 
-// Cleanup session (worktree and branch)
-await docsSteward.cleanupSession();
+// Cleanup session (worktree and branch) without merging
+await docsSteward.cleanupSession(worktreePath, branchName);
 ```
 
 ### DocIssue Type
@@ -572,28 +696,68 @@ interface DocIssue {
 
 **File:** `services/worker-task-service.ts`
 
-Worker-specific task operations.
+Provides the complete workflow for workers picking up tasks and working in isolated worktrees. Orchestrates task dispatch, worktree creation, worker spawning, and task completion.
 
 ```typescript
 import { createWorkerTaskService } from '@stoneforge/smithy';
 
-const workerTaskService = createWorkerTaskService(api, assignmentService);
+const workerTaskService = createWorkerTaskService(
+  api,
+  taskAssignment,
+  agentRegistry,
+  dispatchService,
+  spawnerService,
+  sessionManager,
+  worktreeManager?  // optional
+);
 ```
 
-### Methods
+### Task Lifecycle
 
 ```typescript
-// Get current task for worker
-const task = await workerTaskService.getCurrentTask(workerId);
+// Start a worker on a task with full worktree isolation
+// (dispatches task → creates worktree → spawns worker session → sends task context)
+const result = await workerTaskService.startWorkerOnTask(taskId, agentId, {
+  branch?,              // Custom branch name (auto-generated if not provided)
+  worktreePath?,        // Custom worktree path (auto-generated if not provided)
+  baseBranch?,          // Base branch to create worktree from
+  additionalPrompt?,    // Additional instructions to prepend to task context
+  performedBy?,         // Entity performing the operation
+  skipWorktree?,        // Skip worktree creation (use existing directory)
+  workingDirectory?,    // Custom working directory (used if skipWorktree is true)
+  priority?,            // Dispatch priority for notification
+});
+// Returns StartWorkerOnTaskResult { task, agent, dispatch, worktree?, session, taskContextPrompt, startedAt }
 
-// Claim next available task
-const task = await workerTaskService.claimNextTask(workerId);
+// Complete a task and mark the branch as ready for merge
+const result = await workerTaskService.completeTask(taskId, {
+  summary?,       // Summary of what was accomplished
+  commitHash?,    // Commit hash for the final commit
+  runTests?,      // Whether to run tests before marking complete (default: false)
+  performedBy?,   // Entity performing the completion
+});
+// Returns CompleteTaskResult { task, worktree?, readyForMerge, completedAt }
+```
 
-// Complete current task
-await workerTaskService.completeCurrentTask(workerId, result);
+### Task Context
 
-// Request help
-await workerTaskService.requestHelp(workerId, taskId, message);
+```typescript
+// Build the task context prompt for a worker
+const prompt = await workerTaskService.buildTaskContextPrompt(
+  taskId, workerId, additionalInstructions?
+);
+
+// Get the task context information
+const context = await workerTaskService.getTaskContext(taskId);
+// Returns TaskContext { taskId, title, description?, tags, priority?, complexity?, branch?, worktreePath? }
+```
+
+### Cleanup
+
+```typescript
+// Clean up after a task is merged or abandoned
+// (removes worktree, optionally deletes branch, updates metadata)
+const success = await workerTaskService.cleanupTask(taskId, deleteBranch?);
 ```
 
 ---
