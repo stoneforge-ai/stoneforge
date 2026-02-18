@@ -8,6 +8,7 @@
  * - DispatchService (TB-O8a) - Task dispatch with assignment + notification
  * - DispatchDaemon - Continuous polling for task assignment and message delivery
  * - StewardScheduler (TB-O23) - Scheduled steward execution
+ * - RateLimitTracker - In-memory rate limit state tracking for executables
  */
 
 // Agent registry (TB-O7, TB-O7a)
@@ -219,6 +220,15 @@ export {
   // Factory
   createAgentPoolService,
 } from './agent-pool-service.js';
+
+// Rate limit tracker service
+export {
+  // Types
+  type RateLimitEntry,
+  type RateLimitTracker,
+  // Factory
+  createRateLimitTracker,
+} from './rate-limit-tracker.js';
 
 // Settings service
 export {
