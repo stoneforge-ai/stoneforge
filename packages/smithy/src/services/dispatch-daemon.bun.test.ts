@@ -562,7 +562,7 @@ describe('recoverOrphanedAssignments', () => {
   test('falls back to fresh spawn when resume fails', async () => {
     const worker = await createTestWorker('resume-fail-eve');
     const workerId = worker.id as unknown as EntityId;
-    await createAssignedTask('Task with failed resume', workerId, {
+    const task = await createAssignedTask('Task with failed resume', workerId, {
       sessionId: 'stale-session-789',
       worktree: '/worktrees/resume-fail-eve/task',
       branch: 'agent/resume-fail-eve/task-branch',
@@ -585,6 +585,12 @@ describe('recoverOrphanedAssignments', () => {
         workingDirectory: '/worktrees/resume-fail-eve/task',
       })
     );
+
+    // Verify stale sessionId was cleared and new sessionId was written
+    const updatedTask = await api.get<Task>(task.id);
+    const updatedMeta = getOrchestratorTaskMeta(updatedTask!.metadata as Record<string, unknown>);
+    expect(updatedMeta?.sessionId).toBeDefined();
+    expect(updatedMeta?.sessionId).not.toBe('stale-session-789');
   });
 
   test('does not recover tasks in REVIEW status', async () => {
@@ -943,7 +949,7 @@ describe('recoverOrphanedAssignments - merge steward recovery', () => {
     const steward = await createTestSteward('resume-fail-steward');
     const stewardId = steward.id as unknown as EntityId;
 
-    await createOrphanedStewardTask('Review task with stale session', stewardId, {
+    const task = await createOrphanedStewardTask('Review task with stale session', stewardId, {
       sessionId: 'stale-steward-session',
       worktree: '/worktrees/worker/task', // Worktree required for spawnMergeStewardForTask fallback
     });
@@ -965,6 +971,12 @@ describe('recoverOrphanedAssignments - merge steward recovery', () => {
         interactive: false,
       })
     );
+
+    // Verify stale sessionId was cleared and new sessionId was written by spawnMergeStewardForTask
+    const updatedTask = await api.get<Task>(task.id);
+    const updatedMeta = getOrchestratorTaskMeta(updatedTask!.metadata as Record<string, unknown>);
+    expect(updatedMeta?.sessionId).toBeDefined();
+    expect(updatedMeta?.sessionId).not.toBe('stale-steward-session');
   });
 
   test('skips steward tasks with terminal mergeStatus (test_failed/failed/conflict)', async () => {

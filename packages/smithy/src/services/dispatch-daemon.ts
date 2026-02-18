@@ -1760,6 +1760,13 @@ export class DispatchDaemonImpl implements DispatchDaemon {
           `Failed to resume session ${previousSessionId} for worker ${worker.name}, falling back to fresh spawn:`,
           error
         );
+
+        // Clear stale session ID so next recovery cycle doesn't try to resume again
+        const clearedMeta = updateOrchestratorTaskMeta(
+          task.metadata as Record<string, unknown> | undefined,
+          { sessionId: undefined }
+        );
+        await this.api.update(task.id, { metadata: clearedMeta });
       }
     }
 
@@ -1781,7 +1788,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       executablePathOverride: orphanExecutableOverride ?? undefined,
     });
 
-    // Record session history entry for fresh spawned worker session
+    // Record session history entry and new sessionId for fresh spawned worker session
     const freshSpawnHistoryEntry: TaskSessionHistoryEntry = {
       sessionId: session.id,
       providerSessionId: session.providerSessionId,
@@ -1796,7 +1803,12 @@ export class DispatchDaemonImpl implements DispatchDaemon {
         taskAfterFreshSpawn.metadata as Record<string, unknown> | undefined,
         freshSpawnHistoryEntry
       );
-      await this.api.update<Task>(task.id, { metadata: metadataWithHistory });
+      // Write the new session ID so future recovery cycles can resume this session
+      const metadataWithSessionId = updateOrchestratorTaskMeta(
+        metadataWithHistory,
+        { sessionId: session.providerSessionId ?? session.id }
+      );
+      await this.api.update<Task>(task.id, { metadata: metadataWithSessionId });
     }
 
     if (this.config.onSessionStarted) {
@@ -1875,6 +1887,13 @@ export class DispatchDaemonImpl implements DispatchDaemon {
           `Failed to resume steward session ${previousSessionId} for ${steward.name}, falling back to fresh spawn:`,
           error
         );
+
+        // Clear stale session ID so next recovery cycle doesn't try to resume again
+        const clearedMeta = updateOrchestratorTaskMeta(
+          task.metadata as Record<string, unknown> | undefined,
+          { sessionId: undefined }
+        );
+        await this.api.update(task.id, { metadata: clearedMeta });
       }
     }
 
