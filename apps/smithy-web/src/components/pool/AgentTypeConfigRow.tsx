@@ -9,7 +9,9 @@
  * - AgentTypeConfigRow component
  */
 
-import { Trash2, ChevronDown } from 'lucide-react';
+import { useMemo } from 'react';
+import { Trash2, ChevronDown, Loader2 } from 'lucide-react';
+import { useProviders, useProviderModels } from '../../api/hooks/useAgents';
 
 // ============================================================================
 // Types
@@ -120,6 +122,20 @@ interface AgentTypeConfigRowProps {
 }
 
 export function AgentTypeConfigRow({ index, agentType, onUpdate, onRemove }: AgentTypeConfigRowProps) {
+  // Fetch providers and models for the selected provider
+  const { data: providersData } = useProviders();
+  const providers = useMemo(() => providersData?.providers ?? [], [providersData?.providers]);
+
+  const { data: modelsData, isLoading: modelsLoading } = useProviderModels(agentType.provider || undefined);
+  const allModels = useMemo(() => modelsData?.models ?? [], [modelsData?.models]);
+  const defaultModel = useMemo(() => allModels.find(m => m.isDefault), [allModels]);
+  const models = useMemo(() => allModels.filter(m => !m.isDefault), [allModels]);
+
+  const handleProviderChange = (newProvider: string) => {
+    // When provider changes, reset model to empty (will use provider default)
+    onUpdate({ provider: newProvider, model: '' });
+  };
+
   return (
     <div
       className="p-3 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg space-y-2"
@@ -277,39 +293,70 @@ export function AgentTypeConfigRow({ index, agentType, onUpdate, onRemove }: Age
       <div className="grid grid-cols-2 gap-2">
         <div className="space-y-1">
           <label className="text-xs text-[var(--color-text-tertiary)]">Provider</label>
-          <input
-            type="text"
-            value={agentType.provider}
-            onChange={e => onUpdate({ provider: e.target.value })}
-            placeholder="e.g., claude, opencode"
-            className="
-              w-full px-2 py-1.5
-              text-xs
-              bg-[var(--color-bg)]
-              border border-[var(--color-border)]
-              rounded
-              focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)]/30
-            "
-            data-testid={`agent-type-${index}-provider`}
-          />
+          <div className="relative">
+            <select
+              value={agentType.provider}
+              onChange={e => handleProviderChange(e.target.value)}
+              className="
+                w-full px-2 py-1.5 pr-7
+                text-xs
+                bg-[var(--color-bg)]
+                border border-[var(--color-border)]
+                rounded
+                appearance-none
+                focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)]/30
+              "
+              data-testid={`agent-type-${index}-provider`}
+            >
+              <option value="">Any</option>
+              {providers.map(p => (
+                <option key={p.name} value={p.name} disabled={!p.available}>
+                  {p.name}{!p.available ? ' (not installed)' : ''}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-[var(--color-text-tertiary)] pointer-events-none" />
+          </div>
         </div>
         <div className="space-y-1">
           <label className="text-xs text-[var(--color-text-tertiary)]">Model</label>
-          <input
-            type="text"
-            value={agentType.model}
-            onChange={e => onUpdate({ model: e.target.value })}
-            placeholder="e.g., claude-sonnet-4-20250514"
-            className="
-              w-full px-2 py-1.5
-              text-xs
-              bg-[var(--color-bg)]
-              border border-[var(--color-border)]
-              rounded
-              focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)]/30
-            "
-            data-testid={`agent-type-${index}-model`}
-          />
+          <div className="relative">
+            {modelsLoading && agentType.provider ? (
+              <div className="flex items-center gap-1.5 py-1.5 text-xs text-[var(--color-text-tertiary)]">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Loading...
+              </div>
+            ) : (
+              <select
+                value={agentType.model}
+                onChange={e => onUpdate({ model: e.target.value })}
+                disabled={!agentType.provider}
+                className="
+                  w-full px-2 py-1.5 pr-7
+                  text-xs
+                  bg-[var(--color-bg)]
+                  border border-[var(--color-border)]
+                  rounded
+                  appearance-none
+                  focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)]/30
+                  disabled:opacity-50 disabled:cursor-not-allowed
+                "
+                data-testid={`agent-type-${index}-model`}
+              >
+                <option value="">
+                  {defaultModel ? `Default (${defaultModel.displayName})` : '(Default)'}
+                </option>
+                {models.map(m => (
+                  <option key={m.id} value={m.id}>
+                    {m.providerName ? `${m.displayName} — ${m.providerName}` : m.displayName}
+                  </option>
+                ))}
+              </select>
+            )}
+            {!(modelsLoading && agentType.provider) && (
+              <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-[var(--color-text-tertiary)] pointer-events-none" />
+            )}
+          </div>
         </div>
       </div>
     </div>

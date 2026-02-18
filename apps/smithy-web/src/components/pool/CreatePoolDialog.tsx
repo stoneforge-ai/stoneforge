@@ -151,23 +151,23 @@ export function CreatePoolDialog({ isOpen, onClose, onSuccess }: CreatePoolDialo
       />
 
       {/* Dialog */}
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none overflow-y-auto">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
         <div
           className="
-            w-full max-w-lg
+            w-full max-w-lg max-h-[90vh]
+            flex flex-col
             bg-[var(--color-bg)]
             rounded-xl shadow-2xl
             border border-[var(--color-border)]
             animate-scale-in
             pointer-events-auto
-            my-8
           "
           data-testid="create-pool-dialog"
           role="dialog"
           aria-labelledby="create-pool-title"
         >
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)]">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)] flex-shrink-0">
             <div className="flex items-center gap-2">
               <Users className="w-5 h-5 text-[var(--color-primary)]" />
               <h2
@@ -193,186 +193,189 @@ export function CreatePoolDialog({ isOpen, onClose, onSuccess }: CreatePoolDialo
             </button>
           </div>
 
-          <form onSubmit={handleSubmit} className="p-4 space-y-4">
-            {/* Error message */}
-            {error && (
-              <div className="flex items-center gap-2 px-3 py-2 text-sm text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                {error}
+          <form onSubmit={handleSubmit} className="flex flex-col min-h-0 flex-1">
+            {/* Scrollable form body */}
+            <div className="overflow-y-auto flex-1 min-h-0 p-4 space-y-4">
+              {/* Error message */}
+              {error && (
+                <div className="flex items-center gap-2 px-3 py-2 text-sm text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  {error}
+                </div>
+              )}
+
+              {/* Pool Name */}
+              <div className="space-y-1">
+                <label htmlFor="pool-name" className="text-sm font-medium text-[var(--color-text)]">
+                  Pool Name
+                </label>
+                <input
+                  id="pool-name"
+                  type="text"
+                  value={form.name}
+                  onChange={e => setForm(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="e.g., worker-pool, build-agents"
+                  className="
+                    w-full px-3 py-2
+                    text-sm
+                    bg-[var(--color-surface)]
+                    border border-[var(--color-border)]
+                    rounded-lg
+                    placeholder:text-[var(--color-text-tertiary)]
+                    focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30
+                  "
+                  autoFocus
+                  data-testid="pool-name"
+                />
+                <p className="text-xs text-[var(--color-text-tertiary)]">
+                  Must start with a letter. Letters, numbers, hyphens, underscores only.
+                </p>
               </div>
-            )}
 
-            {/* Pool Name */}
-            <div className="space-y-1">
-              <label htmlFor="pool-name" className="text-sm font-medium text-[var(--color-text)]">
-                Pool Name
-              </label>
-              <input
-                id="pool-name"
-                type="text"
-                value={form.name}
-                onChange={e => setForm(prev => ({ ...prev, name: e.target.value }))}
-                placeholder="e.g., worker-pool, build-agents"
-                className="
-                  w-full px-3 py-2
-                  text-sm
-                  bg-[var(--color-surface)]
-                  border border-[var(--color-border)]
-                  rounded-lg
-                  placeholder:text-[var(--color-text-tertiary)]
-                  focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30
-                "
-                autoFocus
-                data-testid="pool-name"
-              />
-              <p className="text-xs text-[var(--color-text-tertiary)]">
-                Must start with a letter. Letters, numbers, hyphens, underscores only.
-              </p>
-            </div>
-
-            {/* Description */}
-            <div className="space-y-1">
-              <label htmlFor="pool-description" className="text-sm font-medium text-[var(--color-text)]">
-                Description
-                <span className="ml-1 text-xs text-[var(--color-text-tertiary)]">(optional)</span>
-              </label>
-              <input
-                id="pool-description"
-                type="text"
-                value={form.description}
-                onChange={e => setForm(prev => ({ ...prev, description: e.target.value }))}
-                placeholder="e.g., Pool for ephemeral build workers"
-                className="
-                  w-full px-3 py-2
-                  text-sm
-                  bg-[var(--color-surface)]
-                  border border-[var(--color-border)]
-                  rounded-lg
-                  placeholder:text-[var(--color-text-tertiary)]
-                  focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30
-                "
-                data-testid="pool-description"
-              />
-            </div>
-
-            {/* Max Concurrent Agents */}
-            <div className="space-y-1">
-              <label htmlFor="pool-max-size" className="text-sm font-medium text-[var(--color-text)]">
-                Max Concurrent Agents
-              </label>
-              <input
-                id="pool-max-size"
-                type="number"
-                min="1"
-                max="1000"
-                value={form.maxSize}
-                onChange={e => setForm(prev => ({ ...prev, maxSize: e.target.value }))}
-                className="
-                  w-full px-3 py-2
-                  text-sm
-                  bg-[var(--color-surface)]
-                  border border-[var(--color-border)]
-                  rounded-lg
-                  focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30
-                "
-                data-testid="pool-max-size"
-              />
-              <p className="text-xs text-[var(--color-text-tertiary)]">
-                Maximum number of agents that can run simultaneously in this pool (1-1000).
-              </p>
-            </div>
-
-            {/* Agent Type Configurations */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-medium text-[var(--color-text)]">
-                  Agent Types
+              {/* Description */}
+              <div className="space-y-1">
+                <label htmlFor="pool-description" className="text-sm font-medium text-[var(--color-text)]">
+                  Description
                   <span className="ml-1 text-xs text-[var(--color-text-tertiary)]">(optional)</span>
                 </label>
-                <button
-                  type="button"
-                  onClick={addAgentType}
-                  className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-[var(--color-primary)] hover:bg-[var(--color-primary-muted)] rounded transition-colors"
-                  data-testid="add-agent-type"
-                >
-                  <Plus className="w-3 h-3" />
-                  Add Type
-                </button>
+                <input
+                  id="pool-description"
+                  type="text"
+                  value={form.description}
+                  onChange={e => setForm(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="e.g., Pool for ephemeral build workers"
+                  className="
+                    w-full px-3 py-2
+                    text-sm
+                    bg-[var(--color-surface)]
+                    border border-[var(--color-border)]
+                    rounded-lg
+                    placeholder:text-[var(--color-text-tertiary)]
+                    focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30
+                  "
+                  data-testid="pool-description"
+                />
               </div>
 
-              {form.agentTypes.length === 0 ? (
-                <p className="text-xs text-[var(--color-text-tertiary)] italic">
-                  No agent types configured. Pool will include all workers and stewards.
+              {/* Max Concurrent Agents */}
+              <div className="space-y-1">
+                <label htmlFor="pool-max-size" className="text-sm font-medium text-[var(--color-text)]">
+                  Max Concurrent Agents
+                </label>
+                <input
+                  id="pool-max-size"
+                  type="number"
+                  min="1"
+                  max="1000"
+                  value={form.maxSize}
+                  onChange={e => setForm(prev => ({ ...prev, maxSize: e.target.value }))}
+                  className="
+                    w-full px-3 py-2
+                    text-sm
+                    bg-[var(--color-surface)]
+                    border border-[var(--color-border)]
+                    rounded-lg
+                    focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30
+                  "
+                  data-testid="pool-max-size"
+                />
+                <p className="text-xs text-[var(--color-text-tertiary)]">
+                  Maximum number of agents that can run simultaneously in this pool (1-1000).
                 </p>
-              ) : (
-                <div className="space-y-2">
-                  {form.agentTypes.map((agentType, index) => (
-                    <AgentTypeConfigRow
-                      key={index}
-                      index={index}
-                      agentType={agentType}
-                      onUpdate={updates => updateAgentType(index, updates)}
-                      onRemove={() => removeAgentType(index)}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
+              </div>
 
-            {/* Advanced Settings (collapsible) */}
-            <div className="space-y-2">
-              <button
-                type="button"
-                onClick={() => setShowAdvanced(!showAdvanced)}
-                className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
-                data-testid="toggle-advanced"
-              >
-                <ChevronDown className={`w-4 h-4 transition-transform ${showAdvanced ? 'rotate-180' : ''}`} />
-                Advanced Settings
-              </button>
-              {showAdvanced && (
-                <div className="space-y-3 pl-6">
-                  {/* Enabled */}
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={form.enabled}
-                      onChange={e => setForm(prev => ({ ...prev, enabled: e.target.checked }))}
-                      className="rounded border-[var(--color-border)] text-[var(--color-primary)] focus:ring-[var(--color-primary)]"
-                      data-testid="pool-enabled"
-                    />
-                    <span className="text-sm text-[var(--color-text)]">Pool enabled</span>
+              {/* Agent Type Configurations */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium text-[var(--color-text)]">
+                    Agent Types
+                    <span className="ml-1 text-xs text-[var(--color-text-tertiary)]">(optional)</span>
                   </label>
-
-                  {/* Tags */}
-                  <div className="space-y-1">
-                    <label htmlFor="pool-tags" className="text-xs font-medium text-[var(--color-text-secondary)]">
-                      Tags (comma-separated)
-                    </label>
-                    <input
-                      id="pool-tags"
-                      type="text"
-                      value={form.tags}
-                      onChange={e => setForm(prev => ({ ...prev, tags: e.target.value }))}
-                      placeholder="e.g., production, high-priority"
-                      className="
-                        w-full px-3 py-1.5
-                        text-sm
-                        bg-[var(--color-surface)]
-                        border border-[var(--color-border)]
-                        rounded-lg
-                        placeholder:text-[var(--color-text-tertiary)]
-                        focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30
-                      "
-                      data-testid="pool-tags"
-                    />
-                  </div>
+                  <button
+                    type="button"
+                    onClick={addAgentType}
+                    className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-[var(--color-primary)] hover:bg-[var(--color-primary-muted)] rounded transition-colors"
+                    data-testid="add-agent-type"
+                  >
+                    <Plus className="w-3 h-3" />
+                    Add Type
+                  </button>
                 </div>
-              )}
+
+                {form.agentTypes.length === 0 ? (
+                  <p className="text-xs text-[var(--color-text-tertiary)] italic">
+                    No agent types configured. Pool will include all workers and stewards.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {form.agentTypes.map((agentType, index) => (
+                      <AgentTypeConfigRow
+                        key={index}
+                        index={index}
+                        agentType={agentType}
+                        onUpdate={updates => updateAgentType(index, updates)}
+                        onRemove={() => removeAgentType(index)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Advanced Settings (collapsible) */}
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAdvanced(!showAdvanced)}
+                  className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors"
+                  data-testid="toggle-advanced"
+                >
+                  <ChevronDown className={`w-4 h-4 transition-transform ${showAdvanced ? 'rotate-180' : ''}`} />
+                  Advanced Settings
+                </button>
+                {showAdvanced && (
+                  <div className="space-y-3 pl-6">
+                    {/* Enabled */}
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={form.enabled}
+                        onChange={e => setForm(prev => ({ ...prev, enabled: e.target.checked }))}
+                        className="rounded border-[var(--color-border)] text-[var(--color-primary)] focus:ring-[var(--color-primary)]"
+                        data-testid="pool-enabled"
+                      />
+                      <span className="text-sm text-[var(--color-text)]">Pool enabled</span>
+                    </label>
+
+                    {/* Tags */}
+                    <div className="space-y-1">
+                      <label htmlFor="pool-tags" className="text-xs font-medium text-[var(--color-text-secondary)]">
+                        Tags (comma-separated)
+                      </label>
+                      <input
+                        id="pool-tags"
+                        type="text"
+                        value={form.tags}
+                        onChange={e => setForm(prev => ({ ...prev, tags: e.target.value }))}
+                        placeholder="e.g., production, high-priority"
+                        className="
+                          w-full px-3 py-1.5
+                          text-sm
+                          bg-[var(--color-surface)]
+                          border border-[var(--color-border)]
+                          rounded-lg
+                          placeholder:text-[var(--color-text-tertiary)]
+                          focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30
+                        "
+                        data-testid="pool-tags"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* Actions */}
-            <div className="flex justify-end gap-2 pt-2">
+            {/* Actions — sticky footer */}
+            <div className="flex justify-end gap-2 px-4 py-3 border-t border-[var(--color-border)] flex-shrink-0">
               <button
                 type="button"
                 onClick={handleClose}
