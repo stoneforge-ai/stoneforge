@@ -157,7 +157,7 @@ const blockedTasks = await api.blocked();
 const isBlocked = blockedTasks.some(t => t.id === taskId);
 
 // Using BlockedCacheService directly
-import { createBlockedCacheService } from '@stoneforge/quarry/services/blocked-cache';
+import { createBlockedCacheService } from '@stoneforge/quarry';
 
 const blockedCache = createBlockedCacheService(storage);
 const isBlocked = blockedCache.isBlocked(taskId);
