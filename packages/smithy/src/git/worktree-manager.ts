@@ -649,6 +649,13 @@ export class WorktreeManagerImpl implements WorktreeManager {
 
       await this.execGit(removeArgs);
 
+      // Prune any stale entries left behind (defensive cleanup)
+      try {
+        await this.execGit(['worktree', 'prune']);
+      } catch {
+        // Non-fatal: prune is best-effort cleanup
+      }
+
       // Delete branch if requested
       if (options?.deleteBranch && worktree.branch) {
         // Delete remote branch first if requested
