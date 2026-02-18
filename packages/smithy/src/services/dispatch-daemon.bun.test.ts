@@ -2270,3 +2270,170 @@ describe('spawnRecoveryStewardForTask - atomic worker unassignment', () => {
     expect(updatedTask?.assignee as unknown as string).toBe(workerId as unknown as string);
   });
 });
+
+describe('startup non-blocking orphan recovery', () => {
+  let api: QuarryAPI;
+  let inboxService: InboxService;
+  let agentRegistry: AgentRegistry;
+  let taskAssignment: TaskAssignmentService;
+  let dispatchService: DispatchService;
+  let sessionManager: SessionManager;
+  let worktreeManager: WorktreeManager;
+  let stewardScheduler: StewardScheduler;
+  let daemon: DispatchDaemon;
+  let testDbPath: string;
+  let systemEntity: EntityId;
+
+  beforeEach(async () => {
+    testDbPath = `/tmp/dispatch-daemon-startup-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`;
+    const storage = createStorage({ path: testDbPath, create: true });
+    initializeSchema(storage);
+
+    api = createQuarryAPI(storage);
+    inboxService = createInboxService(storage);
+    agentRegistry = createAgentRegistry(api);
+    taskAssignment = createTaskAssignmentService(api);
+    dispatchService = createDispatchService(api, taskAssignment, agentRegistry);
+    sessionManager = createMockSessionManager();
+    worktreeManager = createMockWorktreeManager();
+    stewardScheduler = createMockStewardScheduler();
+
+    const { createEntity, EntityTypeValue } = await import('@stoneforge/core');
+    const entity = await createEntity({
+      name: 'test-system',
+      entityType: EntityTypeValue.SYSTEM,
+      createdBy: 'system:test' as EntityId,
+    });
+    const saved = await api.create(entity as unknown as Record<string, unknown> & { createdBy: EntityId });
+    systemEntity = saved.id as unknown as EntityId;
+  });
+
+  afterEach(async () => {
+    await daemon.stop();
+    if (fs.existsSync(testDbPath)) {
+      fs.unlinkSync(testDbPath);
+    }
+  });
+
+  test('poll loop starts even if orphan recovery takes a long time', async () => {
+    const config: DispatchDaemonConfig = {
+      pollIntervalMs: 50,
+      workerAvailabilityPollEnabled: true,
+      inboxPollEnabled: false,
+      stewardTriggerPollEnabled: false,
+      workflowTaskPollEnabled: false,
+      orphanRecoveryEnabled: true,
+    };
+
+    daemon = createDispatchDaemon(
+      api,
+      agentRegistry,
+      sessionManager,
+      dispatchService,
+      worktreeManager,
+      taskAssignment,
+      stewardScheduler,
+      inboxService,
+      config
+    );
+
+    // Track poll cycle events to verify the poll loop is running
+    const pollEvents: string[] = [];
+    daemon.on('poll:start', (type: string) => pollEvents.push(`start:${type}`));
+    daemon.on('poll:complete', () => pollEvents.push('complete'));
+
+    // Override recoverOrphanedAssignments to simulate a long-running recovery
+    // that blocks for a long time (stale session resume scenario)
+    let recoveryStarted = false;
+    let resolveRecovery: (() => void) | undefined;
+    const recoveryPromise = new Promise<void>((resolve) => {
+      resolveRecovery = resolve;
+    });
+
+    const impl = daemon as DispatchDaemonImpl;
+    impl.recoverOrphanedAssignments = async () => {
+      recoveryStarted = true;
+      await recoveryPromise;
+      return { pollType: 'orphan-recovery' as const, startedAt: new Date().toISOString(), processed: 0, errors: 0, errorMessages: [], durationMs: 0 };
+    };
+
+    // Start the daemon — this should NOT block on orphan recovery
+    await daemon.start();
+
+    // The poll loop should be running. Wait for at least one poll cycle to complete.
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    // Orphan recovery was started in the background
+    expect(recoveryStarted).toBe(true);
+
+    // Poll events should have fired, proving the poll loop started despite
+    // orphan recovery still being in progress. The initial runPollCycle skips
+    // orphan recovery (startupRecoveryInFlight flag) so it doesn't block.
+    expect(pollEvents.length).toBeGreaterThan(0);
+    expect(pollEvents.some((e) => e.startsWith('start:'))).toBe(true);
+
+    // Clean up: resolve the blocked recovery so it doesn't leak
+    resolveRecovery!();
+  });
+
+  test('tasks are dispatched within the first poll interval even if orphan recovery is still running', async () => {
+    const config: DispatchDaemonConfig = {
+      pollIntervalMs: 50,
+      workerAvailabilityPollEnabled: true,
+      inboxPollEnabled: false,
+      stewardTriggerPollEnabled: false,
+      workflowTaskPollEnabled: false,
+      orphanRecoveryEnabled: true,
+    };
+
+    daemon = createDispatchDaemon(
+      api,
+      agentRegistry,
+      sessionManager,
+      dispatchService,
+      worktreeManager,
+      taskAssignment,
+      stewardScheduler,
+      inboxService,
+      config
+    );
+
+    // Create a worker and an unassigned task
+    await agentRegistry.registerWorker({
+      name: 'fast-worker',
+      workerMode: 'ephemeral',
+      createdBy: systemEntity,
+      maxConcurrentTasks: 1,
+    });
+
+    const task = await createTask({
+      title: 'Should be dispatched quickly',
+      createdBy: systemEntity,
+      status: TaskStatus.OPEN,
+    });
+    await api.create(task as unknown as Record<string, unknown> & { createdBy: EntityId });
+
+    // Override orphan recovery to block indefinitely — simulates stale session resume
+    let resolveRecovery: (() => void) | undefined;
+    const impl = daemon as DispatchDaemonImpl;
+    impl.recoverOrphanedAssignments = async () => {
+      await new Promise<void>((resolve) => {
+        resolveRecovery = resolve;
+      });
+      return { pollType: 'orphan-recovery' as const, startedAt: new Date().toISOString(), processed: 0, errors: 0, errorMessages: [], durationMs: 0 };
+    };
+
+    // Start the daemon — orphan recovery runs in background, poll loop starts immediately
+    await daemon.start();
+
+    // Wait for the initial poll cycle to complete and dispatch the task
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    // The worker should have had a session started — meaning a task was dispatched
+    // by the initial poll cycle, even while orphan recovery is still blocked
+    expect(sessionManager.startSession).toHaveBeenCalled();
+
+    // Clean up
+    resolveRecovery!();
+  });
+});

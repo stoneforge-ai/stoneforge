@@ -461,6 +461,13 @@ export class DispatchDaemonImpl implements DispatchDaemon {
    */
   private readonly forwardingInboxItems = new Set<string>();
 
+  /**
+   * When true, the startup background orphan recovery is still in flight.
+   * runPollCycle skips its own orphan recovery to avoid duplicate work and
+   * to prevent the initial poll cycle from blocking on stale session resumes.
+   */
+  private startupRecoveryInFlight = false;
+
   constructor(
     api: QuarryAPI,
     agentRegistry: AgentRegistry,
@@ -513,16 +520,29 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       logger.error('Failed to reconcile on startup:', error);
     }
 
-    // Recover orphaned task assignments (workers with tasks but no session after restart)
+    // Option A (non-blocking startup recovery): Orphan recovery may block for a
+    // long time if it encounters stale session IDs from before a server restart.
+    // The resumeSession → spawn → waitForInit path will wait for the full timeout
+    // duration on dead sessions. By running orphan recovery in the background and
+    // starting the poll loop first, we ensure tasks are dispatched within the first
+    // poll interval regardless of how long recovery takes.
+    //
+    // While startup recovery is in flight, runPollCycle skips its own orphan
+    // recovery call to avoid duplicate work. Once the background recovery finishes,
+    // the flag is cleared and subsequent poll cycles handle orphan recovery normally.
+
+    // Run orphan recovery in the background — don't block the poll loop
     if (this.config.orphanRecoveryEnabled) {
-      try {
-        const result = await this.recoverOrphanedAssignments();
+      this.startupRecoveryInFlight = true;
+      this.recoverOrphanedAssignments().then((result) => {
         if (result.processed > 0) {
           logger.info(`Startup: recovered ${result.processed} orphaned task assignment(s)`);
         }
-      } catch (error) {
+      }).catch((error) => {
         logger.error('Failed to recover orphaned assignments on startup:', error);
-      }
+      }).finally(() => {
+        this.startupRecoveryInFlight = false;
+      });
     }
 
     // Start the main poll loop
@@ -1568,7 +1588,9 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       // Recover orphaned assignments first — workers with tasks but no session
       // (e.g. from mid-cycle crashes). Runs before availability polling so
       // orphans are handled before they'd be skipped.
-      if (this.config.orphanRecoveryEnabled) {
+      // Skip if startup recovery is still in flight to avoid duplicate work
+      // and prevent blocking the poll cycle on stale session resumes.
+      if (this.config.orphanRecoveryEnabled && !this.startupRecoveryInFlight) {
         await this.recoverOrphanedAssignments();
       }
 
