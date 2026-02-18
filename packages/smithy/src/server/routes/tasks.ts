@@ -42,7 +42,7 @@ async function formatTaskWithDescription(task: Task, api: QuarryAPI, blockedIds?
 }
 
 export function createTaskRoutes(services: Services) {
-  const { api, agentRegistry, taskAssignmentService, dispatchService, workerTaskService, storageBackend } = services;
+  const { api, agentRegistry, taskAssignmentService, dispatchService, workerTaskService, storageBackend, sessionManager } = services;
   const app = new Hono();
 
   /**
@@ -613,6 +613,23 @@ export function createTaskRoutes(services: Services) {
           { error: { code: 'BAD_REQUEST', message: 'Task cannot be reset - no assignee or work-in-progress state' } },
           400
         );
+      }
+
+      // Terminate any active session for the current assignee before clearing state
+      if (task.assignee && sessionManager) {
+        try {
+          const activeSession = sessionManager.getActiveSession(task.assignee);
+          if (activeSession) {
+            logger.info(`Terminating session ${activeSession.id} for agent ${task.assignee} during task reset`);
+            await sessionManager.stopSession(activeSession.id, {
+              graceful: true,
+              reason: 'Task was reset',
+            });
+          }
+        } catch (error) {
+          logger.warn(`Failed to stop session during task reset: ${error}`);
+          // Non-fatal — continue with reset even if session termination fails
+        }
       }
 
       // Update status to OPEN (clears closedAt)
