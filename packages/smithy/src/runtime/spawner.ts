@@ -1110,14 +1110,27 @@ export class SpawnerServiceImpl implements SpawnerService {
 
   private async waitForInit(session: InternalSession, timeout: number): Promise<void> {
     return new Promise((resolve, reject) => {
+      let settled = false;
+
+      const cleanup = () => {
+        clearTimeout(timer);
+        session.events.off('event', onEvent);
+        session.events.off('resume_failed', onResumeFailed);
+        session.events.off('exit', onExit);
+      };
+
       const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        cleanup();
         reject(new Error(`Timeout waiting for agent init (${timeout}ms)`));
       }, timeout);
 
       const onEvent = (event: SpawnedSessionEvent) => {
         if (event.type === 'system' && event.subtype === 'init') {
-          clearTimeout(timer);
-          session.events.off('event', onEvent);
+          if (settled) return;
+          settled = true;
+          cleanup();
 
           // Extract provider session ID from init event
           if (event.raw.session_id) {
@@ -1131,7 +1144,23 @@ export class SpawnerServiceImpl implements SpawnerService {
         }
       };
 
+      const onResumeFailed = (info: { reason: string; message: string }) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(new Error(`Session resume failed: ${info.message}`));
+      };
+
+      const onExit = () => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(new Error('Session exited before init'));
+      };
+
       session.events.on('event', onEvent);
+      session.events.on('resume_failed', onResumeFailed);
+      session.events.on('exit', onExit);
     });
   }
 

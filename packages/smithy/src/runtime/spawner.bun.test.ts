@@ -937,24 +937,24 @@ describe('Race condition guards (terminated->terminated)', () => {
   test('spawnHeadless catch block does not throw when session is already terminated', async () => {
     // This test simulates the race condition:
     // 1. processProviderMessages finishes (fire-and-forget) → transitions to terminated
-    // 2. waitForInit times out → catch block tries to transition to terminated again
+    // 2. waitForInit detects resume_failed → catch block tries to transition to terminated again
     // Without the guard, this would throw "Invalid status transition: terminated -> terminated"
     const mockProvider = createMockProvider(createImmediateExitHeadlessSession);
 
     const spawner = new SpawnerServiceImpl({
       provider: mockProvider,
       workingDirectory: '/tmp',
-      timeout: 100, // Very short timeout to trigger waitForInit timeout quickly
+      timeout: 100, // Very short timeout
     });
 
-    // The spawn should reject with a timeout error (from waitForInit),
+    // The spawn should reject with a resume_failed error (fast-fail from waitForInit),
     // NOT with "Invalid status transition: terminated -> terminated"
     await expect(
       spawner.spawn(testAgentId, 'worker', {
         mode: 'headless',
         resumeSessionId: 'stale-session-123',
       })
-    ).rejects.toThrow('Timeout waiting for agent init');
+    ).rejects.toThrow('Session resume failed');
 
     // Verify the session ended up in terminated state
     const sessions = spawner.listAllSessions(testAgentId);
@@ -1012,7 +1012,7 @@ describe('Race condition guards (terminated->terminated)', () => {
     }
 
     expect(thrownError).toBeDefined();
-    expect(thrownError!.message).toContain('Timeout waiting for agent init');
+    expect(thrownError!.message).toContain('Session resume failed');
 
     // Session should be cleanly terminated
     const sessions = spawner.listAllSessions(testAgentId);
@@ -1140,6 +1140,188 @@ describe('Race condition guards (terminated->terminated)', () => {
     await new Promise((resolve) => setTimeout(resolve, 200));
 
     // After the result message, processProviderMessages should terminate the session
+    const sessions = spawner.listAllSessions(testAgentId);
+    expect(sessions.length).toBe(1);
+    expect(sessions[0].status).toBe('terminated');
+  });
+});
+
+// ============================================================================
+// waitForInit fast-fail on resume_failed and exit Tests
+// ============================================================================
+
+describe('waitForInit fast-fail on resume_failed', () => {
+  test('rejects quickly with meaningful error when resume fails (session not found)', async () => {
+    // This test verifies that when a stale session resume fails,
+    // waitForInit rejects immediately via the resume_failed event
+    // instead of blocking for the full timeout duration.
+    const mockProvider = createMockProvider(createImmediateExitHeadlessSession);
+
+    const LONG_TIMEOUT = 10_000; // 10 seconds — we should never wait this long
+    const spawner = new SpawnerServiceImpl({
+      provider: mockProvider,
+      workingDirectory: '/tmp',
+      timeout: LONG_TIMEOUT,
+    });
+
+    const startTime = Date.now();
+
+    await expect(
+      spawner.spawn(testAgentId, 'worker', {
+        mode: 'headless',
+        resumeSessionId: 'stale-session-fast-fail',
+      })
+    ).rejects.toThrow('Session resume failed');
+
+    const elapsed = Date.now() - startTime;
+
+    // Should reject well under the timeout — if it took more than 2 seconds,
+    // the fast-fail isn't working (resume_failed was ignored).
+    expect(elapsed).toBeLessThan(2000);
+
+    // Verify the session ended up in terminated state
+    const sessions = spawner.listAllSessions(testAgentId);
+    expect(sessions.length).toBe(1);
+    expect(sessions[0].status).toBe('terminated');
+    expect(sessions[0].endedAt).toBeDefined();
+  });
+
+  test('resume_failed error includes the reason from the event', async () => {
+    const mockProvider = createMockProvider(createImmediateExitHeadlessSession);
+
+    const spawner = new SpawnerServiceImpl({
+      provider: mockProvider,
+      workingDirectory: '/tmp',
+      timeout: 10_000,
+    });
+
+    let thrownError: Error | undefined;
+    try {
+      await spawner.spawn(testAgentId, 'worker', {
+        mode: 'headless',
+        resumeSessionId: 'stale-session-reason-check',
+      });
+    } catch (error) {
+      thrownError = error as Error;
+    }
+
+    expect(thrownError).toBeDefined();
+    expect(thrownError!.message).toContain('Session resume failed');
+    expect(thrownError!.message).toContain('No conversation found with session ID');
+  });
+});
+
+describe('waitForInit fast-fail on exit', () => {
+  test('rejects quickly with "Session exited before init" when process dies', async () => {
+    // Create a mock headless session that immediately closes without emitting
+    // any init event or resume_failed event — simulating a process crash.
+    const createCrashingHeadlessSession = (): HeadlessSession => {
+      return {
+        sendMessage: () => {},
+        [Symbol.asyncIterator]() {
+          return {
+            async next(): Promise<IteratorResult<AgentMessage>> {
+              // Stream ends immediately — no init, no resume error
+              return { done: true, value: undefined };
+            },
+          };
+        },
+        interrupt: async () => {},
+        close: () => {},
+      };
+    };
+
+    const mockProvider = createMockProvider(createCrashingHeadlessSession);
+
+    const LONG_TIMEOUT = 10_000;
+    const spawner = new SpawnerServiceImpl({
+      provider: mockProvider,
+      workingDirectory: '/tmp',
+      timeout: LONG_TIMEOUT,
+    });
+
+    const startTime = Date.now();
+
+    await expect(
+      spawner.spawn(testAgentId, 'worker', {
+        mode: 'headless',
+      })
+    ).rejects.toThrow('Session exited before init');
+
+    const elapsed = Date.now() - startTime;
+
+    // Should reject well under the timeout
+    expect(elapsed).toBeLessThan(2000);
+
+    // Verify the session ended up in terminated state
+    const sessions = spawner.listAllSessions(testAgentId);
+    expect(sessions.length).toBe(1);
+    expect(sessions[0].status).toBe('terminated');
+  });
+});
+
+describe('waitForInit still resolves normally on init event', () => {
+  test('normal spawn without resume succeeds when init event is received', async () => {
+    // This ensures the new resume_failed/exit listeners don't interfere
+    // with the normal init flow.
+    const mockHeadlessSession: HeadlessSession = {
+      sendMessage: () => {},
+      [Symbol.asyncIterator]() {
+        let sentInit = false;
+        let sentResult = false;
+        return {
+          async next(): Promise<IteratorResult<AgentMessage>> {
+            if (!sentInit) {
+              sentInit = true;
+              return {
+                done: false,
+                value: {
+                  type: 'system',
+                  subtype: 'init',
+                  sessionId: 'provider-session-normal-test',
+                  content: 'Session initialized',
+                  raw: { type: 'system', subtype: 'init', session_id: 'provider-session-normal-test' },
+                },
+              };
+            }
+            if (!sentResult) {
+              sentResult = true;
+              await new Promise((resolve) => setTimeout(resolve, 100));
+              return {
+                done: false,
+                value: {
+                  type: 'result',
+                  content: 'Task completed',
+                  raw: { type: 'result', result: 'Task completed' },
+                },
+              };
+            }
+            return { done: true, value: undefined };
+          },
+        };
+      },
+      interrupt: async () => {},
+      close: () => {},
+    };
+
+    const mockProvider = createMockProvider(() => mockHeadlessSession);
+
+    const spawner = new SpawnerServiceImpl({
+      provider: mockProvider,
+      workingDirectory: '/tmp',
+      timeout: 5000,
+    });
+
+    const result = await spawner.spawn(testAgentId, 'worker', {
+      mode: 'headless',
+    });
+
+    expect(result.session.status).toBe('running');
+    expect(result.session.providerSessionId).toBe('provider-session-normal-test');
+
+    // Wait for processProviderMessages to finish
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
     const sessions = spawner.listAllSessions(testAgentId);
     expect(sessions.length).toBe(1);
     expect(sessions[0].status).toBe('terminated');
