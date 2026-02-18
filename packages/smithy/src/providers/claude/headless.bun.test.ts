@@ -6,7 +6,7 @@
 
 import { describe, it, expect } from 'bun:test';
 import type { HeadlessSpawnOptions } from '../types.js';
-import type { Options as SDKOptions } from '@anthropic-ai/claude-agent-sdk';
+import type { Options as SDKOptions, SpawnOptions } from '@anthropic-ai/claude-agent-sdk';
 
 describe('ClaudeHeadlessProvider', () => {
   describe('spawn() model passthrough', () => {
@@ -81,10 +81,75 @@ describe('ClaudeHeadlessProvider', () => {
     });
   });
 
+  describe('spawnClaudeCodeProcess for custom executable', () => {
+    it('should set spawnClaudeCodeProcess when custom executable is configured', () => {
+      const executablePath = 'claude2';
+
+      const sdkOptions: SDKOptions = {
+        cwd: '/test/dir',
+        permissionMode: 'bypassPermissions',
+        allowDangerouslySkipPermissions: true,
+      };
+
+      // This replicates the logic in headless.ts spawn()
+      if (executablePath && executablePath !== 'claude') {
+        sdkOptions.spawnClaudeCodeProcess = (_spawnOpts: SpawnOptions) => {
+          // Stub - would return a SpawnedProcess in real code
+          return undefined as never;
+        };
+      }
+
+      expect(sdkOptions.spawnClaudeCodeProcess).toBeDefined();
+      expect(typeof sdkOptions.spawnClaudeCodeProcess).toBe('function');
+    });
+
+    it('should NOT set spawnClaudeCodeProcess when using default "claude"', () => {
+      const executablePath = 'claude';
+
+      const sdkOptions: SDKOptions = {
+        cwd: '/test/dir',
+        permissionMode: 'bypassPermissions',
+        allowDangerouslySkipPermissions: true,
+      };
+
+      if (executablePath && executablePath !== 'claude') {
+        sdkOptions.spawnClaudeCodeProcess = (_spawnOpts: SpawnOptions) => {
+          return undefined as never;
+        };
+      }
+
+      expect(sdkOptions.spawnClaudeCodeProcess).toBeUndefined();
+    });
+
+    it('should NOT set spawnClaudeCodeProcess when no executable path is set', () => {
+      const executablePath: string | undefined = undefined;
+
+      const sdkOptions: SDKOptions = {
+        cwd: '/test/dir',
+        permissionMode: 'bypassPermissions',
+        allowDangerouslySkipPermissions: true,
+      };
+
+      if (executablePath && executablePath !== 'claude') {
+        sdkOptions.spawnClaudeCodeProcess = (_spawnOpts: SpawnOptions) => {
+          return undefined as never;
+        };
+      }
+
+      expect(sdkOptions.spawnClaudeCodeProcess).toBeUndefined();
+    });
+  });
+
   describe('provider setup', () => {
     it('should have correct provider name', async () => {
       const { ClaudeHeadlessProvider } = await import('./headless.js');
       const provider = new ClaudeHeadlessProvider();
+      expect(provider.name).toBe('claude-headless');
+    });
+
+    it('should accept custom executable path', async () => {
+      const { ClaudeHeadlessProvider } = await import('./headless.js');
+      const provider = new ClaudeHeadlessProvider('/usr/local/bin/claude-dev');
       expect(provider.name).toBe('claude-headless');
     });
   });

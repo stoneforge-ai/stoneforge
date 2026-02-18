@@ -7,8 +7,9 @@
  * @module
  */
 
+import { spawn as cpSpawn } from 'node:child_process';
 import { query as sdkQuery } from '@anthropic-ai/claude-agent-sdk';
-import type { Query as SDKQuery, SDKMessage, SDKUserMessage, Options as SDKOptions } from '@anthropic-ai/claude-agent-sdk';
+import type { Query as SDKQuery, SDKMessage, SDKUserMessage, Options as SDKOptions, SpawnOptions, SpawnedProcess } from '@anthropic-ai/claude-agent-sdk';
 import type {
   HeadlessProvider,
   HeadlessSession,
@@ -16,6 +17,17 @@ import type {
   AgentMessage,
   ProviderSessionId,
 } from '../types.js';
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+/**
+ * Shell-quotes a string for safe inclusion in a bash command.
+ */
+function shellQuote(s: string): string {
+  return "'" + s.replace(/'/g, "'\\''") + "'";
+}
 
 // ============================================================================
 // SDK Input Queue
@@ -336,9 +348,42 @@ export class ClaudeHeadlessProvider implements HeadlessProvider {
       allowDangerouslySkipPermissions: true,
     };
 
-    // Pass custom executable path if configured (skip the default 'claude' to preserve existing behavior)
+    // When a custom executable path is configured, use spawnClaudeCodeProcess to
+    // route through a login shell. This ensures shell functions and aliases defined
+    // in the user's profile (e.g. "claude2" as a bash function) are available.
+    // When using the default 'claude', let the SDK handle spawning normally.
     if (this.executablePath && this.executablePath !== 'claude') {
-      sdkOptions.pathToClaudeCodeExecutable = this.executablePath;
+      const customExecutable = this.executablePath;
+      sdkOptions.spawnClaudeCodeProcess = (spawnOpts: SpawnOptions): SpawnedProcess => {
+        // Build a shell command string from the custom executable + SDK args
+        const shellCommand = [shellQuote(customExecutable), ...spawnOpts.args.map(shellQuote)].join(' ');
+
+        const isWindows = process.platform === 'win32';
+        const shell = isWindows ? 'cmd.exe' : '/bin/bash';
+        const shellArgs = isWindows
+          ? ['/c', shellCommand]
+          : ['-l', '-c', shellCommand];
+
+        const child = cpSpawn(shell, shellArgs, {
+          cwd: spawnOpts.cwd,
+          env: spawnOpts.env as NodeJS.ProcessEnv,
+          stdio: ['pipe', 'pipe', 'pipe'],
+        });
+
+        // Wire the abort signal to kill the spawned process
+        if (spawnOpts.signal) {
+          if (spawnOpts.signal.aborted) {
+            child.kill('SIGTERM');
+          } else {
+            spawnOpts.signal.addEventListener('abort', () => {
+              child.kill('SIGTERM');
+            }, { once: true });
+          }
+        }
+
+        // ChildProcess satisfies SpawnedProcess interface
+        return child as unknown as SpawnedProcess;
+      };
     }
 
     // Pass model if specified
