@@ -153,6 +153,15 @@ const channelId = await api.getAgentChannel(agentId);
 
 Each provider implements the `AgentProvider` interface with `headless` and `interactive` sub-providers for non-interactive and interactive sessions respectively.
 
+### Scaling with Multiple Plans
+
+To run 10+ agents concurrently, split them across multiple Claude Code MAX or Pro plans:
+
+1. Create a profile wrapper for each plan — set `CLAUDE_CONFIG_DIR` to a separate directory and authenticate each one
+2. In the Stoneforge dashboard (Settings > Agent Defaults), set the executable path per provider, or set it per-agent when creating/editing agents
+
+See the [Claude Code profiles discussion](https://github.com/anthropics/claude-code/issues/261#issuecomment-3071151276) for wrapper script examples.
+
 ## Key Services
 
 | Service | Description |
