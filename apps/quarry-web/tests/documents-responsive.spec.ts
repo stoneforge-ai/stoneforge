@@ -36,6 +36,16 @@ test.describe('TB150: Responsive Documents Page', () => {
     });
 
     test('document items are visible and clickable on mobile', async ({ page }) => {
+      // Create a test document first so the list isn't empty
+      await page.request.post('/api/documents', {
+        data: {
+          title: 'Test Document for Responsive',
+          content: 'Test content',
+          contentType: 'markdown',
+          createdBy: 'el-0000',
+        },
+      });
+
       // Go to documents page
       await page.goto('/documents');
       await page.waitForLoadState('networkidle');
@@ -47,7 +57,7 @@ test.describe('TB150: Responsive Documents Page', () => {
 
       // Document items should be visible
       const firstDoc = page.locator('[data-testid^="document-item-"]').first();
-      await expect(firstDoc).toBeVisible();
+      await expect(firstDoc).toBeVisible({ timeout: 5000 });
 
       // Document items should have cursor pointer (clickable)
       const cursor = await firstDoc.evaluate((el) => window.getComputedStyle(el).cursor);

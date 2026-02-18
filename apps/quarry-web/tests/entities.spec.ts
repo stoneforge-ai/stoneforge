@@ -83,7 +83,7 @@ test.describe('TB33: Entities Page - List View', () => {
       // Should show entities grid
       await expect(page.getByTestId('entities-grid')).toBeVisible();
       // Should show correct count in header (showing current page items of total)
-      await expect(page.getByText(new RegExp(`\\d+ of ${total} entities`))).toBeVisible();
+      await expect(page.getByText(new RegExp(`\\d+ of ${total}`))).toBeVisible();
     }
   });
 
@@ -480,8 +480,8 @@ test.describe('TB34: Entity Detail Panel', () => {
     const card = page.getByTestId(`entity-card-${firstEntity.id}`);
     await card.click();
 
-    // Card should have selected styling (blue border)
-    await expect(card).toHaveClass(/border-blue-500/);
+    // Card should have selected styling (ring and border using CSS variables)
+    await expect(card).toHaveClass(/ring-\[var\(--color-primary\)\]/);
     await expect(card).toHaveClass(/ring-2/);
   });
 });

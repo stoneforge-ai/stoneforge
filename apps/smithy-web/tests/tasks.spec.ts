@@ -370,14 +370,16 @@ test.describe('TB-O18: Orchestrator Task List Page', () => {
       const hasTable = await table.isVisible().catch(() => false);
 
       if (hasTable) {
-        await expect(page.getByRole('columnheader', { name: 'Task', exact: true })).toBeVisible();
-        await expect(page.getByRole('columnheader', { name: /Status/i })).toBeVisible();
-        await expect(page.getByRole('columnheader', { name: /Priority/i })).toBeVisible();
-        await expect(page.getByRole('columnheader', { name: /Type/i })).toBeVisible();
-        await expect(page.getByRole('columnheader', { name: /Assignee/i })).toBeVisible();
-        await expect(page.getByRole('columnheader', { name: /Branch/i })).toBeVisible();
-        await expect(page.getByRole('columnheader', { name: /Updated/i })).toBeVisible();
-        await expect(page.getByRole('columnheader', { name: /Actions/i })).toBeVisible();
+        // Column headers include resize handle separators in their accessible names,
+        // so use regex patterns instead of exact matching
+        await expect(page.getByRole('columnheader', { name: /^Task/i })).toBeVisible();
+        await expect(page.getByRole('columnheader', { name: /^Status/i })).toBeVisible();
+        await expect(page.getByRole('columnheader', { name: /^Priority/i })).toBeVisible();
+        await expect(page.getByRole('columnheader', { name: /^Type/i })).toBeVisible();
+        await expect(page.getByRole('columnheader', { name: /^Assignee/i })).toBeVisible();
+        await expect(page.getByRole('columnheader', { name: /^Branch/i })).toBeVisible();
+        await expect(page.getByRole('columnheader', { name: /^Updated/i })).toBeVisible();
+        await expect(page.getByRole('columnheader', { name: /^Actions/i })).toBeVisible();
       }
     });
   });

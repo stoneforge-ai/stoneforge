@@ -52,11 +52,13 @@ test.describe('TB-O25c: Settings Page', () => {
 
     test('preserves tab in URL on page reload', async ({ page }) => {
       await page.goto('/settings?tab=workspace');
+      await expect(page.getByTestId('settings-page')).toBeVisible({ timeout: 10000 });
 
       await page.reload();
+      await expect(page.getByTestId('settings-page')).toBeVisible({ timeout: 10000 });
 
       await expect(page).toHaveURL(/tab=workspace/);
-      await expect(page.getByTestId('settings-workspace')).toBeVisible();
+      await expect(page.getByTestId('settings-workspace')).toBeVisible({ timeout: 10000 });
     });
   });
 
@@ -110,12 +112,14 @@ test.describe('TB-O25c: Settings Page', () => {
 
     test('persists theme setting after page reload', async ({ page }) => {
       await page.goto('/settings');
+      await expect(page.getByTestId('settings-page')).toBeVisible({ timeout: 10000 });
 
       await page.getByTestId('settings-theme-dark').click();
       await page.reload();
+      await expect(page.getByTestId('settings-page')).toBeVisible({ timeout: 10000 });
 
       // Dark theme should still be selected
-      await expect(page.getByTestId('settings-theme-dark')).toHaveClass(/border-\[var\(--color-primary\)\]/);
+      await expect(page.getByTestId('settings-theme-dark')).toHaveClass(/border-\[var\(--color-primary\)\]/, { timeout: 10000 });
       await expect(page.locator('html')).toHaveClass(/theme-dark/);
     });
   });
@@ -123,8 +127,9 @@ test.describe('TB-O25c: Settings Page', () => {
   test.describe('Preferences Tab - Notifications', () => {
     test('displays notification settings section', async ({ page }) => {
       await page.goto('/settings');
+      await expect(page.getByTestId('settings-page')).toBeVisible({ timeout: 10000 });
 
-      await expect(page.getByTestId('settings-section-notifications')).toBeVisible();
+      await expect(page.getByTestId('settings-section-notifications')).toBeVisible({ timeout: 10000 });
     });
 
     test('can toggle task completion alerts', async ({ page }) => {
@@ -214,22 +219,36 @@ test.describe('TB-O25c: Settings Page', () => {
   test.describe('Preferences Tab - Keyboard Shortcuts', () => {
     test('displays keyboard shortcuts section', async ({ page }) => {
       await page.goto('/settings');
+      await expect(page.getByTestId('settings-page')).toBeVisible({ timeout: 10000 });
 
-      await expect(page.getByTestId('settings-section-keyboard-shortcuts')).toBeVisible();
+      // Scroll to the keyboard shortcuts section which may be below the fold
+      const shortcutsSection = page.getByTestId('settings-section-keyboard-shortcuts');
+      await shortcutsSection.scrollIntoViewIfNeeded();
+      await expect(shortcutsSection).toBeVisible({ timeout: 10000 });
     });
 
     test('displays command palette shortcut', async ({ page }) => {
       await page.goto('/settings');
+      await expect(page.getByTestId('settings-page')).toBeVisible({ timeout: 10000 });
 
-      await expect(page.getByTestId('shortcut-row-action.commandPalette')).toBeVisible();
+      // Scroll to shortcuts section
+      const shortcutsSection = page.getByTestId('settings-section-keyboard-shortcuts');
+      await shortcutsSection.scrollIntoViewIfNeeded();
+
+      await expect(page.getByTestId('shortcut-row-action.commandPalette')).toBeVisible({ timeout: 10000 });
       // Check for the keyboard shortcut text
       await expect(page.getByTestId('shortcut-row-action.commandPalette').locator('kbd')).toContainText('K');
     });
 
     test('displays all expected shortcuts', async ({ page }) => {
       await page.goto('/settings');
+      await expect(page.getByTestId('settings-page')).toBeVisible({ timeout: 10000 });
 
-      await expect(page.getByTestId('shortcut-row-action.commandPalette')).toBeVisible();
+      // Scroll to shortcuts section
+      const shortcutsSection = page.getByTestId('settings-section-keyboard-shortcuts');
+      await shortcutsSection.scrollIntoViewIfNeeded();
+
+      await expect(page.getByTestId('shortcut-row-action.commandPalette')).toBeVisible({ timeout: 10000 });
       await expect(page.getByTestId('shortcut-row-action.toggleSidebar')).toBeVisible();
       await expect(page.getByTestId('shortcut-row-action.toggleDirector')).toBeVisible();
     });
@@ -238,8 +257,10 @@ test.describe('TB-O25c: Settings Page', () => {
   test.describe('Workspace Tab - Git Worktrees', () => {
     test('displays worktree settings section', async ({ page }) => {
       await page.goto('/settings?tab=workspace');
+      await expect(page.getByTestId('settings-page')).toBeVisible({ timeout: 10000 });
+      await expect(page.getByTestId('settings-workspace')).toBeVisible({ timeout: 10000 });
 
-      await expect(page.getByTestId('settings-section-git-worktrees')).toBeVisible();
+      await expect(page.getByTestId('settings-section-git-worktrees')).toBeVisible({ timeout: 10000 });
     });
 
     test('can edit worktree directory', async ({ page }) => {

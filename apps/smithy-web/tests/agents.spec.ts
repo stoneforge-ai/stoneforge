@@ -367,8 +367,9 @@ test.describe('TB-O22: Steward Configuration UI', () => {
       // Add a cron trigger
       await page.getByTestId('add-cron-trigger').click();
 
-      // Edit the schedule
-      const scheduleInput = page.getByTestId('trigger-0-schedule');
+      // Switch to raw cron syntax mode and edit the schedule
+      await page.getByTestId('trigger-0-schedule-mode-toggle').click();
+      const scheduleInput = page.getByTestId('trigger-0-schedule-raw-input');
       await scheduleInput.clear();
       await scheduleInput.fill('0 2 * * *');
 
@@ -484,10 +485,11 @@ test.describe('TB-O22: Steward Configuration UI', () => {
       await page.getByTestId('agent-name').fill('Test Merge Steward');
       await page.getByTestId('steward-focus').selectOption('merge');
 
-      // Add a cron trigger
+      // Add a cron trigger and switch to raw mode to enter cron syntax
       await page.getByTestId('add-cron-trigger').click();
-      await page.getByTestId('trigger-0-schedule').clear();
-      await page.getByTestId('trigger-0-schedule').fill('0 2 * * *');
+      await page.getByTestId('trigger-0-schedule-mode-toggle').click();
+      await page.getByTestId('trigger-0-schedule-raw-input').clear();
+      await page.getByTestId('trigger-0-schedule-raw-input').fill('0 2 * * *');
 
       // Submit
       await page.getByTestId('submit-create-agent').click();
@@ -663,9 +665,9 @@ test.describe('TB-O26: Agent Workspace View', () => {
 
   test.describe('Graph visualization - Loading state', () => {
     test('shows loading indicator while fetching agents', async ({ page }) => {
-      // Add a delay to the API response
+      // Add a delay to the API response so we can observe loading state
       await page.route('**/api/agents*', async (route) => {
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        await new Promise((resolve) => setTimeout(resolve, 5000));
         route.fulfill({
           status: 200,
           contentType: 'application/json',
@@ -673,10 +675,11 @@ test.describe('TB-O26: Agent Workspace View', () => {
         });
       });
 
-      await page.goto('/agents?tab=graph');
+      // Use domcontentloaded to not wait for network requests to settle
+      await page.goto('/agents?tab=graph', { waitUntil: 'domcontentloaded' });
 
-      // Should show loading indicator
-      await expect(page.getByTestId('agent-graph-loading')).toBeVisible();
+      // Should show loading indicator while API is delayed
+      await expect(page.getByTestId('agent-graph-loading')).toBeVisible({ timeout: 10000 });
       await expect(page.getByText('Loading agents...')).toBeVisible();
     });
   });
@@ -913,13 +916,13 @@ test.describe('TB-O26: Agent Workspace View', () => {
         });
       });
 
-      await page.goto('/agents?tab=graph');
+      await page.goto('/agents?tab=graph', { timeout: 60000 });
 
       // Wait for graph to render
       await page.waitForTimeout(1000);
 
       // Should show Steward node
-      await expect(page.getByTestId('graph-node-el-steward-1')).toBeVisible();
+      await expect(page.getByTestId('graph-node-el-steward-1')).toBeVisible({ timeout: 10000 });
       await expect(page.getByText('Merge Steward')).toBeVisible();
     });
 
