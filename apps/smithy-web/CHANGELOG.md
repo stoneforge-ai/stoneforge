@@ -1,5 +1,15 @@
 # @stoneforge/smithy-web
 
+## 1.3.0
+
+### Minor Changes
+
+- cba8d1b: Add per-agent executable path field to agent creation and provider change dialogs, and display custom path on agent cards
+
+### Patch Changes
+
+- @stoneforge/ui@1.3.0
+
 ## 1.2.0
 
 ### Minor Changes
