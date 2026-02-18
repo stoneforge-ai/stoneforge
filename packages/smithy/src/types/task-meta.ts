@@ -68,6 +68,9 @@ export interface OrchestratorTaskMeta {
   /** Number of times this task has been recovered from a stuck merging/testing state */
   readonly stuckMergeRecoveryCount?: number;
 
+  /** Number of times the steward orphan recovery has re-dispatched a steward for this task */
+  readonly stewardRecoveryCount?: number;
+
   /**
    * Number of consecutive times the orphan recovery loop has resumed this task
    * without a status change. When this exceeds the configured threshold,

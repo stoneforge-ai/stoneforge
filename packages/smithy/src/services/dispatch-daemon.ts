@@ -961,7 +961,42 @@ export class DispatchDaemonImpl implements DispatchDaemon {
         if (stewardTasks.length === 0) continue;
 
         const orphanedAssignment = stewardTasks[0];
+
+        // Safety valve: cap steward recovery attempts to prevent infinite re-dispatch loops
+        const stewardRecoveryCount = orphanedAssignment.orchestratorMeta?.stewardRecoveryCount ?? 0;
+        if (stewardRecoveryCount >= 3) {
+          logger.warn(
+            `Steward recovery limit reached for task ${orphanedAssignment.task.id}, setting mergeStatus to 'failed'`
+          );
+          try {
+            await this.api.update<Task>(orphanedAssignment.task.id, {
+              assignee: undefined,
+              metadata: updateOrchestratorTaskMeta(
+                orphanedAssignment.task.metadata as Record<string, unknown> | undefined,
+                {
+                  mergeStatus: 'failed' as const,
+                  mergeFailureReason: `Steward recovery limit reached after ${stewardRecoveryCount} attempts`,
+                }
+              ),
+            });
+            processed++;
+          } catch (error) {
+            errors++;
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            errorMessages.push(`Steward recovery limit for ${steward.name}: ${errorMessage}`);
+            logger.error(`Error setting mergeStatus to failed for task ${orphanedAssignment.task.id}:`, error);
+          }
+          continue;
+        }
+
         try {
+          // Increment stewardRecoveryCount before recovering
+          await this.api.update<Task>(orphanedAssignment.task.id, {
+            metadata: updateOrchestratorTaskMeta(
+              orphanedAssignment.task.metadata as Record<string, unknown> | undefined,
+              { stewardRecoveryCount: stewardRecoveryCount + 1 }
+            ),
+          });
           await this.recoverOrphanedStewardTask(steward, orphanedAssignment.task, orphanedAssignment.orchestratorMeta);
           processed++;
         } catch (error) {
