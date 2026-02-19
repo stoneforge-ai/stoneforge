@@ -198,6 +198,71 @@ export function createTaskRoutes(services: Services) {
     }
   });
 
+  // PATCH /api/tasks/bulk - Bulk update tasks
+  // MUST be before /:id route to avoid matching "bulk" as a task ID
+  app.patch('/api/tasks/bulk', async (c) => {
+    try {
+      const body = await c.req.json();
+
+      // Validate request structure
+      if (!body.ids || !Array.isArray(body.ids) || body.ids.length === 0) {
+        return c.json({ error: { code: 'VALIDATION_ERROR', message: 'ids must be a non-empty array' } }, 400);
+      }
+      if (!body.updates || typeof body.updates !== 'object') {
+        return c.json({ error: { code: 'VALIDATION_ERROR', message: 'updates must be an object' } }, 400);
+      }
+
+      const ids = body.ids as string[];
+
+      // Extract allowed updates
+      const updates: Record<string, unknown> = {};
+      const allowedFields = [
+        'status', 'priority', 'complexity', 'taskType',
+        'assignee', 'owner', 'deadline', 'scheduledFor', 'tags',
+      ];
+
+      for (const field of allowedFields) {
+        if (body.updates[field] !== undefined) {
+          updates[field] = body.updates[field];
+        }
+      }
+
+      if (Object.keys(updates).length === 0) {
+        return c.json({ error: { code: 'VALIDATION_ERROR', message: 'No valid fields to update' } }, 400);
+      }
+
+      // Update each task
+      const results: { id: string; success: boolean; error?: string }[] = [];
+
+      for (const id of ids) {
+        try {
+          const existing = await api.get<Task>(id as ElementId);
+          if (!existing || existing.type !== ElementType.TASK) {
+            results.push({ id, success: false, error: 'Task not found' });
+            continue;
+          }
+
+          await api.update(id as ElementId, updates);
+          results.push({ id, success: true });
+        } catch (error) {
+          results.push({ id, success: false, error: (error as Error).message });
+        }
+      }
+
+      const successCount = results.filter((r) => r.success).length;
+      const failureCount = results.filter((r) => !r.success).length;
+
+      return c.json({
+        updated: successCount,
+        failed: failureCount,
+        results,
+      });
+    } catch (error) {
+      logger.error('Failed to bulk update tasks:', error);
+      return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
+    }
+  });
+
   // PATCH /api/tasks/:id - Update task
   app.patch('/api/tasks/:id', async (c) => {
     try {
