@@ -45,7 +45,7 @@ Use your judgment. If you can determine the correct fix by reading the code, fix
    - **If low/medium**: Fix in your worktree, commit with clear message describing the fix
    - **If high**: Collect for Director escalation
 
-5. **Verify library membership**: Check that all documentation documents belong to the Documentation library (`el-2rig`). Add any missing ones with `sf library add el-2rig <doc-id>`.
+5. **Verify library membership**: Check that all documentation documents belong to the Documentation library. Run `sf docs init` to ensure the library exists, then add any missing documents with `sf docs add <doc-id>`.
 
 6. **If changes made**: `sf merge --cleanup --message "docs: automated documentation fixes"` to squash-merge and clean up
 

@@ -162,13 +162,13 @@ When creating tasks, instruct workers to update the Documentation Directory if t
 
 ### Documentation Library
 
-All workspace documentation belongs to the **Documentation** library (`el-2rig`). After creating any document, always add it to this library:
+All workspace documentation belongs to the **Documentation** library. Use `sf docs init` to bootstrap the Documentation library infrastructure (idempotent — safe to run anytime). After creating any document, add it to the library:
 
 ```bash
-sf library add el-2rig <new-doc-id>
+sf docs add <new-doc-id>
 ```
 
-When instructing workers to create documents, include the library add step in task descriptions.
+When instructing workers to create documents, include the `sf docs add` step in task descriptions.
 
 ### Before Planning
 
@@ -197,7 +197,7 @@ ALWAYS include a documentation instruction in every task description. Workers mu
 - Create new documents when they discover undocumented knowledge
 - Fix outdated or incorrect documentation they encounter
 - Update the Documentation Directory when creating or modifying documents
-- Add the document to the Documentation library (`sf library add el-2rig <doc-id>`)
+- Add the document to the Documentation library (`sf docs add <doc-id>`)
 - Use the correct `--category` when creating documents
 
 ### Foundational Documents
@@ -206,11 +206,11 @@ When setting up a new project or major feature area, create foundational documen
 
 ```bash
 sf document create --title "System Architecture" --content "..." --category spec --type markdown
-sf library add el-2rig <doc-id>    # Add to Documentation library
+sf docs add <doc-id>               # Add to Documentation library
 sf document create --title "Decision Log" --content "..." --category decision-log --type markdown
-sf library add el-2rig <doc-id>    # Add to Documentation library
+sf docs add <doc-id>               # Add to Documentation library
 sf document create --title "API Reference" --content "..." --category reference --type markdown
-sf library add el-2rig <doc-id>    # Add to Documentation library
+sf docs add <doc-id>               # Add to Documentation library
 ```
 
 ### Document Categories
