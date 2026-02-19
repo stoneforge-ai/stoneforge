@@ -46,12 +46,15 @@ jobs:
 
       - name: Deploy to Cloudflare Pages
         id: deploy
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          packageManager: pnpm
-          command: pages deploy apps/website/dist --project-name=stoneforge-ai --branch=${{ github.event_name == 'push' && 'master' || github.head_ref }}
+        working-directory: apps/website
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          DEPLOY_OUTPUT=$(pnpm exec wrangler pages deploy dist --project-name=stoneforge-ai --branch=${{ github.event_name == 'push' && 'master' || github.head_ref }} 2>&1)
+          echo "$DEPLOY_OUTPUT"
+          DEPLOY_URL=$(echo "$DEPLOY_OUTPUT" | grep -oE 'https://[^ ]+\.pages\.dev')
+          echo "deployment-url=$DEPLOY_URL" >> "$GITHUB_OUTPUT"
 
       - name: Comment preview URL on PR
         if: github.event_name == 'pull_request'
