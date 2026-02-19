@@ -5,10 +5,13 @@ on:
     branches: [master]
     paths:
       - 'apps/website/**'
+      - '.github/workflows/deploy-website.yml'
   pull_request:
     branches: [master]
     paths:
       - 'apps/website/**'
+      - '.github/workflows/deploy-website.yml'
+  workflow_dispatch:
 
 concurrency:
   group: deploy-website-${{ github.ref }}
