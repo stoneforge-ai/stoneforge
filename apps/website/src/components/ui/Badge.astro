@@ -1,0 +1,26 @@
+---
+interface Props {
+  class?: string;
+}
+
+const { class: className = '' } = Astro.props;
+---
+
+<span
+  class:list={[
+    'inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-medium',
+    'bg-[var(--site-bg-elevated)] text-[var(--site-accent)]',
+    'relative',
+    className,
+  ]}
+>
+  <!-- Gradient border via mask technique -->
+  <span
+    class="absolute inset-0 rounded-full pointer-events-none"
+    style="padding: 1px; background: linear-gradient(135deg, var(--site-accent), #a78bfa, var(--site-accent)); -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); -webkit-mask-composite: xor; mask-composite: exclude;"
+    aria-hidden="true"
+  ></span>
+  <span class="relative z-10 flex items-center gap-2">
+    <slot />
+  </span>
+</span>

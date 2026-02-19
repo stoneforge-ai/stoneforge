@@ -1,0 +1,41 @@
+/* =============================================================================
+   STONEFORGE MARKETING SITE — DESIGN TOKENS
+   ============================================================================= */
+
+:root {
+  /* --- Backgrounds (dark marketing theme) --- */
+  --site-bg-void:       #050507;
+  --site-bg-primary:    #08090c;
+  --site-bg-elevated:   #0f1117;
+  --site-bg-surface:    #151820;
+
+  /* --- Text --- */
+  --site-text-primary:  #f0f2f5;
+  --site-text-secondary:#94a3b8;
+  --site-text-tertiary: #64748b;
+  --site-text-ghost:    #475569;
+
+  /* --- Accent (brand blue) --- */
+  --site-accent:        #60a5fa;
+  --site-accent-bright: #93c5fd;
+  --site-accent-glow:   rgba(96, 165, 250, 0.15);
+  --site-accent-subtle: rgba(96, 165, 250, 0.08);
+
+  /* --- Borders --- */
+  --site-border:        rgba(255, 255, 255, 0.06);
+  --site-border-accent: rgba(96, 165, 250, 0.25);
+
+  /* --- Status colors --- */
+  --site-error:         #f87171;
+  --site-warning:       #fbbf24;
+  --site-success:       #4ade80;
+
+  /* --- Typography --- */
+  --font-headline: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+  --font-body:     'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-code:     'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+
+  /* --- Spacing --- */
+  --site-container-max: 1200px;
+  --site-section-gap:   clamp(4rem, 8vw, 7rem);
+}

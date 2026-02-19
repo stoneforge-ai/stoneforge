@@ -1,0 +1,41 @@
+---
+interface Props {
+  variant?: 'primary' | 'ghost';
+  href?: string;
+  class?: string;
+  target?: string;
+  rel?: string;
+}
+
+const { variant = 'primary', href, class: className = '', target, rel, ...rest } = Astro.props;
+
+const base = 'group relative inline-flex items-center justify-center gap-2.5 h-12 px-7 rounded-xl font-medium text-sm tracking-wide cursor-pointer whitespace-nowrap transition-all duration-300 overflow-hidden';
+
+const variants = {
+  primary: [
+    'bg-[var(--site-accent)] text-[#08090c]',
+    'hover:shadow-[0_0_32px_rgba(96,165,250,0.25),0_4px_16px_rgba(96,165,250,0.15)]',
+    'hover:brightness-110',
+    'active:scale-[0.98]',
+  ].join(' '),
+  ghost: [
+    'border border-[var(--site-border)] text-[var(--site-text-primary)]',
+    'hover:border-[var(--site-border-accent)] hover:text-[var(--site-accent)]',
+    'hover:bg-[var(--site-accent-subtle)]',
+    'hover:shadow-[0_0_24px_rgba(96,165,250,0.06)]',
+    'active:scale-[0.98]',
+  ].join(' '),
+};
+
+const classes = `${base} ${variants[variant]} ${className}`;
+---
+
+{href ? (
+  <a href={href} class={classes} target={target} rel={rel} {...rest}>
+    <slot />
+  </a>
+) : (
+  <button class={classes} {...rest}>
+    <slot />
+  </button>
+)}

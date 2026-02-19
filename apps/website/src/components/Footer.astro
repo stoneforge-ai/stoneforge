@@ -1,0 +1,71 @@
+---
+const productLinks = [
+  { label: 'Documentation', href: 'https://github.com/stoneforge-ai/stoneforge/tree/master/docs' },
+  { label: 'Quick Start', href: '#quickstart' },
+  { label: 'Changelog', href: 'https://github.com/stoneforge-ai/stoneforge/releases' },
+];
+
+const communityLinks = [
+  { label: 'GitHub', href: 'https://github.com/stoneforge-ai/stoneforge' },
+  { label: 'Discord', href: 'https://discord.gg/NBCaUUv8Vm' },
+  { label: 'X / Twitter', href: 'https://x.com/stoneforge_ai' },
+];
+
+const legalLinks = [
+  { label: 'Apache 2.0 License', href: 'https://github.com/stoneforge-ai/stoneforge/blob/master/LICENSE' },
+];
+---
+
+<footer class="relative bg-[var(--site-bg-void)] overflow-hidden">
+  <!-- Top gradient line -->
+  <div class="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[var(--site-border-accent)]/40 to-transparent"></div>
+
+  <div class="site-container py-14 md:py-20 relative z-10">
+    <div class="flex flex-col md:flex-row gap-14 md:gap-20">
+      <!-- Left: logo + description -->
+      <div class="md:max-w-[280px]">
+        <a href="/" class="flex items-center gap-2.5 text-[var(--site-text-primary)] no-underline mb-5 group">
+          <img src="/logo.png" alt="" width="24" height="24" class="object-contain" />
+          <span class="font-semibold text-sm tracking-wide" style="font-family: var(--font-headline);">stoneforge</span>
+        </a>
+        <p class="text-[13px] text-[var(--site-text-ghost)] leading-relaxed">
+          Multi-agent orchestration platform for AI coding agents. Open source, Apache 2.0.
+        </p>
+      </div>
+
+      <!-- Right: link groups -->
+      <div class="flex flex-wrap gap-14 md:gap-20 md:ml-auto">
+        {[
+          { title: 'Product', links: productLinks },
+          { title: 'Community', links: communityLinks },
+          { title: 'Legal', links: legalLinks },
+        ].map(group => (
+          <div>
+            <h4 class="text-[11px] font-semibold uppercase tracking-[0.15em] text-[var(--site-text-ghost)] mb-5">{group.title}</h4>
+            <ul class="space-y-3">
+              {group.links.map(link => (
+                <li>
+                  <a
+                    href={link.href}
+                    target={link.href.startsWith('http') ? '_blank' : undefined}
+                    rel={link.href.startsWith('http') ? 'noopener noreferrer' : undefined}
+                    class="text-[13px] text-[var(--site-text-tertiary)] hover:text-[var(--site-text-primary)] transition-colors duration-200"
+                  >
+                    {link.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </div>
+
+    <div class="mt-14 pt-6 flex items-center justify-between">
+      <hr class="hr-gradient flex-1 mr-6" />
+      <span class="text-[11px] text-[var(--site-text-ghost)] whitespace-nowrap font-mono">
+        &copy; {new Date().getFullYear()} Stoneforge
+      </span>
+    </div>
+  </div>
+</footer>

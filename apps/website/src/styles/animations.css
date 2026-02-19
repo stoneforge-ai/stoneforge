@@ -1,0 +1,152 @@
+/* =============================================================================
+   SCROLL REVEAL + ANIMATION SYSTEM
+   ============================================================================= */
+
+/* --- Keyframes --- */
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-12px); }
+}
+
+@keyframes float-slow {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-8px) rotate(1deg); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.05); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+@keyframes dash {
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes orb-drift-1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(30px, -20px) scale(1.1); }
+  50% { transform: translate(-10px, -35px) scale(0.95); }
+  75% { transform: translate(-25px, -10px) scale(1.05); }
+}
+
+@keyframes orb-drift-2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(-20px, 15px) scale(0.9); }
+  50% { transform: translate(25px, 25px) scale(1.1); }
+  75% { transform: translate(15px, -15px) scale(1); }
+}
+
+@keyframes typing-cursor {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+@keyframes scan-line {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(400%); }
+}
+
+@layer components {
+  /* --- Base reveal state (hidden) --- */
+  [data-reveal] {
+    opacity: 0;
+    transform: translateY(24px);
+    transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1), transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  [data-reveal].revealed {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* --- Stagger children --- */
+  [data-reveal-stagger] > * {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  [data-reveal-stagger].revealed > *:nth-child(1) { transition-delay: 0ms; }
+  [data-reveal-stagger].revealed > *:nth-child(2) { transition-delay: 120ms; }
+  [data-reveal-stagger].revealed > *:nth-child(3) { transition-delay: 240ms; }
+  [data-reveal-stagger].revealed > *:nth-child(4) { transition-delay: 360ms; }
+  [data-reveal-stagger].revealed > *:nth-child(5) { transition-delay: 480ms; }
+  [data-reveal-stagger].revealed > *:nth-child(6) { transition-delay: 600ms; }
+
+  [data-reveal-stagger].revealed > * {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* --- Directional reveals --- */
+  [data-reveal="left"] { transform: translateX(-40px); }
+  [data-reveal="left"].revealed { transform: translateX(0); }
+
+  [data-reveal="right"] { transform: translateX(40px); }
+  [data-reveal="right"].revealed { transform: translateX(0); }
+
+  [data-reveal="scale"] { transform: scale(0.92); }
+  [data-reveal="scale"].revealed { transform: scale(1); }
+
+  /* --- Timeline line draw --- */
+  .timeline-line {
+    transform-origin: left;
+    transform: scaleX(0);
+    transition: transform 1.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .revealed .timeline-line {
+    transform: scaleX(1);
+  }
+
+  /* --- Float utility --- */
+  .animate-float { animation: float 6s ease-in-out infinite; }
+  .animate-float-slow { animation: float-slow 8s ease-in-out infinite; }
+  .animate-pulse-glow { animation: pulse-glow 3s ease-in-out infinite; }
+
+  /* --- Shimmer for skeleton loaders --- */
+  .animate-shimmer {
+    background: linear-gradient(90deg, transparent 25%, rgba(96, 165, 250, 0.04) 50%, transparent 75%);
+    background-size: 200% 100%;
+    animation: shimmer 3s ease-in-out infinite;
+  }
+
+  /* --- Prefers reduced motion --- */
+  @media (prefers-reduced-motion: reduce) {
+    [data-reveal],
+    [data-reveal-stagger] > * {
+      opacity: 1;
+      transform: none;
+      transition: none;
+    }
+
+    .timeline-line {
+      transform: scaleX(1);
+      transition: none;
+    }
+
+    .animate-float,
+    .animate-float-slow,
+    .animate-pulse-glow,
+    .animate-shimmer {
+      animation: none;
+    }
+  }
+}
+
+/* --- Copy button animation --- */
+@layer components {
+  .copy-btn .icon-check { display: none; }
+  .copy-btn.copied .icon-clipboard { display: none; }
+  .copy-btn.copied .icon-check { display: block; }
+}

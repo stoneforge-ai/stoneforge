@@ -1,0 +1,69 @@
+---
+import SectionLabel from '../ui/SectionLabel.astro';
+
+const rows = [
+  { feature: 'State', ccat: 'Ephemeral, file-based', sf: 'Event-sourced, SQLite + JSONL' },
+  { feature: 'UI', ccat: 'Terminal only', sf: 'Web dashboard' },
+  { feature: 'Branch isolation', ccat: 'Manual', sf: 'Automatic worktrees' },
+  { feature: 'Task dispatch', ccat: 'Lead assigns', sf: 'Auto-dispatch daemon' },
+  { feature: 'Merge', ccat: 'Manual', sf: 'Auto merge + test' },
+  { feature: 'Communication', ccat: 'Lead-mediated', sf: 'Persistent channels' },
+  { feature: 'Knowledge base', ccat: 'CLAUDE.md only', sf: 'Versioned docs + search' },
+  { feature: 'Workflows', ccat: 'Ad-hoc task lists', sf: 'Resumable playbooks' },
+  { feature: 'Provider lock-in', ccat: 'Claude only', sf: 'Claude, OpenCode, Codex' },
+  { feature: 'Scaling', ccat: 'Single plan', sf: 'Multi-plan support' },
+];
+---
+
+<section id="compare" class="site-section">
+  <div class="site-container">
+    <SectionLabel class="mb-4">Compare</SectionLabel>
+    <h2
+      class="text-[clamp(1.75rem,3vw+0.5rem,2.75rem)] font-semibold tracking-[-0.025em] mb-14 md:mb-20 max-w-lg"
+      data-reveal
+    >
+      How Stoneforge compares
+    </h2>
+
+    <div class="overflow-x-auto -mx-4 px-4 pb-2" data-reveal>
+      <table class="w-full text-sm border-collapse min-w-[640px]">
+        <thead>
+          <tr>
+            <th class="text-left py-4 px-5 text-[var(--site-text-ghost)] font-medium text-xs uppercase tracking-wider sticky left-0 bg-[var(--site-bg-primary)] z-10 w-[160px]">Feature</th>
+            <th class="text-left py-4 px-5 text-[var(--site-text-tertiary)] font-medium text-xs uppercase tracking-wider">Agent Teams</th>
+            <th class="text-left py-4 px-5 text-xs uppercase tracking-wider relative">
+              <span class="text-[var(--site-accent)] font-semibold">Stoneforge</span>
+              <!-- Accent line at top of column -->
+              <div class="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-[var(--site-accent)] to-[var(--site-accent-bright)]"></div>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (
+            <tr class="border-t border-[var(--site-border)] group hover:bg-[var(--site-bg-elevated)] transition-colors duration-200">
+              <td class="py-3.5 px-5 font-medium text-[var(--site-text-primary)] whitespace-nowrap sticky left-0 bg-[var(--site-bg-primary)] group-hover:bg-[var(--site-bg-elevated)] transition-colors z-10 text-[13px]">
+                {row.feature}
+              </td>
+              <td class="py-3.5 px-5 text-[var(--site-text-tertiary)] text-[13px]">
+                <span class="flex items-center gap-2.5">
+                  <span class="flex-shrink-0 w-4 h-4 rounded-full border border-[var(--site-border)] flex items-center justify-center">
+                    <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="var(--site-text-ghost)" stroke-width="3" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  </span>
+                  {row.ccat}
+                </span>
+              </td>
+              <td class="py-3.5 px-5 text-[var(--site-text-primary)] text-[13px] bg-[var(--site-accent-subtle)]/40 border-l border-l-[var(--site-accent)]/15">
+                <span class="flex items-center gap-2.5">
+                  <span class="flex-shrink-0 w-4 h-4 rounded-full bg-[var(--site-accent)]/15 flex items-center justify-center">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--site-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  </span>
+                  {row.sf}
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>

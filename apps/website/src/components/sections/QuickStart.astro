@@ -1,0 +1,73 @@
+---
+import SectionLabel from '../ui/SectionLabel.astro';
+import CodeBlock from '../ui/CodeBlock.astro';
+
+const installCode = `<span style="color: var(--site-text-ghost);"># Install the Stoneforge CLI globally</span>
+<span style="color: var(--site-text-primary);">npm install -g</span> <span style="color: var(--site-accent);">@stoneforge/smithy</span>
+
+<span style="color: var(--site-text-ghost);"># Initialize a workspace in your project</span>
+<span style="color: var(--site-text-primary);">cd your-project &&</span> <span style="color: var(--site-accent);">sf init</span>
+
+<span style="color: var(--site-text-ghost);"># Start the server + web dashboard at http://localhost:3457</span>
+<span style="color: var(--site-text-primary);">sf serve</span>`;
+
+const rawCode = `# Install the Stoneforge CLI globally
+npm install -g @stoneforge/smithy
+
+# Initialize a workspace in your project
+cd your-project && sf init
+
+# Start the server + web dashboard at http://localhost:3457
+sf serve`;
+
+const steps = [
+  { num: '1', label: 'Install', desc: 'One npm command' },
+  { num: '2', label: 'Initialize', desc: 'Set up workspace' },
+  { num: '3', label: 'Launch', desc: 'Open dashboard' },
+];
+---
+
+<section id="quickstart" class="site-section relative">
+  <div class="site-container">
+    <hr class="hr-gradient mb-16 md:mb-24" />
+
+    <div class="max-w-[680px] mx-auto text-center">
+      <SectionLabel class="mb-4">Quick Start</SectionLabel>
+      <h2
+        class="text-[clamp(1.75rem,3vw+0.5rem,2.75rem)] font-semibold tracking-[-0.025em] mb-5"
+        data-reveal
+      >
+        Start in 30 seconds
+      </h2>
+      <p class="text-[var(--site-text-secondary)] mb-10 leading-relaxed" data-reveal>
+        Three commands. That's it.
+      </p>
+
+      <div data-reveal>
+        <CodeBlock code={installCode} title="Terminal" class="text-left" />
+      </div>
+
+      <!-- 3-step summary with connecting line -->
+      <div class="relative flex items-start justify-center gap-6 md:gap-12 mt-12" data-reveal-stagger>
+        <!-- Connecting line behind steps -->
+        <div class="hidden md:block absolute top-5 left-[20%] right-[20%] h-px bg-gradient-to-r from-[var(--site-border)] via-[var(--site-border-accent)] to-[var(--site-border)]" aria-hidden="true"></div>
+
+        {steps.map((step) => (
+          <div class="flex flex-col items-center gap-2.5 relative z-10">
+            <span class="w-10 h-10 rounded-xl bg-[var(--site-bg-elevated)] border border-[var(--site-border-accent)] flex items-center justify-center text-sm font-bold text-[var(--site-accent)] shadow-[0_0_16px_rgba(96,165,250,0.08)]">
+              {step.num}
+            </span>
+            <span class="text-sm font-semibold text-[var(--site-text-primary)]">{step.label}</span>
+            <span class="text-[11px] text-[var(--site-text-ghost)]">{step.desc}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+</section>
+
+<script define:vars={{ rawCode }}>
+  document.querySelectorAll('#quickstart .copy-btn').forEach(btn => {
+    btn.dataset.code = rawCode;
+  });
+</script>
