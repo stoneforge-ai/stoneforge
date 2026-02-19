@@ -417,8 +417,8 @@ interface InboxItem {
   recipientId: EntityId;
   messageId: MessageId;
   channelId: ChannelId;
-  status: InboxStatus;
   sourceType: InboxSourceType;
+  status: InboxStatus;
   readAt: Timestamp | null;
   createdAt: Timestamp;
 }

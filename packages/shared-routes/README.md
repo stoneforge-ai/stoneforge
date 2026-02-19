@@ -52,6 +52,7 @@ export default app;
 | `createDocumentRoutes(services)` | Document versioning and content |
 | `createInboxRoutes(services)` | Per-entity notification inbox |
 | `createPlanRoutes(services)` | Plan creation and status tracking |
+| `createTaskRoutes(services)` | Task CRUD and assignment |
 
 All factories accept a `CollaborateServices` (or `CollaborateServicesWithBroadcast`) object that provides the backing `QuarryAPI` and optional broadcast function.
 

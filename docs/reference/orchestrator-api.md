@@ -166,6 +166,7 @@ interface OrchestratorTaskMeta {
   lastTestResult?: TestResult;
   reconciliationCount?: number;
   stuckMergeRecoveryCount?: number;
+  stewardRecoveryCount?: number;
   resumeCount?: number;
   reportedIssues?: readonly string[];
   // Handoff context
