@@ -1021,6 +1021,12 @@ export class DispatchDaemonImpl implements DispatchDaemon {
         workerMode: 'ephemeral',
       });
 
+      // Track recovery stewards assigned during this cycle to prevent cascade assignment.
+      // When a steward session terminates immediately (e.g. rate-limited), getActiveSession
+      // returns null and the steward appears available for the next task. This set ensures
+      // each steward is only assigned once per recoverOrphanedAssignments call.
+      const stewardsUsedThisCycle = new Set<string>();
+
       for (const worker of workers) {
         const workerId = asEntityId(worker.id);
 
@@ -1054,7 +1060,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
           // Task has been resumed too many times without status change —
           // spawn a recovery steward instead of resuming the worker again
           try {
-            await this.spawnRecoveryStewardForTask(worker, taskAssignment.task, taskAssignment.orchestratorMeta);
+            await this.spawnRecoveryStewardForTask(worker, taskAssignment.task, taskAssignment.orchestratorMeta, stewardsUsedThisCycle);
             processed++;
             logger.info(
               `[dispatch-daemon] Spawning recovery steward for stuck task ${taskAssignment.task.id} after ${resumeCount} resume attempts`
@@ -2526,7 +2532,8 @@ export class DispatchDaemonImpl implements DispatchDaemon {
   private async spawnRecoveryStewardForTask(
     worker: AgentEntity,
     task: Task,
-    taskMeta: import('../types/task-meta.js').OrchestratorTaskMeta | undefined
+    taskMeta: import('../types/task-meta.js').OrchestratorTaskMeta | undefined,
+    stewardsUsedThisCycle?: Set<string>
   ): Promise<void> {
     const workerId = asEntityId(worker.id);
 
@@ -2536,10 +2543,15 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       stewardFocus: 'recovery',
     });
 
-    // Find a steward without an active session
+    // Find a steward without an active session that hasn't already been used this cycle.
+    // The stewardsUsedThisCycle guard prevents cascade assignment: when a steward session
+    // terminates immediately (e.g. due to rate limiting), getActiveSession returns null
+    // and the steward appears available for the next task in the same loop iteration.
     let recoverySteward: AgentEntity | undefined;
     for (const steward of stewards) {
-      const session = this.sessionManager.getActiveSession(asEntityId(steward.id));
+      const sid = asEntityId(steward.id);
+      if (stewardsUsedThisCycle?.has(sid as string)) continue;
+      const session = this.sessionManager.getActiveSession(sid);
       if (!session) {
         recoverySteward = steward;
         break;
@@ -2638,6 +2650,10 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       interactive: false, // Stewards use headless mode
       executablePathOverride: recoveryExecutableOverride ?? undefined,
     });
+
+    // 5b. Mark steward as used this cycle so it won't be re-assigned if the session
+    //     terminates immediately (e.g. rate-limited) before the next loop iteration checks.
+    stewardsUsedThisCycle?.add(stewardId as string);
 
     // 6. Session started successfully — now transfer the task from worker to steward.
     //    If the metadata update fails, terminate the steward session to avoid an

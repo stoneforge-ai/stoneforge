@@ -2273,6 +2273,266 @@ describe('spawnRecoveryStewardForTask - atomic worker unassignment', () => {
   });
 });
 
+// ============================================================================
+// Recovery steward cascade prevention tests
+// ============================================================================
+
+describe('recoverOrphanedAssignments - recovery steward cascade prevention', () => {
+  let api: QuarryAPI;
+  let inboxService: InboxService;
+  let agentRegistry: AgentRegistry;
+  let taskAssignment: TaskAssignmentService;
+  let dispatchService: DispatchService;
+  let sessionManager: SessionManager;
+  let worktreeManager: WorktreeManager;
+  let stewardScheduler: StewardScheduler;
+  let daemon: DispatchDaemon;
+  let testDbPath: string;
+  let systemEntity: EntityId;
+
+  beforeEach(async () => {
+    testDbPath = `/tmp/dispatch-daemon-cascade-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`;
+    const storage = createStorage({ path: testDbPath, create: true });
+    initializeSchema(storage);
+
+    api = createQuarryAPI(storage);
+    inboxService = createInboxService(storage);
+    agentRegistry = createAgentRegistry(api);
+    taskAssignment = createTaskAssignmentService(api);
+    dispatchService = createDispatchService(api, taskAssignment, agentRegistry);
+    sessionManager = createMockSessionManager();
+    worktreeManager = createMockWorktreeManager();
+    stewardScheduler = createMockStewardScheduler();
+
+    const { createEntity, EntityTypeValue } = await import('@stoneforge/core');
+    const entity = await createEntity({
+      name: 'test-system',
+      entityType: EntityTypeValue.SYSTEM,
+      createdBy: 'system:test' as EntityId,
+    });
+    const saved = await api.create(entity as unknown as Record<string, unknown> & { createdBy: EntityId });
+    systemEntity = saved.id as unknown as EntityId;
+
+    const config: DispatchDaemonConfig = {
+      pollIntervalMs: 100,
+      workerAvailabilityPollEnabled: false,
+      inboxPollEnabled: false,
+      stewardTriggerPollEnabled: false,
+      workflowTaskPollEnabled: false,
+      orphanRecoveryEnabled: true,
+      maxResumeAttemptsBeforeRecovery: 3,
+    };
+
+    daemon = createDispatchDaemon(
+      api,
+      agentRegistry,
+      sessionManager,
+      dispatchService,
+      worktreeManager,
+      taskAssignment,
+      stewardScheduler,
+      inboxService,
+      config
+    );
+  });
+
+  afterEach(async () => {
+    await daemon.stop();
+    if (fs.existsSync(testDbPath)) {
+      fs.unlinkSync(testDbPath);
+    }
+  });
+
+  async function createTestWorker(name: string): Promise<AgentEntity> {
+    return agentRegistry.registerWorker({
+      name,
+      workerMode: 'ephemeral',
+      createdBy: systemEntity,
+      maxConcurrentTasks: 1,
+    });
+  }
+
+  async function createTestRecoverySteward(name: string): Promise<AgentEntity> {
+    return agentRegistry.registerSteward({
+      name,
+      stewardFocus: 'recovery',
+      createdBy: systemEntity,
+      maxConcurrentTasks: 1,
+    });
+  }
+
+  async function createStuckTask(
+    title: string,
+    workerId: EntityId,
+    resumeCount: number = 3,
+  ): Promise<Task> {
+    const task = await createTask({
+      title,
+      createdBy: systemEntity,
+      status: TaskStatus.IN_PROGRESS,
+      assignee: workerId,
+    });
+    const saved = await api.create(task as unknown as Record<string, unknown> & { createdBy: EntityId }) as Task;
+
+    await api.update(saved.id, {
+      metadata: updateOrchestratorTaskMeta(undefined, {
+        assignedAgent: workerId,
+        branch: 'agent/test-worker/task-branch',
+        worktree: '/worktrees/test-worker/task',
+        sessionId: 'prev-session-stuck',
+        resumeCount,
+      }),
+    });
+
+    return (await api.get<Task>(saved.id))!;
+  }
+
+  test('recovery steward is only assigned to one task per cycle when multiple stuck tasks exist', async () => {
+    // Create two workers with stuck tasks
+    const worker1 = await createTestWorker('cascade-worker-1');
+    const worker2 = await createTestWorker('cascade-worker-2');
+    const workerId1 = worker1.id as unknown as EntityId;
+    const workerId2 = worker2.id as unknown as EntityId;
+
+    // Create a single recovery steward
+    const steward = await createTestRecoverySteward('recovery-steward-cascade');
+    const stewardId = steward.id as unknown as EntityId;
+
+    // Both tasks are stuck (resumeCount >= maxResumes)
+    const task1 = await createStuckTask('Stuck task 1', workerId1, 3);
+    const task2 = await createStuckTask('Stuck task 2', workerId2, 3);
+
+    // Mock startSession to simulate a session that immediately terminates (rate limited).
+    // The session starts successfully but the steward is immediately dead —
+    // getActiveSession returns null.
+    (sessionManager.startSession as ReturnType<typeof mock>).mockImplementation(
+      async (agentId: EntityId, options?: StartSessionOptions) => {
+        const session: SessionRecord = {
+          id: `session-cascade-${Date.now()}`,
+          agentId,
+          agentRole: 'steward',
+          workerMode: 'ephemeral',
+          status: 'running',
+          workingDirectory: options?.workingDirectory,
+          worktree: options?.worktree,
+          createdAt: createTimestamp(),
+          startedAt: createTimestamp(),
+          lastActivityAt: createTimestamp(),
+        };
+        // Don't store in sessions map — simulates session dying immediately
+        // so getActiveSession returns null
+        return { session, events: null };
+      }
+    );
+
+    const result = await daemon.recoverOrphanedAssignments();
+
+    // The steward should only have a session started ONCE — the cascade is prevented.
+    // spawnRecoveryStewardForTask returns normally (no error) when no steward is available,
+    // so processed counts both calls, but only one actually spawned a session.
+    expect(sessionManager.startSession).toHaveBeenCalledTimes(1);
+
+    // Verify at most one task was reassigned to the steward
+    const updatedTask1 = await api.get<Task>(task1.id);
+    const updatedTask2 = await api.get<Task>(task2.id);
+
+    const task1AssignedToSteward = (updatedTask1?.assignee as unknown as string) === (stewardId as unknown as string);
+    const task2AssignedToSteward = (updatedTask2?.assignee as unknown as string) === (stewardId as unknown as string);
+
+    // Exactly one should be assigned to the steward
+    const stewardAssignments = [task1AssignedToSteward, task2AssignedToSteward].filter(Boolean).length;
+    expect(stewardAssignments).toBe(1);
+  });
+
+  test('steward session that terminates immediately is not reassigned in same cycle', async () => {
+    // Create three workers with stuck tasks
+    const worker1 = await createTestWorker('imm-term-worker-1');
+    const worker2 = await createTestWorker('imm-term-worker-2');
+    const worker3 = await createTestWorker('imm-term-worker-3');
+    const workerId1 = worker1.id as unknown as EntityId;
+    const workerId2 = worker2.id as unknown as EntityId;
+    const workerId3 = worker3.id as unknown as EntityId;
+
+    // Only one recovery steward
+    await createTestRecoverySteward('recovery-steward-imm-term');
+
+    await createStuckTask('Stuck A', workerId1, 5);
+    await createStuckTask('Stuck B', workerId2, 5);
+    await createStuckTask('Stuck C', workerId3, 5);
+
+    // Session starts but immediately dies — getActiveSession returns null
+    (sessionManager.startSession as ReturnType<typeof mock>).mockImplementation(
+      async (agentId: EntityId, options?: StartSessionOptions) => {
+        const session: SessionRecord = {
+          id: `session-imm-${Date.now()}`,
+          agentId,
+          agentRole: 'steward',
+          workerMode: 'ephemeral',
+          status: 'running',
+          workingDirectory: options?.workingDirectory,
+          worktree: options?.worktree,
+          createdAt: createTimestamp(),
+          startedAt: createTimestamp(),
+          lastActivityAt: createTimestamp(),
+        };
+        return { session, events: null };
+      }
+    );
+
+    const result = await daemon.recoverOrphanedAssignments();
+
+    // Despite three stuck tasks, steward should only have a session started ONCE
+    expect(sessionManager.startSession).toHaveBeenCalledTimes(1);
+  });
+
+  test('multiple stewards can each handle one task per cycle', async () => {
+    // Create two workers with stuck tasks
+    const worker1 = await createTestWorker('multi-steward-worker-1');
+    const worker2 = await createTestWorker('multi-steward-worker-2');
+    const workerId1 = worker1.id as unknown as EntityId;
+    const workerId2 = worker2.id as unknown as EntityId;
+
+    // Create TWO recovery stewards
+    const steward1 = await createTestRecoverySteward('recovery-steward-multi-1');
+    const steward2 = await createTestRecoverySteward('recovery-steward-multi-2');
+    const stewardId1 = steward1.id as unknown as EntityId;
+    const stewardId2 = steward2.id as unknown as EntityId;
+
+    await createStuckTask('Multi stuck 1', workerId1, 3);
+    await createStuckTask('Multi stuck 2', workerId2, 3);
+
+    // Sessions start but immediately die
+    (sessionManager.startSession as ReturnType<typeof mock>).mockImplementation(
+      async (agentId: EntityId, options?: StartSessionOptions) => {
+        const session: SessionRecord = {
+          id: `session-multi-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          agentId,
+          agentRole: 'steward',
+          workerMode: 'ephemeral',
+          status: 'running',
+          workingDirectory: options?.workingDirectory,
+          worktree: options?.worktree,
+          createdAt: createTimestamp(),
+          startedAt: createTimestamp(),
+          lastActivityAt: createTimestamp(),
+        };
+        return { session, events: null };
+      }
+    );
+
+    const result = await daemon.recoverOrphanedAssignments();
+
+    // Both stewards should be spawned — one per stuck task
+    expect(sessionManager.startSession).toHaveBeenCalledTimes(2);
+    expect(result.processed).toBe(2);
+
+    // Each steward should be assigned to a different task
+    const startSessionCalls = (sessionManager.startSession as ReturnType<typeof mock>).mock.calls;
+    const spawnedAgentIds = startSessionCalls.map((call: unknown[]) => call[0]);
+    expect(new Set(spawnedAgentIds).size).toBe(2);
+  });
+});
+
 describe('startup non-blocking orphan recovery', () => {
   let api: QuarryAPI;
   let inboxService: InboxService;
