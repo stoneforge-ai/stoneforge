@@ -606,7 +606,9 @@ export class DispatchDaemonImpl implements DispatchDaemon {
     soonestReset?: string;
   } {
     const fallbackChain = this.settingsService?.getAgentDefaults().fallbackChain ?? [];
-    const isPaused = fallbackChain.length > 0 && this.rateLimitTracker.isAllLimited(fallbackChain);
+    const isPaused = fallbackChain.length > 0
+      ? this.rateLimitTracker.isAllLimited(fallbackChain)
+      : this.rateLimitTracker.isLimited('claude');
     const allLimits = this.rateLimitTracker.getAllLimits();
     const soonestReset = this.rateLimitTracker.getSoonestResetTime();
 
@@ -1032,6 +1034,17 @@ export class DispatchDaemonImpl implements DispatchDaemon {
         });
         if (workerTasks.length === 0) continue;
 
+        // 3b. Skip recovery entirely when all executables are rate-limited.
+        // Rate limits are transient — do NOT increment resumeCount, as that
+        // would eventually trigger the recovery steward for a non-stuck task.
+        const executableCheck = this.resolveExecutableWithFallback(worker);
+        if (executableCheck === 'all_limited') {
+          logger.debug(
+            `All executables rate-limited, skipping orphan recovery for ${worker.name}`
+          );
+          continue; // Skip this worker entirely — do NOT increment resumeCount
+        }
+
         // 4. Check if the task is stuck in a resume loop
         const taskAssignment = workerTasks[0];
         const resumeCount = taskAssignment.orchestratorMeta?.resumeCount ?? 0;
@@ -1095,6 +1108,16 @@ export class DispatchDaemonImpl implements DispatchDaemon {
           mergeStatus: ['pending', 'testing'],
         });
         if (stewardTasks.length === 0) continue;
+
+        // Skip recovery when all executables are rate-limited (same guard as Phase 1).
+        // Prevents stewardRecoveryCount from incrementing due to transient rate limits.
+        const stewardExecCheck = this.resolveExecutableWithFallback(steward);
+        if (stewardExecCheck === 'all_limited') {
+          logger.debug(
+            `All executables rate-limited, skipping steward orphan recovery for ${steward.name}`
+          );
+          continue;
+        }
 
         const orphanedAssignment = stewardTasks[0];
 
@@ -1547,8 +1570,13 @@ export class DispatchDaemonImpl implements DispatchDaemon {
     try {
       // Check if all executables in the fallback chain are rate-limited.
       // When paused, skip dispatch-related polls but still run non-dispatch work.
+      // When no fallback chain is configured, check if the default provider is limited —
+      // an empty chain previously made allLimited always false, letting orphan recovery
+      // run every cycle even when the only executable was rate-limited.
       const fallbackChain = this.settingsService?.getAgentDefaults().fallbackChain ?? [];
-      const allLimited = fallbackChain.length > 0 && this.rateLimitTracker.isAllLimited(fallbackChain);
+      const allLimited = fallbackChain.length > 0
+        ? this.rateLimitTracker.isAllLimited(fallbackChain)
+        : this.rateLimitTracker.isLimited('claude');
 
       if (allLimited) {
         // Schedule a wake-up timer so we re-check when the soonest limit expires

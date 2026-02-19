@@ -2008,7 +2008,7 @@ describe('DispatchDaemon Rate Limit Integration', () => {
     expect(executables).toEqual(['claude', 'claude2']);
   });
 
-  test('getRateLimitStatus isPaused is false when no fallback chain is configured', async () => {
+  test('getRateLimitStatus isPaused is true when default provider is rate-limited even without fallback chain', async () => {
     // Create a daemon with no settings service (fallbackChain defaults to [])
     await daemon.stop();
 
@@ -2025,12 +2025,14 @@ describe('DispatchDaemon Rate Limit Integration', () => {
       // No poolService, no settingsService
     );
 
-    // Even marking executables as limited should not cause isPaused
-    // because there's no fallback chain to check against
+    // When the default provider ('claude') is rate-limited and there's no fallback chain,
+    // isPaused should be true — there's no alternative executable to fall back to.
+    // Previously this was always false with an empty chain, which caused orphan recovery
+    // to run every cycle and incorrectly increment resumeCount for rate-limited tasks.
     noSettingsDaemon.handleRateLimitDetected('claude', new Date(Date.now() + 60_000));
 
     const status = noSettingsDaemon.getRateLimitStatus();
-    expect(status.isPaused).toBe(false);
+    expect(status.isPaused).toBe(true);
     expect(status.limits).toHaveLength(1);
 
     await noSettingsDaemon.stop();
@@ -2435,5 +2437,349 @@ describe('startup non-blocking orphan recovery', () => {
 
     // Clean up
     resolveRecovery!();
+  });
+});
+
+describe('recoverOrphanedAssignments - rate limit guard', () => {
+  let api: QuarryAPI;
+  let inboxService: InboxService;
+  let agentRegistry: AgentRegistry;
+  let taskAssignment: TaskAssignmentService;
+  let dispatchService: DispatchService;
+  let sessionManager: SessionManager;
+  let worktreeManager: WorktreeManager;
+  let stewardScheduler: StewardScheduler;
+  let settingsService: SettingsService;
+  let daemon: DispatchDaemon;
+  let testDbPath: string;
+  let systemEntity: EntityId;
+
+  beforeEach(async () => {
+    testDbPath = `/tmp/dispatch-daemon-ratelimit-orphan-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`;
+    const storage = createStorage({ path: testDbPath, create: true });
+    initializeSchema(storage);
+
+    api = createQuarryAPI(storage);
+    inboxService = createInboxService(storage);
+    agentRegistry = createAgentRegistry(api);
+    taskAssignment = createTaskAssignmentService(api);
+    dispatchService = createDispatchService(api, taskAssignment, agentRegistry);
+    sessionManager = createMockSessionManager();
+    worktreeManager = createMockWorktreeManager();
+    stewardScheduler = createMockStewardScheduler();
+    settingsService = createMockSettingsService({
+      fallbackChain: ['claude2', 'claude'],
+    });
+
+    const { createEntity, EntityTypeValue } = await import('@stoneforge/core');
+    const entity = await createEntity({
+      name: 'test-system-ratelimit-orphan',
+      entityType: EntityTypeValue.SYSTEM,
+      createdBy: 'system:test' as EntityId,
+    });
+    const saved = await api.create(entity as unknown as Record<string, unknown> & { createdBy: EntityId });
+    systemEntity = saved.id as unknown as EntityId;
+
+    const config: DispatchDaemonConfig = {
+      pollIntervalMs: 100,
+      workerAvailabilityPollEnabled: false,
+      inboxPollEnabled: false,
+      stewardTriggerPollEnabled: false,
+      workflowTaskPollEnabled: false,
+      orphanRecoveryEnabled: true,
+      maxResumeAttemptsBeforeRecovery: 3,
+    };
+
+    daemon = new DispatchDaemonImpl(
+      api,
+      agentRegistry,
+      sessionManager,
+      dispatchService,
+      worktreeManager,
+      taskAssignment,
+      stewardScheduler,
+      inboxService,
+      config,
+      undefined, // poolService
+      settingsService
+    );
+  });
+
+  afterEach(async () => {
+    await daemon.stop();
+    if (fs.existsSync(testDbPath)) {
+      fs.unlinkSync(testDbPath);
+    }
+  });
+
+  async function createTestWorker(name: string): Promise<AgentEntity> {
+    return agentRegistry.registerWorker({
+      name,
+      workerMode: 'ephemeral',
+      createdBy: systemEntity,
+      maxConcurrentTasks: 1,
+    });
+  }
+
+  async function createAssignedTask(
+    title: string,
+    workerId: EntityId,
+    meta?: { sessionId?: string; worktree?: string; branch?: string; resumeCount?: number }
+  ): Promise<Task> {
+    const task = await createTask({
+      title,
+      createdBy: systemEntity,
+      status: TaskStatus.IN_PROGRESS,
+      assignee: workerId,
+    });
+    const saved = await api.create(task as unknown as Record<string, unknown> & { createdBy: EntityId }) as Task;
+
+    await api.update(saved.id, {
+      metadata: updateOrchestratorTaskMeta(undefined, {
+        assignedAgent: workerId,
+        branch: meta?.branch ?? 'agent/test/task-branch',
+        worktree: meta?.worktree ?? '/worktrees/test/task',
+        sessionId: meta?.sessionId,
+        resumeCount: meta?.resumeCount,
+      }),
+    });
+
+    return (await api.get<Task>(saved.id))!;
+  }
+
+  test('does not increment resumeCount when all executables are rate-limited', async () => {
+    const worker = await createTestWorker('rate-limited-worker');
+    const workerId = worker.id as unknown as EntityId;
+    const task = await createAssignedTask('Task during rate limit', workerId, {
+      worktree: '/worktrees/rate-limited-worker/task',
+      resumeCount: 1,
+    });
+
+    // Mark all executables as rate-limited
+    const resetsAt = new Date(Date.now() + 60_000);
+    daemon.handleRateLimitDetected('claude2', resetsAt);
+    daemon.handleRateLimitDetected('claude', resetsAt);
+
+    const result = await daemon.recoverOrphanedAssignments();
+
+    // Should skip the worker entirely — no processing, no errors
+    expect(result.processed).toBe(0);
+    expect(result.errors).toBe(0);
+
+    // resumeCount should NOT have been incremented
+    const updatedTask = await api.get<Task>(task.id);
+    const meta = getOrchestratorTaskMeta(updatedTask!.metadata as Record<string, unknown>);
+    expect(meta?.resumeCount).toBe(1); // Still 1, not 2
+  });
+
+  test('does not spawn recovery steward for rate-limited tasks even at maxResumes threshold', async () => {
+    const worker = await createTestWorker('threshold-worker');
+    const workerId = worker.id as unknown as EntityId;
+
+    // Create a recovery steward so spawnRecoveryStewardForTask has someone to use
+    await agentRegistry.registerSteward({
+      name: 'test-recovery-steward',
+      stewardFocus: 'recovery',
+      createdBy: systemEntity,
+      maxConcurrentTasks: 1,
+    });
+
+    // Task is at the resumeCount threshold (3), but executables are rate-limited
+    await createAssignedTask('Task at threshold', workerId, {
+      worktree: '/worktrees/threshold-worker/task',
+      resumeCount: 3,
+    });
+
+    // Mark all executables as rate-limited
+    const resetsAt = new Date(Date.now() + 60_000);
+    daemon.handleRateLimitDetected('claude2', resetsAt);
+    daemon.handleRateLimitDetected('claude', resetsAt);
+
+    const result = await daemon.recoverOrphanedAssignments();
+
+    // Should skip entirely — no recovery steward spawned
+    expect(result.processed).toBe(0);
+    expect(result.errors).toBe(0);
+
+    // Session should NOT have been started (neither resume nor fresh spawn)
+    expect(sessionManager.startSession).not.toHaveBeenCalled();
+    expect(sessionManager.resumeSession).not.toHaveBeenCalled();
+  });
+
+  test('resumes normal orphan recovery when rate limits expire', async () => {
+    const worker = await createTestWorker('expiry-worker');
+    const workerId = worker.id as unknown as EntityId;
+    const task = await createAssignedTask('Task waiting for rate limit expiry', workerId, {
+      worktree: '/worktrees/expiry-worker/task',
+      resumeCount: 1,
+    });
+
+    // Mark all executables as rate-limited with a past expiry (already expired)
+    const expiredAt = new Date(Date.now() - 1000);
+    daemon.handleRateLimitDetected('claude2', expiredAt);
+    daemon.handleRateLimitDetected('claude', expiredAt);
+
+    const result = await daemon.recoverOrphanedAssignments();
+
+    // Rate limits expired — should process normally
+    expect(result.processed).toBe(1);
+
+    // resumeCount should have been incremented
+    const updatedTask = await api.get<Task>(task.id);
+    const meta = getOrchestratorTaskMeta(updatedTask!.metadata as Record<string, unknown>);
+    expect(meta?.resumeCount).toBe(2);
+  });
+
+  test('skips steward orphan recovery when all executables are rate-limited (Phase 2)', async () => {
+    const steward = await agentRegistry.registerSteward({
+      name: 'rate-limited-steward',
+      stewardFocus: 'merge',
+      createdBy: systemEntity,
+      maxConcurrentTasks: 1,
+    });
+    const stewardId = steward.id as unknown as EntityId;
+
+    // Create a REVIEW task assigned to the steward with pending mergeStatus
+    const task = await createTask({
+      title: 'Review task during rate limit',
+      createdBy: systemEntity,
+      status: TaskStatus.REVIEW,
+      assignee: stewardId,
+    });
+    const saved = await api.create(task as unknown as Record<string, unknown> & { createdBy: EntityId }) as Task;
+
+    await api.update(saved.id, {
+      metadata: updateOrchestratorTaskMeta(undefined, {
+        assignedAgent: stewardId,
+        mergeStatus: 'testing',
+        sessionId: 'steward-session-rl',
+        branch: 'agent/worker/task-branch',
+        stewardRecoveryCount: 1,
+      }),
+    });
+
+    // Mark all executables as rate-limited
+    const resetsAt = new Date(Date.now() + 60_000);
+    daemon.handleRateLimitDetected('claude2', resetsAt);
+    daemon.handleRateLimitDetected('claude', resetsAt);
+
+    const result = await daemon.recoverOrphanedAssignments();
+
+    // Should skip steward recovery entirely
+    expect(result.processed).toBe(0);
+    expect(result.errors).toBe(0);
+
+    // stewardRecoveryCount should NOT have been incremented
+    const updatedTask = await api.get<Task>(saved.id);
+    const updatedMeta = getOrchestratorTaskMeta(updatedTask!.metadata as Record<string, unknown>);
+    expect(updatedMeta?.stewardRecoveryCount).toBe(1); // Still 1, not 2
+
+    // No session activity
+    expect(sessionManager.startSession).not.toHaveBeenCalled();
+    expect(sessionManager.resumeSession).not.toHaveBeenCalled();
+  });
+
+  test('processes orphan recovery when only some executables are rate-limited (fallback available)', async () => {
+    const worker = await createTestWorker('partial-limit-worker');
+    const workerId = worker.id as unknown as EntityId;
+    await createAssignedTask('Task with partial rate limit', workerId, {
+      worktree: '/worktrees/partial-limit-worker/task',
+      resumeCount: 0,
+    });
+
+    // Only mark 'claude' as limited — 'claude2' is still available in the fallback chain
+    const resetsAt = new Date(Date.now() + 60_000);
+    daemon.handleRateLimitDetected('claude', resetsAt);
+
+    const result = await daemon.recoverOrphanedAssignments();
+
+    // Should proceed with recovery using fallback executable
+    expect(result.processed).toBe(1);
+  });
+});
+
+describe('runPollCycle - allLimited with empty fallback chain', () => {
+  let api: QuarryAPI;
+  let inboxService: InboxService;
+  let agentRegistry: AgentRegistry;
+  let taskAssignment: TaskAssignmentService;
+  let dispatchService: DispatchService;
+  let sessionManager: SessionManager;
+  let worktreeManager: WorktreeManager;
+  let stewardScheduler: StewardScheduler;
+  let settingsService: SettingsService;
+  let daemon: DispatchDaemon;
+  let testDbPath: string;
+  let systemEntity: EntityId;
+
+  beforeEach(async () => {
+    testDbPath = `/tmp/dispatch-daemon-empty-chain-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`;
+    const storage = createStorage({ path: testDbPath, create: true });
+    initializeSchema(storage);
+
+    api = createQuarryAPI(storage);
+    inboxService = createInboxService(storage);
+    agentRegistry = createAgentRegistry(api);
+    taskAssignment = createTaskAssignmentService(api);
+    dispatchService = createDispatchService(api, taskAssignment, agentRegistry);
+    sessionManager = createMockSessionManager();
+    worktreeManager = createMockWorktreeManager();
+    stewardScheduler = createMockStewardScheduler();
+    // Empty fallback chain
+    settingsService = createMockSettingsService({
+      fallbackChain: [],
+    });
+
+    const { createEntity, EntityTypeValue } = await import('@stoneforge/core');
+    const entity = await createEntity({
+      name: 'test-system-empty-chain',
+      entityType: EntityTypeValue.SYSTEM,
+      createdBy: 'system:test' as EntityId,
+    });
+    const saved = await api.create(entity as unknown as Record<string, unknown> & { createdBy: EntityId });
+    systemEntity = saved.id as unknown as EntityId;
+
+    const config: DispatchDaemonConfig = {
+      pollIntervalMs: 100,
+      workerAvailabilityPollEnabled: true,
+      inboxPollEnabled: false,
+      stewardTriggerPollEnabled: false,
+      workflowTaskPollEnabled: false,
+      orphanRecoveryEnabled: true,
+    };
+
+    daemon = new DispatchDaemonImpl(
+      api,
+      agentRegistry,
+      sessionManager,
+      dispatchService,
+      worktreeManager,
+      taskAssignment,
+      stewardScheduler,
+      inboxService,
+      config,
+      undefined,
+      settingsService
+    );
+  });
+
+  afterEach(async () => {
+    await daemon.stop();
+    if (fs.existsSync(testDbPath)) {
+      fs.unlinkSync(testDbPath);
+    }
+  });
+
+  test('reports isPaused when default provider is rate-limited with empty fallback chain', () => {
+    // Mark the default provider as rate-limited
+    daemon.handleRateLimitDetected('claude', new Date(Date.now() + 60_000));
+
+    const status = daemon.getRateLimitStatus();
+    expect(status.isPaused).toBe(true);
+  });
+
+  test('reports not paused when default provider is not rate-limited with empty fallback chain', () => {
+    const status = daemon.getRateLimitStatus();
+    expect(status.isPaused).toBe(false);
   });
 });
