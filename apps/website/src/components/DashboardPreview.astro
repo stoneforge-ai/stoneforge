@@ -1,0 +1,2402 @@
+---
+const tasks = [
+  { id: 'el-3xze', title: 'Move bulk task update/delete routes t...', status: 'Closed', priority: 'High', pc: '#fbbf24', assignee: '', branch: 'el-3xze-move-...' },
+  { id: 'el-44n9', title: 'Add PATCH /api/tasks/bulk endpoint to...', status: 'Closed', priority: 'Critical', pc: '#f87171', assignee: '', branch: 'el-44n9-add-p...' },
+  { id: 'el-4w62', title: 'Fix flaky IdLengthCache age test in CI', status: 'Closed', priority: 'Critical', pc: '#f87171', assignee: '', branch: 'el-4w62-fix-f...' },
+  { id: 'el-1lvt', title: 'Add bulk set-status action to smithy-w...', status: 'Closed', priority: 'Medium', pc: '#60a5fa', assignee: '', branch: 'el-1lvt-add-b...' },
+  { id: 'el-47n4', title: 'Fix startup blocking on stale session r...', status: 'Closed', priority: 'Critical', pc: '#f87171', assignee: '', branch: 'el-47n4-fix-s...' },
+  { id: 'el-e9xb', title: 'Make waitForInit reject immediately on...', status: 'Closed', priority: 'Critical', pc: '#f87171', assignee: '', branch: 'el-e9xb-make-...' },
+  { id: 'el-3y9e', title: 'Add session termination to task reset ...', status: 'Closed', priority: 'High', pc: '#fbbf24', assignee: '', branch: 'el-3y9e-add-s...' },
+  { id: 'el-4stp', title: 'Unskip dispatch daemon priority sortin...', status: 'Closed', priority: 'Low', pc: 'var(--site-text-ghost)', assignee: '', branch: 'el-4stp-unski...' },
+  { id: 'el-w71j', title: 'Fix non-atomic worker unassignment i...', status: 'Closed', priority: 'High', pc: '#fbbf24', assignee: '', branch: 'el-w71j-fix-n...' },
+];
+
+const agents = [
+  { name: 'Director', role: 'Director', rc: 'var(--site-warning)', task: 'SF-42', tt: 'Plan execution', out: 'Dispatching task #14...', cursor: false },
+  { name: 'Worker-1', role: 'Worker', rc: 'var(--site-accent)', task: 'SF-42', tt: 'Auth flow', out: 'Implementing JWT...', cursor: true },
+  { name: 'Worker-2', role: 'Worker', rc: 'var(--site-accent)', task: 'SF-45', tt: 'WebSocket fix', out: 'Running tests (14/27)', cursor: false },
+  { name: 'Worker-3', role: 'Worker', rc: 'var(--site-accent)', task: 'SF-50', tt: 'DB migration', out: 'Waiting on dependency...', cursor: false },
+  { name: 'Steward-1', role: 'Steward', rc: '#818cf8', task: 'SF-46', tt: 'Merge review', out: 'Checking CI status...', cursor: false },
+  { name: 'Steward-2', role: 'Steward', rc: '#818cf8', task: '', tt: 'Monitoring', out: 'Watching for MRs...', cursor: false },
+];
+
+const completions = [
+  { id: 'SF-38', title: 'Add JWT validation to auth', time: '2m ago', merged: true, assignee: 'Worker-1' },
+  { id: 'SF-36', title: 'Update API schema for users', time: '8m ago', merged: true, assignee: 'Worker-2' },
+  { id: 'SF-34', title: 'Fix worker reconnect logic', time: '14m ago', merged: false, assignee: 'Worker-3' },
+];
+
+const mrs = [
+  { title: 'Move bulk task update/delete routes to shared-routes package', branch: 'agent/joe-claude/el-3xze-m...', time: '4h ago' },
+  { title: 'Add PATCH /api/tasks/bulk endpoint to smithy-server', branch: 'agent/joe-claude/el-44n9-a...', time: '4h ago' },
+  { title: 'Fix flaky IdLengthCache age test in CI', branch: 'agent/joe-claude/el-4w62-f...', time: '4h ago' },
+  { title: 'Add bulk set-status action to smithy-web task list', branch: 'agent/bob-claude/el-1lvt-a...', time: '7h ago' },
+  { title: 'Fix startup blocking on stale session resume in recoverOrphanedAssignments', branch: 'agent/joe-claude/el-47n4-f...', time: '7h ago' },
+  { title: 'Make waitForInit reject immediately on resume_failed or session exit', branch: 'agent/joe-claude/el-e9xb-m...', time: '8h ago' },
+];
+
+const plans = [
+  { title: 'Fix dispatch daemon crash recovery bugs', id: 'el-424w', status: 'Completed', updated: '7h ago', pct: 100, completed: 5, inProgress: 0, blocked: 0, remaining: 0, tasks: ['Fix terminated->terminated ra...', 'Fix startup blocking on stale se...', 'Add session termination to tas...'] },
+  { title: 'Harden rate limit parsing and add fallback sleep defaults', id: 'el-3b8k', status: 'Completed', updated: '10h ago', pct: 100, completed: 4, inProgress: 0, blocked: 0, remaining: 0, tasks: [] },
+  { title: 'Rate limit detection, fallback chain, and daemon pause', id: 'el-2m9p', status: 'Completed', updated: '10h ago', pct: 100, completed: 3, inProgress: 0, blocked: 0, remaining: 0, tasks: [] },
+  { title: 'Fix steward infinite retry loop on already-merged branches', id: 'el-5v2x', status: 'Completed', updated: '11h ago', pct: 100, completed: 2, inProgress: 0, blocked: 0, remaining: 0, tasks: [] },
+  { title: 'Fix headless spawn for shell-defined executables', id: 'el-8n4q', status: 'Completed', updated: '12h ago', pct: 100, completed: 3, inProgress: 0, blocked: 0, remaining: 0, tasks: [] },
+  { title: 'sf init: auto-install AGENTS.md and skills', id: 'el-1k7w', status: 'Completed', updated: '22h ago', pct: 100, completed: 4, inProgress: 0, blocked: 0, remaining: 0, tasks: [] },
+];
+
+const inbox = [
+  { text: 'Completed SF-38: JWT validation', sender: 'Worker-1', time: '2m', unread: true, type: 'agent' },
+  { text: 'Merge conflict on feat/rate-limiter', sender: 'Steward-1', time: '5m', unread: true, type: 'agent' },
+  { text: 'Needs approval for SF-50', sender: 'Worker-3', time: '12m', unread: true, type: 'agent' },
+  { text: 'CI pipeline passed for !12', sender: 'System', time: '18m', unread: false, type: 'system' },
+];
+
+const workflows = [
+  { name: 'Template', slug: 'workflow_template', steps: 2, version: 'v1' },
+];
+
+const docs = [
+  { name: 'Critical Gotchas', type: 'markdown', updated: '2/18/2026' },
+  { name: 'CLI Reference', type: 'markdown', updated: '2/18/2026', selected: true },
+  { name: 'Documentation Directory', type: 'markdown', updated: '2/18/2026' },
+  { name: 'Orchestrator Services Reference', type: 'markdown', updated: '2/18/2026' },
+  { name: 'Settings API Reference', type: 'markdown', updated: '2/18/2026' },
+  { name: 'Orchestrator Runtime Reference', type: 'markdown', updated: '2/17/2026' },
+  { name: 'OrchestratorAPI Reference', type: 'markdown', updated: '2/17/2026' },
+  { name: 'Custom Stewards', type: 'markdown', updated: '2/17/2026' },
+  { name: 'SDK Services Reference', type: 'markdown', updated: '2/17/2026' },
+];
+
+const channels = [
+  { name: 'ui-modal-channel-1770...', count: 2, section: 'channels' },
+  { name: 'visible-channel-177036...', count: 2, section: 'channels' },
+];
+
+const directMessages = [
+  { name: 'Director:docs-steward', count: 2 },
+  { name: 'Director:d-steward-1', count: 2 },
+  { name: 'Director:m-steward-1', count: 2 },
+  { name: 'Director:m-steward-2', count: 2 },
+  { name: 'd-steward-1:operator', count: 2 },
+  { name: 'm-steward-2:operator', count: 2 },
+  { name: 'm-steward-1:operator', count: 2 },
+  { name: 'Director:alice-claude', count: 2 },
+  { name: 'Director:joe-claude', count: 2 },
+  { name: 'Director:bob-claude', count: 2 },
+  { name: 'joe-claude:operator', count: 2 },
+  { name: 'bob-claude:operator', count: 2 },
+  { name: 'claude-worker-1:operator', count: 2 },
+  { name: 'Director:merger', count: 2, selected: true },
+  { name: 'Director:merger-2', count: 2 },
+];
+---
+
+<div
+    class="relative rounded-xl border border-[var(--site-border-accent)] bg-[var(--site-bg-void)] overflow-hidden flex flex-col"
+    id="solutions-dashboard"
+    style="box-shadow: 0 0 80px rgba(96,165,250,0.06), 0 25px 80px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.03); aspect-ratio: 21/9;"
+  >
+    <!-- Hidden URL tracker for JS navigation -->
+    <span class="hidden" data-url></span>
+
+    <!-- Dashboard body -->
+    <div class="flex flex-1 min-h-0">
+      <!-- ═══════════════ SIDEBAR ═══════════════ -->
+      <div class="w-[120px] border-r border-[var(--site-border)] flex flex-col bg-[var(--site-bg-primary)] flex-shrink-0">
+        <!-- Logo -->
+        <div class="flex items-center gap-1.5 px-2.5 h-[28px] border-b border-[var(--site-border)] bg-[var(--site-bg-elevated)]/40">
+          <img src="/logo.svg" class="w-4 h-4 flex-shrink-0" alt="" />
+          <span class="text-[8px] font-semibold text-[var(--site-text-primary)] tracking-wide" style="font-family: var(--font-headline);">stoneforge</span>
+          <svg class="w-2.5 h-2.5 text-[var(--site-text-ghost)] ml-auto flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="7,2 3,5 7,8"/></svg>
+        </div>
+
+        <!-- Nav sections -->
+        <nav class="flex-1 px-1.5 py-2 space-y-2 overflow-hidden">
+          <!-- Overview -->
+          <div>
+            <div class="text-[5.5px] uppercase tracking-[0.1em] text-[var(--site-text-ghost)] px-2 mb-0.5 font-semibold">Overview</div>
+            <div class="space-y-px">
+              <div class="dp-nav relative flex items-center gap-1.5 px-2 py-[3px] rounded" data-nav="activity">
+                <svg class="dp-icon w-2.5 h-2.5 text-[var(--site-text-ghost)] flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="1,5 3,2 5,8 7,3 9,5"/></svg>
+                <span class="dp-label text-[7px] text-[var(--site-text-ghost)]">Activity</span>
+              </div>
+              <div class="dp-nav relative flex items-center gap-1.5 px-2 py-[3px] rounded" data-nav="inbox">
+                <svg class="dp-icon w-2.5 h-2.5 text-[var(--site-text-ghost)] flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1" y="3" width="8" height="6" rx="1"/><polyline points="1,4 5,7 9,4"/></svg>
+                <span class="dp-label text-[7px] text-[var(--site-text-ghost)]">Inbox</span>
+                <span class="ml-auto text-[5px] px-1 py-px rounded-full bg-[var(--site-accent-subtle)] text-[var(--site-accent)] font-semibold">252</span>
+              </div>
+              <div class="dp-nav relative flex items-center gap-1.5 px-2 py-[3px] rounded" data-nav="editor">
+                <svg class="dp-icon w-2.5 h-2.5 text-[var(--site-text-ghost)] flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="2" y="1" width="6" height="8" rx="1"/><line x1="4" y1="4" x2="4" y2="6"/><line x1="6" y1="4" x2="6" y2="6"/></svg>
+                <span class="dp-label text-[7px] text-[var(--site-text-ghost)]">Editor</span>
+              </div>
+            </div>
+          </div>
+          <!-- Work -->
+          <div>
+            <div class="text-[5.5px] uppercase tracking-[0.1em] text-[var(--site-text-ghost)] px-2 mb-0.5 font-semibold">Work</div>
+            <div class="space-y-px">
+              <div class="dp-nav dp-active relative flex items-center gap-1.5 px-2 py-[3px] rounded" data-nav="tasks" data-active>
+                <svg class="dp-icon w-2.5 h-2.5 flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1.5" y="1.5" width="7" height="7" rx="1"/><polyline points="3,5.5 4.5,7 7,3.5"/></svg>
+                <span class="dp-label text-[7px] font-medium">Tasks</span>
+              </div>
+              <div class="dp-nav relative flex items-center gap-1.5 px-2 py-[3px] rounded" data-nav="merge-requests">
+                <svg class="dp-icon w-2.5 h-2.5 text-[var(--site-text-ghost)] flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="3" cy="3" r="1.5"/><circle cx="3" cy="7" r="1.5"/><circle cx="7" cy="5" r="1.5"/><line x1="4.5" y1="3.5" x2="5.5" y2="4.5"/><line x1="4.5" y1="6.5" x2="5.5" y2="5.5"/></svg>
+                <span class="dp-label text-[7px] text-[var(--site-text-ghost)]">Merge Requests</span>
+              </div>
+              <div class="dp-nav relative flex items-center gap-1.5 px-2 py-[3px] rounded" data-nav="plans">
+                <svg class="dp-icon w-2.5 h-2.5 text-[var(--site-text-ghost)] flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="2" y="1" width="6" height="8" rx="1"/><line x1="4" y1="3.5" x2="7" y2="3.5"/><line x1="4" y1="5.5" x2="7" y2="5.5"/><line x1="4" y1="7.5" x2="6" y2="7.5"/></svg>
+                <span class="dp-label text-[7px] text-[var(--site-text-ghost)]">Plans</span>
+              </div>
+              <div class="dp-nav relative flex items-center gap-1.5 px-2 py-[3px] rounded" data-nav="workflows">
+                <svg class="dp-icon w-2.5 h-2.5 text-[var(--site-text-ghost)] flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="2" cy="5" r="1"/><circle cx="8" cy="5" r="1"/><circle cx="5" cy="2" r="1"/><circle cx="5" cy="8" r="1"/><line x1="3" y1="5" x2="4" y2="5"/><line x1="6" y1="5" x2="7" y2="5"/></svg>
+                <span class="dp-label text-[7px] text-[var(--site-text-ghost)]">Workflows</span>
+              </div>
+            </div>
+          </div>
+          <!-- Orchestration -->
+          <div>
+            <div class="text-[5.5px] uppercase tracking-[0.1em] text-[var(--site-text-ghost)] px-2 mb-0.5 font-semibold">Orchestration</div>
+            <div class="space-y-px">
+              <div class="dp-nav relative flex items-center gap-1.5 px-2 py-[3px] rounded" data-nav="agents">
+                <svg class="dp-icon w-2.5 h-2.5 text-[var(--site-text-ghost)] flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="5" cy="3" r="2"/><path d="M1.5,9 C1.5,6.5 3,5.5 5,5.5 C7,5.5 8.5,6.5 8.5,9"/></svg>
+                <span class="dp-label text-[7px] text-[var(--site-text-ghost)]">Agents</span>
+              </div>
+              <div class="dp-nav relative flex items-center gap-1.5 px-2 py-[3px] rounded" data-nav="workspaces">
+                <svg class="dp-icon w-2.5 h-2.5 text-[var(--site-text-ghost)] flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1" y="1" width="3.5" height="3.5" rx="0.5"/><rect x="5.5" y="1" width="3.5" height="3.5" rx="0.5"/><rect x="1" y="5.5" width="3.5" height="3.5" rx="0.5"/><rect x="5.5" y="5.5" width="3.5" height="3.5" rx="0.5"/></svg>
+                <span class="dp-label text-[7px] text-[var(--site-text-ghost)]">Workspaces</span>
+              </div>
+            </div>
+          </div>
+          <!-- Collaborate -->
+          <div>
+            <div class="text-[5.5px] uppercase tracking-[0.1em] text-[var(--site-text-ghost)] px-2 mb-0.5 font-semibold">Collaborate</div>
+            <div class="space-y-px">
+              <div class="dp-nav relative flex items-center gap-1.5 px-2 py-[3px] rounded" data-nav="messages">
+                <svg class="dp-icon w-2.5 h-2.5 text-[var(--site-text-ghost)] flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M2,1.5 h6 a1,1 0 0,1 1,1 v4 a1,1 0 0,1 -1,1 h-3.5 l-2,2 v-2 h-0.5 a1,1 0 0,1 -1,-1 v-4 a1,1 0 0,1 1,-1 z"/></svg>
+                <span class="dp-label text-[7px] text-[var(--site-text-ghost)]">Messages</span>
+              </div>
+              <div class="dp-nav relative flex items-center gap-1.5 px-2 py-[3px] rounded" data-nav="documents">
+                <svg class="dp-icon w-2.5 h-2.5 text-[var(--site-text-ghost)] flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M3,1 h3 l2,2 v6 a1,1 0 0,1 -1,1 h-4 a1,1 0 0,1 -1,-1 v-7 a1,1 0 0,1 1,-1 z"/><polyline points="6,1 6,3 8,3"/></svg>
+                <span class="dp-label text-[7px] text-[var(--site-text-ghost)]">Documents</span>
+              </div>
+            </div>
+          </div>
+          <!-- Analytics -->
+          <div>
+            <div class="text-[5.5px] uppercase tracking-[0.1em] text-[var(--site-text-ghost)] px-2 mb-0.5 font-semibold">Analytics</div>
+            <div class="space-y-px">
+              <div class="dp-nav relative flex items-center gap-1.5 px-2 py-[3px] rounded" data-nav="metrics">
+                <svg class="dp-icon w-2.5 h-2.5 text-[var(--site-text-ghost)] flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1" y="5" width="2" height="4" rx="0.3"/><rect x="4" y="3" width="2" height="6" rx="0.3"/><rect x="7" y="1" width="2" height="8" rx="0.3"/></svg>
+                <span class="dp-label text-[7px] text-[var(--site-text-ghost)]">Metrics</span>
+              </div>
+            </div>
+          </div>
+        </nav>
+
+        <!-- Bottom: Settings -->
+        <div class="px-1.5 py-1.5 border-t border-[var(--site-border)]">
+          <div class="dp-nav relative flex items-center gap-1.5 px-2 py-[3px] rounded" data-nav="settings">
+            <svg class="dp-icon w-2.5 h-2.5 text-[var(--site-text-ghost)] flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="5" cy="5" r="2.5"/><line x1="5" y1="1" x2="5" y2="2"/><line x1="5" y1="8" x2="5" y2="9"/><line x1="1" y1="5" x2="2" y2="5"/><line x1="8" y1="5" x2="9" y2="5"/></svg>
+            <span class="dp-label text-[7px] text-[var(--site-text-ghost)]">Settings</span>
+          </div>
+          <div class="px-2 mt-1 text-[5.5px] text-[var(--site-text-ghost)]">
+            <span class="px-1 py-px rounded bg-[var(--site-bg-surface)] text-[var(--site-text-ghost)]" style="font-family: var(--font-code);">&#8984;K</span>
+            <span class="ml-0.5">for commands</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════ MAIN CONTENT ═══════════════ -->
+      <div class="flex-1 min-w-0 flex flex-col">
+
+        <!-- App header -->
+        <div class="flex items-center justify-between h-[28px] px-2.5 border-b border-[var(--site-border)] bg-[var(--site-bg-elevated)]/40 flex-shrink-0">
+          <!-- Breadcrumbs -->
+          <div class="flex items-center gap-1 text-[7px]" data-breadcrumb>
+            <svg class="w-2.5 h-2.5 text-[var(--site-accent)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1.5" y="1.5" width="7" height="7" rx="1"/><polyline points="3,5.5 4.5,7 7,3.5"/></svg>
+            <span class="font-medium text-[var(--site-text-primary)]" data-breadcrumb-label>Tasks</span>
+          </div>
+          <!-- Header controls -->
+          <div class="flex items-center gap-1.5">
+            <!-- Command palette trigger -->
+            <div class="flex items-center gap-1 px-1.5 py-[2px] rounded border border-[var(--site-border)] text-[5.5px] text-[var(--site-text-ghost)] bg-[var(--site-bg-surface)]">
+              <svg class="w-2 h-2" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="4.5" cy="4.5" r="3"/><line x1="7" y1="7" x2="9" y2="9"/></svg>
+              <span>Search...</span>
+              <span class="ml-1 px-0.5 py-px rounded bg-[var(--site-bg-elevated)] text-[5px] font-mono">&#8984;K</span>
+            </div>
+            <!-- User selector -->
+            <div class="flex items-center gap-0.5 px-1 py-[2px] rounded border border-[var(--site-border)] text-[5.5px] text-[var(--site-text-secondary)]">
+              <svg class="w-2 h-2" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="5" cy="3.5" r="2"/><path d="M1.5,9.5 C1.5,7 3,6 5,6 C7,6 8.5,7 8.5,9.5"/></svg>
+              <span class="font-medium">operator</span>
+              <svg class="w-1.5 h-1.5 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="3,4 5,6 7,4"/></svg>
+            </div>
+            <!-- Autopilot indicator -->
+            <div class="flex items-center gap-0.5 px-1 py-[2px] rounded text-[5.5px]" style="background: rgba(74,222,128,0.06);">
+              <svg class="w-2 h-2 text-[var(--site-success)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1" y="2" width="8" height="6" rx="1.5"/><circle cx="5" cy="5" r="1.5" fill="currentColor"/></svg>
+              <span class="text-[var(--site-success)] font-medium">Autopilot</span>
+              <span class="w-1 h-1 rounded-full bg-[var(--site-success)] animate-pulse"></span>
+            </div>
+            <!-- Stop All button -->
+            <div class="flex items-center gap-0.5 px-1 py-[2px] rounded text-[5.5px] font-medium border border-[var(--site-border)]" style="color: var(--site-error); background: rgba(248,113,113,0.06);">
+              <svg class="w-2 h-2" viewBox="0 0 10 10" fill="currentColor"><rect x="2" y="2" width="6" height="6" rx="0.5"/></svg>
+              <span>Stop All</span>
+              <span class="px-0.5 py-px rounded-full bg-[var(--site-error)]/20 text-[4.5px]">1</span>
+            </div>
+            <!-- Settings gear -->
+            <div class="p-0.5">
+              <svg class="w-2.5 h-2.5 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="5" cy="5" r="1.5"/><path d="M5,1 v1 M5,8 v1 M1,5 h1 M8,5 h1 M2.2,2.2 l0.7,0.7 M7.1,7.1 l0.7,0.7 M7.8,2.2 l-0.7,0.7 M2.9,7.1 l-0.7,0.7"/></svg>
+            </div>
+            <!-- Notifications -->
+            <div class="relative p-0.5">
+              <svg class="w-2.5 h-2.5 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M5,1 C3,1 2,2.5 2,4 v2 l-1,1 h8 l-1,-1 v-2 C8,2.5 7,1 5,1 z"/><path d="M4,8 C4,8.5 4.5,9 5,9 C5.5,9 6,8.5 6,8"/></svg>
+              <span class="absolute -top-px -right-px w-1.5 h-1.5 rounded-full bg-[var(--site-accent)] border border-[var(--site-bg-elevated)]"></span>
+            </div>
+            <!-- Connection status -->
+            <div class="flex items-center gap-0.5 text-[5.5px] text-[var(--site-success)]">
+              <span class="w-1 h-1 rounded-full bg-[var(--site-success)]"></span>
+              <span class="font-medium">Connected</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Page content area -->
+        <div class="flex-1 min-h-0 relative">
+
+        <!-- ──── PAGE: Tasks (default) ──── -->
+        <div data-page="tasks" class="absolute inset-0 p-3 flex flex-col gap-1.5 overflow-hidden">
+          <!-- Header -->
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-1.5">
+              <div class="w-5 h-5 rounded-md bg-[var(--site-accent-subtle)] flex items-center justify-center">
+                <svg class="w-3 h-3 text-[var(--site-accent)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="1.5" width="7" height="7" rx="1"/><polyline points="3,5.5 4.5,7 7,3.5"/></svg>
+              </div>
+              <div>
+                <div class="text-[10px] font-semibold text-[var(--site-text-primary)]">Tasks</div>
+                <div class="text-[6px] text-[var(--site-text-ghost)]">Manage and track agent task assignments</div>
+              </div>
+            </div>
+            <div class="px-1.5 py-0.5 rounded text-[6.5px] font-medium bg-[var(--site-accent)] text-white flex items-center gap-0.5">
+              + Create Task
+              <span class="text-[5px] opacity-70 ml-0.5">C T</span>
+            </div>
+          </div>
+          <!-- Search + controls row -->
+          <div class="flex items-center gap-1.5">
+            <div class="flex-1 flex items-center gap-0.5 px-1.5 py-[3px] rounded border border-[var(--site-border)] text-[6px] text-[var(--site-text-ghost)] bg-[var(--site-bg-surface)]">
+              <svg class="w-2 h-2" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="4.5" cy="4.5" r="3"/><line x1="7" y1="7" x2="9" y2="9"/></svg>
+              Search tasks...
+            </div>
+            <div class="flex items-center gap-0.5 px-1 py-[2px] rounded border border-[var(--site-border)] text-[5.5px] text-[var(--site-text-ghost)]">
+              <svg class="w-1.5 h-1.5" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1,3 h8 M3,5 h4 M4,7 h2"/></svg>
+              Sort: Updated
+              <svg class="w-1.5 h-1.5" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="3,4 5,6 7,4"/></svg>
+            </div>
+            <div class="flex items-center gap-0.5 px-1 py-[2px] rounded border border-[var(--site-border)] text-[5.5px] text-[var(--site-text-ghost)]">
+              Group: None
+              <svg class="w-1.5 h-1.5" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="3,4 5,6 7,4"/></svg>
+            </div>
+            <!-- List/Kanban toggle -->
+            <div class="flex items-center rounded border border-[var(--site-border)] overflow-hidden">
+              <div class="px-1 py-[2px] text-[5.5px] font-medium bg-[var(--site-accent-subtle)] text-[var(--site-accent)] border-r border-[var(--site-border)] flex items-center gap-0.5">
+                <svg class="w-2 h-2" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><line x1="1" y1="2" x2="9" y2="2"/><line x1="1" y1="5" x2="9" y2="5"/><line x1="1" y1="8" x2="9" y2="8"/></svg>
+                List
+              </div>
+              <div class="px-1 py-[2px] text-[5.5px] text-[var(--site-text-ghost)] flex items-center gap-0.5">
+                <svg class="w-2 h-2" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1" y="1" width="3" height="8" rx="0.5"/><rect x="6" y="1" width="3" height="8" rx="0.5"/></svg>
+                Kanban
+              </div>
+            </div>
+          </div>
+          <!-- Filters button -->
+          <div class="flex items-center gap-0.5 text-[6px] text-[var(--site-text-ghost)]">
+            <svg class="w-2 h-2" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M1,2 h8 M2,5 h6 M3,8 h4"/></svg>
+            Filters
+            <svg class="w-1.5 h-1.5" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="3,4 5,6 7,4"/></svg>
+          </div>
+          <!-- Status filter tabs -->
+          <div class="flex items-center gap-0.5 border-b border-[var(--site-border)]">
+            {[
+              { label: 'All', count: '16', active: false },
+              { label: 'Backlog', count: '', active: false },
+              { label: 'Unassigned', count: '15', active: false },
+              { label: 'Assigned', count: '1', active: false },
+              { label: 'In Progress', count: '', active: false },
+              { label: 'Awaiting Merge', count: '4', active: false },
+              { label: 'Closed', count: '3', active: true },
+            ].map(tab => (
+              <div class={`px-1 py-[2px] text-[5.5px] font-medium border-b-2 flex items-center gap-0.5 ${tab.active ? 'text-[var(--site-accent)] border-[var(--site-accent)]' : 'text-[var(--site-text-ghost)] border-transparent'}`}>
+                {tab.label}
+                {tab.count && <span class={`text-[5px] px-0.5 rounded-sm ${tab.active ? 'bg-[var(--site-accent-subtle)]' : ''}`}>{tab.count}</span>}
+              </div>
+            ))}
+          </div>
+          <!-- Table header -->
+          <div class="flex items-center gap-0.5 px-1 py-0.5 rounded-t bg-[var(--site-bg-surface)] border border-[var(--site-border)] text-[5px] font-semibold text-[var(--site-text-tertiary)] uppercase tracking-wider">
+            <span class="w-[3%]"><input type="checkbox" class="w-1.5 h-1.5 opacity-40" disabled /></span>
+            <span class="w-[28%]">Task</span>
+            <span class="w-[10%]">Status</span>
+            <span class="w-[10%]">Priority</span>
+            <span class="w-[8%]">Type</span>
+            <span class="w-[12%]">Assignee</span>
+            <span class="w-[20%]">Branch</span>
+          </div>
+          <!-- Task rows -->
+          <div class="flex-1 min-h-0 -mt-1.5 space-y-px overflow-hidden">
+            {tasks.map((t, i) => (
+              <div class="flex items-center gap-0.5 px-1 py-[2.5px] border-x border-b border-[var(--site-border)] text-[6px] hover:bg-[var(--site-bg-surface)]/50" style={`animation: fade-in-up 0.4s ${0.1 + i * 0.06}s both;`}>
+                <div class="w-[3%]"><input type="checkbox" class="w-1.5 h-1.5 opacity-30" disabled /></div>
+                <div class="w-[28%] truncate">
+                  <span class="text-[var(--site-text-secondary)] font-medium">{t.title}</span>
+                  <div class="text-[5px] text-[var(--site-text-ghost)]">{t.id}</div>
+                </div>
+                <div class="w-[10%] flex items-center gap-0.5">
+                  <span class="px-0.5 py-px rounded text-[5px] font-medium text-[var(--site-success)]" style="background: rgba(74,222,128,0.08);">Closed</span>
+                  <span class="flex items-center gap-px text-[5px] text-[var(--site-text-ghost)]">
+                    <svg class="w-1.5 h-1.5" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="3" cy="5" r="2"/><circle cx="7" cy="5" r="2"/><line x1="5" y1="5" x2="5" y2="5"/></svg>
+                    Merged
+                  </span>
+                </div>
+                <div class="w-[10%]">
+                  <span class="text-[5.5px] font-medium" style={`color: ${t.pc};`}>{t.priority}</span>
+                </div>
+                <div class="w-[8%]">
+                  <span class="flex items-center gap-px px-0.5 py-px rounded text-[5px] font-medium text-[var(--site-accent)]" style="background: rgba(96,165,250,0.06);">
+                    <svg class="w-1.5 h-1.5" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="5" cy="5" r="3"/></svg>
+                    Task
+                  </span>
+                </div>
+                <div class="w-[12%] text-[var(--site-text-ghost)] truncate text-[5.5px]">Unassigned</div>
+                <div class="w-[20%] truncate">
+                  <span class="flex items-center gap-0.5 px-0.5 py-px rounded bg-[var(--site-bg-surface)] border border-[var(--site-border)] text-[4.5px] font-mono text-[var(--site-text-tertiary)]">
+                    <svg class="w-1.5 h-1.5 flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="3" cy="5" r="2"/><path d="M5,3 h2 a2,2 0 0,1 0,4 h-2"/></svg>
+                    {t.branch}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <!-- ──── PAGE: Activity ──── -->
+        <div data-page="activity" class="absolute inset-0 p-3 flex flex-col gap-2 overflow-hidden" style="display:none;">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-1.5">
+              <div class="w-5 h-5 rounded-md bg-[var(--site-accent-subtle)] flex items-center justify-center">
+                <svg class="w-3 h-3 text-[var(--site-accent)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="1,5 3,2 5,8 7,3 9,5"/></svg>
+              </div>
+              <div>
+                <div class="text-[10px] font-semibold text-[var(--site-text-primary)]">Activity</div>
+                <div class="text-[6px] text-[var(--site-text-ghost)]">Command center for agent orchestration</div>
+              </div>
+            </div>
+            <div class="flex items-center gap-1">
+              <div class="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[6.5px] font-medium" style="background: rgba(74,222,128,0.08); color: var(--site-success);">
+                <svg class="w-2 h-2" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="5" cy="5" r="3"/><circle cx="5" cy="5" r="1" fill="currentColor"/></svg>
+                Live
+              </div>
+              <div class="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[6.5px] font-medium" style="background: rgba(74,222,128,0.08); color: var(--site-success);"><span class="w-1 h-1 rounded-full bg-[var(--site-success)]"></span> Daemon</div>
+              <div class="flex items-center gap-0.5 px-1 py-0.5 rounded text-[6px] font-medium border border-[var(--site-border)] text-[var(--site-text-tertiary)]">
+                <svg class="w-2 h-2" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M1,5 A4,4 0 1,1 5,9"/><polyline points="1,2 1,5 4,5"/></svg>
+                Refresh
+                <span class="px-0.5 py-px rounded bg-[var(--site-bg-surface)] text-[4.5px] font-mono text-[var(--site-text-ghost)] ml-0.5">&#8984;R</span>
+              </div>
+            </div>
+          </div>
+          <!-- System Status Bar -->
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <div class="flex items-center gap-1 px-1.5 py-[2px] rounded-full text-[6px] font-medium border border-[var(--site-border-accent)] text-[var(--site-accent)] bg-[var(--site-accent-subtle)]">
+              <svg class="w-2 h-2" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="5" cy="3" r="1.5"/><path d="M2,8.5 C2,6.5 3.5,5.5 5,5.5 C6.5,5.5 8,6.5 8,8.5"/></svg>
+              <span class="font-bold">4</span> Active Agents
+            </div>
+            <div class="flex items-center gap-1 px-1.5 py-[2px] rounded-full text-[6px] font-medium border border-[var(--site-border)]" style="color: var(--site-warning); background: rgba(251,191,36,0.06);">
+              <svg class="w-2 h-2" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.3"><polyline points="1,5 3,2 5,8 7,3 9,5"/></svg>
+              <span class="font-bold">3</span> In Progress
+            </div>
+            <div class="flex items-center gap-1 px-1.5 py-[2px] rounded-full text-[6px] font-medium border border-[var(--site-border)]" style="color: #818cf8; background: rgba(129,140,248,0.06);">
+              <svg class="w-2 h-2" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="3" cy="3" r="1.5"/><circle cx="3" cy="7" r="1.5"/><circle cx="7" cy="5" r="1.5"/><line x1="4.5" y1="3.5" x2="5.5" y2="4.5"/></svg>
+              <span class="font-bold">1</span> In Review
+            </div>
+            <div class="flex items-center gap-1 px-1.5 py-[2px] rounded-full text-[6px] font-medium border border-[var(--site-border)] text-[var(--site-text-tertiary)] bg-[var(--site-bg-surface)]">
+              <svg class="w-2 h-2" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="5" cy="5" r="3.5"/><polyline points="3.5,5 4.5,6.5 7,3.5"/></svg>
+              <span class="font-bold">5</span> Completed
+            </div>
+            <div class="ml-auto flex items-center gap-0.5 text-[6px] text-[var(--site-text-ghost)]"><span class="w-1.5 h-1.5 rounded-full bg-[var(--site-success)] animate-pulse-glow"></span> Daemon Running</div>
+          </div>
+          <!-- Agent grid -->
+          <div>
+            <div class="text-[7.5px] font-medium text-[var(--site-text-tertiary)] mb-1.5">Active Agents</div>
+            <div class="grid grid-cols-3 gap-1">
+              {agents.map(a => (
+                <div class="flex flex-col gap-0.5 p-1 rounded-lg border border-[var(--site-border)] bg-[var(--site-bg-surface)]">
+                  <div class="flex items-center gap-1">
+                    <span class={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${a.task ? 'bg-[var(--site-success)] animate-pulse' : 'bg-[var(--site-text-ghost)]'}`}></span>
+                    <span class="text-[6.5px] font-semibold text-[var(--site-text-primary)] truncate">{a.name}</span>
+                    <span class="ml-auto text-[5.5px] font-medium flex-shrink-0" style={`color: ${a.rc}`}>{a.role}</span>
+                  </div>
+                  <div class="text-[5.5px] text-[var(--site-text-ghost)] truncate">
+                    <span class="text-[var(--site-text-secondary)] font-medium">{a.task}</span> {a.tt}
+                  </div>
+                  <div class="rounded border border-[var(--site-border)] bg-[var(--site-bg-elevated)] px-1 py-px">
+                    <span class="text-[5.5px] font-mono text-[var(--site-text-tertiary)] truncate block">{a.out}{a.cursor && <span class="inline-block w-[2px] h-[6px] bg-[var(--site-text-tertiary)] ml-px" style="animation: typing-cursor 1s step-end infinite;"></span>}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <!-- Recent Completions -->
+          <div class="flex-1 min-h-0">
+            <div class="flex items-center justify-between mb-1">
+              <div class="flex items-center gap-1 text-[7.5px] font-medium text-[var(--site-text-tertiary)]">
+                <svg class="w-2.5 h-2.5" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="5" cy="5" r="4"/><polyline points="5,2.5 5,5 7,6.5"/></svg>
+                Recent Completions
+              </div>
+              <span class="text-[5.5px] text-[var(--site-accent)] font-medium">View all &rarr;</span>
+            </div>
+            <div class="space-y-px">
+              {completions.map(c => (
+                <div class="flex items-center gap-1 px-1.5 py-[2px] rounded text-[6.5px]">
+                  {c.merged ? (
+                    <svg class="w-2 h-2 flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="var(--site-success)" stroke-width="1.5"><circle cx="3" cy="2.5" r="1.5"/><circle cx="3" cy="7.5" r="1.5"/><circle cx="7" cy="7.5" r="1.5"/><path d="M3,4 v2"/><path d="M4.5,7.5 h1"/></svg>
+                  ) : (
+                    <svg class="w-2 h-2 flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="var(--site-success)" stroke-width="1.5"><circle cx="5" cy="5" r="3.5"/><polyline points="3.5,5 4.5,6.5 7,3.5"/></svg>
+                  )}
+                  <span class="font-medium text-[var(--site-text-primary)] flex-shrink-0">{c.id}</span>
+                  <span class="text-[var(--site-text-ghost)] truncate">{c.title}</span>
+                  <span class="text-[var(--site-text-ghost)] text-[5.5px] flex-shrink-0">{c.assignee}</span>
+                  <span class="text-[var(--site-text-ghost)] flex-shrink-0 ml-auto">{c.time}</span>
+                  <span class="px-1 py-px rounded text-[5px] font-medium flex-shrink-0" style={c.merged ? 'background: rgba(74,222,128,0.08); color: var(--site-success);' : 'background: rgba(251,191,36,0.08); color: var(--site-warning);'}>{c.merged ? 'Merged' : 'Pending'}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <!-- Activity Feed (collapsed) -->
+          <div class="flex items-center gap-1 px-1.5 py-1 rounded border border-[var(--site-border)] bg-[var(--site-bg-surface)]">
+            <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="4,2 7,5 4,8"/></svg>
+            <span class="text-[6.5px] font-medium text-[var(--site-text-tertiary)]">Activity Feed</span>
+            <span class="text-[5.5px] text-[var(--site-text-ghost)]">(24 events)</span>
+          </div>
+        </div>
+
+        <!-- ──── PAGE: Agents ──── -->
+        <div data-page="agents" class="absolute inset-0 p-3 flex flex-col gap-1.5 overflow-hidden" style="display:none;">
+          <!-- Header -->
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-1.5">
+              <div class="w-5 h-5 rounded-md bg-[var(--site-accent-subtle)] flex items-center justify-center">
+                <svg class="w-3 h-3 text-[var(--site-accent)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="5" cy="3" r="2"/><path d="M1.5,9 C1.5,6.5 3,5.5 5,5.5 C7,5.5 8.5,6.5 8.5,9"/></svg>
+              </div>
+              <div>
+                <div class="text-[10px] font-semibold text-[var(--site-text-primary)]">Agents</div>
+                <div class="text-[6px] text-[var(--site-text-ghost)]">Manage your AI agents and stewards</div>
+              </div>
+            </div>
+            <div class="flex items-center gap-1">
+              <div class="flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-[var(--site-border)] text-[6px] text-[var(--site-text-ghost)]">
+                <svg class="w-2 h-2" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="4.5" cy="4.5" r="3"/><line x1="7" y1="7" x2="9" y2="9"/></svg>
+                Search agents...
+              </div>
+              <div class="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[6.5px] font-medium bg-[var(--site-accent)] text-white">
+                + Create Agent
+                <span class="px-0.5 py-px rounded bg-[rgba(255,255,255,0.2)] text-[5px] ml-0.5">C A</span>
+              </div>
+            </div>
+          </div>
+          <!-- Tabs: Agents | Stewards | Pools | Graph -->
+          <div class="flex items-center gap-0.5 border-b border-[var(--site-border)]">
+            {[
+              { label: 'Agents', count: '5', icon: 'user', active: true },
+              { label: 'Stewards', count: '3', icon: 'shield', active: false },
+              { label: 'Pools', count: '1', icon: 'layers', active: false },
+              { label: 'Graph', count: '', icon: 'graph', active: false },
+            ].map(tab => (
+              <div class={`flex items-center gap-0.5 px-1.5 py-[2px] text-[6px] font-medium border-b-2 ${tab.active ? 'text-[var(--site-accent)] border-[var(--site-accent)]' : 'text-[var(--site-text-ghost)] border-transparent'}`}>
+                <svg class="w-2 h-2" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="5" cy="3" r="2"/><path d="M1.5,9 C1.5,6.5 3,5.5 5,5.5 C7,5.5 8.5,6.5 8.5,9"/></svg>
+                {tab.label}
+                {tab.count && <span class="px-0.5 py-px rounded-full bg-[var(--site-bg-surface)] text-[5px]">{tab.count}</span>}
+              </div>
+            ))}
+          </div>
+          <!-- Scrollable content -->
+          <div class="flex-1 overflow-hidden space-y-2">
+            <!-- Director Section -->
+            <div>
+              <div class="flex items-center gap-1 mb-0.5">
+                <svg class="w-2.5 h-2.5 text-[var(--site-warning)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M2,8 L5,1 L8,8 Z"/><circle cx="5" cy="6" r="0.5" fill="currentColor"/></svg>
+                <span class="text-[7px] font-semibold text-[var(--site-text-primary)]">Director</span>
+              </div>
+              <div class="text-[5.5px] text-[var(--site-text-ghost)] mb-1">Strategic agent that creates and assigns tasks</div>
+              <div class="p-1.5 rounded-lg border border-[var(--site-border)] bg-[var(--site-bg-surface)] max-w-[220px]">
+                <div class="flex items-center gap-1 mb-1">
+                  <span class="text-[7px] font-semibold text-[var(--site-text-primary)]">Director</span>
+                  <span class="w-1.5 h-1.5 rounded-full bg-[var(--site-success)]"></span>
+                  <span class="text-[6px] text-[var(--site-text-ghost)] ml-auto">&middot;&middot;&middot;</span>
+                </div>
+                <div class="flex items-center gap-0.5 mb-1.5">
+                  <span class="px-1 py-px rounded text-[5px] font-medium bg-[var(--site-accent-subtle)] text-[var(--site-accent)]">Director</span>
+                  <span class="px-1 py-px rounded text-[5px] text-[var(--site-text-ghost)] bg-[var(--site-bg-elevated)] border border-[var(--site-border)]">claude code</span>
+                </div>
+                <div class="flex items-center gap-1">
+                  <div class="flex items-center gap-0.5 px-1 py-[2px] rounded text-[5.5px] font-medium" style="color: var(--site-error); background: rgba(248,113,113,0.08);">
+                    <svg class="w-1.5 h-1.5" viewBox="0 0 10 10" fill="currentColor"><rect x="2" y="2" width="6" height="6" rx="0.5"/></svg>
+                    Stop
+                  </div>
+                  <div class="flex items-center gap-0.5 px-1 py-[2px] rounded text-[5.5px] font-medium border border-[var(--site-border)] text-[var(--site-text-secondary)]">
+                    <svg class="w-1.5 h-1.5" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.3"><polyline points="2,4 5,1 8,4"/><polyline points="2,6 5,9 8,6"/></svg>
+                    Open
+                  </div>
+                  <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1" y="3" width="8" height="5" rx="0.5"/><polyline points="1,4 5,7 9,4"/></svg>
+                </div>
+              </div>
+            </div>
+            <!-- Persistent Workers Section -->
+            <div>
+              <div class="flex items-center gap-1 mb-0.5">
+                <svg class="w-2.5 h-2.5 text-[var(--site-text-tertiary)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M3,2 L5,1 L7,2 L8,4 L7,6 L5,7 L3,6 L2,4 Z"/></svg>
+                <span class="text-[7px] font-semibold text-[var(--site-text-primary)]">Persistent Workers</span>
+                <span class="px-1 py-px rounded-full bg-[var(--site-bg-surface)] text-[5px] text-[var(--site-text-ghost)] border border-[var(--site-border)]">1</span>
+              </div>
+              <div class="text-[5.5px] text-[var(--site-text-ghost)] mb-1">Long-lived workers that handle multiple tasks</div>
+              <div class="p-1.5 rounded-lg border border-[var(--site-border)] bg-[var(--site-bg-surface)] max-w-[220px]">
+                <div class="flex items-center gap-1 mb-1">
+                  <span class="text-[7px] font-semibold text-[var(--site-text-primary)]">john</span>
+                  <span class="w-1.5 h-1.5 rounded-full bg-[var(--site-text-ghost)]"></span>
+                  <span class="text-[6px] text-[var(--site-text-ghost)] ml-auto">&middot;&middot;&middot;</span>
+                </div>
+                <div class="flex items-center gap-0.5 mb-1.5">
+                  <span class="flex items-center gap-0.5 px-1 py-px rounded text-[5px] text-[var(--site-text-ghost)] bg-[var(--site-bg-elevated)] border border-[var(--site-border)]">
+                    <svg class="w-1.5 h-1.5" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="5" cy="3" r="2"/><path d="M1.5,9 C1.5,6.5 3,5.5 5,5.5 C7,5.5 8.5,6.5 8.5,9"/></svg>
+                    Worker (Persistent)
+                  </span>
+                  <span class="px-1 py-px rounded text-[5px] text-[var(--site-text-ghost)] bg-[var(--site-bg-elevated)] border border-[var(--site-border)]">claude code</span>
+                </div>
+                <div class="flex items-center gap-1">
+                  <div class="flex items-center gap-0.5 px-1 py-[2px] rounded text-[5.5px] font-medium" style="color: var(--site-success); background: rgba(74,222,128,0.08);">
+                    <svg class="w-1.5 h-1.5" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="3,2 8,5 3,8"/></svg>
+                    Start
+                  </div>
+                  <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1" y="3" width="8" height="5" rx="0.5"/><polyline points="1,4 5,7 9,4"/></svg>
+                </div>
+              </div>
+            </div>
+            <!-- Ephemeral Workers Section -->
+            <div>
+              <div class="flex items-center gap-1 mb-0.5">
+                <svg class="w-2.5 h-2.5 text-[var(--site-text-tertiary)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M3,2 L5,1 L7,2 L8,4 L7,6 L5,7 L3,6 L2,4 Z"/></svg>
+                <span class="text-[7px] font-semibold text-[var(--site-text-primary)]">Ephemeral Workers</span>
+                <span class="px-1 py-px rounded-full bg-[var(--site-bg-surface)] text-[5px] text-[var(--site-text-ghost)] border border-[var(--site-border)]">3</span>
+              </div>
+              <div class="text-[5.5px] text-[var(--site-text-ghost)] mb-1">Short-lived workers spawned per task</div>
+              <div class="grid grid-cols-3 gap-1">
+                {[
+                  { name: 'joe-claude' },
+                  { name: 'bob-claude' },
+                  { name: 'alice-claude' },
+                ].map(w => (
+                  <div class="p-1.5 rounded-lg border border-[var(--site-border)] bg-[var(--site-bg-surface)]">
+                    <div class="flex items-center gap-1 mb-1">
+                      <span class="text-[6.5px] font-semibold text-[var(--site-text-primary)]">{w.name}</span>
+                      <span class="w-1.5 h-1.5 rounded-full bg-[var(--site-text-ghost)]"></span>
+                      <span class="text-[6px] text-[var(--site-text-ghost)] ml-auto">&middot;&middot;&middot;</span>
+                    </div>
+                    <div class="flex items-center gap-0.5 mb-1.5 flex-wrap">
+                      <span class="flex items-center gap-0.5 px-1 py-px rounded text-[5px] text-[var(--site-text-ghost)] bg-[var(--site-bg-elevated)] border border-[var(--site-border)]">
+                        <svg class="w-1.5 h-1.5" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="5" cy="3" r="2"/><path d="M1.5,9 C1.5,6.5 3,5.5 5,5.5 C7,5.5 8.5,6.5 8.5,9"/></svg>
+                        Worker (Ephemeral)
+                      </span>
+                      <span class="px-1 py-px rounded text-[5px] text-[var(--site-text-ghost)] bg-[var(--site-bg-elevated)] border border-[var(--site-border)]">claude code</span>
+                    </div>
+                    <div class="flex items-center gap-1">
+                      <div class="flex items-center gap-0.5 px-1 py-[2px] rounded text-[5.5px] font-medium" style="color: var(--site-success); background: rgba(74,222,128,0.08);">
+                        <svg class="w-1.5 h-1.5" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="3,2 8,5 3,8"/></svg>
+                        Start
+                      </div>
+                      <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1" y="3" width="8" height="5" rx="0.5"/><polyline points="1,4 5,7 9,4"/></svg>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ──── PAGE: Merge Requests ──── -->
+        <div data-page="merge-requests" class="absolute inset-0 p-3 flex flex-col gap-2 overflow-hidden" style="display:none;">
+          <!-- Header -->
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-1.5">
+              <div class="w-5 h-5 rounded-md bg-[var(--site-accent-subtle)] flex items-center justify-center">
+                <svg class="w-3 h-3 text-[var(--site-accent)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="3" cy="3" r="1.5"/><circle cx="3" cy="7" r="1.5"/><circle cx="7" cy="5" r="1.5"/><line x1="4.5" y1="3.5" x2="5.5" y2="4.5"/><line x1="4.5" y1="6.5" x2="5.5" y2="5.5"/></svg>
+              </div>
+              <div>
+                <div class="text-[10px] font-semibold text-[var(--site-text-primary)]">Merge Requests</div>
+                <div class="text-[6px] text-[var(--site-text-ghost)]">Review and merge completed agent work</div>
+              </div>
+            </div>
+            <div class="flex items-center gap-0.5 px-1.5 py-[3px] rounded border border-[var(--site-border)] text-[6px] text-[var(--site-text-ghost)] bg-[var(--site-bg-surface)]">
+              <svg class="w-2 h-2" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="4.5" cy="4.5" r="3"/><line x1="7" y1="7" x2="9" y2="9"/></svg>
+              Search merge requests...
+            </div>
+          </div>
+          <!-- Filter tabs + Merged button -->
+          <div class="flex items-center justify-between border-b border-[var(--site-border)]">
+            <div class="flex items-center gap-0.5">
+              {[
+                { label: 'All', count: '4', active: false },
+                { label: 'Needs Review', count: '0', active: false },
+                { label: 'Testing', count: '0', active: false },
+                { label: 'Conflicts', count: '0', active: false },
+              ].map(tab => (
+                <div class={`px-1.5 py-[2px] text-[6px] font-medium border-b-2 flex items-center gap-0.5 ${tab.active ? 'text-[var(--site-accent)] border-[var(--site-accent)]' : 'text-[var(--site-text-ghost)] border-transparent'}`}>
+                  {tab.label}
+                  <span class="text-[5px]">{tab.count}</span>
+                </div>
+              ))}
+            </div>
+            <div class="flex items-center gap-0.5 px-1.5 py-[2px] rounded-full text-[5.5px] font-medium border-2 border-[var(--site-accent)]" style="color: var(--site-accent); background: rgba(96,165,250,0.08);">
+              <svg class="w-2 h-2" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="5" cy="5" r="3.5"/><polyline points="3.5,5 4.5,6.5 7,3.5"/></svg>
+              Merged (342)
+            </div>
+          </div>
+          <!-- MR card list -->
+          <div class="flex-1 space-y-1.5 overflow-hidden">
+            {mrs.map((m, i) => (
+              <div class={`rounded-lg border bg-[var(--site-bg-surface)] p-1.5 ${i === 0 ? 'border-[var(--site-accent)]/40 bg-[var(--site-accent-subtle)]' : 'border-[var(--site-border)]'}`} style={`animation: fade-in-up 0.4s ${0.1 + i * 0.08}s both;`}>
+                <div class="flex items-center gap-1 mb-0.5">
+                  <span class="px-1 py-px rounded text-[5px] font-semibold text-[var(--site-success)] flex-shrink-0" style="background: rgba(74,222,128,0.1);">Merged</span>
+                  <span class="text-[6.5px] font-medium text-[var(--site-text-primary)] truncate">{m.title}</span>
+                  <span class="ml-auto text-[5px] text-[var(--site-text-ghost)] flex-shrink-0">{m.time}</span>
+                  <span class="text-[var(--site-text-ghost)] text-[6px]">&middot;&middot;&middot;</span>
+                </div>
+                <div class="flex items-center gap-1 text-[5px] text-[var(--site-text-ghost)]">
+                  <svg class="w-1.5 h-1.5 flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="3" cy="5" r="2"/><path d="M5,3 h2 a2,2 0 0,1 0,4 h-2"/></svg>
+                  <span class="font-mono truncate">{m.branch}</span>
+                  <span>&rarr;</span>
+                  <span class="font-mono">main</span>
+                </div>
+                <div class="flex items-center gap-1 mt-0.5 text-[5px] text-[var(--site-text-ghost)]">
+                  <svg class="w-1.5 h-1.5" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="5" cy="3.5" r="2"/><path d="M1.5,9.5 C1.5,7 3,6 5,6 C7,6 8.5,7 8.5,9.5"/></svg>
+                  Unassigned
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <!-- ──── PAGE: Plans ──── -->
+        <div data-page="plans" class="absolute inset-0 p-3 flex flex-col gap-1.5 overflow-hidden" style="display:none;">
+          <!-- Header -->
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-1.5">
+              <div class="w-5 h-5 rounded-md bg-[var(--site-accent-subtle)] flex items-center justify-center">
+                <svg class="w-3 h-3 text-[var(--site-accent)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="1" width="6" height="8" rx="1"/><line x1="4" y1="3.5" x2="7" y2="3.5"/><line x1="4" y1="5.5" x2="7" y2="5.5"/><line x1="4" y1="7.5" x2="6" y2="7.5"/></svg>
+              </div>
+              <div class="flex items-center gap-1">
+                <span class="text-[10px] font-semibold text-[var(--site-text-primary)]">Plans</span>
+                <span class="text-[8px] text-[var(--site-text-ghost)]">(60)</span>
+              </div>
+            </div>
+            <div class="px-1.5 py-0.5 rounded text-[6.5px] font-medium bg-[var(--site-accent)] text-white flex items-center gap-0.5">
+              + Create Plan
+              <span class="text-[5px] opacity-70 ml-0.5">C P</span>
+            </div>
+          </div>
+          <!-- Search -->
+          <div class="flex items-center gap-0.5 px-1.5 py-[3px] rounded border border-[var(--site-border)] text-[6px] text-[var(--site-text-ghost)] bg-[var(--site-bg-surface)]">
+            <svg class="w-2 h-2" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="4.5" cy="4.5" r="3"/><line x1="7" y1="7" x2="9" y2="9"/></svg>
+            Search plans... (Press / to focus)
+          </div>
+          <!-- Tabs and view toggle -->
+          <div class="flex items-center justify-between border-b border-[var(--site-border)]">
+            <div class="flex items-center gap-0.5">
+              {['All', 'Active', 'Draft', 'Completed', 'Cancelled'].map((tab, i) => (
+                <div class={`px-1.5 py-[2px] text-[6px] font-medium border-b-2 ${i === 0 ? 'text-[var(--site-accent)] border-[var(--site-accent)]' : 'text-[var(--site-text-ghost)] border-transparent'}`}>{tab}</div>
+              ))}
+            </div>
+            <div class="flex items-center gap-1">
+              <div class="flex items-center rounded border border-[var(--site-border)] overflow-hidden">
+                <div class="px-1 py-[1px] text-[5.5px] font-medium bg-[var(--site-accent-subtle)] text-[var(--site-accent)] border-r border-[var(--site-border)] flex items-center gap-0.5">
+                  <svg class="w-1.5 h-1.5" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><line x1="1" y1="2" x2="9" y2="2"/><line x1="1" y1="5" x2="9" y2="5"/><line x1="1" y1="8" x2="9" y2="8"/></svg>
+                  List
+                </div>
+                <div class="px-1 py-[1px] text-[5.5px] text-[var(--site-text-ghost)] flex items-center gap-0.5">
+                  <svg class="w-1.5 h-1.5" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><line x1="1" y1="5" x2="9" y2="5"/><rect x="1" y="3" width="3" height="4" rx="0.5" fill="none"/><rect x="5" y="2" width="3" height="6" rx="0.5" fill="none"/></svg>
+                  Roadmap
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- Two-column layout: plan list + detail panel -->
+          <div class="flex-1 flex gap-1.5 min-h-0 overflow-hidden">
+            <!-- Left: Plan list -->
+            <div class="w-[55%] space-y-1 overflow-hidden">
+              {plans.map((p, i) => (
+                <div class={`p-1.5 rounded-lg border ${i === 0 ? 'border-[var(--site-accent)] bg-[var(--site-accent-subtle)]' : 'border-[var(--site-border)] bg-[var(--site-bg-surface)]'} cursor-pointer`} style={`animation: fade-in-up 0.4s ${0.1 + i * 0.06}s both;`}>
+                  <div class="flex items-center justify-between">
+                    <span class="text-[6.5px] font-semibold text-[var(--site-text-primary)] truncate flex-1">{p.title}</span>
+                    <!-- Progress circle mini -->
+                    <div class="relative w-4 h-4 flex-shrink-0 ml-1">
+                      <svg class="w-4 h-4" viewBox="0 0 16 16">
+                        <circle cx="8" cy="8" r="6" fill="none" stroke="var(--site-border)" stroke-width="1.5"/>
+                        <circle cx="8" cy="8" r="6" fill="none" stroke="var(--site-accent)" stroke-width="1.5" stroke-dasharray="37.7" stroke-dashoffset="0" transform="rotate(-90 8 8)"/>
+                      </svg>
+                      <span class="absolute inset-0 flex items-center justify-center text-[3.5px] font-bold text-[var(--site-accent)]">100%</span>
+                    </div>
+                    <svg class="w-2 h-2 text-[var(--site-text-ghost)] ml-0.5 flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="4,2 7,5 4,8"/></svg>
+                  </div>
+                  <div class="flex items-center gap-1 mt-0.5">
+                    <span class="px-0.5 py-px rounded text-[4.5px] font-medium text-[var(--site-success)]" style="background: rgba(74,222,128,0.1);">Completed</span>
+                    <span class="text-[4.5px] text-[var(--site-text-ghost)]">Updated {p.updated}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <!-- Right: Detail panel -->
+            <div class="w-[45%] border border-[var(--site-border)] rounded-lg bg-[var(--site-bg-surface)] p-2 flex flex-col overflow-hidden">
+              <!-- Detail header -->
+              <div class="flex items-center justify-between mb-1">
+                <span class="px-1 py-px rounded text-[5px] font-medium text-[var(--site-success)]" style="background: rgba(74,222,128,0.1);">Completed</span>
+                <div class="flex items-center gap-1">
+                  <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M2,8 h6 M4,2 l1,4 M5,2 l1,4"/></svg>
+                  <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="2" y1="2" x2="8" y2="8"/><line x1="8" y1="2" x2="2" y2="8"/></svg>
+                </div>
+              </div>
+              <div class="text-[8px] font-semibold text-[var(--site-text-primary)] mb-0.5">Fix dispatch daemon crash recovery bugs</div>
+              <div class="text-[5px] text-[var(--site-text-ghost)] mb-1.5">el-424w</div>
+              <!-- Reopen button -->
+              <div class="flex items-center gap-0.5 px-1 py-[2px] rounded border border-[var(--site-border)] text-[5.5px] text-[var(--site-text-ghost)] self-start mb-2">
+                <svg class="w-1.5 h-1.5" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M2,5 a3,3 0 1,1 1,2"/><polyline points="1,4 2,5.5 3.5,4"/></svg>
+                Reopen as Draft
+              </div>
+              <!-- Progress section -->
+              <div class="text-[5.5px] font-semibold text-[var(--site-text-secondary)] mb-1">Progress</div>
+              <div class="flex items-center gap-2 mb-1.5">
+                <!-- Large progress circle -->
+                <div class="relative w-10 h-10 flex-shrink-0">
+                  <svg class="w-10 h-10" viewBox="0 0 40 40">
+                    <circle cx="20" cy="20" r="16" fill="none" stroke="var(--site-border)" stroke-width="3"/>
+                    <circle cx="20" cy="20" r="16" fill="none" stroke="var(--site-accent)" stroke-width="3" stroke-dasharray="100.53" stroke-dashoffset="0" transform="rotate(-90 20 20)"/>
+                  </svg>
+                  <span class="absolute inset-0 flex items-center justify-center text-[7px] font-bold text-[var(--site-accent)]">100%</span>
+                </div>
+                <!-- Stats grid -->
+                <div class="grid grid-cols-2 gap-x-2 gap-y-1 text-[5px]">
+                  <div class="flex items-center gap-0.5">
+                    <svg class="w-1.5 h-1.5 text-[var(--site-success)]" viewBox="0 0 10 10" fill="currentColor"><circle cx="5" cy="5" r="3"/></svg>
+                    <span class="font-bold text-[var(--site-text-primary)]">5</span>
+                    <span class="text-[var(--site-text-ghost)]">Completed</span>
+                  </div>
+                  <div class="flex items-center gap-0.5">
+                    <svg class="w-1.5 h-1.5 text-[var(--site-accent)]" viewBox="0 0 10 10" fill="currentColor"><circle cx="5" cy="5" r="3"/></svg>
+                    <span class="font-bold text-[var(--site-text-primary)]">0</span>
+                    <span class="text-[var(--site-text-ghost)]">In Progress</span>
+                  </div>
+                  <div class="flex items-center gap-0.5">
+                    <svg class="w-1.5 h-1.5 text-[var(--site-error)]" viewBox="0 0 10 10" fill="currentColor"><circle cx="5" cy="5" r="3"/></svg>
+                    <span class="font-bold text-[var(--site-text-primary)]">0</span>
+                    <span class="text-[var(--site-text-ghost)]">Blocked</span>
+                  </div>
+                  <div class="flex items-center gap-0.5">
+                    <svg class="w-1.5 h-1.5 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="currentColor"><circle cx="5" cy="5" r="3"/></svg>
+                    <span class="font-bold text-[var(--site-text-primary)]">0</span>
+                    <span class="text-[var(--site-text-ghost)]">Remaining</span>
+                  </div>
+                </div>
+              </div>
+              <!-- Tasks section -->
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-[5.5px] font-semibold text-[var(--site-text-secondary)]">Tasks (5)</span>
+                <span class="text-[5px] text-[var(--site-accent)]">+ Add Task</span>
+              </div>
+              <div class="space-y-0.5 overflow-hidden">
+                {['Fix terminated->terminated ra...', 'Fix startup blocking on stale se...', 'Add session termination to tas...'].map(task => (
+                  <div class="flex items-center justify-between px-1 py-[2px] rounded bg-[var(--site-bg-elevated)]">
+                    <div class="flex items-center gap-0.5">
+                      <span class="w-1 h-1 rounded-full bg-[var(--site-text-ghost)]"></span>
+                      <span class="text-[5px] text-[var(--site-text-secondary)] truncate">{task}</span>
+                    </div>
+                    <span class="px-0.5 py-px rounded text-[4px] font-medium text-[var(--site-success)]" style="background: rgba(74,222,128,0.1);">closed</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ──── PAGE: Metrics ──── -->
+        <div data-page="metrics" class="absolute inset-0 p-2.5 flex flex-col gap-1.5 overflow-hidden" style="display:none;">
+          <!-- Header -->
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-1.5">
+              <div class="w-5 h-5 rounded-md bg-[var(--site-accent-subtle)] flex items-center justify-center">
+                <svg class="w-3 h-3 text-[var(--site-accent)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="5" width="2" height="4" rx="0.3"/><rect x="4" y="3" width="2" height="6" rx="0.3"/><rect x="7" y="1" width="2" height="8" rx="0.3"/></svg>
+              </div>
+              <div>
+                <div class="text-[10px] font-semibold text-[var(--site-text-primary)]">Metrics</div>
+                <div class="text-[6px] text-[var(--site-text-ghost)]">Performance analytics and workspace health</div>
+              </div>
+            </div>
+            <div class="flex items-center gap-0.5 px-1 py-[2px] rounded border border-[var(--site-border)] text-[5.5px] text-[var(--site-text-secondary)]">
+              <svg class="w-2 h-2" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1" y="2" width="8" height="7" rx="1"/><line x1="3" y1="1" x2="3" y2="3"/><line x1="7" y1="1" x2="7" y2="3"/><line x1="1" y1="4.5" x2="9" y2="4.5"/></svg>
+              Last 7 days
+              <svg class="w-1.5 h-1.5 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="3,4 5,6 7,4"/></svg>
+            </div>
+          </div>
+          <!-- 6 stat cards in a row -->
+          <div class="grid grid-cols-6 gap-1">
+            {[
+              { label: 'Completed', value: '219', icon: 'check', ic: 'var(--site-success)', sub1: '38', sub1l: 'today', sub2: '+74', sub2l: 'vs prev' },
+              { label: 'Active Agents', value: '0/8', icon: 'users', ic: '#818cf8', sub1: '4 workers,', sub1l: '', sub2: '3', sub2l: 'stewards' },
+              { label: 'In Progress', value: '0', icon: 'arrow', ic: 'var(--site-warning)', sub1: '1 assigned', sub1l: '', sub2: '', sub2l: 'total' },
+              { label: 'Blocked', value: '0', icon: 'block', ic: 'var(--site-text-ghost)', sub1: '15', sub1l: 'unassigned', sub2: '', sub2l: '' },
+              { label: 'Avg Completion', value: '14m', icon: 'clock', ic: 'var(--site-accent)', sub1: '219 tasks', sub1l: '', sub2: '', sub2l: 'measured' },
+              { label: 'Merge Queue', value: '4', icon: 'merge', ic: '#a78bfa', sub1: '342 merged', sub1l: '', sub2: '', sub2l: 'total' },
+            ].map(s => (
+              <div class="p-1 rounded-lg border border-[var(--site-border)] bg-[var(--site-bg-surface)]">
+                <div class="flex items-center gap-0.5 mb-0.5">
+                  <span class="text-[4.5px] text-[var(--site-text-ghost)]">{s.label}</span>
+                  <svg class="w-1.5 h-1.5 ml-auto" style={`color: ${s.ic}`} viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="5" cy="5" r="3.5"/><polyline points="3.5,5 4.5,6.5 7,3.5"/></svg>
+                </div>
+                <div class="text-[9px] font-bold text-[var(--site-text-primary)] leading-tight">{s.value}</div>
+                <div class="text-[4px] text-[var(--site-text-ghost)] mt-px">{s.sub1} {s.sub1l}{s.sub2 && ` ${s.sub2}`} {s.sub2l}</div>
+              </div>
+            ))}
+          </div>
+          <!-- ACTIVITY & DISTRIBUTION section -->
+          <div class="flex items-center gap-0.5 mt-0.5">
+            <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><polyline points="1,5 3,2 5,8 7,3 9,5"/></svg>
+            <span class="text-[5.5px] font-semibold text-[var(--site-text-tertiary)] uppercase tracking-wider">Activity &amp; Distribution</span>
+          </div>
+          <!-- 3 charts in a row -->
+          <div class="flex gap-1 flex-1 min-h-0">
+            <!-- Line chart: Task Completions -->
+            <div class="flex-1 rounded-lg border border-[var(--site-border)] bg-[var(--site-bg-surface)] p-1.5 flex flex-col">
+              <div class="flex items-center gap-0.5 mb-1">
+                <span class="text-[5.5px] font-medium text-[var(--site-text-secondary)]">Task Completions (Last 7 days)</span>
+                <span class="text-[5px] text-[var(--site-text-ghost)] ml-auto">Total: 219</span>
+              </div>
+              <div class="flex-1 relative min-h-0">
+                <!-- Y-axis labels -->
+                <div class="absolute left-0 top-0 bottom-[10px] flex flex-col justify-between text-[3.5px] text-[var(--site-text-ghost)]">
+                  <span>60</span>
+                  <span>45</span>
+                  <span>30</span>
+                  <span>15</span>
+                  <span>0</span>
+                </div>
+                <!-- Chart area with line -->
+                <svg class="w-full h-full pl-2" viewBox="0 0 100 50" preserveAspectRatio="none">
+                  <!-- Grid lines -->
+                  <line x1="0" y1="12.5" x2="100" y2="12.5" stroke="var(--site-border)" stroke-width="0.3"/>
+                  <line x1="0" y1="25" x2="100" y2="25" stroke="var(--site-border)" stroke-width="0.3"/>
+                  <line x1="0" y1="37.5" x2="100" y2="37.5" stroke="var(--site-border)" stroke-width="0.3"/>
+                  <!-- Area fill -->
+                  <path d="M0,20 L17,15 L33,42 L50,45 L67,43 L83,40 L100,25 L100,50 L0,50 Z" fill="var(--site-accent)" opacity="0.08"/>
+                  <!-- Line -->
+                  <polyline points="0,20 17,15 33,42 50,45 67,43 83,40 100,25" fill="none" stroke="var(--site-accent)" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                  <!-- Dots -->
+                  <circle cx="0" cy="20" r="1.5" fill="var(--site-accent)"/>
+                  <circle cx="17" cy="15" r="1.5" fill="var(--site-accent)"/>
+                  <circle cx="33" cy="42" r="1.5" fill="var(--site-accent)"/>
+                  <circle cx="50" cy="45" r="1.5" fill="var(--site-accent)"/>
+                  <circle cx="67" cy="43" r="1.5" fill="var(--site-accent)"/>
+                  <circle cx="83" cy="40" r="1.5" fill="var(--site-accent)"/>
+                  <circle cx="100" cy="25" r="1.5" fill="var(--site-accent)"/>
+                </svg>
+                <!-- X-axis labels -->
+                <div class="flex justify-between px-1 text-[3.5px] text-[var(--site-text-ghost)] mt-px">
+                  <span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span><span>Mon</span><span>Tue</span><span>Tod</span>
+                </div>
+              </div>
+            </div>
+            <!-- Donut chart: Task Status Distribution -->
+            <div class="flex-1 rounded-lg border border-[var(--site-border)] bg-[var(--site-bg-surface)] p-1.5 flex flex-col items-center">
+              <div class="text-[5.5px] font-medium text-[var(--site-text-secondary)] mb-1 self-start">Task Status Distribution</div>
+              <div class="flex-1 flex items-center justify-center">
+                <div class="relative w-14 h-14">
+                  <svg viewBox="0 0 36 36" class="w-full h-full" style="transform: rotate(-90deg);">
+                    <circle cx="18" cy="18" r="14" fill="none" stroke="var(--site-bg-elevated)" stroke-width="4.5"/>
+                    <!-- Completed: 99% (green) -->
+                    <circle cx="18" cy="18" r="14" fill="none" stroke="var(--site-success)" stroke-width="4.5" stroke-dasharray="98 2" stroke-dashoffset="0"/>
+                    <!-- Open: ~0.3% (blue) -->
+                    <circle cx="18" cy="18" r="14" fill="none" stroke="var(--site-accent)" stroke-width="4.5" stroke-dasharray="0.5 99.5" stroke-dashoffset="-98"/>
+                    <!-- Review: ~1% (purple) -->
+                    <circle cx="18" cy="18" r="14" fill="none" stroke="#818cf8" stroke-width="4.5" stroke-dasharray="1.5 98.5" stroke-dashoffset="-98.5"/>
+                  </svg>
+                  <div class="absolute inset-0 flex flex-col items-center justify-center">
+                    <span class="text-[5px] text-[var(--site-text-ghost)]">ted 99%</span>
+                  </div>
+                </div>
+              </div>
+              <div class="flex flex-wrap gap-x-1.5 gap-y-0.5 justify-center text-[4px] mt-0.5">
+                <span class="flex items-center gap-0.5"><span class="w-1 h-1 rounded-full bg-[var(--site-accent)]"></span> Open: 1</span>
+                <span class="flex items-center gap-0.5"><span class="w-1 h-1 rounded-full bg-[var(--site-success)]"></span> Completed: 364</span>
+                <span class="flex items-center gap-0.5"><span class="w-1 h-1 rounded-full" style="background: #818cf8;"></span> Review: 4</span>
+              </div>
+            </div>
+            <!-- Donut chart: Tasks by Type -->
+            <div class="flex-1 rounded-lg border border-[var(--site-border)] bg-[var(--site-bg-surface)] p-1.5 flex flex-col items-center">
+              <div class="text-[5.5px] font-medium text-[var(--site-text-secondary)] mb-1 self-start">Tasks by Type</div>
+              <div class="flex-1 flex items-center justify-center">
+                <div class="relative w-14 h-14">
+                  <svg viewBox="0 0 36 36" class="w-full h-full" style="transform: rotate(-90deg);">
+                    <circle cx="18" cy="18" r="14" fill="none" stroke="var(--site-bg-elevated)" stroke-width="4.5"/>
+                    <!-- Task: 92% (blue) -->
+                    <circle cx="18" cy="18" r="14" fill="none" stroke="var(--site-accent)" stroke-width="4.5" stroke-dasharray="92 8" stroke-dashoffset="0"/>
+                    <!-- Bug: 8% (red) -->
+                    <circle cx="18" cy="18" r="14" fill="none" stroke="var(--site-error)" stroke-width="4.5" stroke-dasharray="8 92" stroke-dashoffset="-92"/>
+                  </svg>
+                  <div class="absolute inset-0 flex flex-col items-center justify-center">
+                    <span class="text-[5px] text-[var(--site-text-ghost)]">ask 92%</span>
+                  </div>
+                </div>
+              </div>
+              <div class="flex flex-wrap gap-x-1.5 gap-y-0.5 justify-center text-[4px] mt-0.5">
+                <span class="flex items-center gap-0.5"><span class="w-1 h-1 rounded-full bg-[var(--site-accent)]"></span> Task: 349</span>
+                <span class="flex items-center gap-0.5"><span class="w-1 h-1 rounded-full bg-[var(--site-error)]"></span> Bug: 31</span>
+              </div>
+            </div>
+          </div>
+          <!-- AGENT PERFORMANCE section -->
+          <div class="flex items-center gap-0.5">
+            <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="5" cy="3" r="2"/><path d="M1.5,9 C1.5,6.5 3,5.5 5,5.5 C7,5.5 8.5,6.5 8.5,9"/></svg>
+            <span class="text-[5.5px] font-semibold text-[var(--site-text-tertiary)] uppercase tracking-wider">Agent Performance</span>
+          </div>
+          <!-- 2 charts -->
+          <div class="flex gap-1 min-h-0" style="height: 40%;">
+            <!-- Horizontal bar chart: Tasks Completed by Agent -->
+            <div class="flex-1 rounded-lg border border-[var(--site-border)] bg-[var(--site-bg-surface)] p-1.5 flex flex-col">
+              <div class="text-[5.5px] font-medium text-[var(--site-text-secondary)] mb-1">Tasks Completed by Agent (Last 7 days)</div>
+              <div class="flex-1 flex flex-col justify-center gap-[3px]">
+                {[
+                  { name: 'el-5946', value: 85, color: 'var(--site-success)' },
+                  { name: 'm-steward-2', value: 65, color: 'var(--site-success)' },
+                  { name: 'el-5r5b', value: 50, color: 'var(--site-success)' },
+                ].map(a => (
+                  <div class="flex items-center gap-1">
+                    <span class="text-[4.5px] text-[var(--site-text-ghost)] w-[30px] text-right font-mono truncate">{a.name}</span>
+                    <div class="flex-1 h-[5px] rounded bg-[var(--site-bg-elevated)]">
+                      <div class="h-full rounded" style={`width: ${a.value}%; background: ${a.color}; opacity: 0.7;`}></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <!-- Bar chart: Current Workload by Agent -->
+            <div class="flex-1 rounded-lg border border-[var(--site-border)] bg-[var(--site-bg-surface)] p-1.5 flex flex-col">
+              <div class="text-[5.5px] font-medium text-[var(--site-text-secondary)] mb-1">Current Workload by Agent</div>
+              <div class="flex-1 flex items-end gap-[4px] px-2">
+                {[
+                  { name: 'el-0000', value: 80 },
+                ].map((a, i) => (
+                  <div class="flex-1 flex flex-col items-center gap-0.5">
+                    <div class="w-full rounded-t bg-[var(--site-text-ghost)]" style={`height: ${a.value}%; opacity: 0.5;`}></div>
+                    <span class="text-[3.5px] text-[var(--site-text-ghost)] font-mono">{a.name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ──── PAGE: Inbox ──── -->
+        <div data-page="inbox" class="absolute inset-0 p-3 flex flex-col gap-1.5 overflow-hidden" style="display:none;">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-1.5">
+              <div class="w-5 h-5 rounded-md bg-[var(--site-accent-subtle)] flex items-center justify-center">
+                <svg class="w-3 h-3 text-[var(--site-accent)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="8" height="6" rx="1"/><polyline points="1,4 5,7 9,4"/></svg>
+              </div>
+              <div>
+                <div class="text-[10px] font-semibold text-[var(--site-text-primary)]">operator's Inbox</div>
+                <div class="text-[6px] text-[var(--site-text-ghost)]">252 unread</div>
+              </div>
+            </div>
+            <div class="flex items-center gap-px p-0.5 rounded-md bg-[var(--site-bg-surface)] border border-[var(--site-border)]">
+              <div class="px-1.5 py-[2px] rounded text-[5.5px] font-medium bg-[var(--site-bg-elevated)] text-[var(--site-text-primary)]" style="box-shadow: 0 1px 2px rgba(0,0,0,0.15);">Unread <span class="px-0.5 py-px rounded-sm bg-[var(--site-accent-subtle)] text-[var(--site-accent)] text-[4.5px] ml-0.5">252</span></div>
+              <div class="px-1.5 py-[2px] rounded text-[5.5px] font-medium text-[var(--site-text-ghost)]">All</div>
+              <div class="px-1.5 py-[2px] rounded text-[5.5px] font-medium text-[var(--site-text-ghost)]">Archived</div>
+            </div>
+          </div>
+          <!-- Filter/Sort bar -->
+          <div class="flex items-center justify-between px-0.5 py-[2px]">
+            <div class="flex items-center gap-0.5 text-[5.5px] text-[var(--site-text-ghost)]">
+              <svg class="w-2 h-2" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.3"><line x1="1" y1="3" x2="9" y2="3"/><line x1="2.5" y1="5.5" x2="7.5" y2="5.5"/><line x1="4" y1="8" x2="6" y2="8"/></svg>
+              All sources
+              <svg class="w-1.5 h-1.5" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="3,4 5,6 7,4"/></svg>
+            </div>
+            <div class="flex items-center gap-0.5 text-[5.5px] text-[var(--site-text-ghost)]">
+              <svg class="w-2 h-2" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M3,2 v6 M1,6 l2,2 l2,-2"/><path d="M7,8 v-6 M5,4 l2,-2 l2,2"/></svg>
+              Newest first
+              <svg class="w-1.5 h-1.5" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="3,4 5,6 7,4"/></svg>
+            </div>
+          </div>
+          <!-- Split pane: message list (40%) + detail (60%) -->
+          <div class="flex flex-1 gap-1.5 min-h-0">
+            <!-- Message list -->
+            <div class="w-[40%] flex flex-col overflow-hidden">
+              <!-- Time period header -->
+              <div class="flex items-center gap-0.5 px-1 py-[2px] bg-[var(--site-bg-surface)] border-b border-[var(--site-border)]">
+                <svg class="w-1.5 h-1.5 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1" y="2" width="8" height="7" rx="1"/><line x1="3" y1="1" x2="3" y2="3"/><line x1="7" y1="1" x2="7" y2="3"/><line x1="1" y1="4.5" x2="9" y2="4.5"/></svg>
+                <span class="text-[5px] font-semibold text-[var(--site-text-ghost)] uppercase tracking-wider">This Week</span>
+              </div>
+              <div class="space-y-0.5 flex-1 overflow-hidden">
+                <!-- bob-claude (selected) -->
+                <div class="flex items-start gap-1 px-1 py-1 rounded border border-[var(--site-border-accent)] bg-[var(--site-accent-subtle)]">
+                  <div class="w-3 h-3 rounded-full flex items-center justify-center flex-shrink-0 mt-px" style="background: rgba(74,222,128,0.2);">
+                    <svg class="w-2 h-2" style="color: #4ade80;" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="5" cy="3.5" r="2"/><path d="M2,8.5 C2,6.5 3.5,5.5 5,5.5 C6.5,5.5 8,6.5 8,8.5"/></svg>
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-1">
+                      <span class="text-[6px] font-semibold text-[var(--site-text-primary)]">bob-claude</span>
+                      <span class="text-[5px] text-[var(--site-text-ghost)] ml-auto flex-shrink-0">5d</span>
+                    </div>
+                    <div class="text-[5px] text-[var(--site-text-ghost)]">To: operator</div>
+                    <div class="text-[5.5px] text-[var(--site-text-ghost)] truncate">Task assigned: Allow task table columns to be resi</div>
+                  </div>
+                  <span class="w-1 h-1 rounded-full bg-[var(--site-accent)] flex-shrink-0 mt-1"></span>
+                </div>
+                <!-- joe-claude -->
+                <div class="flex items-start gap-1 px-1 py-1 rounded border border-[var(--site-border)] bg-[var(--site-bg-surface)]">
+                  <div class="w-3 h-3 rounded-full flex items-center justify-center flex-shrink-0 mt-px" style="background: rgba(129,140,248,0.2);">
+                    <svg class="w-2 h-2" style="color: #818cf8;" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="5" cy="3.5" r="2"/><path d="M2,8.5 C2,6.5 3.5,5.5 5,5.5 C6.5,5.5 8,6.5 8,8.5"/></svg>
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-1">
+                      <span class="text-[6px] font-semibold text-[var(--site-text-primary)]">joe-claude</span>
+                      <span class="text-[5px] text-[var(--site-text-ghost)] ml-auto flex-shrink-0">5d</span>
+                    </div>
+                    <div class="text-[5px] text-[var(--site-text-ghost)]">To: operator</div>
+                    <div class="text-[5.5px] text-[var(--site-text-ghost)] truncate">Task assigned: Update the drag-and-drop to move fi</div>
+                  </div>
+                  <span class="w-1 h-1 rounded-full bg-[var(--site-accent)] flex-shrink-0 mt-1"></span>
+                </div>
+                <!-- joe-claude -->
+                <div class="flex items-start gap-1 px-1 py-1 rounded border border-[var(--site-border)] bg-[var(--site-bg-surface)]">
+                  <div class="w-3 h-3 rounded-full flex items-center justify-center flex-shrink-0 mt-px" style="background: rgba(129,140,248,0.2);">
+                    <svg class="w-2 h-2" style="color: #818cf8;" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="5" cy="3.5" r="2"/><path d="M2,8.5 C2,6.5 3.5,5.5 5,5.5 C6.5,5.5 8,6.5 8,8.5"/></svg>
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-1">
+                      <span class="text-[6px] font-semibold text-[var(--site-text-primary)]">joe-claude</span>
+                      <span class="text-[5px] text-[var(--site-text-ghost)] ml-auto flex-shrink-0">5d</span>
+                    </div>
+                    <div class="text-[5px] text-[var(--site-text-ghost)]">To: operator</div>
+                    <div class="text-[5.5px] text-[var(--site-text-ghost)] truncate">Task assigned: Pending Messages in the director pa</div>
+                  </div>
+                  <span class="w-1 h-1 rounded-full bg-[var(--site-accent)] flex-shrink-0 mt-1"></span>
+                </div>
+                <!-- bob-claude -->
+                <div class="flex items-start gap-1 px-1 py-1 rounded border border-[var(--site-border)] bg-[var(--site-bg-surface)]">
+                  <div class="w-3 h-3 rounded-full flex items-center justify-center flex-shrink-0 mt-px" style="background: rgba(74,222,128,0.2);">
+                    <svg class="w-2 h-2" style="color: #4ade80;" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="5" cy="3.5" r="2"/><path d="M2,8.5 C2,6.5 3.5,5.5 5,5.5 C6.5,5.5 8,6.5 8,8.5"/></svg>
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-1">
+                      <span class="text-[6px] font-semibold text-[var(--site-text-primary)]">bob-claude</span>
+                      <span class="text-[5px] text-[var(--site-text-ghost)] ml-auto flex-shrink-0">5d</span>
+                    </div>
+                    <div class="text-[5px] text-[var(--site-text-ghost)]">To: operator</div>
+                    <div class="text-[5.5px] text-[var(--site-text-ghost)] truncate">Task assigned: Allow task table columns to be resi</div>
+                  </div>
+                  <span class="w-1 h-1 rounded-full bg-[var(--site-accent)] flex-shrink-0 mt-1"></span>
+                </div>
+                <!-- joe-claude -->
+                <div class="flex items-start gap-1 px-1 py-1 rounded border border-[var(--site-border)] bg-[var(--site-bg-surface)]">
+                  <div class="w-3 h-3 rounded-full flex items-center justify-center flex-shrink-0 mt-px" style="background: rgba(129,140,248,0.2);">
+                    <svg class="w-2 h-2" style="color: #818cf8;" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="5" cy="3.5" r="2"/><path d="M2,8.5 C2,6.5 3.5,5.5 5,5.5 C6.5,5.5 8,6.5 8,8.5"/></svg>
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-1">
+                      <span class="text-[6px] font-semibold text-[var(--site-text-primary)]">joe-claude</span>
+                      <span class="text-[5px] text-[var(--site-text-ghost)] ml-auto flex-shrink-0">5d</span>
+                    </div>
+                    <div class="text-[5px] text-[var(--site-text-ghost)]">To: operator</div>
+                    <div class="text-[5.5px] text-[var(--site-text-ghost)] truncate">Task assigned: Merge steward agent cards on the Ac</div>
+                  </div>
+                  <span class="w-1 h-1 rounded-full bg-[var(--site-accent)] flex-shrink-0 mt-1"></span>
+                </div>
+                <!-- joe-claude -->
+                <div class="flex items-start gap-1 px-1 py-1 rounded border border-[var(--site-border)] bg-[var(--site-bg-surface)]">
+                  <div class="w-3 h-3 rounded-full flex items-center justify-center flex-shrink-0 mt-px" style="background: rgba(129,140,248,0.2);">
+                    <svg class="w-2 h-2" style="color: #818cf8;" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="5" cy="3.5" r="2"/><path d="M2,8.5 C2,6.5 3.5,5.5 5,5.5 C6.5,5.5 8,6.5 8,8.5"/></svg>
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-1">
+                      <span class="text-[6px] font-semibold text-[var(--site-text-primary)]">joe-claude</span>
+                      <span class="text-[5px] text-[var(--site-text-ghost)] ml-auto flex-shrink-0">5d</span>
+                    </div>
+                    <div class="text-[5px] text-[var(--site-text-ghost)]">To: operator</div>
+                    <div class="text-[5.5px] text-[var(--site-text-ghost)] truncate">Task assigned: Add New File, New Folder, and Colla</div>
+                  </div>
+                  <span class="w-1 h-1 rounded-full bg-[var(--site-accent)] flex-shrink-0 mt-1"></span>
+                </div>
+                <!-- alice-claude -->
+                <div class="flex items-start gap-1 px-1 py-1 rounded border border-[var(--site-border)] bg-[var(--site-bg-surface)]">
+                  <div class="w-3 h-3 rounded-full flex items-center justify-center flex-shrink-0 mt-px" style="background: rgba(251,191,36,0.2);">
+                    <svg class="w-2 h-2" style="color: #fbbf24;" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="5" cy="3.5" r="2"/><path d="M2,8.5 C2,6.5 3.5,5.5 5,5.5 C6.5,5.5 8,6.5 8,8.5"/></svg>
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-1">
+                      <span class="text-[6px] font-semibold text-[var(--site-text-primary)]">alice-claude</span>
+                      <span class="text-[5px] text-[var(--site-text-ghost)] ml-auto flex-shrink-0">6d</span>
+                    </div>
+                    <div class="text-[5px] text-[var(--site-text-ghost)]">To: operator</div>
+                    <div class="text-[5.5px] text-[var(--site-text-ghost)] truncate">Task assigned: Add the ability to process a single</div>
+                  </div>
+                  <span class="w-1 h-1 rounded-full bg-[var(--site-accent)] flex-shrink-0 mt-1"></span>
+                </div>
+                <!-- bob-claude -->
+                <div class="flex items-start gap-1 px-1 py-1 rounded border border-[var(--site-border)] bg-[var(--site-bg-surface)]">
+                  <div class="w-3 h-3 rounded-full flex items-center justify-center flex-shrink-0 mt-px" style="background: rgba(74,222,128,0.2);">
+                    <svg class="w-2 h-2" style="color: #4ade80;" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="5" cy="3.5" r="2"/><path d="M2,8.5 C2,6.5 3.5,5.5 5,5.5 C6.5,5.5 8,6.5 8,8.5"/></svg>
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-1">
+                      <span class="text-[6px] font-semibold text-[var(--site-text-primary)]">bob-claude</span>
+                      <span class="text-[5px] text-[var(--site-text-ghost)] ml-auto flex-shrink-0">6d</span>
+                    </div>
+                    <div class="text-[5px] text-[var(--site-text-ghost)]">To: operator</div>
+                    <div class="text-[5.5px] text-[var(--site-text-ghost)] truncate">Task assigned: The &ldquo;working...&rdquo; line on the agent</div>
+                  </div>
+                  <span class="w-1 h-1 rounded-full bg-[var(--site-accent)] flex-shrink-0 mt-1"></span>
+                </div>
+                <!-- joe-claude (partially visible) -->
+                <div class="flex items-start gap-1 px-1 py-1 rounded border border-[var(--site-border)] bg-[var(--site-bg-surface)]">
+                  <div class="w-3 h-3 rounded-full flex items-center justify-center flex-shrink-0 mt-px" style="background: rgba(129,140,248,0.2);">
+                    <svg class="w-2 h-2" style="color: #818cf8;" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="5" cy="3.5" r="2"/><path d="M2,8.5 C2,6.5 3.5,5.5 5,5.5 C6.5,5.5 8,6.5 8,8.5"/></svg>
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-1">
+                      <span class="text-[6px] font-semibold text-[var(--site-text-primary)]">joe-claude</span>
+                      <span class="text-[5px] text-[var(--site-text-ghost)] ml-auto flex-shrink-0">6d</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <!-- Pagination -->
+              <div class="flex items-center justify-center px-1 py-0.5 text-[5px] text-[var(--site-text-ghost)] border-t border-[var(--site-border)]">
+                Showing 100 of 252 items
+              </div>
+            </div>
+            <!-- Message detail -->
+            <div class="flex-1 flex flex-col border border-[var(--site-border)] rounded-lg bg-[var(--site-bg-surface)] overflow-hidden">
+              <div class="px-2 py-1.5 border-b border-[var(--site-border)]">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-1">
+                    <div class="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0" style="background: rgba(74,222,128,0.2);">
+                      <svg class="w-2.5 h-2.5" style="color: #4ade80;" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="5" cy="3.5" r="2"/><path d="M2,8.5 C2,6.5 3.5,5.5 5,5.5 C6.5,5.5 8,6.5 8,8.5"/></svg>
+                    </div>
+                    <div>
+                      <div class="text-[7px] font-semibold text-[var(--site-text-primary)]">bob-claude</div>
+                      <div class="flex items-center gap-0.5 text-[5px] text-[var(--site-text-ghost)]">
+                        <span class="font-mono">#bob-claude:operator</span>
+                        <span>&middot;</span>
+                        <span class="px-0.5 py-px rounded text-[4.5px] font-medium bg-[var(--site-accent-subtle)] text-[var(--site-accent)]">Direct</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-0.5">
+                    <div class="p-0.5 rounded hover:bg-[var(--site-bg-elevated)]">
+                      <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M4,3 L1,5.5 L4,8"/><path d="M1,5.5 h5 a2.5,2.5 0 0,1 2.5,2.5"/></svg>
+                    </div>
+                    <div class="p-0.5 rounded hover:bg-[var(--site-bg-elevated)]">
+                      <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.3"><polyline points="1,5 3,7 6,4"/><polyline points="4,5 6,7 9,4"/></svg>
+                    </div>
+                    <div class="p-0.5 rounded hover:bg-[var(--site-bg-elevated)]">
+                      <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1" y="1" width="8" height="3" rx="0.5"/><path d="M2,4 v4.5 a0.5,0.5 0 0,0 0.5,0.5 h5 a0.5,0.5 0 0,0 0.5,-0.5 v-4.5"/><line x1="4" y1="6" x2="6" y2="6"/></svg>
+                    </div>
+                  </div>
+                </div>
+                <div class="text-[5px] text-[var(--site-text-ghost)] mt-0.5 ml-5">Thu, Feb 12, 2026, 10:32 PM (5 days ago)</div>
+              </div>
+              <div class="flex-1 px-2 py-1.5 text-[6px] text-[var(--site-text-secondary)] overflow-hidden">
+                <p>Task assigned: Allow task table columns to be resized by dragging and moving header borders [Priority: 3]</p>
+                <p class="mt-2">
+                  <span class="text-[var(--site-accent)] text-[5.5px] cursor-pointer">View in channel &rsaquo;</span>
+                </p>
+              </div>
+              <!-- Reply area -->
+              <div class="px-2 py-1 border-t border-[var(--site-border)]">
+                <div class="text-[5px] text-[var(--site-text-ghost)] mb-0.5 flex items-center gap-0.5">
+                  <svg class="w-1.5 h-1.5" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M4,3 L1,5.5 L4,8"/><path d="M1,5.5 h5 a2.5,2.5 0 0,1 2.5,2.5"/></svg>
+                  Replying as <span class="font-semibold text-[var(--site-text-secondary)]">operator</span> to bob-claude
+                </div>
+                <div class="rounded border border-[var(--site-border)] bg-[var(--site-bg-elevated)] overflow-hidden">
+                  <div class="px-1.5 py-1 text-[5.5px] text-[var(--site-text-ghost)]">Write your reply...</div>
+                  <div class="flex items-center justify-end gap-1 px-1 py-0.5 border-t border-[var(--site-border)]">
+                    <div class="px-1.5 py-[2px] rounded text-[5px] font-medium bg-[var(--site-accent)] text-white flex items-center gap-0.5">
+                      <svg class="w-1.5 h-1.5" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1,5 L9,1 L7,9 L5,5.5 Z"/></svg>
+                      Send
+                    </div>
+                  </div>
+                </div>
+                <div class="flex items-center justify-between mt-0.5">
+                  <div class="text-[5px] text-[var(--site-text-ghost)]">Press Cmd+Enter to send</div>
+                  <div class="text-[5.5px] text-[var(--site-text-ghost)] cursor-pointer">Cancel</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ──── PAGE: Editor ──── -->
+        <div data-page="editor" class="absolute inset-0 flex flex-col overflow-hidden" style="display:none;">
+          <!-- Editor page header -->
+          <div class="flex items-center justify-between px-3 py-1.5 border-b border-[var(--site-border)]">
+            <div class="flex items-center gap-1.5">
+              <div class="w-5 h-5 rounded-md bg-[var(--site-accent-subtle)] flex items-center justify-center">
+                <svg class="w-3 h-3 text-[var(--site-accent)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="2" y="1" width="6" height="8" rx="1"/><line x1="4" y1="4" x2="4" y2="6"/><line x1="6" y1="4" x2="6" y2="6"/></svg>
+              </div>
+              <div>
+                <div class="text-[10px] font-semibold text-[var(--site-text-primary)]">Editor</div>
+                <div class="text-[5px] text-[var(--site-text-ghost)] font-mono">apps/smithy-server/src/daemon-state.ts</div>
+              </div>
+            </div>
+          </div>
+          <!-- Editor body -->
+          <div class="flex flex-1 min-h-0">
+            <!-- Activity Bar -->
+            <div class="w-[18px] flex-shrink-0 bg-[var(--site-bg-elevated)] border-r border-[var(--site-border)] flex flex-col items-center py-1.5 gap-1.5">
+              <div class="p-0.5 rounded bg-[var(--site-accent-subtle)]">
+                <svg class="w-2 h-2 text-[var(--site-accent)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M2,2 h3 l1,1 h2.5 a0.5,0.5 0 0,1 0.5,0.5 v4.5 a0.5,0.5 0 0,1 -0.5,0.5 h-6 a0.5,0.5 0 0,1 -0.5,-0.5 v-5.5 a0.5,0.5 0 0,1 0.5,-0.5 z"/></svg>
+              </div>
+              <div class="p-0.5 rounded">
+                <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="4.5" cy="4.5" r="3"/><line x1="7" y1="7" x2="9" y2="9"/></svg>
+              </div>
+              <div class="p-0.5 rounded">
+                <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1" y="1" width="3.5" height="3.5" rx="0.5"/><rect x="5.5" y="1" width="3.5" height="3.5" rx="0.5"/><rect x="1" y="5.5" width="3.5" height="3.5" rx="0.5"/><rect x="5.5" y="5.5" width="3.5" height="3.5" rx="0.5"/></svg>
+              </div>
+              <div class="mt-auto p-0.5 rounded">
+                <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="5" cy="5" r="2.5"/><line x1="5" y1="1" x2="5" y2="2"/><line x1="5" y1="8" x2="5" y2="9"/><line x1="1" y1="5" x2="2" y2="5"/><line x1="8" y1="5" x2="9" y2="5"/></svg>
+              </div>
+            </div>
+            <!-- File tree sidebar -->
+            <div class="w-[90px] border-r border-[var(--site-border)] bg-[var(--site-bg-primary)] flex flex-col flex-shrink-0">
+              <!-- Explorer header -->
+              <div class="flex items-center justify-between px-1.5 py-0.5 border-b border-[var(--site-border)]">
+                <span class="text-[5px] font-semibold text-[var(--site-text-ghost)] uppercase tracking-wider">Explorer</span>
+                <div class="flex items-center gap-0.5">
+                  <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M3,1 h3 l2,2 v6 a0.5,0.5 0 0,1 -0.5,0.5 h-4.5 a0.5,0.5 0 0,1 -0.5,-0.5 v-7.5 a0.5,0.5 0 0,1 0.5,-0.5 z"/><line x1="5" y1="4" x2="5" y2="7"/><line x1="3.5" y1="5.5" x2="6.5" y2="5.5"/></svg>
+                  <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M2,2 h3 l1,1 h2.5 a0.5,0.5 0 0,1 0.5,0.5 v4.5 a0.5,0.5 0 0,1 -0.5,0.5 h-6 a0.5,0.5 0 0,1 -0.5,-0.5 v-5.5 a0.5,0.5 0 0,1 0.5,-0.5 z"/><line x1="5" y1="5" x2="5" y2="7.5"/><line x1="3.5" y1="6.25" x2="6.5" y2="6.25"/></svg>
+                  <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><polyline points="2,4 5,1 8,4"/><polyline points="2,6 5,9 8,6"/></svg>
+                </div>
+              </div>
+              <!-- Source toggle -->
+              <div class="px-1.5 py-0.5 border-b border-[var(--site-border)]">
+                <div class="flex items-center gap-px p-px rounded bg-[var(--site-bg-surface)]">
+                  <div class="flex-1 flex items-center justify-center gap-0.5 px-1 py-[1px] rounded text-[4.5px] font-medium bg-[var(--site-bg-elevated)] text-[var(--site-text-primary)]" style="box-shadow: 0 1px 2px rgba(0,0,0,0.15);">
+                    <svg class="w-1.5 h-1.5" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1.5" y="2" width="7" height="6" rx="0.5"/><line x1="1.5" y1="4.5" x2="8.5" y2="4.5"/></svg>
+                    Local
+                  </div>
+                  <div class="flex-1 flex items-center justify-center gap-0.5 px-1 py-[1px] rounded text-[4.5px] font-medium text-[var(--site-text-ghost)]">
+                    <svg class="w-1.5 h-1.5" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M3,1 h3 l2,2 v6 a0.5,0.5 0 0,1 -0.5,0.5 h-4.5 a0.5,0.5 0 0,1 -0.5,-0.5 v-7.5 a0.5,0.5 0 0,1 0.5,-0.5 z"/></svg>
+                    Docs
+                  </div>
+                </div>
+                <div class="text-[4.5px] text-[var(--site-text-ghost)] mt-0.5 px-0.5">Workspace</div>
+              </div>
+              <!-- File tree -->
+              <div class="flex-1 py-1 overflow-hidden text-[5.5px]">
+                <!-- .playwright -->
+                <div class="flex items-center gap-0.5 px-1.5 py-[1px] text-[var(--site-text-ghost)]">
+                  <svg class="w-1.5 h-1.5 flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="3,2 7,5 3,8"/></svg>
+                  <svg class="w-2 h-2 flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.1" style="color: var(--site-warning)"><path d="M1,3 h8 v5.5 a0.5,0.5 0 0,1 -0.5,0.5 h-7 a0.5,0.5 0 0,1 -0.5,-0.5 z"/><path d="M2,3 v-1 a0.3,0.3 0 0,1 0.3,-0.3 h2.2 l1,1"/></svg>
+                  <span>.playwright</span>
+                </div>
+                <!-- .stoneforge -->
+                <div class="flex items-center gap-0.5 px-1.5 py-[1px] text-[var(--site-text-ghost)]">
+                  <svg class="w-1.5 h-1.5 flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="3,2 7,5 3,8"/></svg>
+                  <svg class="w-2 h-2 flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.1" style="color: var(--site-warning)"><path d="M1,3 h8 v5.5 a0.5,0.5 0 0,1 -0.5,0.5 h-7 a0.5,0.5 0 0,1 -0.5,-0.5 z"/><path d="M2,3 v-1 a0.3,0.3 0 0,1 0.3,-0.3 h2.2 l1,1"/></svg>
+                  <span>.stoneforge</span>
+                </div>
+                <!-- .turbo -->
+                <div class="flex items-center gap-0.5 px-1.5 py-[1px] text-[var(--site-text-ghost)]">
+                  <svg class="w-1.5 h-1.5 flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="3,2 7,5 3,8"/></svg>
+                  <svg class="w-2 h-2 flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.1" style="color: var(--site-warning)"><path d="M1,3 h8 v5.5 a0.5,0.5 0 0,1 -0.5,0.5 h-7 a0.5,0.5 0 0,1 -0.5,-0.5 z"/><path d="M2,3 v-1 a0.3,0.3 0 0,1 0.3,-0.3 h2.2 l1,1"/></svg>
+                  <span>.turbo</span>
+                </div>
+                <!-- apps/ (expanded) -->
+                <div class="flex items-center gap-0.5 px-1.5 py-[1px] text-[var(--site-text-secondary)]">
+                  <svg class="w-1.5 h-1.5 flex-shrink-0 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="2,3 5,7 8,3"/></svg>
+                  <svg class="w-2 h-2 flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.1" style="color: var(--site-warning)"><path d="M1,3 h8 v5.5 a0.5,0.5 0 0,1 -0.5,0.5 h-7 a0.5,0.5 0 0,1 -0.5,-0.5 z"/><path d="M2,3 v-1 a0.3,0.3 0 0,1 0.3,-0.3 h2.2 l1,1"/></svg>
+                  <span class="font-medium">apps</span>
+                </div>
+                <!-- quarry-server -->
+                <div class="flex items-center gap-0.5 py-[1px] text-[var(--site-text-ghost)]" style="padding-left: 18px;">
+                  <svg class="w-1.5 h-1.5 flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="3,2 7,5 3,8"/></svg>
+                  <svg class="w-2 h-2 flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.1" style="color: var(--site-warning)"><path d="M1,3 h8 v5.5 a0.5,0.5 0 0,1 -0.5,0.5 h-7 a0.5,0.5 0 0,1 -0.5,-0.5 z"/><path d="M2,3 v-1 a0.3,0.3 0 0,1 0.3,-0.3 h2.2 l1,1"/></svg>
+                  <span>quarry-server</span>
+                </div>
+                <!-- quarry-web -->
+                <div class="flex items-center gap-0.5 py-[1px] text-[var(--site-text-ghost)]" style="padding-left: 18px;">
+                  <svg class="w-1.5 h-1.5 flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="3,2 7,5 3,8"/></svg>
+                  <svg class="w-2 h-2 flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.1" style="color: var(--site-warning)"><path d="M1,3 h8 v5.5 a0.5,0.5 0 0,1 -0.5,0.5 h-7 a0.5,0.5 0 0,1 -0.5,-0.5 z"/><path d="M2,3 v-1 a0.3,0.3 0 0,1 0.3,-0.3 h2.2 l1,1"/></svg>
+                  <span>quarry-web</span>
+                </div>
+                <!-- smithy-server (expanded) -->
+                <div class="flex items-center gap-0.5 py-[1px] text-[var(--site-text-secondary)]" style="padding-left: 18px;">
+                  <svg class="w-1.5 h-1.5 flex-shrink-0 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="2,3 5,7 8,3"/></svg>
+                  <svg class="w-2 h-2 flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.1" style="color: var(--site-warning)"><path d="M1,3 h8 v5.5 a0.5,0.5 0 0,1 -0.5,0.5 h-7 a0.5,0.5 0 0,1 -0.5,-0.5 z"/><path d="M2,3 v-1 a0.3,0.3 0 0,1 0.3,-0.3 h2.2 l1,1"/></svg>
+                  <span class="font-medium">smithy-server</span>
+                </div>
+                <!-- .turbo (nested) -->
+                <div class="flex items-center gap-0.5 py-[1px] text-[var(--site-text-ghost)]" style="padding-left: 30px;">
+                  <svg class="w-1.5 h-1.5 flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="3,2 7,5 3,8"/></svg>
+                  <svg class="w-2 h-2 flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.1" style="color: var(--site-warning)"><path d="M1,3 h8 v5.5 a0.5,0.5 0 0,1 -0.5,0.5 h-7 a0.5,0.5 0 0,1 -0.5,-0.5 z"/><path d="M2,3 v-1 a0.3,0.3 0 0,1 0.3,-0.3 h2.2 l1,1"/></svg>
+                  <span>.turbo</span>
+                </div>
+                <!-- src/ (expanded) -->
+                <div class="flex items-center gap-0.5 py-[1px] text-[var(--site-text-secondary)]" style="padding-left: 30px;">
+                  <svg class="w-1.5 h-1.5 flex-shrink-0 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="2,3 5,7 8,3"/></svg>
+                  <svg class="w-2 h-2 flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.1" style="color: var(--site-warning)"><path d="M1,3 h8 v5.5 a0.5,0.5 0 0,1 -0.5,0.5 h-7 a0.5,0.5 0 0,1 -0.5,-0.5 z"/><path d="M2,3 v-1 a0.3,0.3 0 0,1 0.3,-0.3 h2.2 l1,1"/></svg>
+                  <span class="font-medium">src</span>
+                </div>
+                <!-- routes/ -->
+                <div class="flex items-center gap-0.5 py-[1px] text-[var(--site-text-ghost)]" style="padding-left: 42px;">
+                  <svg class="w-1.5 h-1.5 flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="3,2 7,5 3,8"/></svg>
+                  <svg class="w-2 h-2 flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.1" style="color: var(--site-warning)"><path d="M1,3 h8 v5.5 a0.5,0.5 0 0,1 -0.5,0.5 h-7 a0.5,0.5 0 0,1 -0.5,-0.5 z"/><path d="M2,3 v-1 a0.3,0.3 0 0,1 0.3,-0.3 h2.2 l1,1"/></svg>
+                  <span>routes</span>
+                </div>
+                <!-- services/ -->
+                <div class="flex items-center gap-0.5 py-[1px] text-[var(--site-text-ghost)]" style="padding-left: 42px;">
+                  <svg class="w-1.5 h-1.5 flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="3,2 7,5 3,8"/></svg>
+                  <svg class="w-2 h-2 flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.1" style="color: var(--site-warning)"><path d="M1,3 h8 v5.5 a0.5,0.5 0 0,1 -0.5,0.5 h-7 a0.5,0.5 0 0,1 -0.5,-0.5 z"/><path d="M2,3 v-1 a0.3,0.3 0 0,1 0.3,-0.3 h2.2 l1,1"/></svg>
+                  <span>services</span>
+                </div>
+                <!-- config.ts -->
+                <div class="flex items-center gap-0.5 py-[1px] text-[var(--site-text-ghost)]" style="padding-left: 42px;">
+                  <svg class="w-2 h-2 flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.1" style="color: #3b82f6"><path d="M3,1 h3 l2,2 v6 a0.5,0.5 0 0,1 -0.5,0.5 h-4.5 a0.5,0.5 0 0,1 -0.5,-0.5 v-7.5 a0.5,0.5 0 0,1 0.5,-0.5 z"/></svg>
+                  <span class="truncate">config.ts</span>
+                </div>
+                <!-- daemon-state.ts (SELECTED) -->
+                <div class="flex items-center gap-0.5 py-[1px] rounded bg-[var(--site-accent-subtle)]" style="padding-left: 42px;">
+                  <svg class="w-2 h-2 flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.1" style="color: #3b82f6"><path d="M3,1 h3 l2,2 v6 a0.5,0.5 0 0,1 -0.5,0.5 h-4.5 a0.5,0.5 0 0,1 -0.5,-0.5 v-7.5 a0.5,0.5 0 0,1 0.5,-0.5 z"/></svg>
+                  <span class="truncate text-[var(--site-accent)] font-medium">daemon-state.ts</span>
+                </div>
+                <!-- events-websocket... -->
+                <div class="flex items-center gap-0.5 py-[1px] text-[var(--site-text-ghost)]" style="padding-left: 42px;">
+                  <svg class="w-2 h-2 flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.1" style="color: #3b82f6"><path d="M3,1 h3 l2,2 v6 a0.5,0.5 0 0,1 -0.5,0.5 h-4.5 a0.5,0.5 0 0,1 -0.5,-0.5 v-7.5 a0.5,0.5 0 0,1 0.5,-0.5 z"/></svg>
+                  <span class="truncate">events-websocket...</span>
+                </div>
+                <!-- formatters.ts -->
+                <div class="flex items-center gap-0.5 py-[1px] text-[var(--site-text-ghost)]" style="padding-left: 42px;">
+                  <svg class="w-2 h-2 flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.1" style="color: #3b82f6"><path d="M3,1 h3 l2,2 v6 a0.5,0.5 0 0,1 -0.5,0.5 h-4.5 a0.5,0.5 0 0,1 -0.5,-0.5 v-7.5 a0.5,0.5 0 0,1 0.5,-0.5 z"/></svg>
+                  <span class="truncate">formatters.ts</span>
+                </div>
+                <!-- index.test.ts -->
+                <div class="flex items-center gap-0.5 py-[1px] text-[var(--site-text-ghost)]" style="padding-left: 42px;">
+                  <svg class="w-2 h-2 flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.1" style="color: #3b82f6"><path d="M3,1 h3 l2,2 v6 a0.5,0.5 0 0,1 -0.5,0.5 h-4.5 a0.5,0.5 0 0,1 -0.5,-0.5 v-7.5 a0.5,0.5 0 0,1 0.5,-0.5 z"/></svg>
+                  <span class="truncate">index.test.ts</span>
+                </div>
+                <!-- index.ts -->
+                <div class="flex items-center gap-0.5 py-[1px] text-[var(--site-text-ghost)]" style="padding-left: 42px;">
+                  <svg class="w-2 h-2 flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.1" style="color: #3b82f6"><path d="M3,1 h3 l2,2 v6 a0.5,0.5 0 0,1 -0.5,0.5 h-4.5 a0.5,0.5 0 0,1 -0.5,-0.5 v-7.5 a0.5,0.5 0 0,1 0.5,-0.5 z"/></svg>
+                  <span class="truncate">index.ts</span>
+                </div>
+                <!-- lsp-websocket.ts -->
+                <div class="flex items-center gap-0.5 py-[1px] text-[var(--site-text-ghost)]" style="padding-left: 42px;">
+                  <svg class="w-2 h-2 flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.1" style="color: #3b82f6"><path d="M3,1 h3 l2,2 v6 a0.5,0.5 0 0,1 -0.5,0.5 h-4.5 a0.5,0.5 0 0,1 -0.5,-0.5 v-7.5 a0.5,0.5 0 0,1 0.5,-0.5 z"/></svg>
+                  <span class="truncate">lsp-websocket.ts</span>
+                </div>
+                <!-- plugins.integratio... -->
+                <div class="flex items-center gap-0.5 py-[1px] text-[var(--site-text-ghost)]" style="padding-left: 42px;">
+                  <svg class="w-2 h-2 flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.1" style="color: #3b82f6"><path d="M3,1 h3 l2,2 v6 a0.5,0.5 0 0,1 -0.5,0.5 h-4.5 a0.5,0.5 0 0,1 -0.5,-0.5 v-7.5 a0.5,0.5 0 0,1 0.5,-0.5 z"/></svg>
+                  <span class="truncate">plugins.integratio...</span>
+                </div>
+                <!-- server.ts -->
+                <div class="flex items-center gap-0.5 py-[1px] text-[var(--site-text-ghost)]" style="padding-left: 42px;">
+                  <svg class="w-2 h-2 flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.1" style="color: #3b82f6"><path d="M3,1 h3 l2,2 v6 a0.5,0.5 0 0,1 -0.5,0.5 h-4.5 a0.5,0.5 0 0,1 -0.5,-0.5 v-7.5 a0.5,0.5 0 0,1 0.5,-0.5 z"/></svg>
+                  <span class="truncate">server.ts</span>
+                </div>
+                <!-- services.ts -->
+                <div class="flex items-center gap-0.5 py-[1px] text-[var(--site-text-ghost)]" style="padding-left: 42px;">
+                  <svg class="w-2 h-2 flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.1" style="color: #3b82f6"><path d="M3,1 h3 l2,2 v6 a0.5,0.5 0 0,1 -0.5,0.5 h-4.5 a0.5,0.5 0 0,1 -0.5,-0.5 v-7.5 a0.5,0.5 0 0,1 0.5,-0.5 z"/></svg>
+                  <span class="truncate">services.ts</span>
+                </div>
+              </div>
+            </div>
+            <!-- Editor panel -->
+            <div class="flex-1 flex flex-col bg-[var(--site-bg-void)]">
+              <!-- Tab bar -->
+              <div class="flex items-center border-b border-[var(--site-border)] bg-[var(--site-bg-elevated)] h-[18px] flex-shrink-0">
+                <div class="flex items-center gap-0.5 px-1.5 h-full border-r border-[var(--site-border)] bg-[var(--site-bg-void)] text-[5.5px]">
+                  <svg class="w-2 h-2 flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.1" style="color: #3b82f6"><path d="M3,1 h3 l2,2 v6 a0.5,0.5 0 0,1 -0.5,0.5 h-4.5 a0.5,0.5 0 0,1 -0.5,-0.5 v-7.5 a0.5,0.5 0 0,1 0.5,-0.5 z"/></svg>
+                  <span class="font-medium text-[var(--site-text-primary)]">daemon-state.ts</span>
+                  <span class="text-[var(--site-text-ghost)] hover:text-[var(--site-text-secondary)] ml-0.5">&times;</span>
+                </div>
+                <div class="flex-1"></div>
+              </div>
+              <!-- Status bar -->
+              <div class="flex items-center justify-between px-1.5 py-[1px] border-b border-[var(--site-border)] bg-[var(--site-bg-elevated)]/40">
+                <div class="flex items-center gap-1 text-[5px] text-[var(--site-text-ghost)]">
+                  <span class="flex items-center gap-0.5">
+                    <svg class="w-1.5 h-1.5" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1" y="2" width="8" height="6" rx="0.5"/><line x1="1" y1="5" x2="9" y2="5"/></svg>
+                    TypeScript
+                  </span>
+                  <span>&middot;</span>
+                  <span class="text-[var(--site-success)]">LSP</span>
+                </div>
+                <div class="px-1 py-px rounded text-[5px] font-medium text-[var(--site-text-ghost)] border border-[var(--site-border)]">Save</div>
+              </div>
+              <!-- Code area with gutter -->
+              <div class="flex-1 flex min-h-0">
+                <!-- Gutter -->
+                <div class="w-[16px] flex-shrink-0 bg-[var(--site-bg-elevated)]/30 border-r border-[var(--site-border)]/30 pt-1.5 font-mono text-[5px] text-[var(--site-text-ghost)]/30 text-right pr-1 select-none space-y-px">
+                  <div>1</div><div>2</div><div>3</div><div>4</div><div>5</div><div>6</div><div>7</div><div>8</div><div>9</div><div>10</div><div>11</div><div>12</div><div>13</div><div>14</div><div>15</div><div>16</div><div>17</div><div>18</div><div>19</div><div>20</div><div>21</div><div>22</div><div>23</div><div>24</div><div>25</div><div>26</div><div>27</div>
+                </div>
+                <!-- Code content -->
+                <div class="flex-1 pt-1.5 pl-1.5 font-mono text-[5.5px] space-y-px overflow-hidden">
+                  <div><span style="color: #6b7280">/**</span></div>
+                  <div><span style="color: #6b7280"> * Daemon State Persistence</span></div>
+                  <div><span style="color: #6b7280"> *</span></div>
+                  <div><span style="color: #6b7280"> * Persists the dispatch daemon's running state across</span></div>
+                  <div><span style="color: #6b7280"> * server restarts.</span></div>
+                  <div><span style="color: #6b7280"> * This allows the daemon to remember whether it was</span></div>
+                  <div><span style="color: #6b7280"> * intentionally stopped</span></div>
+                  <div><span style="color: #6b7280"> * by the user, so it doesn't auto-restart during dev mode</span></div>
+                  <div><span style="color: #6b7280"> * hot reloads.</span></div>
+                  <div><span style="color: #6b7280"> */</span></div>
+                  <div>&nbsp;</div>
+                  <div><span style="color: #c084fc">import</span> <span style="color: var(--site-text-secondary)">{"{"} existsSync, readFileSync, writeFileSync,</span></div>
+                  <div><span style="color: var(--site-text-secondary)">    mkdirSync {"}"}</span> <span style="color: #c084fc">from</span> <span style="color: #a5d6ff">'node:fs'</span>;</div>
+                  <div><span style="color: #c084fc">import</span> <span style="color: var(--site-text-secondary)">{"{"} dirname, join {"}"}</span> <span style="color: #c084fc">from</span> <span style="color: #a5d6ff">'node:path'</span>;</div>
+                  <div><span style="color: #c084fc">import</span> <span style="color: var(--site-text-secondary)">{"{"} createLogger {"}"}</span> <span style="color: #c084fc">from</span> <span style="color: #a5d6ff">'@stoneforge/smithy'</span>;</div>
+                  <div><span style="color: #c084fc">import</span> <span style="color: var(--site-text-secondary)">{"{"} PROJECT_ROOT {"}"}</span> <span style="color: #c084fc">from</span> <span style="color: #a5d6ff">'./config.js'</span>;</div>
+                  <div>&nbsp;</div>
+                  <div><span style="color: #c084fc">const</span> <span style="color: var(--site-text-primary)">logger</span> = <span style="color: #e2e8f0">createLogger</span>(<span style="color: #a5d6ff">'daemon-state'</span>);</div>
+                  <div>&nbsp;</div>
+                  <div><span style="color: #c084fc">const</span> <span style="color: var(--site-text-primary)">STATE_FILE</span> = <span style="color: #e2e8f0">join</span>(<span style="color: var(--site-text-primary)">PROJECT_ROOT</span>, <span style="color: #a5d6ff">'.stoneforge'</span>,</div>
+                  <div>&nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #a5d6ff">'daemon-state.json'</span>);</div>
+                  <div>&nbsp;</div>
+                  <div><span style="color: #c084fc">interface</span> <span style="color: #7dd3fc">DaemonConfigOverrides</span> {"{"}</div>
+                  <div>&nbsp;&nbsp;<span style="color: var(--site-text-secondary)">directorInboxForwardingEnabled?: </span><span style="color: #7dd3fc">boolean</span>;</div>
+                  <div>{"}"}</div>
+                  <div>&nbsp;</div>
+                  <div><span style="color: #c084fc">interface</span> <span style="color: #7dd3fc">DaemonState</span> {"{"}</div>
+                  <div><span style="color: #6b7280">  /** Whether the daemon should be running */</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ──── PAGE: Workflows ──── -->
+        <div data-page="workflows" class="absolute inset-0 p-3 flex flex-col gap-2 overflow-hidden" style="display:none;">
+          <!-- Header -->
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-1.5">
+              <div class="w-5 h-5 rounded-md bg-[var(--site-accent-subtle)] flex items-center justify-center">
+                <svg class="w-3 h-3 text-[var(--site-accent)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="2" cy="5" r="1"/><circle cx="8" cy="5" r="1"/><circle cx="5" cy="2" r="1"/><circle cx="5" cy="8" r="1"/><line x1="3" y1="5" x2="4" y2="5"/><line x1="6" y1="5" x2="7" y2="5"/></svg>
+              </div>
+              <div>
+                <div class="text-[10px] font-semibold text-[var(--site-text-primary)]">Workflows</div>
+                <div class="text-[6px] text-[var(--site-text-ghost)]">Manage workflow templates and active workflows</div>
+              </div>
+            </div>
+            <div class="flex items-center gap-1">
+              <!-- Refresh icon -->
+              <div class="p-0.5 rounded border border-[var(--site-border)]">
+                <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M2,5 a3,3 0 1,1 1,2"/><polyline points="1,4 2,5.5 3.5,4"/></svg>
+              </div>
+              <div class="px-1.5 py-0.5 rounded text-[6.5px] font-medium bg-[var(--site-accent)] text-white flex items-center gap-0.5">
+                + Create Template
+                <span class="text-[5px] opacity-70 ml-0.5">C W</span>
+              </div>
+            </div>
+          </div>
+          <!-- Search -->
+          <div class="flex items-center gap-0.5 px-1.5 py-[3px] rounded border border-[var(--site-border)] text-[6px] text-[var(--site-text-ghost)] bg-[var(--site-bg-surface)]">
+            <svg class="w-2 h-2" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="4.5" cy="4.5" r="3"/><line x1="7" y1="7" x2="9" y2="9"/></svg>
+            Search templates...
+          </div>
+          <!-- Underline tabs: Templates | Active (with badge counts) -->
+          <div class="flex items-center gap-0.5 border-b border-[var(--site-border)]">
+            <div class="px-1.5 py-[2px] text-[6px] font-medium border-b-2 text-[var(--site-accent)] border-[var(--site-accent)] flex items-center gap-0.5">
+              Templates
+              <span class="px-0.5 py-px rounded-sm text-[4.5px] bg-[var(--site-accent-subtle)] text-[var(--site-accent)]">1</span>
+            </div>
+            <div class="px-1.5 py-[2px] text-[6px] font-medium border-b-2 text-[var(--site-text-ghost)] border-transparent flex items-center gap-0.5">
+              Active
+              <span class="px-0.5 py-px rounded-sm text-[4.5px] bg-[var(--site-bg-surface)] text-[var(--site-text-ghost)]">1</span>
+            </div>
+          </div>
+          <!-- Template card -->
+          <div class="space-y-1.5">
+            {workflows.map(w => (
+              <div class="p-2 rounded-lg border border-[var(--site-border)] bg-[var(--site-bg-surface)] w-[50%]">
+                <div class="flex items-start justify-between mb-1">
+                  <div class="flex items-center gap-1">
+                    <!-- Template icon -->
+                    <div class="w-4 h-4 rounded bg-[var(--site-bg-elevated)] border border-[var(--site-border)] flex items-center justify-center">
+                      <svg class="w-2.5 h-2.5 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="2" y="2" width="6" height="6" rx="1"/><line x1="2" y1="4.5" x2="8" y2="4.5"/><line x1="5" y1="4.5" x2="5" y2="8"/></svg>
+                    </div>
+                    <div>
+                      <div class="text-[7px] font-semibold text-[var(--site-text-primary)]">{w.name}</div>
+                      <div class="text-[5px] text-[var(--site-text-ghost)]">{w.slug}</div>
+                    </div>
+                  </div>
+                  <span class="text-[var(--site-text-ghost)] text-[6px]">&middot;&middot;&middot;</span>
+                </div>
+                <div class="flex items-center gap-1.5 text-[5px] text-[var(--site-text-ghost)] mb-1.5">
+                  <span class="flex items-center gap-0.5">
+                    <svg class="w-1.5 h-1.5" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="2" y="2" width="6" height="6" rx="1"/><line x1="2" y1="5" x2="8" y2="5"/></svg>
+                    {w.steps} steps
+                  </span>
+                  <span>{w.version}</span>
+                </div>
+                <!-- Create Workflow button -->
+                <div class="flex items-center justify-center gap-0.5 px-2 py-[3px] rounded bg-[var(--site-accent)] text-white text-[6px] font-medium">
+                  <svg class="w-2 h-2" viewBox="0 0 10 10" fill="currentColor"><path d="M3,2 l5,3 -5,3 z"/></svg>
+                  Create Workflow
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <!-- ──── PAGE: Workspaces ──── -->
+        <div data-page="workspaces" class="absolute inset-0 p-2 flex flex-col gap-1.5 overflow-hidden" style="display:none;">
+          <!-- Header -->
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-1.5">
+              <div class="w-5 h-5 rounded-md bg-[var(--site-accent-subtle)] flex items-center justify-center">
+                <svg class="w-3 h-3 text-[var(--site-accent)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="3.5" height="3.5" rx="0.5"/><rect x="5.5" y="1" width="3.5" height="3.5" rx="0.5"/><rect x="1" y="5.5" width="3.5" height="3.5" rx="0.5"/><rect x="5.5" y="5.5" width="3.5" height="3.5" rx="0.5"/></svg>
+              </div>
+              <div>
+                <div class="text-[10px] font-semibold text-[var(--site-text-primary)]">Workspaces</div>
+                <div class="text-[6px] text-[var(--site-text-ghost)]">Terminal multiplexer for agent sessions &middot; 4 panes</div>
+              </div>
+            </div>
+            <div class="flex items-center gap-1">
+              <div class="flex items-center gap-0.5 px-1 py-[2px] rounded border border-[var(--site-border)] text-[5.5px] text-[var(--site-text-secondary)] font-medium">
+                <svg class="w-2 h-2" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1" y="1" width="3.5" height="3.5" rx="0.5"/><rect x="5.5" y="1" width="3.5" height="3.5" rx="0.5"/><rect x="1" y="5.5" width="3.5" height="3.5" rx="0.5"/><rect x="5.5" y="5.5" width="3.5" height="3.5" rx="0.5"/></svg>
+                Grid
+                <svg class="w-1.5 h-1.5 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="3,4 5,6 7,4"/></svg>
+              </div>
+              <div class="flex items-center gap-0.5 px-1 py-[2px] rounded border border-[var(--site-border)] text-[5.5px] text-[var(--site-text-ghost)]">
+                <svg class="w-2 h-2" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M2,2 L8,2 L8,8 L2,8 Z M5,2 L5,8"/></svg>
+                Rotate
+              </div>
+              <div class="flex items-center gap-0.5 px-1.5 py-[2px] rounded text-[5.5px] font-medium bg-[var(--site-accent)] text-white">
+                + Add Pane
+                <span class="px-0.5 py-px rounded bg-[rgba(255,255,255,0.2)] text-[4.5px] ml-0.5">A P</span>
+              </div>
+            </div>
+          </div>
+          <!-- 2x2 workspace grid -->
+          <div class="grid grid-cols-2 grid-rows-2 gap-1 flex-1 min-h-0">
+            <!-- Top-left: worker alice-claude -->
+            <div class="rounded-lg border border-[var(--site-border)] bg-[var(--site-bg-void)] overflow-hidden flex flex-col min-h-0">
+              <div class="flex items-center gap-0.5 px-1 py-[2px] border-b border-[var(--site-border)] bg-[var(--site-bg-elevated)] flex-shrink-0">
+                <span class="text-[5px] font-semibold px-0.5 py-px rounded" style="color: var(--site-success); background: rgba(74,222,128,0.1);">&gt; worker</span>
+                <span class="text-[5.5px] font-semibold text-[var(--site-text-primary)]">alice-claude</span>
+                <span class="text-[5px] text-[var(--site-text-ghost)]">ephemeral</span>
+                <div class="ml-auto flex items-center gap-px">
+                  <input type="checkbox" class="w-1.5 h-1.5 opacity-30" disabled />
+                  <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><polyline points="2,4 5,1 8,4"/><polyline points="2,6 5,9 8,6"/></svg>
+                  <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="5" cy="3" r="0.5" fill="currentColor"/><circle cx="5" cy="5" r="0.5" fill="currentColor"/><circle cx="5" cy="7" r="0.5" fill="currentColor"/></svg>
+                  <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><line x1="3" y1="3" x2="7" y2="7"/><line x1="7" y1="3" x2="3" y2="7"/></svg>
+                </div>
+              </div>
+              <div class="flex-1 p-1 text-[4.5px] font-mono text-[var(--site-text-tertiary)] overflow-hidden leading-relaxed">
+                <div class="text-[var(--site-text-ghost)]"># Documentation &mdash; search</div>
+                <div>sf document search "query"</div>
+                <div>sf document search "query" &mdash;category spec &mdash;limit 10</div>
+                <div class="mt-0.5 text-[var(--site-text-ghost)]"># Documentation &mdash; create &amp; update</div>
+                <div>sf document create &mdash;title "Doc Title" &mdash;content "..."</div>
+                <div>sf document update &lt;doc-id&gt; &mdash;content "..."</div>
+                <div class="mt-1 text-[var(--site-text-secondary)]">Worker ID: el-1j62</div>
+                <div class="text-[var(--site-text-secondary)]">Director ID: el-39hd</div>
+              </div>
+              <div class="flex items-center gap-0.5 px-1 py-[1.5px] border-t border-[var(--site-border)]" style="background: rgba(74,222,128,0.06);">
+                <svg class="w-1.5 h-1.5 text-[var(--site-success)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="3,2 8,5 3,8"/></svg>
+                <span class="text-[4.5px] font-medium text-[var(--site-success)]">3 TOOL CALLS (Bash)</span>
+                <span class="text-[4.5px] text-[var(--site-text-ghost)]">&middot; 3 results</span>
+              </div>
+              <div class="flex items-center gap-0.5 px-1 py-[1.5px]">
+                <span class="w-1.5 h-1.5 rounded-full border border-[var(--site-text-ghost)] animate-spin" style="border-top-color: transparent;"></span>
+                <span class="text-[4.5px] text-[var(--site-text-ghost)]">Agent is working...</span>
+              </div>
+              <div class="flex items-center px-1 py-[2px] border-t border-[var(--site-border)] bg-[var(--site-bg-surface)]">
+                <span class="text-[4.5px] text-[var(--site-text-ghost)] flex-1">Type a message...</span>
+                <div class="w-2.5 h-2.5 rounded flex items-center justify-center bg-[var(--site-accent)]">
+                  <svg class="w-1.5 h-1.5 text-white" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1,5 L9,1 L7,9 L5,5.5 Z"/></svg>
+                </div>
+              </div>
+            </div>
+            <!-- Top-right: worker bob-claude -->
+            <div class="rounded-lg border border-[var(--site-border)] bg-[var(--site-bg-void)] overflow-hidden flex flex-col min-h-0">
+              <div class="flex items-center gap-0.5 px-1 py-[2px] border-b border-[var(--site-border)] bg-[var(--site-bg-elevated)] flex-shrink-0">
+                <span class="text-[5px] font-semibold px-0.5 py-px rounded" style="color: var(--site-success); background: rgba(74,222,128,0.1);">&gt; worker</span>
+                <span class="text-[5.5px] font-semibold text-[var(--site-text-primary)]">bob-claude</span>
+                <span class="text-[5px] text-[var(--site-text-ghost)]">ephemeral</span>
+                <div class="ml-auto flex items-center gap-px">
+                  <input type="checkbox" class="w-1.5 h-1.5 opacity-30" disabled />
+                  <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><polyline points="2,4 5,1 8,4"/><polyline points="2,6 5,9 8,6"/></svg>
+                  <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="5" cy="3" r="0.5" fill="currentColor"/><circle cx="5" cy="5" r="0.5" fill="currentColor"/><circle cx="5" cy="7" r="0.5" fill="currentColor"/></svg>
+                  <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><line x1="3" y1="3" x2="7" y2="7"/><line x1="7" y1="3" x2="3" y2="7"/></svg>
+                </div>
+              </div>
+              <div class="flex-1 p-1 text-[4.5px] font-mono text-[var(--site-text-tertiary)] overflow-hidden leading-relaxed">
+                <div class="text-[var(--site-text-ghost)]"># Documentation &mdash; search</div>
+                <div>sf document search "query"</div>
+                <div>sf document search "query" &mdash;category spec &mdash;limit 10</div>
+                <div class="mt-0.5 text-[var(--site-text-ghost)]"># Documentation &mdash; create &amp; update</div>
+                <div>sf document create &mdash;title "Doc Title" &mdash;content "..."</div>
+                <div>sf document update &lt;doc-id&gt; &mdash;content "..."</div>
+                <div class="mt-1 text-[var(--site-text-secondary)]">Worker ID: el-1q96</div>
+                <div class="text-[var(--site-text-secondary)]">Director ID: el-39hd</div>
+              </div>
+              <div class="flex items-center gap-0.5 px-1 py-[1.5px] border-t border-[var(--site-border)]" style="background: rgba(74,222,128,0.06);">
+                <svg class="w-1.5 h-1.5 text-[var(--site-success)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="3,2 8,5 3,8"/></svg>
+                <span class="text-[4.5px] font-medium text-[var(--site-success)]">3 TOOL CALLS (Bash)</span>
+                <span class="text-[4.5px] text-[var(--site-text-ghost)]">&middot; 3 results</span>
+              </div>
+              <div class="flex items-center gap-0.5 px-1 py-[1.5px]">
+                <span class="w-1.5 h-1.5 rounded-full border border-[var(--site-text-ghost)] animate-spin" style="border-top-color: transparent;"></span>
+                <span class="text-[4.5px] text-[var(--site-text-ghost)]">Agent is working...</span>
+              </div>
+              <div class="flex items-center px-1 py-[2px] border-t border-[var(--site-border)] bg-[var(--site-bg-surface)]">
+                <span class="text-[4.5px] text-[var(--site-text-ghost)] flex-1">Type a message...</span>
+                <div class="w-2.5 h-2.5 rounded flex items-center justify-center bg-[var(--site-accent)]">
+                  <svg class="w-1.5 h-1.5 text-white" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1,5 L9,1 L7,9 L5,5.5 Z"/></svg>
+                </div>
+              </div>
+            </div>
+            <!-- Bottom-left: steward m-steward-1 -->
+            <div class="rounded-lg border border-[var(--site-border)] bg-[var(--site-bg-void)] overflow-hidden flex flex-col min-h-0">
+              <div class="flex items-center gap-0.5 px-1 py-[2px] border-b border-[var(--site-border)] bg-[var(--site-bg-elevated)] flex-shrink-0">
+                <span class="text-[5px] font-semibold px-0.5 py-px rounded" style="color: var(--site-warning); background: rgba(251,191,36,0.1);">&#128056; steward</span>
+                <span class="text-[5.5px] font-semibold text-[var(--site-text-primary)]">m-steward-1</span>
+                <div class="ml-auto flex items-center gap-px">
+                  <input type="checkbox" class="w-1.5 h-1.5 opacity-30" disabled />
+                  <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><polyline points="2,4 5,1 8,4"/><polyline points="2,6 5,9 8,6"/></svg>
+                  <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="5" cy="3" r="0.5" fill="currentColor"/><circle cx="5" cy="5" r="0.5" fill="currentColor"/><circle cx="5" cy="7" r="0.5" fill="currentColor"/></svg>
+                  <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><line x1="3" y1="3" x2="7" y2="7"/><line x1="7" y1="3" x2="3" y2="7"/></svg>
+                </div>
+              </div>
+              <div class="flex-1 p-1 text-[4.5px] overflow-hidden space-y-0.5">
+                <div class="text-[var(--site-text-ghost)]">the message. Let me check for any tasks awaiting review.</div>
+                <div class="flex items-center gap-0.5 px-0.5 py-[1px] rounded" style="background: rgba(251,191,36,0.06);">
+                  <span class="text-[4px] font-medium text-[var(--site-warning)]">2 TOOL CALLS (Bash)</span>
+                  <span class="text-[4px] text-[var(--site-text-ghost)]">&middot; 2 results</span>
+                </div>
+                <div class="rounded px-0.5 py-[1px] bg-[var(--site-bg-surface)]">
+                  <div class="flex items-center gap-0.5 mb-px">
+                    <svg class="w-1.5 h-1.5 text-[var(--site-success)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="5" cy="5" r="3"/><polyline points="3.5,5 4.5,6.5 7,3.5"/></svg>
+                    <span class="text-[4.5px] font-semibold text-[var(--site-text-secondary)]">ASSISTANT</span>
+                    <span class="text-[4px] text-[var(--site-text-ghost)] ml-auto">9:54:41 PM</span>
+                  </div>
+                  <div class="text-[4.5px] text-[var(--site-text-ghost)] leading-relaxed">No tasks are currently in review status. There's nothing for me to merge right now.</div>
+                </div>
+                <div class="rounded px-0.5 py-[1px] bg-[var(--site-bg-surface)]">
+                  <div class="flex items-center gap-0.5">
+                    <svg class="w-1.5 h-1.5 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="5" cy="5" r="3"/><path d="M3.5,5 h3"/></svg>
+                    <span class="text-[4.5px] font-semibold text-[var(--site-text-ghost)]">SYSTEM</span>
+                  </div>
+                  <div class="text-[4.5px] text-[var(--site-text-ghost)]">The agent has stopped the session</div>
+                </div>
+              </div>
+              <div class="flex items-center px-1 py-[2px] border-t border-[var(--site-border)] bg-[var(--site-bg-surface)]">
+                <span class="text-[4.5px] text-[var(--site-text-ghost)] flex-1">Type a message...</span>
+                <div class="w-2.5 h-2.5 rounded flex items-center justify-center bg-[var(--site-accent)]">
+                  <svg class="w-1.5 h-1.5 text-white" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1,5 L9,1 L7,9 L5,5.5 Z"/></svg>
+                </div>
+              </div>
+            </div>
+            <!-- Bottom-right: steward m-steward-2 -->
+            <div class="rounded-lg border border-[var(--site-border)] bg-[var(--site-bg-void)] overflow-hidden flex flex-col min-h-0">
+              <div class="flex items-center gap-0.5 px-1 py-[2px] border-b border-[var(--site-border)] bg-[var(--site-bg-elevated)] flex-shrink-0">
+                <span class="text-[5px] font-semibold px-0.5 py-px rounded" style="color: var(--site-warning); background: rgba(251,191,36,0.1);">&#128056; steward</span>
+                <span class="text-[5.5px] font-semibold text-[var(--site-text-primary)]">m-steward-2</span>
+                <div class="ml-auto flex items-center gap-px">
+                  <input type="checkbox" class="w-1.5 h-1.5 opacity-30" disabled />
+                  <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><polyline points="2,4 5,1 8,4"/><polyline points="2,6 5,9 8,6"/></svg>
+                  <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="5" cy="3" r="0.5" fill="currentColor"/><circle cx="5" cy="5" r="0.5" fill="currentColor"/><circle cx="5" cy="7" r="0.5" fill="currentColor"/></svg>
+                  <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><line x1="3" y1="3" x2="7" y2="7"/><line x1="7" y1="3" x2="3" y2="7"/></svg>
+                </div>
+              </div>
+              <div class="flex-1 p-1 text-[4.5px] overflow-hidden space-y-0.5">
+                <div class="rounded px-0.5 py-[1px] bg-[var(--site-bg-surface)]">
+                  <div class="flex items-center gap-0.5 mb-px">
+                    <svg class="w-1.5 h-1.5 text-[var(--site-success)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="5" cy="5" r="3"/><polyline points="3.5,5 4.5,6.5 7,3.5"/></svg>
+                    <span class="text-[4.5px] font-semibold text-[var(--site-text-secondary)]">ASSISTANT</span>
+                    <span class="text-[4px] text-[var(--site-text-ghost)] ml-auto">9:54:32 PM</span>
+                  </div>
+                  <div class="text-[4.5px] text-[var(--site-text-ghost)] leading-relaxed">I'm a Merge Steward ready to review and merge completed work. Let me start by understanding the current workspace state and any pending tasks.</div>
+                </div>
+                <div class="flex items-center gap-0.5 px-0.5 py-[1px] rounded" style="background: rgba(251,191,36,0.06);">
+                  <span class="text-[4px] font-medium text-[var(--site-warning)]">3 TOOL CALLS (Bash)</span>
+                  <span class="text-[4px] text-[var(--site-text-ghost)]">&middot; 3 results</span>
+                </div>
+                <div class="rounded px-0.5 py-[1px] bg-[var(--site-bg-surface)]">
+                  <div class="flex items-center gap-0.5 mb-px">
+                    <svg class="w-1.5 h-1.5 text-[var(--site-success)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="5" cy="5" r="3"/><polyline points="3.5,5 4.5,6.5 7,3.5"/></svg>
+                    <span class="text-[4.5px] font-semibold text-[var(--site-text-secondary)]">ASSISTANT</span>
+                    <span class="text-[4px] text-[var(--site-text-ghost)] ml-auto">9:54:41 PM</span>
+                  </div>
+                  <div class="text-[4.5px] text-[var(--site-text-ghost)] leading-relaxed">I see I'm currently on the <span class="font-mono bg-[var(--site-bg-elevated)] px-0.5 rounded">master</span> branch with no tasks in review status. Let me gather more context about the workspace state.</div>
+                </div>
+                <div class="flex items-center gap-0.5 px-0.5 py-[1px]">
+                  <span class="w-1.5 h-1.5 rounded-full border border-[var(--site-text-ghost)] animate-spin" style="border-top-color: transparent;"></span>
+                  <span class="text-[4.5px] text-[var(--site-text-ghost)]">Agent is working...</span>
+                </div>
+              </div>
+              <div class="flex items-center px-1 py-[2px] border-t border-[var(--site-border)] bg-[var(--site-bg-surface)]">
+                <span class="text-[4.5px] text-[var(--site-text-ghost)] flex-1">Type a message...</span>
+                <div class="w-2.5 h-2.5 rounded flex items-center justify-center bg-[var(--site-accent)]">
+                  <svg class="w-1.5 h-1.5 text-white" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1,5 L9,1 L7,9 L5,5.5 Z"/></svg>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ──── PAGE: Messages ──── -->
+        <div data-page="messages" class="absolute inset-0 flex overflow-hidden" style="display:none;">
+          <!-- Channel list sidebar -->
+          <div class="w-[95px] border-r border-[var(--site-border)] bg-[var(--site-bg-primary)] flex flex-col flex-shrink-0">
+            <!-- Channels header -->
+            <div class="flex items-center justify-between px-1.5 pt-1.5 pb-1">
+              <div class="flex items-center gap-0.5">
+                <svg class="w-2.5 h-2.5 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M2,1.5 h6 a1,1 0 0,1 1,1 v4 a1,1 0 0,1 -1,1 h-3.5 l-2,2 v-2 h-0.5 a1,1 0 0,1 -1,-1 v-4 a1,1 0 0,1 1,-1 z"/></svg>
+                <span class="text-[8px] font-semibold text-[var(--site-text-primary)]">Channels</span>
+              </div>
+              <div class="w-3 h-3 rounded flex items-center justify-center text-[var(--site-text-ghost)] hover:bg-[var(--site-bg-surface)]">
+                <svg class="w-2 h-2" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="5" y1="2" x2="5" y2="8"/><line x1="2" y1="5" x2="8" y2="5"/></svg>
+              </div>
+            </div>
+            <!-- Search channels -->
+            <div class="px-1.5 mb-1">
+              <div class="flex items-center gap-0.5 px-1 py-0.5 rounded border border-[var(--site-border)] bg-[var(--site-bg-surface)]">
+                <svg class="w-1.5 h-1.5 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="4.5" cy="4.5" r="3"/><line x1="7" y1="7" x2="9" y2="9"/></svg>
+                <span class="text-[4.5px] text-[var(--site-text-ghost)]">Search channels...</span>
+              </div>
+            </div>
+            <!-- Channel list -->
+            <div class="flex-1 px-1 overflow-hidden space-y-1">
+              <!-- CHANNELS section -->
+              <div>
+                <div class="text-[5px] uppercase tracking-[0.1em] text-[var(--site-text-ghost)] px-0.5 mb-0.5 font-semibold">Channels</div>
+                <div class="space-y-px text-[5.5px]">
+                  {channels.map(ch => (
+                    <div class="flex items-center justify-between px-1 py-[2px] rounded text-[var(--site-text-ghost)] truncate">
+                      <span class="truncate">{ch.name}</span>
+                      <span class="text-[4.5px] flex-shrink-0 ml-0.5">{ch.count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <!-- DIRECT MESSAGES section -->
+              <div>
+                <div class="text-[5px] uppercase tracking-[0.1em] text-[var(--site-text-ghost)] px-0.5 mb-0.5 font-semibold">Direct Messages</div>
+                <div class="space-y-px text-[5.5px]">
+                  {directMessages.map(dm => (
+                    <div class={`flex items-center justify-between px-1 py-[2px] rounded truncate ${dm.selected ? 'bg-[var(--site-accent-subtle)] text-[var(--site-accent)] font-medium' : 'text-[var(--site-text-ghost)]'}`}>
+                      <span class="truncate">{dm.name}</span>
+                      <span class="text-[4.5px] flex-shrink-0 ml-0.5">{dm.count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <!-- Channel count -->
+            <div class="px-1.5 py-1 text-[5px] text-[var(--site-text-ghost)] border-t border-[var(--site-border)]">24 channels</div>
+          </div>
+          <!-- Chat area -->
+          <div class="flex-1 flex flex-col min-w-0">
+            <!-- Chat header -->
+            <div class="flex items-center justify-between px-2 py-1 border-b border-[var(--site-border)]">
+              <div class="flex items-center gap-1">
+                <span class="text-[8px] font-semibold text-[var(--site-text-primary)]">Director:merger</span>
+                <span class="text-[5.5px] text-[var(--site-text-ghost)]">
+                  <svg class="w-2 h-2 inline-block" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="5" cy="3.5" r="2"/><path d="M1.5,9.5 C1.5,7 3,6 5,6 C7,6 8.5,7 8.5,9.5"/></svg>
+                  2 members
+                </span>
+              </div>
+              <div class="flex items-center gap-0.5 px-1 py-[2px] rounded border border-[var(--site-border)] bg-[var(--site-bg-surface)] text-[5px] text-[var(--site-text-ghost)]">
+                <svg class="w-1.5 h-1.5" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="4.5" cy="4.5" r="3"/><line x1="7" y1="7" x2="9" y2="9"/></svg>
+                Search messages...
+              </div>
+            </div>
+            <!-- Messages -->
+            <div class="flex-1 px-2 py-1.5 space-y-2 overflow-hidden text-[5.5px]">
+              <div class="text-[var(--site-text-secondary)]">
+                <span class="text-[var(--site-text-ghost)]">This is NOT caused by el-4mw2's changes - it exists on master.</span>
+              </div>
+              <!-- Date separator -->
+              <div class="flex items-center gap-1.5 my-1">
+                <div class="flex-1 h-px bg-[var(--site-border)]"></div>
+                <span class="text-[5px] text-[var(--site-text-ghost)]">Wednesday, February 11</span>
+                <div class="flex-1 h-px bg-[var(--site-border)]"></div>
+              </div>
+              <!-- Message with element ID -->
+              <div class="flex gap-1.5">
+                <div class="w-4 h-4 rounded-md flex items-center justify-center text-[5px] font-bold flex-shrink-0" style="background: rgba(74,222,128,0.15); color: var(--site-success);">5B</div>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-1 mb-0.5">
+                    <span class="text-[6px] font-semibold text-[var(--site-accent)]">el-5r5b</span>
+                    <span class="text-[4.5px] text-[var(--site-text-ghost)]">10:56 AM</span>
+                  </div>
+                  <div class="text-[5.5px] text-[var(--site-text-secondary)] leading-relaxed">
+                    <div class="mb-1">Found pre-existing issues during review of el-3jrg:</div>
+                    <div class="pl-1 space-y-0.5">
+                      <div>1. TEST FAILURE: agents.spec.ts:9 - 'TB-O16: Agent List Page &gt; displays agents page with correct header' has a strict mode violation.</div>
+                      <div>2. TEST FAILURE: agents.spec.ts:616 - 'TB-O26: Agent Workspace View &gt; Graph tab &gt; displays Graph tab in the agents page'</div>
+                    </div>
+                    <div class="mt-1">These are NOT caused by this PR (el-3jrg). Please create tasks to address these flaky/broken tests.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- Jump to latest -->
+            <div class="flex justify-center pb-1">
+              <div class="flex items-center gap-0.5 px-1.5 py-[2px] rounded-full text-[5px] font-medium text-white" style="background: var(--site-accent);">
+                <svg class="w-1.5 h-1.5" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="3,4 5,6 7,4"/></svg>
+                Jump to latest
+              </div>
+            </div>
+            <!-- Input area -->
+            <div class="mx-2 mb-1.5 rounded border border-[var(--site-border)] bg-[var(--site-bg-surface)]">
+              <div class="px-1.5 py-1 text-[5.5px] text-[var(--site-text-ghost)] min-h-[14px]"></div>
+              <div class="flex items-center justify-between px-1.5 py-0.5 border-t border-[var(--site-border)]">
+                <div class="flex items-center gap-1">
+                  <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1" y="3" width="8" height="5" rx="1"/><circle cx="3.5" cy="5.5" r="1"/><polyline points="6,5 7,4 9,6"/></svg>
+                  <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="2" y="1" width="6" height="8" rx="0.5"/><line x1="4" y1="3" x2="7" y2="3"/><line x1="4" y1="5" x2="7" y2="5"/></svg>
+                  <span class="text-[5px] text-[var(--site-text-ghost)]">|</span>
+                  <span class="text-[5.5px] font-bold text-[var(--site-text-ghost)]">B</span>
+                  <span class="text-[5.5px] italic text-[var(--site-text-ghost)]">I</span>
+                  <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><polyline points="2,3 5,3 5,7"/><polyline points="3,7 7,7"/></svg>
+                </div>
+                <div class="w-3.5 h-3.5 rounded-full flex items-center justify-center" style="background: var(--site-accent);">
+                  <svg class="w-2 h-2 text-white" viewBox="0 0 10 10" fill="currentColor"><path d="M2,1 L9,5 L2,9 Z"/></svg>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ──── PAGE: Documents ──── -->
+        <div data-page="documents" class="absolute inset-0 flex overflow-hidden" style="display:none;">
+          <!-- Libraries sidebar -->
+          <div class="w-[80px] border-r border-[var(--site-border)] bg-[var(--site-bg-primary)] flex flex-col flex-shrink-0">
+            <!-- Libraries header -->
+            <div class="flex items-center gap-0.5 px-1.5 pt-1.5 pb-1">
+              <svg class="w-2.5 h-2.5 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1" y="2" width="2.5" height="6" rx="0.3"/><rect x="4" y="1" width="2.5" height="7" rx="0.3"/><rect x="7" y="2.5" width="2" height="5.5" rx="0.3"/></svg>
+              <span class="text-[7px] font-semibold text-[var(--site-text-primary)]">Libraries</span>
+              <div class="ml-auto flex items-center gap-0.5">
+                <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1" y="1" width="3.5" height="3.5" rx="0.5"/><rect x="5.5" y="1" width="3.5" height="3.5" rx="0.5"/><rect x="1" y="5.5" width="3.5" height="3.5" rx="0.5"/><rect x="5.5" y="5.5" width="3.5" height="3.5" rx="0.5"/></svg>
+                <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="5" y1="2" x2="5" y2="8"/><line x1="2" y1="5" x2="8" y2="5"/></svg>
+              </div>
+            </div>
+            <!-- Search docs -->
+            <div class="px-1.5 mb-1">
+              <div class="flex items-center gap-0.5 px-1 py-0.5 rounded border border-[var(--site-border)] bg-[var(--site-bg-surface)]">
+                <svg class="w-1.5 h-1.5 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="4.5" cy="4.5" r="3"/><line x1="7" y1="7" x2="9" y2="9"/></svg>
+                <span class="text-[4.5px] text-[var(--site-text-ghost)]">Search docs... (/)</span>
+              </div>
+            </div>
+            <!-- Library tree -->
+            <div class="flex-1 px-1 overflow-hidden space-y-px text-[5.5px]">
+              <div class="flex items-center gap-0.5 px-1 py-[2px] rounded text-[var(--site-text-ghost)]">
+                <svg class="w-2 h-2 flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M3,1 h3 l2,2 v6 a1,1 0 0,1 -1,1 h-4 a1,1 0 0,1 -1,-1 v-7 a1,1 0 0,1 1,-1 z"/></svg>
+                All Documents
+              </div>
+              {['lib', 'folder-2', 'folder-nested'].map(f => (
+                <div class="flex items-center gap-0.5 px-1 py-[2px] rounded text-[var(--site-text-ghost)]">
+                  <svg class="w-2 h-2 flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M1,3 h8 v5.5 a1,1 0 0,1-1,1 h-6 a1,1 0 0,1-1,-1 z"/><path d="M2,3 v-1 a0.5,0.5 0 0,1 0.5,-0.5 h2 l1,1 h3 a0.5,0.5 0 0,1 0.5,0.5"/></svg>
+                  <span class="truncate">{f}</span>
+                </div>
+              ))}
+              <div class="flex items-center gap-0.5 px-1 py-[2px] rounded bg-[var(--site-accent-subtle)] text-[var(--site-accent)] font-medium">
+                <svg class="w-2 h-2 flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M1,3 h8 v5.5 a1,1 0 0,1-1,1 h-6 a1,1 0 0,1-1,-1 z"/><path d="M2,3 v-1 a0.5,0.5 0 0,1 0.5,-0.5 h2 l1,1 h3 a0.5,0.5 0 0,1 0.5,0.5"/></svg>
+                Documentation
+              </div>
+              {['UI Created Library 1770...', 'Visible Library 177036...'].map(f => (
+                <div class="flex items-center gap-0.5 px-1 py-[2px] rounded text-[var(--site-text-ghost)] truncate">
+                  <svg class="w-2 h-2 flex-shrink-0" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M1,3 h8 v5.5 a1,1 0 0,1-1,1 h-6 a1,1 0 0,1-1,-1 z"/><path d="M2,3 v-1 a0.5,0.5 0 0,1 0.5,-0.5 h2 l1,1 h3 a0.5,0.5 0 0,1 0.5,0.5"/></svg>
+                  <span class="truncate">{f}</span>
+                </div>
+              ))}
+            </div>
+            <!-- Library count -->
+            <div class="px-1.5 py-1 text-[5px] text-[var(--site-text-ghost)] border-t border-[var(--site-border)]">6 libraries</div>
+          </div>
+          <!-- Document list panel -->
+          <div class="w-[140px] border-r border-[var(--site-border)] flex flex-col flex-shrink-0">
+            <!-- Library name + create button -->
+            <div class="flex items-center gap-1 px-1.5 pt-1.5 pb-1">
+              <svg class="w-2.5 h-2.5 text-[var(--site-accent)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M1,3 h8 v5.5 a1,1 0 0,1-1,1 h-6 a1,1 0 0,1-1,-1 z"/><path d="M2,3 v-1 a0.5,0.5 0 0,1 0.5,-0.5 h2 l1,1 h3 a0.5,0.5 0 0,1 0.5,0.5"/></svg>
+              <span class="text-[7px] font-semibold text-[var(--site-text-primary)]">Documentation</span>
+              <span class="text-[5.5px] text-[var(--site-text-ghost)]">35 docs</span>
+              <div class="ml-auto flex items-center gap-0.5 px-1 py-[2px] rounded text-[5px] font-medium text-white" style="background: var(--site-success);">
+                <svg class="w-1.5 h-1.5" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="5" y1="2" x2="5" y2="8"/><line x1="2" y1="5" x2="8" y2="5"/></svg>
+                Create Document
+              </div>
+            </div>
+            <!-- Sort + Filters row -->
+            <div class="flex items-center gap-1 px-1.5 pb-1">
+              <div class="flex items-center gap-0.5 text-[5px] text-[var(--site-text-ghost)]">
+                <svg class="w-1.5 h-1.5" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><line x1="2" y1="3" x2="8" y2="3"/><line x1="3" y1="5" x2="7" y2="5"/><line x1="4" y1="7" x2="6" y2="7"/></svg>
+                Sort: Updated
+                <svg class="w-1.5 h-1.5" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="3,4 5,6 7,4"/></svg>
+              </div>
+              <svg class="w-1.5 h-1.5 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="3,4 5,6 7,4"/></svg>
+              <div class="flex items-center gap-0.5 text-[5px] text-[var(--site-text-ghost)]">
+                <svg class="w-1.5 h-1.5" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="5" cy="5" r="3"/><line x1="5" y1="3.5" x2="5" y2="5"/><line x1="5" y1="5" x2="6.5" y2="6"/></svg>
+                Filters
+                <svg class="w-1.5 h-1.5" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="3,4 5,6 7,4"/></svg>
+              </div>
+            </div>
+            <!-- Search documents -->
+            <div class="px-1.5 mb-1">
+              <div class="flex items-center gap-0.5 px-1 py-0.5 rounded border border-[var(--site-border)] bg-[var(--site-bg-surface)]">
+                <svg class="w-1.5 h-1.5 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="4.5" cy="4.5" r="3"/><line x1="7" y1="7" x2="9" y2="9"/></svg>
+                <span class="text-[4.5px] text-[var(--site-text-ghost)]">Search documents...</span>
+              </div>
+            </div>
+            <!-- Document list -->
+            <div class="flex-1 px-1.5 overflow-hidden space-y-0.5">
+              {docs.map(d => (
+                <div class={`px-1.5 py-1 rounded border ${d.selected ? 'border-[var(--site-accent)] bg-[var(--site-accent-subtle)]' : 'border-[var(--site-border)] bg-[var(--site-bg-surface)]'}`}>
+                  <div class={`text-[6px] font-medium truncate ${d.selected ? 'text-[var(--site-accent)]' : 'text-[var(--site-text-primary)]'}`}>{d.name}</div>
+                  <div class="flex items-center gap-1 mt-0.5">
+                    <span class="text-[4.5px] text-[var(--site-text-ghost)]">{d.type}</span>
+                    <span class="text-[4.5px] text-[var(--site-text-ghost)]">&middot;</span>
+                    <span class="text-[4.5px] text-[var(--site-text-ghost)]">{d.updated}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <!-- Document preview panel -->
+          <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
+            <!-- Preview header -->
+            <div class="flex items-center justify-between px-2 pt-1.5 pb-1">
+              <div class="flex items-center gap-1">
+                <span class="px-1 py-[1px] rounded text-[5px] font-semibold" style="background: rgba(129,140,248,0.15); color: #818cf8;"># Markdown</span>
+                <span class="text-[5px] text-[var(--site-text-ghost)]">v18</span>
+              </div>
+              <div class="flex items-center gap-1">
+                <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M2,1 h6 l-1,3 h3 l-6,5 1-3 h-3 z"/></svg>
+                <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="2" y="2" width="6" height="6" rx="0.5"/><polyline points="6,1 9,1 9,4"/></svg>
+                <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="5" cy="5" r="3.5"/><polyline points="5,3 5,5 6.5,6.5"/></svg>
+                <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><polyline points="2,4 5,1 8,4"/><polyline points="2,6 5,9 8,6"/></svg>
+                <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><line x1="2" y1="2" x2="8" y2="8"/><line x1="8" y1="2" x2="2" y2="8"/></svg>
+              </div>
+            </div>
+            <!-- Document title + metadata -->
+            <div class="px-2 pb-1 border-b border-[var(--site-border)]">
+              <div class="text-[10px] font-bold text-[var(--site-text-primary)]">CLI Reference</div>
+              <div class="text-[5px] text-[var(--site-text-ghost)] mt-0.5">el-59tr</div>
+              <div class="flex items-center gap-1.5 text-[4.5px] text-[var(--site-text-ghost)] mt-0.5">
+                <span>Created Feb 10, 2026, 10:56 AM</span>
+                <span>&middot;</span>
+                <span>Updated 9h ago</span>
+              </div>
+              <div class="flex items-center gap-0.5 text-[4.5px] text-[var(--site-text-ghost)] mt-0.5">
+                <svg class="w-1.5 h-1.5" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="5" cy="3.5" r="2"/><path d="M1.5,9.5 C1.5,7 3,6 5,6 C7,6 8.5,7 8.5,9.5"/></svg>
+                el-0000
+              </div>
+            </div>
+            <!-- Document content preview -->
+            <div class="flex-1 px-2 py-1.5 overflow-hidden text-[5px] leading-relaxed text-[var(--site-text-secondary)]">
+              <div class="text-[7px] font-bold text-[var(--site-text-primary)] mb-1">CLI Reference</div>
+              <div class="mb-0.5"><span class="font-semibold text-[var(--site-text-primary)]">Entry point:</span> <span class="font-mono text-[var(--site-accent)]">packages/quarry/src/bin/sf.ts</span></div>
+              <div class="mb-1"><span class="font-semibold text-[var(--site-text-primary)]">Commands:</span> <span class="font-mono text-[var(--site-accent)]">packages/quarry/src/cli/commands/</span></div>
+              <div class="font-semibold text-[var(--site-text-primary)] mb-0.5">Installation</div>
+              <div class="rounded px-1 py-0.5 mb-1 font-mono text-[4.5px]" style="background: rgba(255,255,255,0.03);">
+                <div># From project root</div>
+                <div>bun link</div>
+              </div>
+              <div class="font-semibold text-[var(--site-text-primary)] mb-0.5">Global Flags</div>
+              <!-- Mini table -->
+              <div class="font-mono text-[4px] leading-normal space-y-px">
+                <div class="flex gap-2"><span class="text-[var(--site-text-primary)] w-[50px]">--help, -h</span><span>Show help</span></div>
+                <div class="flex gap-2"><span class="text-[var(--site-text-primary)] w-[50px]">--version, -V</span><span>Show version</span></div>
+                <div class="flex gap-2"><span class="text-[var(--site-text-primary)] w-[50px]">--json</span><span>Output as JSON</span></div>
+                <div class="flex gap-2"><span class="text-[var(--site-text-primary)] w-[50px]">--quiet, -q</span><span>Minimal output</span></div>
+                <div class="flex gap-2"><span class="text-[var(--site-text-primary)] w-[50px]">--verbose, -v</span><span>Enable debug output</span></div>
+              </div>
+              <div class="font-semibold text-[var(--site-text-primary)] mt-1 mb-0.5">Basic Commands</div>
+              <div class="font-mono text-[4px] leading-normal space-y-px">
+                <div class="flex gap-2"><span class="text-[var(--site-text-primary)] w-[50px]">sf init</span><span>Initialize .stoneforge directory</span></div>
+                <div class="flex gap-2"><span class="text-[var(--site-text-primary)] w-[50px]">sf help</span><span>Show help</span></div>
+                <div class="flex gap-2"><span class="text-[var(--site-text-primary)] w-[50px]">sf version</span><span>Show version</span></div>
+                <div class="flex gap-2"><span class="text-[var(--site-text-primary)] w-[50px]">sf stats</span><span>Show statistics</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ──── PAGE: Settings ──── -->
+        <div data-page="settings" class="absolute inset-0 p-3 flex flex-col gap-2 overflow-hidden" style="display:none;">
+          <!-- Header -->
+          <div class="flex items-center gap-1.5">
+            <div class="w-5 h-5 rounded-md bg-[var(--site-accent-subtle)] flex items-center justify-center">
+              <svg class="w-3 h-3 text-[var(--site-accent)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="5" cy="5" r="2.5"/><line x1="5" y1="1" x2="5" y2="2"/><line x1="5" y1="8" x2="5" y2="9"/><line x1="1" y1="5" x2="2" y2="5"/><line x1="8" y1="5" x2="9" y2="5"/></svg>
+            </div>
+            <div>
+              <div class="text-[10px] font-semibold text-[var(--site-text-primary)]">Settings</div>
+              <div class="text-[6px] text-[var(--site-text-ghost)]">Configure your preferences and workspace</div>
+            </div>
+          </div>
+          <!-- Underline tabs: Preferences | Workspace -->
+          <div class="flex items-center gap-1.5 border-b border-[var(--site-border)]">
+            <div class="flex items-center gap-0.5 px-1.5 py-[3px] text-[6px] font-medium border-b-2 text-[var(--site-accent)] border-[var(--site-accent)]">
+              <svg class="w-2 h-2" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="5" cy="5" r="2.5"/><line x1="5" y1="1" x2="5" y2="2"/><line x1="5" y1="8" x2="5" y2="9"/><line x1="1" y1="5" x2="2" y2="5"/><line x1="8" y1="5" x2="9" y2="5"/></svg>
+              Preferences
+            </div>
+            <div class="flex items-center gap-0.5 px-1.5 py-[3px] text-[6px] font-medium border-b-2 text-[var(--site-text-ghost)] border-transparent">
+              <svg class="w-2 h-2" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1" y="1" width="3.5" height="3.5" rx="0.5"/><rect x="5.5" y="1" width="3.5" height="3.5" rx="0.5"/><rect x="1" y="5.5" width="3.5" height="3.5" rx="0.5"/><rect x="5.5" y="5.5" width="3.5" height="3.5" rx="0.5"/></svg>
+              Workspace
+            </div>
+          </div>
+          <!-- Settings content -->
+          <div class="flex-1 overflow-hidden space-y-2.5 max-w-[280px]">
+            <!-- Theme section -->
+            <div>
+              <div class="flex items-center gap-1 mb-0.5">
+                <svg class="w-2.5 h-2.5 text-[var(--site-text-secondary)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="5" cy="5" r="3.5"/><path d="M5,1.5 A3.5,3.5 0 0,0 5,8.5" fill="currentColor" opacity="0.3"/></svg>
+                <span class="text-[7px] font-semibold text-[var(--site-text-primary)]">Theme</span>
+              </div>
+              <div class="text-[5px] text-[var(--site-text-ghost)] mb-1 ml-3.5">Choose how the interface looks</div>
+              <div class="flex items-center gap-1 ml-3.5 mb-0.5">
+                <!-- Light button -->
+                <div class="flex items-center gap-0.5 px-1.5 py-[2px] rounded-md border border-[var(--site-border)] bg-[var(--site-bg-surface)] text-[5.5px] text-[var(--site-text-ghost)]">
+                  <svg class="w-2 h-2" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="5" cy="5" r="2"/><line x1="5" y1="1" x2="5" y2="2"/><line x1="5" y1="8" x2="5" y2="9"/><line x1="1" y1="5" x2="2" y2="5"/><line x1="8" y1="5" x2="9" y2="5"/></svg>
+                  Light
+                </div>
+                <!-- Dark button -->
+                <div class="flex items-center gap-0.5 px-1.5 py-[2px] rounded-md border border-[var(--site-border)] bg-[var(--site-bg-surface)] text-[5.5px] text-[var(--site-text-ghost)]">
+                  <svg class="w-2 h-2" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M7,2 A4,4 0 1,0 7,8 A3,3 0 1,1 7,2 z"/></svg>
+                  Dark
+                </div>
+                <!-- System button (selected) -->
+                <div class="flex items-center gap-0.5 px-1.5 py-[2px] rounded-md border border-[var(--site-accent)] text-[5.5px] text-[var(--site-text-primary)] font-medium" style="background: var(--site-accent-subtle);">
+                  <svg class="w-2 h-2" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1" y="2" width="8" height="6" rx="1"/><line x1="4" y1="8" x2="6" y2="8"/></svg>
+                  System
+                  <svg class="w-1.5 h-1.5 text-[var(--site-accent)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="2"><polyline points="2,5.5 4.5,8 8,2"/></svg>
+                </div>
+              </div>
+              <div class="text-[4.5px] text-[var(--site-text-ghost)] ml-3.5">Currently using dark theme based on system preference</div>
+            </div>
+            <!-- Notifications section -->
+            <div>
+              <div class="flex items-center gap-1 mb-0.5">
+                <svg class="w-2.5 h-2.5 text-[var(--site-text-secondary)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M5,1 C3,1 2,2.5 2,4 v2 l-1,1 h8 l-1,-1 v-2 C8,2.5 7,1 5,1 z"/><path d="M4,8 C4,8.5 4.5,9 5,9 C5.5,9 6,8.5 6,8"/></svg>
+                <span class="text-[7px] font-semibold text-[var(--site-text-primary)]">Notifications</span>
+              </div>
+              <div class="text-[5px] text-[var(--site-text-ghost)] mb-1 ml-3.5">Configure how you receive alerts</div>
+              <div class="space-y-1 ml-3.5">
+                <!-- Task completion alerts - ON -->
+                <div class="flex items-center gap-2">
+                  <div class="flex-1 min-w-0">
+                    <div class="text-[6px] font-medium text-[var(--site-text-primary)]">Task completion alerts</div>
+                    <div class="text-[4.5px] text-[var(--site-text-ghost)]">Notify when tasks are completed</div>
+                  </div>
+                  <div class="w-5 h-3 rounded-full flex-shrink-0 relative bg-[var(--site-accent)]">
+                    <div class="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-white" style="box-shadow: 0 1px 2px rgba(0,0,0,0.3);"></div>
+                  </div>
+                </div>
+                <!-- Agent health warnings - ON -->
+                <div class="flex items-center gap-2">
+                  <div class="flex-1 min-w-0">
+                    <div class="text-[6px] font-medium text-[var(--site-text-primary)]">Agent health warnings</div>
+                    <div class="text-[4.5px] text-[var(--site-text-ghost)]">Notify when agents encounter issues</div>
+                  </div>
+                  <div class="w-5 h-3 rounded-full flex-shrink-0 relative bg-[var(--site-accent)]">
+                    <div class="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-white" style="box-shadow: 0 1px 2px rgba(0,0,0,0.3);"></div>
+                  </div>
+                </div>
+                <!-- Merge notifications - ON -->
+                <div class="flex items-center gap-2">
+                  <div class="flex-1 min-w-0">
+                    <div class="text-[6px] font-medium text-[var(--site-text-primary)]">Merge notifications</div>
+                    <div class="text-[4.5px] text-[var(--site-text-ghost)]">Notify when branches are merged</div>
+                  </div>
+                  <div class="w-5 h-3 rounded-full flex-shrink-0 relative bg-[var(--site-accent)]">
+                    <div class="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-white" style="box-shadow: 0 1px 2px rgba(0,0,0,0.3);"></div>
+                  </div>
+                </div>
+                <!-- Sound - OFF -->
+                <div class="flex items-center gap-2">
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-0.5">
+                      <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M2,4 h1.5 l2,-2 v6 l-2,-2 h-1.5 z"/><line x1="7" y1="3" x2="9" y2="7" stroke-width="1"/><line x1="9" y1="3" x2="7" y2="7" stroke-width="1"/></svg>
+                      <span class="text-[6px] font-medium text-[var(--site-text-primary)]">Sound</span>
+                    </div>
+                    <div class="text-[4.5px] text-[var(--site-text-ghost)]">Play a sound when notifications arrive</div>
+                  </div>
+                  <div class="w-5 h-3 rounded-full flex-shrink-0 relative bg-[var(--site-bg-elevated)] border border-[var(--site-border)]">
+                    <div class="absolute top-0.5 left-0.5 w-2 h-2 rounded-full bg-white" style="box-shadow: 0 1px 2px rgba(0,0,0,0.3);"></div>
+                  </div>
+                </div>
+              </div>
+              <!-- Toast duration -->
+              <div class="mt-1.5 ml-3.5">
+                <div class="text-[6px] font-medium text-[var(--site-text-primary)] mb-0.5">Toast duration</div>
+                <div class="flex items-center gap-0.5 px-1.5 py-[2px] rounded border border-[var(--site-border)] bg-[var(--site-bg-surface)] text-[5.5px] text-[var(--site-text-secondary)] w-[50px]">
+                  5 seconds
+                  <svg class="w-1.5 h-1.5 text-[var(--site-text-ghost)] ml-auto" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="3,4 5,6 7,4"/></svg>
+                </div>
+              </div>
+              <!-- Reset to defaults -->
+              <div class="mt-1 ml-3.5 flex items-center gap-0.5 text-[5px] text-[var(--site-text-ghost)]">
+                <svg class="w-1.5 h-1.5" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M2,5 A3,3 0 1,1 5,8"/><polyline points="1,3 2,5 4,4"/></svg>
+                Reset to defaults
+              </div>
+            </div>
+            <!-- Agent Defaults section -->
+            <div>
+              <div class="flex items-center gap-1 mb-0.5">
+                <svg class="w-2.5 h-2.5 text-[var(--site-text-secondary)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="5" cy="3" r="2"/><path d="M1.5,9 C1.5,6.5 3,5.5 5,5.5 C7,5.5 8.5,6.5 8.5,9"/></svg>
+                <span class="text-[7px] font-semibold text-[var(--site-text-primary)]">Agent Defaults</span>
+              </div>
+              <div class="text-[5px] text-[var(--site-text-ghost)] ml-3.5">Default provider and model for new agents</div>
+              <div class="mt-1 ml-3.5">
+                <div class="text-[6px] font-medium text-[var(--site-text-primary)]">Default Provider</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        </div><!-- /page content area -->
+      </div><!-- /main content column -->
+
+      <!-- ═══════════════ DIRECTOR PANEL ═══════════════ -->
+      <div
+        class="border-l border-[var(--site-border)] bg-[var(--site-bg-primary)] flex-shrink-0 flex flex-col overflow-hidden"
+        data-director
+        data-expanded="true"
+        style="width: 170px; transition: width 0.25s cubic-bezier(0.16, 1, 0.3, 1);"
+      >
+        <!-- Expanded content -->
+        <div class="dp-director-content flex flex-col flex-1 min-h-0" style="transition: opacity 0.15s ease;">
+          <!-- Director header -->
+          <div class="flex items-center gap-1 px-2 h-[28px] border-b border-[var(--site-border)] bg-[var(--site-bg-elevated)]/40 flex-shrink-0">
+            <span class="text-[7px] text-[var(--site-text-ghost)]">&rsaquo;</span>
+            <span class="text-[7px] font-semibold text-[var(--site-text-primary)]">Director</span>
+            <span class="w-1.5 h-1.5 rounded-full bg-[var(--site-success)] animate-pulse flex-shrink-0"></span>
+            <span class="text-[5px] text-[var(--site-success)]">Running</span>
+            <div class="ml-auto flex items-center gap-0.5">
+              <!-- Action icons matching screenshot -->
+              <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><line x1="2" y1="3" x2="8" y2="3"/><line x1="2" y1="5" x2="8" y2="5"/><line x1="2" y1="7" x2="8" y2="7"/></svg>
+              <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1" y="3" width="8" height="5" rx="0.5"/><polyline points="1,4 5,7 9,4"/></svg>
+              <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="2" y="2" width="6" height="6" rx="0.5"/></svg>
+              <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><polyline points="2,4 5,1 8,4"/><polyline points="2,6 5,9 8,6"/></svg>
+              <button class="p-0.5 rounded hover:bg-[var(--site-bg-surface)]" data-director-toggle aria-label="Collapse director panel">
+                <svg class="w-2 h-2 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="6,2 10,5 6,8"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Director conversation area -->
+          <div class="flex-1 m-1.5 rounded-lg overflow-hidden border border-[var(--site-border)] bg-[#1a1a1a] flex flex-col">
+            <!-- Director title bar -->
+            <div class="flex items-center gap-1 px-2 py-1 bg-[#252525] border-b border-[rgba(255,255,255,0.06)]">
+              <span class="w-1.5 h-1.5 rounded-full bg-[#f87171]/40"></span>
+              <span class="w-1.5 h-1.5 rounded-full bg-[#fbbf24]/40"></span>
+              <span class="w-1.5 h-1.5 rounded-full bg-[#4ade80]/40"></span>
+              <span class="ml-1 text-[5px] text-[rgba(255,255,255,0.5)] font-semibold">Director</span>
+            </div>
+            <!-- Conversation output -->
+            <div class="flex-1 p-1.5 text-[5px] leading-relaxed space-y-1 overflow-hidden">
+              <!-- Context text -->
+              <div class="text-[rgba(255,255,255,0.5)]">smithy-server never got the bulk update endpoint that the quarry server has. The frontend hook was added but had nothing to talk to. Should be a quick fix for a worker &mdash; just port the endpoint pattern from <span class="text-[var(--site-accent)] font-mono">packages/quarry/src/server/index.ts:588</span> into <span class="text-[var(--site-accent)] font-mono">apps/smithy-server/src/routes/tasks.ts</span>.</div>
+              <!-- User message (highlighted) -->
+              <div class="rounded px-1 py-0.5 text-[rgba(255,255,255,0.9)]" style="background: rgba(96,165,250,0.15); border-left: 2px solid var(--site-accent);">No, it should be moved to packages/shared-routes and used in both servers</div>
+              <!-- Bullet point -->
+              <div class="flex gap-0.5 text-[rgba(255,255,255,0.6)]">
+                <span class="text-[var(--site-text-primary)] flex-shrink-0">&bull;</span>
+                <span>Good call &mdash; duplicating the route logic across servers is the wrong approach. Let me understand the shared-routes package first.</span>
+              </div>
+              <!-- Tool call: Explore -->
+              <div class="flex items-center gap-0.5 text-[rgba(255,255,255,0.5)]">
+                <span class="text-[#c084fc]">&bull;</span>
+                <span class="text-[#c084fc] font-semibold">Explore</span><span class="text-[rgba(255,255,255,0.3)]">(Explore shared-routes package)</span>
+              </div>
+              <div class="ml-2 text-[4.5px] text-[rgba(255,255,255,0.3)]">&nbsp;&nbsp;Done (25 tool uses &middot; 68.5k tokens &middot; 2m 40s)</div>
+              <!-- Bullet point -->
+              <div class="flex gap-0.5 text-[rgba(255,255,255,0.6)]">
+                <span class="text-[var(--site-text-primary)] flex-shrink-0">&bull;</span>
+                <span>Now I have the full picture. Let me update the task to reflect the correct approach.</span>
+              </div>
+              <!-- Tool call: Bash -->
+              <div class="flex items-center gap-0.5 text-[rgba(255,255,255,0.5)]">
+                <span class="text-[#c084fc]">&bull;</span>
+                <span class="text-[#c084fc] font-semibold">Bash</span><span class="text-[rgba(255,255,255,0.3)]">(sf show el-44n9)</span>
+              </div>
+              <div class="ml-2 rounded bg-[rgba(255,255,255,0.03)] px-1 py-0.5 text-[4.5px] font-mono text-[rgba(255,255,255,0.3)]">
+                <div>id&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;el-44n9</div>
+                <div>type&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;task</div>
+                <div>createdAt&nbsp;&nbsp;&nbsp;2026-02-19T03:33:45.072Z</div>
+                <div class="text-[rgba(255,255,255,0.2)]">&hellip; +32 lines (ctrl+o to expand)</div>
+              </div>
+              <!-- Bullet point -->
+              <div class="flex gap-0.5 text-[rgba(255,255,255,0.6)]">
+                <span class="text-[var(--site-text-primary)] flex-shrink-0">&bull;</span>
+                <span>Already merged &mdash; the worker duplicated the endpoint into smithy-server. Now we need a follow-up task to consolidate: move the route to shared-routes and remove the duplicates from both servers.</span>
+              </div>
+              <!-- Tool call: Bash -->
+              <div class="flex items-center gap-0.5 text-[rgba(255,255,255,0.5)]">
+                <span class="text-[#c084fc]">&bull;</span>
+                <span class="text-[#c084fc] font-semibold">Bash</span><span class="text-[rgba(255,255,255,0.3)]">(sf task create &mdash;priority 2 &mdash;title "Move bulk task</span>
+              </div>
+              <div class="ml-3 text-[4.5px] text-[rgba(255,255,255,0.3)]">update/delete routes to shared-routes package"</div>
+              <div class="ml-3 text-[4.5px] text-[rgba(255,255,255,0.3)]">&mdash;description 'The PATCH /api/tasks/bulk and POST</div>
+              <div class="ml-3 text-[4.5px] text-[rgba(255,255,255,0.3)]">/api/tasks/&hellip;)</div>
+              <div class="ml-2 text-[4.5px] text-[rgba(255,255,255,0.3)]">&nbsp;&nbsp;Created task el-3xze</div>
+              <!-- Result summary -->
+              <div class="flex gap-0.5 text-[rgba(255,255,255,0.6)]">
+                <span class="text-[var(--site-text-primary)] flex-shrink-0">&bull;</span>
+                <span>Created <span class="text-[var(--site-accent)]">el-3xze</span> (P2) &mdash; "Move bulk task update/delete routes to shared-routes package"</span>
+              </div>
+              <!-- Explanation -->
+              <div class="text-[rgba(255,255,255,0.5)]">The worker's quick fix (el-44n9) unblocks you immediately &mdash; bulk status/priority should work now in smithy-web. This follow-up task consolidates the duplicated endpoints into <span class="font-mono text-[rgba(255,255,255,0.4)]">packages/shared-routes/src/tasks.ts</span> as a proper <span class="font-mono text-[rgba(255,255,255,0.4)]">createTaskRoutes</span> factory, following the same pattern as <span class="font-mono text-[rgba(255,255,255,0.4)]">createPlanRoutes</span>, <span class="font-mono text-[rgba(255,255,255,0.4)]">createMessageRoutes</span>, etc.</div>
+              <!-- Cogitation time -->
+              <div class="text-[rgba(255,255,255,0.3)] mt-0.5">&#10038; Cogitated for 3m 26s</div>
+            </div>
+            <!-- Input area -->
+            <div class="px-1.5 py-1 border-t border-[rgba(255,255,255,0.06)]">
+              <div class="flex items-center gap-0.5 text-[5px]">
+                <span class="text-[var(--site-text-ghost)]">&gt;</span>
+                <span class="text-[rgba(255,255,255,0.5)]">check my inbox</span>
+                <span class="inline-block w-[2px] h-[6px] bg-[rgba(255,255,255,0.6)] ml-0.5" style="animation: typing-cursor 1s step-end infinite;"></span>
+              </div>
+              <div class="flex items-center gap-0.5 text-[4.5px] text-[rgba(255,255,255,0.25)] mt-0.5">
+                <span style="color: var(--site-error);">&#9654;&#9654;</span>
+                <span>bypass permissions on (shift+tab to cycle)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Collapsed strip -->
+        <div class="dp-director-collapsed absolute right-0 top-0 bottom-0 w-[28px] flex flex-col items-center py-3 gap-2" style="opacity: 0; pointer-events: none; transition: opacity 0.15s ease;">
+          <button class="p-1 rounded hover:bg-[var(--site-bg-surface)]" data-director-toggle aria-label="Expand director panel">
+            <svg class="w-3 h-3 text-[var(--site-warning)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="2" width="8" height="6" rx="1"/><line x1="1" y1="4" x2="9" y2="4"/></svg>
+          </button>
+          <span class="w-1.5 h-1.5 rounded-full bg-[var(--site-success)] animate-pulse"></span>
+          <button class="p-1 rounded hover:bg-[var(--site-bg-surface)]" data-director-toggle aria-label="Expand director panel">
+            <svg class="w-2.5 h-2.5 text-[var(--site-text-ghost)]" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="6,2 2,5 6,8"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<style>
+  /* Nav item states */
+  .dp-nav {
+    cursor: pointer;
+    transition: background 0.12s ease;
+  }
+  .dp-nav:not([data-active]):hover {
+    background: rgba(255,255,255,0.03);
+  }
+  .dp-nav[data-active] {
+    background: var(--site-accent-subtle);
+  }
+  .dp-nav[data-active]::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 2px;
+    height: 10px;
+    background: var(--site-accent);
+    border-radius: 0 2px 2px 0;
+  }
+  .dp-nav[data-active] .dp-icon {
+    color: var(--site-accent);
+  }
+  .dp-nav[data-active] .dp-label {
+    color: var(--site-accent);
+    font-weight: 500;
+  }
+
+  /* Director panel collapsed state */
+  [data-director][data-expanded="false"] {
+    width: 28px !important;
+  }
+  [data-director][data-expanded="false"] .dp-director-content {
+    opacity: 0;
+    pointer-events: none;
+  }
+  [data-director][data-expanded="false"] .dp-director-collapsed {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+  }
+</style>
+
+<script>
+  const root = document.getElementById('solutions-dashboard');
+  if (root) {
+    const navItems = root.querySelectorAll<HTMLElement>('[data-nav]');
+    const pages = root.querySelectorAll<HTMLElement>('[data-page]');
+    const urlDisplay = root.querySelector<HTMLElement>('[data-url]');
+    const breadcrumbLabel = root.querySelector<HTMLElement>('[data-breadcrumb-label]');
+    const breadcrumbContainer = root.querySelector<HTMLElement>('[data-breadcrumb]');
+    const directorToggles = root.querySelectorAll<HTMLElement>('[data-director-toggle]');
+    const directorPanel = root.querySelector<HTMLElement>('[data-director]');
+
+    const pageLabels: Record<string, string> = {
+      'tasks': 'Tasks',
+      'activity': 'Activity',
+      'inbox': 'Inbox',
+      'editor': 'Editor',
+      'merge-requests': 'Merge Requests',
+      'plans': 'Plans',
+      'workflows': 'Workflows',
+      'agents': 'Agents',
+      'workspaces': 'Workspaces',
+      'messages': 'Messages',
+      'documents': 'Documents',
+      'metrics': 'Metrics',
+      'settings': 'Settings',
+    };
+
+    navItems.forEach(item => {
+      item.addEventListener('click', () => {
+        const target = item.dataset.nav;
+        if (!target) return;
+
+        navItems.forEach(n => delete n.dataset.active);
+        item.dataset.active = '';
+
+        pages.forEach(p => {
+          (p as HTMLElement).style.display = p.dataset.page === target ? '' : 'none';
+        });
+
+        if (urlDisplay) {
+          urlDisplay.textContent = `localhost:3457/${target}`;
+        }
+
+        if (breadcrumbLabel) {
+          breadcrumbLabel.textContent = pageLabels[target] || target;
+        }
+
+        // Copy the nav item's icon SVG to the breadcrumb
+        const navIcon = item.querySelector('svg');
+        const currentBreadcrumbIcon = breadcrumbContainer?.querySelector('svg');
+        if (currentBreadcrumbIcon && navIcon) {
+          const newIcon = navIcon.cloneNode(true) as SVGElement;
+          newIcon.classList.remove('text-[var(--site-text-ghost)]');
+          newIcon.classList.add('text-[var(--site-accent)]');
+          currentBreadcrumbIcon.replaceWith(newIcon);
+        }
+      });
+    });
+
+    directorToggles.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (directorPanel) {
+          const expanded = directorPanel.dataset.expanded === 'true';
+          directorPanel.dataset.expanded = expanded ? 'false' : 'true';
+        }
+      });
+    });
+  }
+</script>

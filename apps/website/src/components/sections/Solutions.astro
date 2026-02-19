@@ -1,0 +1,114 @@
+---
+import SectionLabel from '../ui/SectionLabel.astro';
+import DashboardPreview from '../DashboardPreview.astro';
+---
+
+<section class="site-section">
+  <div class="site-container">
+    <!-- Separator -->
+    <hr class="hr-gradient mb-16 md:mb-24" />
+
+    <div class="space-y-20 md:space-y-32">
+      <!-- Solution 1: Worktree Isolation — text left, diagram right -->
+      <div class="flex flex-col md:flex-row md:items-center gap-10 lg:gap-20" data-reveal="left">
+        <div class="flex-1">
+          <SectionLabel class="mb-4">Isolation</SectionLabel>
+          <h2 class="text-[clamp(1.5rem,2.5vw+0.5rem,2.25rem)] font-semibold tracking-[-0.02em] mb-5">
+            Every agent gets its own worktree
+          </h2>
+          <p class="text-[var(--site-text-secondary)] max-w-md leading-relaxed">
+            Each worker operates in an isolated git worktree. No merge conflicts, no stepping on each other. Commit, push, and the merge steward handles integration.
+          </p>
+        </div>
+        <!-- Worktree diagram -->
+        <div class="flex-1">
+          <div class="rounded-xl bg-[var(--site-bg-elevated)] border border-[var(--site-border)] p-6 relative overflow-hidden" style="box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);">
+            <div class="h-1 absolute top-0 left-0 right-0 bg-gradient-to-r from-[var(--site-accent)] via-[var(--site-accent-bright)] to-transparent"></div>
+            <!-- Git branch visualization -->
+            <div class="space-y-3 font-mono text-xs">
+              <div class="flex items-center gap-3">
+                <div class="w-3 h-3 rounded-full bg-[var(--site-accent)] shadow-[0_0_8px_rgba(96,165,250,0.3)]"></div>
+                <div class="flex-1 h-px bg-[var(--site-accent)]/30"></div>
+                <span class="text-[var(--site-accent)] text-[10px] font-semibold px-2 py-0.5 rounded bg-[var(--site-accent-subtle)] border border-[var(--site-border-accent)]">main</span>
+              </div>
+              <!-- Branching lines -->
+              <div class="ml-1.5 border-l border-dashed border-[var(--site-border)] pl-6 space-y-2.5">
+                {['worker-1/auth', 'worker-2/api', 'worker-3/tests'].map((branch, i) => (
+                  <div class="flex items-center gap-3 group" style={`animation: fade-in-up 0.5s ${0.3 + i * 0.15}s both;`}>
+                    <div class={`w-2.5 h-2.5 rounded-full ${i === 0 ? 'bg-[var(--site-success)]' : i === 1 ? 'bg-[var(--site-warning)]' : 'bg-[#a78bfa]'}`}></div>
+                    <div class="flex-1 h-px bg-[var(--site-border)]"></div>
+                    <span class="text-[var(--site-text-tertiary)] text-[10px]">{branch}</span>
+                    <span class={`text-[9px] px-1.5 py-0.5 rounded ${i === 0 ? 'text-[var(--site-success)] bg-[rgba(74,222,128,0.08)]' : 'text-[var(--site-text-ghost)] bg-[var(--site-bg-surface)]'}`}>
+                      {i === 0 ? 'merged' : i === 1 ? 'active' : 'queued'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Solution 2: Dispatch — text right, diagram left -->
+      <div class="flex flex-col md:flex-row-reverse md:items-center gap-10 lg:gap-20" data-reveal="right">
+        <div class="flex-1">
+          <SectionLabel class="mb-4">Dispatch</SectionLabel>
+          <h2 class="text-[clamp(1.5rem,2.5vw+0.5rem,2.25rem)] font-semibold tracking-[-0.02em] mb-5">
+            Dependency-aware task dispatch
+          </h2>
+          <p class="text-[var(--site-text-secondary)] max-w-md leading-relaxed">
+            The dispatch daemon tracks task priorities and dependencies. It auto-assigns ready tasks to idle workers — no duplicated work, no blocked starts.
+          </p>
+        </div>
+        <!-- Task queue diagram -->
+        <div class="flex-1">
+          <div class="rounded-xl bg-[var(--site-bg-elevated)] border border-[var(--site-border)] p-6 relative overflow-hidden" style="box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);">
+            <div class="h-1 absolute top-0 left-0 right-0 bg-gradient-to-r from-[var(--site-accent)] via-[var(--site-accent-bright)] to-transparent"></div>
+            <!-- Task kanban mini -->
+            <div class="grid grid-cols-3 gap-3 text-[10px]">
+              {[
+                { label: 'Ready', items: ['Auth middleware', 'API routes'], color: 'var(--site-accent)' },
+                { label: 'In Progress', items: ['JWT validation'], color: 'var(--site-warning)' },
+                { label: 'Done', items: ['DB schema', 'User model'], color: 'var(--site-success)' },
+              ].map(col => (
+                <div>
+                  <div class="flex items-center gap-1.5 mb-2.5">
+                    <span class="w-1.5 h-1.5 rounded-full" style={`background: ${col.color};`}></span>
+                    <span class="font-semibold text-[var(--site-text-secondary)] uppercase tracking-wider text-[9px]">{col.label}</span>
+                    <span class="text-[var(--site-text-ghost)] ml-auto">{col.items.length}</span>
+                  </div>
+                  <div class="space-y-1.5">
+                    {col.items.map(item => (
+                      <div class="p-2 rounded-md bg-[var(--site-bg-surface)] border border-[var(--site-border)] text-[var(--site-text-secondary)]">
+                        {item}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <!-- Dependency arrow -->
+            <div class="mt-3 flex items-center gap-2 text-[9px] text-[var(--site-text-ghost)] font-mono">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--site-accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></svg>
+              <span>Auto-dispatching when dependencies clear</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Solution 3: Dashboard — full width -->
+      <div data-reveal>
+        <div class="text-center max-w-2xl mx-auto mb-10">
+          <SectionLabel class="mb-4">Visibility</SectionLabel>
+          <h2 class="text-[clamp(1.5rem,2.5vw+0.5rem,2.25rem)] font-semibold tracking-[-0.02em] mb-5">
+            Real-time dashboard for everything
+          </h2>
+          <p class="text-[var(--site-text-secondary)] leading-relaxed">
+            See every agent's live output, task progress on a kanban board, merge status, and performance metrics — all in one web dashboard.
+          </p>
+        </div>
+        <DashboardPreview />
+      </div>
+    </div>
+  </div>
+</section>

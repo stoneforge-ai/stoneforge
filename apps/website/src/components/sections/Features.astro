@@ -1,0 +1,88 @@
+---
+import SectionLabel from '../ui/SectionLabel.astro';
+
+const features = [
+  {
+    icon: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+    title: 'Real-time Communication',
+    desc: 'Channels, threads, and inbox triage so agents share context and escalate blockers.',
+  },
+  {
+    icon: '<rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/>',
+    title: 'Linear-like Issue Tracking',
+    desc: 'Priorities, dependencies, kanban views, and plan grouping — all in the web dashboard.',
+  },
+  {
+    icon: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
+    title: 'Evergreen Documentation',
+    desc: 'Versioned document libraries with full-text and semantic search for up-to-date context.',
+  },
+  {
+    icon: '<rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/><path d="M7 11v2a2 2 0 0 0 2 2h2"/><path d="M17 7h-2a2 2 0 0 0-2 2v2"/>',
+    title: 'Structured Workflows',
+    desc: 'Playbook templates that instantiate into resumable task sequences with durable state.',
+  },
+  {
+    icon: '<path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22.18 12.08-1.39-.63L12.6 15.3a2 2 0 0 1-1.66 0l-8.18-3.71-1.39.63a1 1 0 0 0 0 1.83l8.58 3.9a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22.18 16.08-1.39-.63L12.6 19.3a2 2 0 0 1-1.66 0l-8.18-3.71-1.39.63a1 1 0 0 0 0 1.83l8.58 3.9a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/>',
+    title: 'Multi-Provider Support',
+    desc: 'Works with Claude Code, OpenCode, and OpenAI Codex. No lock-in.',
+  },
+  {
+    icon: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>',
+    title: 'Automatic Merge Review',
+    desc: 'Steward runs tests, squash-merges on pass, creates fix tasks on failure.',
+  },
+];
+---
+
+<section id="features" class="site-section relative overflow-hidden">
+  <!-- Background orb -->
+  <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full opacity-20 blur-[150px] pointer-events-none" style="background: radial-gradient(circle, rgba(96,165,250,0.08), transparent 70%);" aria-hidden="true"></div>
+
+  <div class="site-container relative z-10">
+    <SectionLabel class="mb-4">Features</SectionLabel>
+    <h2
+      class="text-[clamp(1.75rem,3vw+0.5rem,2.75rem)] font-semibold tracking-[-0.025em] mb-14 md:mb-20 max-w-lg"
+      data-reveal
+    >
+      Everything you need to orchestrate agents
+    </h2>
+
+    <!-- Staggered 2-column grid -->
+    <div class="grid md:grid-cols-2 gap-4 md:gap-5">
+      <!-- Left column -->
+      <div class="flex flex-col gap-4 md:gap-5" data-reveal-stagger>
+        {features.filter((_, i) => i % 2 === 0).map((feature) => (
+          <div class="glow-card p-6 group">
+            <div class="flex items-start gap-5">
+              <div class="flex-shrink-0 w-11 h-11 rounded-xl bg-[var(--site-accent-subtle)] flex items-center justify-center border border-[var(--site-border-accent)]/30 transition-all duration-300 group-hover:bg-[var(--site-accent-subtle)] group-hover:shadow-[0_0_16px_rgba(96,165,250,0.1)]">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--site-accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" set:html={feature.icon} />
+              </div>
+              <div>
+                <h3 class="text-[15px] font-semibold mb-2 tracking-tight group-hover:text-[var(--site-accent-bright)] transition-colors duration-300">{feature.title}</h3>
+                <p class="text-sm text-[var(--site-text-secondary)] leading-relaxed">{feature.desc}</p>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <!-- Right column (offset down on desktop) -->
+      <div class="flex flex-col gap-4 md:gap-5 md:mt-12" data-reveal-stagger>
+        {features.filter((_, i) => i % 2 === 1).map((feature) => (
+          <div class="glow-card p-6 group">
+            <div class="flex items-start gap-5">
+              <div class="flex-shrink-0 w-11 h-11 rounded-xl bg-[var(--site-accent-subtle)] flex items-center justify-center border border-[var(--site-border-accent)]/30 transition-all duration-300 group-hover:bg-[var(--site-accent-subtle)] group-hover:shadow-[0_0_16px_rgba(96,165,250,0.1)]">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--site-accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" set:html={feature.icon} />
+              </div>
+              <div>
+                <h3 class="text-[15px] font-semibold mb-2 tracking-tight group-hover:text-[var(--site-accent-bright)] transition-colors duration-300">{feature.title}</h3>
+                <p class="text-sm text-[var(--site-text-secondary)] leading-relaxed">{feature.desc}</p>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+</section>

@@ -1,0 +1,142 @@
+---
+const links = [
+  { label: 'Why', href: '#why' },
+  { label: 'Features', href: '#features' },
+  { label: 'Compare', href: '#compare' },
+  { label: 'Quick Start', href: '#quickstart' },
+];
+---
+
+<nav
+  id="site-nav"
+  class="fixed top-0 left-0 right-0 z-50 h-14 flex items-center transition-all duration-500"
+  style="background: rgba(8, 9, 12, 0.6); backdrop-filter: blur(16px) saturate(1.5); -webkit-backdrop-filter: blur(16px) saturate(1.5);"
+>
+  <div class="site-container w-full flex items-center justify-between">
+    <!-- Logo -->
+    <a href="/" class="flex items-center gap-2.5 text-[var(--site-text-primary)] no-underline group">
+      <img src="/logo.png" alt="" width="28" height="28" class="object-contain transition-transform duration-300 group-hover:scale-110" />
+      <span class="text-xl font-semibold tracking-wide transition-colors duration-300 group-hover:text-[var(--site-accent-bright)]" style="font-family: var(--font-headline);">stoneforge</span>
+    </a>
+
+    <!-- Desktop links -->
+    <div class="hidden md:flex items-center gap-1">
+      {links.map(link => (
+        <a
+          href={link.href}
+          class="relative px-3.5 py-2 text-[13px] text-[var(--site-text-tertiary)] hover:text-[var(--site-text-primary)] transition-colors duration-200 rounded-lg hover:bg-[var(--site-bg-surface)]"
+        >
+          {link.label}
+        </a>
+      ))}
+    </div>
+
+    <!-- Desktop CTA -->
+    <a
+      href="https://github.com/stoneforge-ai/stoneforge"
+      target="_blank"
+      rel="noopener noreferrer"
+      class="hidden md:inline-flex items-center gap-2 h-8 px-3.5 rounded-lg text-[12px] font-medium text-[var(--site-text-secondary)] bg-[var(--site-bg-elevated)] border border-[var(--site-border)] hover:border-[var(--site-border-accent)] hover:text-[var(--site-accent)] transition-all duration-200"
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+      </svg>
+      Star on GitHub
+    </a>
+
+    <!-- Mobile hamburger -->
+    <button
+      id="nav-toggle"
+      class="md:hidden p-2 text-[var(--site-text-secondary)] hover:text-[var(--site-text-primary)] transition-colors"
+      aria-label="Toggle menu"
+      aria-expanded="false"
+    >
+      <svg id="nav-icon-open" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="16" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/>
+      </svg>
+      <svg id="nav-icon-close" class="hidden" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Bottom border (appears on scroll) -->
+  <div id="nav-border" class="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[var(--site-border)] to-transparent opacity-0 transition-opacity duration-500"></div>
+
+  <!-- Scroll progress bar -->
+  <div class="absolute bottom-0 left-0 h-px origin-left" id="scroll-progress" style="background: linear-gradient(to right, var(--site-accent), var(--site-accent-bright)); transform: scaleX(0); transition: none;"></div>
+</nav>
+
+<!-- Mobile menu overlay -->
+<div
+  id="mobile-menu"
+  class="fixed inset-0 z-40 hidden flex-col items-center justify-center gap-6 pt-14"
+  style="background: rgba(5, 5, 7, 0.97); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);"
+>
+  {links.map((link, i) => (
+    <a
+      href={link.href}
+      class="mobile-menu-link text-2xl font-semibold text-[var(--site-text-secondary)] hover:text-[var(--site-text-primary)] transition-colors"
+      style={`font-family: var(--font-headline); animation: fade-in-up 0.4s ${i * 0.08}s both;`}
+    >
+      {link.label}
+    </a>
+  ))}
+  <div class="w-12 h-px bg-[var(--site-border)] my-2"></div>
+  <a
+    href="https://github.com/stoneforge-ai/stoneforge"
+    target="_blank"
+    rel="noopener noreferrer"
+    class="inline-flex items-center gap-2 h-12 px-6 rounded-xl border border-[var(--site-border)] text-sm text-[var(--site-text-primary)] hover:border-[var(--site-border-accent)] transition-colors"
+  >
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+    </svg>
+    Star on GitHub
+  </a>
+</div>
+
+<script>
+  // Border + scroll progress
+  const border = document.getElementById('nav-border');
+  const progress = document.getElementById('scroll-progress');
+
+  function onScroll() {
+    if (border) border.style.opacity = window.scrollY > 20 ? '1' : '0';
+    if (progress) {
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      const pct = max > 0 ? window.scrollY / max : 0;
+      progress.style.transform = `scaleX(${pct})`;
+      progress.style.width = '100%';
+    }
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+
+  // Mobile menu toggle
+  const toggle = document.getElementById('nav-toggle');
+  const menu = document.getElementById('mobile-menu');
+  const iconOpen = document.getElementById('nav-icon-open');
+  const iconClose = document.getElementById('nav-icon-close');
+
+  toggle?.addEventListener('click', () => {
+    const isOpen = menu?.classList.contains('hidden') === false;
+    menu?.classList.toggle('hidden');
+    menu?.classList.toggle('flex');
+    iconOpen?.classList.toggle('hidden');
+    iconClose?.classList.toggle('hidden');
+    toggle.setAttribute('aria-expanded', String(!isOpen));
+    document.body.style.overflow = isOpen ? '' : 'hidden';
+  });
+
+  document.querySelectorAll('.mobile-menu-link').forEach(link => {
+    link.addEventListener('click', () => {
+      menu?.classList.add('hidden');
+      menu?.classList.remove('flex');
+      iconOpen?.classList.remove('hidden');
+      iconClose?.classList.add('hidden');
+      toggle?.setAttribute('aria-expanded', 'false');
+      document.body.style.overflow = '';
+    });
+  });
+</script>

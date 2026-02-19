@@ -1,0 +1,37 @@
+---
+interface Props {
+  code: string;
+  title?: string;
+  class?: string;
+}
+
+const { code, title, class: className = '' } = Astro.props;
+---
+
+<div class:list={['rounded-xl border border-[var(--site-border)] bg-[var(--site-bg-void)] overflow-hidden relative', className]} style="box-shadow: 0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.02);">
+  <!-- Accent line at top -->
+  <div class="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[var(--site-accent)]/20 to-transparent"></div>
+
+  <!-- Terminal chrome -->
+  <div class="flex items-center gap-2 px-4 py-3 border-b border-[var(--site-border)] bg-[var(--site-bg-elevated)]/60">
+    <span class="w-3 h-3 rounded-full bg-[#f87171]/30 border border-[#f87171]/15"></span>
+    <span class="w-3 h-3 rounded-full bg-[#fbbf24]/30 border border-[#fbbf24]/15"></span>
+    <span class="w-3 h-3 rounded-full bg-[#4ade80]/30 border border-[#4ade80]/15"></span>
+    {title && <span class="ml-2 text-[11px] text-[var(--site-text-ghost)] font-mono">{title}</span>}
+    <button
+      class="copy-btn ml-auto p-1.5 rounded-lg text-[var(--site-text-ghost)] hover:text-[var(--site-text-primary)] hover:bg-[var(--site-bg-surface)] transition-all duration-200"
+      data-code={code}
+      aria-label="Copy to clipboard"
+    >
+      <svg class="icon-clipboard w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+      </svg>
+      <svg class="icon-check w-4 h-4 text-[var(--site-success)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="20 6 9 17 4 12"></polyline>
+      </svg>
+    </button>
+  </div>
+  <!-- Code content -->
+  <pre class="p-5 overflow-x-auto text-[13px] leading-[1.8]"><code set:html={code} /></pre>
+</div>

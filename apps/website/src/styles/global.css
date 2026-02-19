@@ -1,0 +1,147 @@
+@import "tailwindcss";
+@import "./tokens.css";
+@import "./animations.css";
+
+/* --- Base styles --- */
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: var(--font-body);
+    background-color: var(--site-bg-primary);
+    color: var(--site-text-secondary);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-headline);
+    color: var(--site-text-primary);
+    line-height: 1.15;
+  }
+
+  code, pre, kbd {
+    font-family: var(--font-code);
+  }
+
+  ::selection {
+    background-color: rgba(96, 165, 250, 0.3);
+    color: var(--site-text-primary);
+  }
+}
+
+/* --- Atmospheric gradient layers --- */
+@layer base {
+  body::before {
+    content: '';
+    position: fixed;
+    top: -200px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 140%;
+    height: 900px;
+    background:
+      radial-gradient(ellipse 60% 40% at 50% 0%, rgba(96, 165, 250, 0.08) 0%, transparent 60%),
+      radial-gradient(ellipse 40% 30% at 30% 10%, rgba(96, 165, 250, 0.04) 0%, transparent 50%),
+      radial-gradient(ellipse 35% 25% at 70% 5%, rgba(147, 197, 253, 0.03) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: 0;
+  }
+}
+
+/* --- Noise texture overlay --- */
+@layer base {
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    background-repeat: repeat;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.5;
+    mix-blend-mode: overlay;
+  }
+}
+
+/* --- Section container --- */
+@layer components {
+  .site-container {
+    max-width: var(--site-container-max);
+    margin: 0 auto;
+    padding-left: clamp(1.25rem, 5vw, 2.5rem);
+    padding-right: clamp(1.25rem, 5vw, 2.5rem);
+  }
+
+  .site-section {
+    padding-top: var(--site-section-gap);
+    padding-bottom: var(--site-section-gap);
+    position: relative;
+    z-index: 1;
+  }
+}
+
+/* --- Dot grid pattern background --- */
+@layer components {
+  .dot-grid {
+    --dot-color: rgba(96, 165, 250, 0.07);
+    --dot-size: 1px;
+    --dot-gap: 32px;
+    background-image: radial-gradient(circle at center, var(--dot-color) var(--dot-size), transparent var(--dot-size));
+    background-size: var(--dot-gap) var(--dot-gap);
+  }
+}
+
+/* --- Glow card effect --- */
+@layer components {
+  .glow-card {
+    position: relative;
+    background: var(--site-bg-elevated);
+    border: 1px solid var(--site-border);
+    border-radius: 12px;
+    transition: border-color 0.4s ease, box-shadow 0.4s ease;
+  }
+
+  .glow-card::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: 13px;
+    background: linear-gradient(135deg, transparent 40%, rgba(96, 165, 250, 0.15) 50%, transparent 60%);
+    opacity: 0;
+    transition: opacity 0.4s ease;
+    z-index: -1;
+  }
+
+  .glow-card:hover {
+    border-color: var(--site-border-accent);
+    box-shadow: 0 0 30px rgba(96, 165, 250, 0.06), 0 8px 32px rgba(0, 0, 0, 0.3);
+  }
+
+  .glow-card:hover::before {
+    opacity: 1;
+  }
+}
+
+/* --- Gradient text utility --- */
+@layer components {
+  .text-gradient {
+    background: linear-gradient(135deg, var(--site-accent) 0%, var(--site-accent-bright) 50%, #c4b5fd 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+}
+
+/* --- Horizontal rule with gradient --- */
+@layer components {
+  .hr-gradient {
+    height: 1px;
+    border: none;
+    background: linear-gradient(to right, transparent, var(--site-border-accent), transparent);
+  }
+}
