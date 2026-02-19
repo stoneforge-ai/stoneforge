@@ -782,10 +782,13 @@ describe('Uniqueness tests', () => {
     const entityId = 'el-user1' as EntityId;
 
     for (let i = 0; i < count; i++) {
-      const id = await generateId({
-        identifier: 'Rapid Test',
-        createdBy: entityId,
-      });
+      const id = await generateId(
+        {
+          identifier: 'Rapid Test',
+          createdBy: entityId,
+        },
+        { hashLength: 8 }
+      );
       ids.add(id);
     }
 
@@ -799,11 +802,14 @@ describe('Uniqueness tests', () => {
     const ids = new Set<string>();
 
     for (let i = 0; i < 50; i++) {
-      const id = await generateId({
-        identifier: `Task ${i}`,
-        createdBy: entityId,
-        timestamp,
-      });
+      const id = await generateId(
+        {
+          identifier: `Task ${i}`,
+          createdBy: entityId,
+          timestamp,
+        },
+        { hashLength: 8 }
+      );
       ids.add(id);
     }
 
