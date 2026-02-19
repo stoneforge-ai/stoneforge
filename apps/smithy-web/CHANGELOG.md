@@ -1,5 +1,12 @@
 # @stoneforge/smithy-web
 
+## 1.9.0
+
+### Patch Changes
+
+- 9c5d630: Fix Kanban column header counts to always show unfiltered totals, preventing stale localStorage filters from making columns appear empty
+  - @stoneforge/ui@1.9.0
+
 ## 1.8.0
 
 ### Patch Changes

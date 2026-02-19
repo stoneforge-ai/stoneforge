@@ -1,5 +1,18 @@
 # @stoneforge/smithy
 
+## 1.9.0
+
+### Patch Changes
+
+- b4eca92: Prevent recovery steward cascade assignment during rate limiting by tracking stewards used per recovery cycle
+- c93577b: Skip resumeCount and stewardRecoveryCount increment during rate limits in orphan recovery, preventing false recovery steward triggers for non-stuck tasks
+- db8ae6c: Replace hardcoded `el-2rig` library ID in role prompts with generic `sf docs init` and `sf docs add` commands
+- Updated dependencies [c97555d]
+  - @stoneforge/quarry@1.9.0
+  - @stoneforge/core@1.9.0
+  - @stoneforge/storage@1.9.0
+  - @stoneforge/shared-routes@1.9.0
+
 ## 1.8.0
 
 ### Patch Changes

@@ -1,5 +1,21 @@
 # @stoneforge/quarry
 
+## 1.9.0
+
+### Minor Changes
+
+- c97555d: Add `sf docs` CLI command with `init` and `add` subcommands for streamlined documentation infrastructure management
+
+### Patch Changes
+
+- Updated dependencies [b4eca92]
+- Updated dependencies [c93577b]
+- Updated dependencies [db8ae6c]
+  - @stoneforge/smithy@1.9.0
+  - @stoneforge/core@1.9.0
+  - @stoneforge/storage@1.9.0
+  - @stoneforge/shared-routes@1.9.0
+
 ## 1.8.0
 
 ### Patch Changes
