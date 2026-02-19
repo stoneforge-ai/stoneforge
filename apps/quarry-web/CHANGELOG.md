@@ -1,5 +1,12 @@
 # @stoneforge/quarry-web
 
+## 1.9.0
+
+### Patch Changes
+
+- f733292: Fix Kanban column header count to show unfiltered total instead of per-column filtered count. When column filters are active, displays filtered/total format (e.g., '2/3').
+  - @stoneforge/ui@1.9.0
+
 ## 1.8.0
 
 ### Patch Changes
