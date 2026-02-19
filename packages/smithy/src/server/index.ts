@@ -40,6 +40,7 @@ import {
   createDocumentRoutes,
   createInboxRoutes,
   createPlanRoutes,
+  createTaskRoutes as createSharedTaskRoutes,
 } from '@stoneforge/shared-routes';
 import { notifyClientsOfNewSession } from './websocket.js';
 import { attachSessionEventSaver } from './routes/sessions.js';
@@ -110,6 +111,16 @@ export async function startSmithyServer(options: SmithyServerOptions = {}): Prom
     })
   );
 
+  // Register shared collaborate routes
+  // NOTE: createSharedTaskRoutes registers PATCH /api/tasks/bulk and POST /api/tasks/bulk-delete
+  // and MUST be registered before createTaskRoutes to avoid "bulk" matching as :id
+  const collaborateServices = {
+    api: services.api,
+    inboxService: services.inboxService,
+    storageBackend: services.storageBackend,
+  };
+  app.route('/', createSharedTaskRoutes(collaborateServices));
+
   app.route('/', createHealthRoutes(services));
   app.route('/', createTaskRoutes(services));
   app.route('/', createAgentRoutes(services));
@@ -126,12 +137,6 @@ export async function startSmithyServer(options: SmithyServerOptions = {}): Prom
   app.route('/', createExtensionsRoutes());
   app.route('/', createSettingsRoutes(services));
 
-  // Register shared collaborate routes
-  const collaborateServices = {
-    api: services.api,
-    inboxService: services.inboxService,
-    storageBackend: services.storageBackend,
-  };
   app.route('/', createElementsRoutes(collaborateServices));
   app.route('/', createEntityRoutes(collaborateServices));
   app.route('/', createChannelRoutes(collaborateServices));

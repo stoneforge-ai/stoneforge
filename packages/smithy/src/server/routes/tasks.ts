@@ -371,38 +371,7 @@ export function createTaskRoutes(services: Services) {
     }
   });
 
-  // POST /api/tasks/bulk-delete - Bulk soft delete tasks
-  app.post('/api/tasks/bulk-delete', async (c) => {
-    try {
-      const body = (await c.req.json()) as { ids: string[] };
-      if (!Array.isArray(body.ids) || body.ids.length === 0) {
-        return c.json({ error: { code: 'BAD_REQUEST', message: 'ids must be a non-empty array' } }, 400);
-      }
-
-      const results: { id: string; success: boolean; error?: string }[] = [];
-      for (const id of body.ids) {
-        try {
-          const task = await api.get<Task>(id as ElementId);
-          if (!task || task.type !== ElementType.TASK) {
-            results.push({ id, success: false, error: 'Task not found' });
-            continue;
-          }
-          await api.update(id as ElementId, {
-            status: TaskStatus.TOMBSTONE,
-            deletedAt: new Date().toISOString(),
-          } as unknown as Record<string, unknown>);
-          results.push({ id, success: true });
-        } catch (err) {
-          results.push({ id, success: false, error: String(err) });
-        }
-      }
-
-      return c.json({ success: true, results });
-    } catch (error) {
-      logger.error('Failed to bulk delete tasks:', error);
-      return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
-    }
-  });
+  // NOTE: POST /api/tasks/bulk-delete is now in @stoneforge/shared-routes (createTaskRoutes)
 
   // POST /api/tasks/:id/start - Start task (set to in_progress)
   app.post('/api/tasks/:id/start', async (c) => {

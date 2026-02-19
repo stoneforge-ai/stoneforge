@@ -84,6 +84,7 @@ import {
   createLibraryRoutes,
   createDocumentRoutes,
   createPlanRoutes,
+  createTaskRoutes as createSharedTaskRoutes,
 } from '@stoneforge/shared-routes';
 import { initializeBroadcaster } from './ws/broadcaster.js';
 import { handleOpen, handleMessage, handleClose, handleError, getClientCount, broadcastInboxEvent, type ClientData } from './ws/handler.js';
@@ -236,6 +237,9 @@ export function createQuarryApp(options: QuarryServerOptions = {}): QuarryApp {
   };
 
   // Register all collaborate routes from shared package
+  // NOTE: createSharedTaskRoutes registers PATCH /api/tasks/bulk and POST /api/tasks/bulk-delete
+  // and MUST be registered before any PATCH /api/tasks/:id route to avoid "bulk" matching as :id
+  app.route('/', createSharedTaskRoutes(collaborateServices));
   app.route('/', createElementsRoutes(collaborateServices));
   app.route('/', createChannelRoutes(collaborateServices));
   app.route('/', createMessageRoutes(collaborateServices));
@@ -581,123 +585,6 @@ app.post('/api/tasks', async (c) => {
     }
     console.error('[stoneforge] Failed to create task:', error);
     return c.json({ error: { code: 'INTERNAL_ERROR', message: 'Failed to create task' } }, 500);
-  }
-});
-
-// Bulk update tasks - MUST be before /:id route to avoid matching "bulk" as an id
-app.patch('/api/tasks/bulk', async (c) => {
-  try {
-    const body = await c.req.json();
-
-    // Validate request structure
-    if (!body.ids || !Array.isArray(body.ids) || body.ids.length === 0) {
-      return c.json({ error: { code: 'VALIDATION_ERROR', message: 'ids must be a non-empty array' } }, 400);
-    }
-    if (!body.updates || typeof body.updates !== 'object') {
-      return c.json({ error: { code: 'VALIDATION_ERROR', message: 'updates must be an object' } }, 400);
-    }
-
-    const ids = body.ids as string[];
-
-    // Extract allowed updates
-    const updates: Record<string, unknown> = {};
-    const allowedFields = [
-      'status', 'priority', 'complexity', 'taskType',
-      'assignee', 'owner', 'deadline', 'scheduledFor', 'tags'
-    ];
-
-    for (const field of allowedFields) {
-      if (body.updates[field] !== undefined) {
-        updates[field] = body.updates[field];
-      }
-    }
-
-    if (Object.keys(updates).length === 0) {
-      return c.json({ error: { code: 'VALIDATION_ERROR', message: 'No valid fields to update' } }, 400);
-    }
-
-    // Update each task
-    const results: { id: string; success: boolean; error?: string }[] = [];
-
-    for (const id of ids) {
-      try {
-        const existing = await api.get(id as ElementId);
-        if (!existing || existing.type !== 'task') {
-          results.push({ id, success: false, error: 'Task not found' });
-          continue;
-        }
-
-        await api.update(id as ElementId, updates);
-        results.push({ id, success: true });
-      } catch (error) {
-        results.push({ id, success: false, error: (error as Error).message });
-      }
-    }
-
-    const successCount = results.filter(r => r.success).length;
-    const failureCount = results.filter(r => !r.success).length;
-
-    return c.json({
-      updated: successCount,
-      failed: failureCount,
-      results,
-    });
-  } catch (error) {
-    console.error('[stoneforge] Failed to bulk update tasks:', error);
-    return c.json({ error: { code: 'INTERNAL_ERROR', message: 'Failed to bulk update tasks' } }, 500);
-  }
-});
-
-// Bulk delete tasks - Uses POST with action parameter for better proxy compatibility
-app.post('/api/tasks/bulk-delete', async (c) => {
-  console.log('[stoneforge] Bulk delete request received');
-  try {
-    const body = await c.req.json();
-    console.log('[stoneforge] Bulk delete body:', JSON.stringify(body));
-
-    // Validate request structure
-    if (!body.ids || !Array.isArray(body.ids) || body.ids.length === 0) {
-      console.log('[stoneforge] Bulk delete validation failed: ids must be a non-empty array');
-      return c.json({ error: { code: 'VALIDATION_ERROR', message: 'ids must be a non-empty array' } }, 400);
-    }
-
-    const ids = body.ids as string[];
-    console.log('[stoneforge] Deleting tasks:', ids);
-
-    // Delete each task
-    const results: { id: string; success: boolean; error?: string }[] = [];
-
-    for (const id of ids) {
-      try {
-        const existing = await api.get(id as ElementId);
-        if (!existing || existing.type !== 'task') {
-          console.log(`[stoneforge] Task not found: ${id}`);
-          results.push({ id, success: false, error: 'Task not found' });
-          continue;
-        }
-
-        console.log(`[stoneforge] Deleting task: ${id}`);
-        await api.delete(id as ElementId);
-        console.log(`[stoneforge] Successfully deleted task: ${id}`);
-        results.push({ id, success: true });
-      } catch (error) {
-        console.error(`[stoneforge] Error deleting task ${id}:`, error);
-        results.push({ id, success: false, error: (error as Error).message });
-      }
-    }
-
-    const successCount = results.filter(r => r.success).length;
-    const failureCount = results.filter(r => !r.success).length;
-
-    console.log(`[stoneforge] Bulk delete complete: ${successCount} deleted, ${failureCount} failed`);
-    return c.json({
-      deleted: successCount,
-      failed: failureCount,
-      results,
-    });
-  } catch (error) {
-    console.error('[stoneforge] Failed to bulk delete tasks:', error);
-    return c.json({ error: { code: 'INTERNAL_ERROR', message: 'Failed to bulk delete tasks' } }, 500);
   }
 });
 
