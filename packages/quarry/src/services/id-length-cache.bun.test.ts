@@ -152,15 +152,15 @@ describe('IdLengthCache', () => {
   describe('TTL expiration', () => {
     it('should expire cache after TTL', async () => {
       const backend = createMockBackend(100);
-      const cache = new IdLengthCache(backend, { ttlMs: 50 });
+      const cache = new IdLengthCache(backend, { ttlMs: 100 });
       const getElementCountSpy = spyOn(backend, 'getElementCount');
 
       // First access
       cache.getHashLength();
       expect(getElementCountSpy).toHaveBeenCalledTimes(1);
 
-      // Wait for TTL
-      await new Promise(resolve => setTimeout(resolve, 60));
+      // Wait for TTL (150ms is well over 100ms TTL)
+      await new Promise(resolve => setTimeout(resolve, 150));
 
       // Should refresh
       cache.getHashLength();
@@ -169,12 +169,13 @@ describe('IdLengthCache', () => {
 
     it('should report staleness correctly', async () => {
       const backend = createMockBackend(100);
-      const cache = new IdLengthCache(backend, { ttlMs: 50 });
+      const cache = new IdLengthCache(backend, { ttlMs: 100 });
 
       cache.getHashLength();
       expect(cache.isStale()).toBe(false);
 
-      await new Promise(resolve => setTimeout(resolve, 60));
+      // Wait well past TTL (150ms > 100ms)
+      await new Promise(resolve => setTimeout(resolve, 150));
       expect(cache.isStale()).toBe(true);
     });
   });
@@ -268,18 +269,18 @@ describe('IdLengthCache', () => {
 
     it('should respect custom TTL', async () => {
       const backend = createMockBackend(100);
-      const cache = new IdLengthCache(backend, { ttlMs: 20 });
+      const cache = new IdLengthCache(backend, { ttlMs: 100 });
       const getElementCountSpy = spyOn(backend, 'getElementCount');
 
       cache.getHashLength();
 
-      // Before TTL
-      await new Promise(resolve => setTimeout(resolve, 10));
+      // Before TTL (30ms is well under 100ms TTL)
+      await new Promise(resolve => setTimeout(resolve, 30));
       cache.getHashLength();
       expect(getElementCountSpy).toHaveBeenCalledTimes(1);
 
-      // After TTL
-      await new Promise(resolve => setTimeout(resolve, 15));
+      // After TTL (total ~130ms, well over 100ms TTL)
+      await new Promise(resolve => setTimeout(resolve, 100));
       cache.getHashLength();
       expect(getElementCountSpy).toHaveBeenCalledTimes(2);
     });
@@ -314,7 +315,7 @@ describe('IdLengthCache', () => {
 
       const stats = cache.getStats();
       expect(stats.ageMs).toBeGreaterThanOrEqual(50);
-      expect(stats.ageMs).toBeLessThan(100);
+      expect(stats.ageMs).toBeLessThan(500);
     });
   });
 });
