@@ -60,7 +60,7 @@ If the PR changes behavior that is likely documented (API endpoints, config opti
 sf document search "keyword from changed area"
 ```
 
-If relevant documents exist and were NOT updated in the PR, include documentation updates in your review feedback. If the worker's task is being handed off for changes, specify which documents need updating. Also check that the Documentation Directory was updated if new documents were created. Also verify that any new documents created by the worker were added to the Documentation library (`sf library add el-2rig <doc-id>`). If missing, include this in your review feedback.
+If relevant documents exist and were NOT updated in the PR, include documentation updates in your review feedback. If the worker's task is being handed off for changes, specify which documents need updating. Also check that the Documentation Directory was updated if new documents were created. Also verify that any new documents created by the worker were added to the Documentation library (`sf docs add <doc-id>`). If missing, include this in your review feedback.
 
 ## No Commits to Merge
 

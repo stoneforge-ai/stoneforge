@@ -188,7 +188,7 @@ Keep documentation accurate and complete as you work:
 - **Create** new documents when you discover undocumented knowledge worth preserving (architecture patterns, gotchas, setup steps).
 - **Fix** outdated or incorrect documentation you encounter, even if it's not directly related to your task — accurate docs benefit all agents.
 - **Update the Documentation Directory** (`sf document search "documentation directory"`) when you create or significantly modify documents.
-- **Add to the Documentation library** (`sf library add el-2rig <doc-id>`) so the document is discoverable via library browsing.
+- **Add to the Documentation library** (`sf docs add <doc-id>`) so the document is discoverable via library browsing.
 - Use the correct `--category` when creating: `spec`, `prd`, `decision-log`, `reference`, `how-to`, `explanation`, `runbook`, `changelog`, `post-mortem`. Use `other` only when no existing category fits, and set `--metadata '{"customCategory": "name"}'` to track the intended category.
 
 ```bash
@@ -197,7 +197,7 @@ sf document update <doc-id> --file updated-content.md
 
 # Create a new document and add to library
 sf document create --title "Auth Architecture" --content "..." --category reference --type markdown
-sf library add el-2rig <new-doc-id>
+sf docs add <new-doc-id>
 
 # Search for the Documentation Directory to update it
 sf document search "documentation directory"
@@ -235,7 +235,7 @@ sf document search "query" --category spec --limit 10
 # Documentation — create & update
 sf document create --title "Doc Title" --content "..." --category reference --type markdown
 sf document update <doc-id> --content "..."
-sf library add el-2rig <doc-id>                # Add new doc to Documentation library
+sf docs add <doc-id>                           # Add new doc to Documentation library
 
 # Merge completed work (squash-merge session branch into master)
 sf merge --message "descriptive commit message"
