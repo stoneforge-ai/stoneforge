@@ -472,13 +472,13 @@ app.route('/', createMyFeatureRoutes(services));
 
 | Component | Purpose |
 |-----------|---------|
-| `layout/AppShell.tsx` | Main layout |
-| `layout/Sidebar.tsx` | Navigation |
-| `layout/DirectorPanel.tsx` | Director terminal |
-| `terminal/XTerminal.tsx` | Terminal emulator |
-| `workspace/WorkspacePane.tsx` | Workspace panes |
-| `workspace/StreamViewer.tsx` | Agent output viewer |
-| `agent-graph/AgentWorkspaceGraph.tsx` | Agent hierarchy graph visualization |
+| `components/layout/AppShell.tsx` | Main layout |
+| `components/layout/Sidebar.tsx` | Navigation |
+| `components/layout/DirectorPanel.tsx` | Director terminal |
+| `components/terminal/XTerminal.tsx` | Terminal emulator |
+| `components/workspace/WorkspacePane.tsx` | Workspace panes |
+| `components/workspace/StreamViewer.tsx` | Agent output viewer |
+| `components/agent-graph/AgentWorkspaceGraph.tsx` | Agent hierarchy graph visualization |
 
 ### Routes
 
@@ -620,10 +620,10 @@ The `/agents?tab=graph` route displays a graph visualization of the agent hierar
 
 | File | Purpose |
 |------|---------|
-| `agent-graph/AgentWorkspaceGraph.tsx` | Main graph container with ReactFlow |
-| `agent-graph/AgentNode.tsx` | Custom node renderer for agents |
-| `agent-graph/useAgentGraph.ts` | Hook to transform agent data to nodes/edges |
-| `agent-graph/types.ts` | TypeScript types for graph data |
+| `components/agent-graph/AgentWorkspaceGraph.tsx` | Main graph container with ReactFlow |
+| `components/agent-graph/AgentNode.tsx` | Custom node renderer for agents |
+| `components/agent-graph/useAgentGraph.ts` | Hook to transform agent data to nodes/edges |
+| `components/agent-graph/types.ts` | TypeScript types for graph data |
 
 **Features:**
 
