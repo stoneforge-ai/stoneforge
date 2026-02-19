@@ -1,5 +1,15 @@
 # @stoneforge/smithy-web
 
+## 1.7.0
+
+### Minor Changes
+
+- 8891e17: Add bulk Set Status and Set Priority actions to the task list bulk actions bar
+
+### Patch Changes
+
+- @stoneforge/ui@1.7.0
+
 ## 1.6.0
 
 ### Patch Changes

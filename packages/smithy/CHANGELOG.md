@@ -1,5 +1,29 @@
 # @stoneforge/smithy
 
+## 1.7.0
+
+### Patch Changes
+
+- ddab519: Terminate active agent sessions when resetting tasks to prevent orphaned processes and duplicate work
+- 23c7deb: Fix non-atomic worker unassignment in spawnRecoveryStewardForTask to prevent task orphaning when steward session start fails
+- 61a672d: Fix startup blocking on stale session resume in dispatch daemon orphan recovery
+
+  The dispatch daemon's start() method no longer blocks on recoverOrphanedAssignments() before starting the poll loop. Orphan recovery now runs in the background, and a startupRecoveryInFlight flag prevents runPollCycle from duplicating the work. This ensures tasks are dispatched within the first poll interval after server restart, even if stale session resumes take a long time to timeout.
+
+- 9b29d2b: Fix inverted priority sort in steward task dispatch so CRITICAL (1) tasks are dispatched before MINIMAL (5) tasks
+- b884a2b: Fix terminated->terminated race condition in spawner catch blocks
+
+  Guard `transitionStatus(session, 'terminated')` calls in `spawnHeadless()`, `spawnInteractive()`, and `spawn()` catch blocks to prevent `Invalid status transition: terminated -> terminated` errors when concurrent async code paths (e.g., `processProviderMessages` finishing before `waitForInit` timeout) race to terminate the same session.
+
+- 0de4580: Make waitForInit reject immediately on resume_failed or session exit
+
+  waitForInit() now listens for `resume_failed` and `exit` events in addition to the `system/init` event. When a stale session resume fails or the process exits before init, the promise rejects immediately with a descriptive error instead of blocking for the full timeout duration.
+
+  - @stoneforge/core@1.7.0
+  - @stoneforge/storage@1.7.0
+  - @stoneforge/quarry@1.7.0
+  - @stoneforge/shared-routes@1.7.0
+
 ## 1.6.0
 
 ### Patch Changes
