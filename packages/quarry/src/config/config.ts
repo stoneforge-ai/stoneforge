@@ -308,6 +308,7 @@ export function saveConfig(config: Configuration, filePath?: string): void {
 function createTrackedDefaults(): TrackedConfiguration {
   return {
     actor: undefined,
+    baseBranch: undefined,
     database: { value: DEFAULT_CONFIG.database, source: ConfigSourceEnum.DEFAULT },
     sync: {
       autoExport: { value: DEFAULT_CONFIG.sync.autoExport, source: ConfigSourceEnum.DEFAULT },
@@ -344,6 +345,9 @@ function mergeTrackedConfig(
 
   if (partial.actor !== undefined) {
     result.actor = { value: partial.actor, source };
+  }
+  if (partial.baseBranch !== undefined) {
+    result.baseBranch = { value: partial.baseBranch, source };
   }
   if (partial.database !== undefined) {
     result.database = { value: partial.database, source };

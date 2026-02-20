@@ -76,6 +76,7 @@ export const DEFAULT_PLUGINS_CONFIG: PluginsConfig = {
  */
 export const DEFAULT_CONFIG: Configuration = {
   actor: undefined,
+  baseBranch: undefined,
   database: 'stoneforge.db',
   sync: DEFAULT_SYNC_CONFIG,
   playbooks: DEFAULT_PLAYBOOK_CONFIG,
@@ -125,6 +126,7 @@ export const MAX_TTL = 365 * ONE_DAY;
 export function getDefaultConfig(): Configuration {
   return {
     actor: undefined,
+    baseBranch: undefined,
     database: DEFAULT_CONFIG.database,
     sync: { ...DEFAULT_SYNC_CONFIG },
     playbooks: { paths: [...DEFAULT_PLAYBOOK_CONFIG.paths] },

@@ -182,6 +182,9 @@ export function convertYamlToConfig(yamlConfig: YamlConfigFile): PartialConfigur
   if (yamlConfig.actor !== undefined) {
     result.actor = yamlConfig.actor;
   }
+  if (yamlConfig.base_branch !== undefined) {
+    result.baseBranch = yamlConfig.base_branch;
+  }
   if (yamlConfig.database !== undefined) {
     result.database = yamlConfig.database;
   }
@@ -292,6 +295,9 @@ export function convertConfigToYaml(config: Configuration | PartialConfiguration
   // Direct fields
   if (config.actor !== undefined) {
     result.actor = config.actor;
+  }
+  if (config.baseBranch !== undefined) {
+    result.base_branch = config.baseBranch;
   }
   if (config.database !== undefined) {
     result.database = config.database;

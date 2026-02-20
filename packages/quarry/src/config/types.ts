@@ -84,6 +84,8 @@ export interface IdentityConfigSection {
 export interface Configuration {
   /** Default actor name for operations */
   actor?: string;
+  /** Base branch for merge targets (default: auto-detect) */
+  baseBranch?: string;
   /** Database filename (default: 'stoneforge.db') */
   database: string;
   /** Sync settings */
@@ -103,6 +105,7 @@ export interface Configuration {
  */
 export type PartialConfiguration = {
   actor?: string;
+  baseBranch?: string;
   database?: string;
   sync?: Partial<SyncConfig>;
   playbooks?: Partial<PlaybookConfig>;
@@ -146,6 +149,7 @@ export interface TrackedValue<T> {
  */
 export interface TrackedConfiguration {
   actor?: TrackedValue<string>;
+  baseBranch?: TrackedValue<string>;
   database: TrackedValue<string>;
   sync: {
     autoExport: TrackedValue<boolean>;
@@ -179,6 +183,7 @@ export interface TrackedConfiguration {
  */
 export interface YamlConfigFile {
   actor?: string;
+  base_branch?: string;
   database?: string;
   sync?: {
     auto_export?: boolean;
@@ -212,6 +217,8 @@ export interface YamlConfigFile {
 export const EnvVars = {
   /** Default actor name */
   ACTOR: 'STONEFORGE_ACTOR',
+  /** Base branch for merge targets */
+  BASE_BRANCH: 'STONEFORGE_BASE_BRANCH',
   /** Database file path */
   DATABASE: 'STONEFORGE_DB',
   /** Config file path override */
@@ -279,6 +286,7 @@ export interface ConfigValidationResult {
  */
 export const VALID_CONFIG_PATHS = [
   'actor',
+  'baseBranch',
   'database',
   'sync.autoExport',
   'sync.exportDebounce',
@@ -309,6 +317,7 @@ export function isValidConfigPath(value: string): value is ConfigPath {
  */
 export interface ConfigPathTypes {
   actor: string | undefined;
+  baseBranch: string | undefined;
   database: string;
   'sync.autoExport': boolean;
   'sync.exportDebounce': Duration;

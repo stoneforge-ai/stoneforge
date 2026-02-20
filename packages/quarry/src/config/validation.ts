@@ -64,6 +64,61 @@ export function validateActor(value: unknown): string {
 }
 
 /**
+ * Validates a base branch name
+ */
+export function isValidBaseBranch(value: unknown): value is string {
+  if (typeof value !== 'string') {
+    return false;
+  }
+  // Must be non-empty, no whitespace-only, no slashes that break git commands,
+  // no control characters, no spaces
+  return (
+    value.length > 0 &&
+    value.trim().length > 0 &&
+    !value.includes('/') &&
+    !value.includes('\\') &&
+    !/\s/.test(value) &&
+    // eslint-disable-next-line no-control-regex
+    !/[\x00-\x1f\x7f]/.test(value)
+  );
+}
+
+/**
+ * Validates base branch and throws if invalid
+ */
+export function validateBaseBranch(value: unknown): string {
+  if (typeof value !== 'string') {
+    throw new ValidationError(
+      'baseBranch must be a string',
+      ErrorCode.INVALID_INPUT,
+      { field: 'baseBranch', value, expected: 'string' }
+    );
+  }
+  if (value.length === 0 || value.trim().length === 0) {
+    throw new ValidationError(
+      'baseBranch cannot be empty or whitespace-only',
+      ErrorCode.INVALID_INPUT,
+      { field: 'baseBranch', value }
+    );
+  }
+  if (value.includes('/') || value.includes('\\')) {
+    throw new ValidationError(
+      'baseBranch must not contain slashes',
+      ErrorCode.INVALID_INPUT,
+      { field: 'baseBranch', value }
+    );
+  }
+  if (/\s/.test(value)) {
+    throw new ValidationError(
+      'baseBranch must not contain whitespace',
+      ErrorCode.INVALID_INPUT,
+      { field: 'baseBranch', value }
+    );
+  }
+  return value;
+}
+
+/**
  * Validates a database filename
  */
 export function isValidDatabase(value: unknown): value is string {
@@ -231,6 +286,11 @@ export function validateConfiguration(config: unknown): Configuration {
     validateActor(obj.actor);
   }
 
+  // Validate baseBranch (optional)
+  if (obj.baseBranch !== undefined) {
+    validateBaseBranch(obj.baseBranch);
+  }
+
   // Validate database
   if (typeof obj.database !== 'string') {
     throw new ValidationError(
@@ -359,6 +419,9 @@ export function validateConfigurationSafe(config: unknown): ConfigValidationResu
 export function validatePartialConfiguration(config: PartialConfiguration): void {
   if (config.actor !== undefined) {
     validateActor(config.actor);
+  }
+  if (config.baseBranch !== undefined) {
+    validateBaseBranch(config.baseBranch);
   }
   if (config.database !== undefined) {
     validateDatabase(config.database);

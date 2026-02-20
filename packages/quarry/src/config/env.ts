@@ -119,6 +119,12 @@ export function loadEnvConfig(): PartialConfiguration {
     config.actor = actor;
   }
 
+  // Base branch
+  const baseBranch = getEnvVar(EnvVars.BASE_BRANCH);
+  if (baseBranch !== undefined && baseBranch !== '') {
+    config.baseBranch = baseBranch;
+  }
+
   // Database
   const database = getEnvVar(EnvVars.DATABASE);
   if (database !== undefined && database !== '') {
@@ -183,6 +189,12 @@ export function getEnvVarInfo(): Array<{
       configPath: 'actor',
       type: 'string',
       description: 'Default actor name for operations',
+    },
+    {
+      name: EnvVars.BASE_BRANCH,
+      configPath: 'baseBranch',
+      type: 'string',
+      description: 'Base branch for merge targets',
     },
     {
       name: EnvVars.DATABASE,

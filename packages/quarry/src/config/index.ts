@@ -85,6 +85,8 @@ export {
 export {
   isValidActor,
   validateActor,
+  isValidBaseBranch,
+  validateBaseBranch,
   isValidDatabase,
   validateDatabase,
   isValidJsonlFilename,

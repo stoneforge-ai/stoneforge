@@ -75,6 +75,7 @@ export function mergeConfiguration(
 ): Configuration {
   const result: Configuration = {
     actor: partial.actor !== undefined ? partial.actor : base.actor,
+    baseBranch: partial.baseBranch !== undefined ? partial.baseBranch : base.baseBranch,
     database: partial.database !== undefined ? partial.database : base.database,
     sync: {
       autoExport: partial.sync?.autoExport !== undefined ? partial.sync.autoExport : base.sync.autoExport,
@@ -143,6 +144,7 @@ export function createConfiguration(partial?: PartialConfiguration): Configurati
 export function cloneConfiguration(config: Configuration): Configuration {
   return {
     actor: config.actor,
+    baseBranch: config.baseBranch,
     database: config.database,
     sync: {
       autoExport: config.sync.autoExport,
@@ -182,6 +184,9 @@ export function diffConfigurations(
 
   if (a.actor !== b.actor) {
     diff.actor = b.actor;
+  }
+  if (a.baseBranch !== b.baseBranch) {
+    diff.baseBranch = b.baseBranch;
   }
   if (a.database !== b.database) {
     diff.database = b.database;
@@ -252,6 +257,7 @@ export function configurationsEqual(a: Configuration, b: Configuration): boolean
   const bPackages = b.plugins?.packages ?? [];
   return (
     a.actor === b.actor &&
+    a.baseBranch === b.baseBranch &&
     a.database === b.database &&
     a.sync.autoExport === b.sync.autoExport &&
     a.sync.exportDebounce === b.sync.exportDebounce &&
