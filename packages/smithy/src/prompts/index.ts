@@ -428,3 +428,47 @@ export function buildAgentPrompt(options: BuildAgentPromptOptions): string | und
 
   return parts.join('\n\n');
 }
+
+// ============================================================================
+// Prompt Template Rendering
+// ============================================================================
+
+/**
+ * Variables available for prompt template rendering.
+ *
+ * Prompt files can use `{{variableName}}` placeholders which are replaced
+ * with actual values at load time.
+ */
+export interface PromptTemplateVars {
+  /**
+   * The base/target branch name (e.g. 'main', 'master', 'develop').
+   * Replaces `{{baseBranch}}` in prompt templates.
+   */
+  baseBranch?: string;
+}
+
+/**
+ * Renders a prompt template by replacing `{{variableName}}` placeholders
+ * with values from the provided variables.
+ *
+ * Currently supported variables:
+ * - `{{baseBranch}}` — the repository's base/target branch name
+ *
+ * Unknown template variables are left as-is (not replaced).
+ *
+ * @param content - The raw prompt content with template placeholders
+ * @param vars - The template variable values to substitute
+ * @returns The rendered prompt with placeholders replaced
+ */
+export function renderPromptTemplate(
+  content: string,
+  vars: PromptTemplateVars
+): string {
+  let result = content;
+
+  if (vars.baseBranch !== undefined) {
+    result = result.replace(/\{\{baseBranch\}\}/g, vars.baseBranch);
+  }
+
+  return result;
+}

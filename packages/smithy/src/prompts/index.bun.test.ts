@@ -5,6 +5,7 @@ import {
   hasBuiltInPrompt,
   listBuiltInPrompts,
   buildAgentPrompt,
+  renderPromptTemplate,
 } from "./index.js";
 
 describe("Prompt Loading", () => {
@@ -304,5 +305,70 @@ describe("Prompt Content", () => {
       expect(prompt).toContain("You are a **Steward**"); // Base
       expect(prompt).toContain("Recovery Steward"); // Focus
     });
+  });
+});
+
+describe("renderPromptTemplate", () => {
+  it("replaces {{baseBranch}} with the provided branch name", () => {
+    const content = "Run: `git diff origin/{{baseBranch}}..HEAD`";
+    const result = renderPromptTemplate(content, { baseBranch: "main" });
+    expect(result).toBe("Run: `git diff origin/main..HEAD`");
+  });
+
+  it("replaces multiple {{baseBranch}} occurrences", () => {
+    const content =
+      "Check {{baseBranch}}, diff origin/{{baseBranch}}..HEAD, log origin/{{baseBranch}}..HEAD";
+    const result = renderPromptTemplate(content, { baseBranch: "develop" });
+    expect(result).toBe(
+      "Check develop, diff origin/develop..HEAD, log origin/develop..HEAD"
+    );
+  });
+
+  it("returns content unchanged when baseBranch is undefined", () => {
+    const content = "Run: `git diff origin/{{baseBranch}}..HEAD`";
+    const result = renderPromptTemplate(content, {});
+    expect(result).toBe(content);
+  });
+
+  it("handles empty string baseBranch", () => {
+    const content = "Branch: {{baseBranch}}";
+    const result = renderPromptTemplate(content, { baseBranch: "" });
+    expect(result).toBe("Branch: ");
+  });
+
+  it("handles content with no template variables", () => {
+    const content = "No variables here";
+    const result = renderPromptTemplate(content, { baseBranch: "main" });
+    expect(result).toBe("No variables here");
+  });
+
+  it("does not replace unknown template variables", () => {
+    const content = "{{unknownVar}} and {{baseBranch}}";
+    const result = renderPromptTemplate(content, { baseBranch: "main" });
+    expect(result).toBe("{{unknownVar}} and main");
+  });
+
+  it("renders steward-merge prompt without raw template variables", () => {
+    const prompt = loadBuiltInPrompt("steward", "merge");
+    expect(prompt).toBeDefined();
+    const rendered = renderPromptTemplate(prompt!, { baseBranch: "main" });
+    expect(rendered).not.toContain("{{baseBranch}}");
+    expect(rendered).toContain("origin/main..HEAD");
+  });
+
+  it("renders steward-docs prompt without raw template variables", () => {
+    const prompt = loadBuiltInPrompt("steward", "docs");
+    expect(prompt).toBeDefined();
+    const rendered = renderPromptTemplate(prompt!, { baseBranch: "production" });
+    expect(rendered).not.toContain("{{baseBranch}}");
+    expect(rendered).toContain("branch off production named");
+  });
+
+  it("renders steward-base prompt without raw template variables", () => {
+    const prompt = loadBuiltInPrompt("steward");
+    expect(prompt).toBeDefined();
+    const rendered = renderPromptTemplate(prompt!, { baseBranch: "develop" });
+    expect(rendered).not.toContain("{{baseBranch}}");
+    expect(rendered).toContain("origin/develop:<path/to/file>");
   });
 });

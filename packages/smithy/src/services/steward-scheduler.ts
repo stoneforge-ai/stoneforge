@@ -34,7 +34,8 @@ import {
   isEventTrigger,
 } from '../types/index.js';
 import type { SessionManager } from '../runtime/session-manager.js';
-import { loadRolePrompt } from '../prompts/index.js';
+import { loadRolePrompt, renderPromptTemplate } from '../prompts/index.js';
+import { detectTargetBranch } from '../git/merge.js';
 import type { AgentRegistry, AgentEntity } from './agent-registry.js';
 import { getAgentMetadata } from './agent-registry.js';
 import type { MergeStewardService } from './merge-steward-service.js';
@@ -1427,7 +1428,11 @@ export function createStewardExecutor(deps: StewardExecutorDeps): StewardExecuto
           const roleResult = loadRolePrompt('steward', focus as StewardFocus, {
             projectRoot: deps.projectRoot,
           });
-          const initialPrompt = roleResult?.prompt ?? '';
+          // Render template variables (e.g. {{baseBranch}}) in the prompt
+          const baseBranch = await detectTargetBranch(deps.projectRoot);
+          const initialPrompt = roleResult?.prompt
+            ? renderPromptTemplate(roleResult.prompt, { baseBranch })
+            : '';
           const { session, events } = await deps.sessionManager.startSession(stewardId, {
             workingDirectory: deps.projectRoot,
             initialPrompt,
@@ -1498,7 +1503,11 @@ export function createStewardExecutor(deps: StewardExecutorDeps): StewardExecuto
           const roleResult = loadRolePrompt('steward', undefined, {
             projectRoot: deps.projectRoot,
           });
-          const basePrompt = roleResult?.prompt ?? '';
+          // Render template variables (e.g. {{baseBranch}}) in the base prompt
+          const customBaseBranch = await detectTargetBranch(deps.projectRoot);
+          const basePrompt = roleResult?.prompt
+            ? renderPromptTemplate(roleResult.prompt, { baseBranch: customBaseBranch })
+            : '';
 
           // Combine base steward prompt with the custom playbook
           const initialPrompt = basePrompt

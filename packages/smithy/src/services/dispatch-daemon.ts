@@ -30,7 +30,8 @@ import type {
 } from '@stoneforge/core';
 import { InboxStatus, createTimestamp, TaskStatus, asEntityId, asElementId, PlanStatus, canAutoComplete } from '@stoneforge/core';
 import type { QuarryAPI, InboxService } from '@stoneforge/quarry';
-import { loadTriagePrompt, loadRolePrompt } from '../prompts/index.js';
+import { loadTriagePrompt, loadRolePrompt, renderPromptTemplate } from '../prompts/index.js';
+import { detectTargetBranch } from '../git/merge.js';
 import { createLogger } from '../utils/logger.js';
 
 import type { AgentRegistry, AgentEntity } from './agent-registry.js';
@@ -468,6 +469,12 @@ export class DispatchDaemonImpl implements DispatchDaemon {
    */
   private startupRecoveryInFlight = false;
 
+  /**
+   * Cached result of target branch detection.
+   * Lazily resolved on first use and reused for subsequent prompt renders.
+   */
+  private cachedTargetBranch: string | undefined;
+
   constructor(
     api: QuarryAPI,
     agentRegistry: AgentRegistry,
@@ -494,6 +501,21 @@ export class DispatchDaemonImpl implements DispatchDaemon {
     this.rateLimitTracker = createRateLimitTracker();
     this.emitter = new EventEmitter();
     this.config = this.normalizeConfig(config);
+  }
+
+  // ----------------------------------------
+  // Prompt Template Helpers
+  // ----------------------------------------
+
+  /**
+   * Gets the target branch name, caching it after first detection.
+   * Uses the centralized detectTargetBranch() function.
+   */
+  private async getTargetBranch(): Promise<string> {
+    if (!this.cachedTargetBranch) {
+      this.cachedTargetBranch = await detectTargetBranch(this.config.projectRoot);
+    }
+    return this.cachedTargetBranch;
   }
 
   // ----------------------------------------
@@ -2265,13 +2287,15 @@ export class DispatchDaemonImpl implements DispatchDaemon {
   ): Promise<string> {
     const parts: string[] = [];
 
-    // Load and include the steward role prompt
+    // Load and include the steward role prompt, rendering template variables
     const roleResult = loadRolePrompt('steward', stewardFocus, { projectRoot: this.config.projectRoot });
     if (roleResult) {
+      const baseBranch = await this.getTargetBranch();
+      const renderedPrompt = renderPromptTemplate(roleResult.prompt, { baseBranch });
       parts.push(
         'Please read and internalize the following operating instructions. These define your role and how you should behave:',
         '',
-        roleResult.prompt,
+        renderedPrompt,
         '',
         '---',
         ''
@@ -2732,13 +2756,15 @@ export class DispatchDaemonImpl implements DispatchDaemon {
   ): Promise<string> {
     const parts: string[] = [];
 
-    // Load the recovery steward role prompt
+    // Load the recovery steward role prompt, rendering template variables
     const roleResult = loadRolePrompt('steward', 'recovery' as StewardFocus, { projectRoot: this.config.projectRoot });
     if (roleResult) {
+      const baseBranch = await this.getTargetBranch();
+      const renderedPrompt = renderPromptTemplate(roleResult.prompt, { baseBranch });
       parts.push(
         'Please read and internalize the following operating instructions. These define your role and how you should behave:',
         '',
-        roleResult.prompt,
+        renderedPrompt,
         '',
         '---',
         ''

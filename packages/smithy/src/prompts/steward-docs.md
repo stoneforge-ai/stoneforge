@@ -29,7 +29,7 @@ Use your judgment. If you can determine the correct fix by reading the code, fix
 
 ## Workflow
 
-1. **Create worktree and branch**: Create a worktree and branch off master named `{your-steward-name}/docs/auto-updates`
+1. **Create worktree and branch**: Create a worktree and branch off {{baseBranch}} named `{your-steward-name}/docs/auto-updates`
 
 2. **Run verification checks**: Use the docs-steward tools to scan for issues:
    - `verifyFilePaths()` - Check paths in docs exist
