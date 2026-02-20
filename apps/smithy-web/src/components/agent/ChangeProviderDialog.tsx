@@ -9,7 +9,7 @@ import { getProviderLabel } from '../../lib/providers';
 
 /** Default executable name per provider (used as placeholder text) */
 const providerDefaultExecutable: Record<string, string> = {
-  claude: 'claude',
+  'claude-code': 'claude',
   opencode: 'opencode',
   codex: 'codex',
 };

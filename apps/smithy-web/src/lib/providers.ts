@@ -7,7 +7,7 @@
 
 /** Maps internal provider name → display label for UI rendering */
 export const PROVIDER_LABELS: Record<string, string> = {
-  claude: 'Claude Code',
+  'claude-code': 'Claude Code',
   opencode: 'OpenCode',
   codex: 'Codex',
 };

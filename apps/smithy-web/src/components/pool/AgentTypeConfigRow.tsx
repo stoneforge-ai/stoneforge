@@ -107,7 +107,7 @@ export const defaultAgentType: AgentTypeFormState = {
   stewardFocus: '',
   priority: '0',
   maxSlots: '',
-  provider: 'claude',
+  provider: 'claude-code',
   model: '',
 };
 

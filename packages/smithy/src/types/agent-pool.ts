@@ -46,7 +46,7 @@ export interface PoolAgentTypeConfig {
    * Must be <= pool maxSize.
    */
   readonly maxSlots?: number;
-  /** Agent provider name (e.g., 'claude', 'opencode'). If not set, uses system default. */
+  /** Agent provider name (e.g., 'claude-code', 'opencode'). If not set, uses system default. */
   readonly provider?: string;
   /** Model identifier (e.g., 'claude-sonnet-4-20250514'). If not set, uses provider default. */
   readonly model?: string;

@@ -18,7 +18,7 @@ import { CodexAgentProvider } from './codex/index.js';
  */
 export class AgentProviderRegistry {
   private readonly providers = new Map<string, AgentProvider>();
-  private defaultProviderName = 'claude';
+  private defaultProviderName = 'claude-code';
 
   constructor() {
     // Always register the Claude provider as the default
@@ -36,7 +36,9 @@ export class AgentProviderRegistry {
 
   /** Get a provider by name. Returns undefined if not found. */
   get(name: string): AgentProvider | undefined {
-    return this.providers.get(name);
+    // Backward compatibility: treat 'claude' as alias for 'claude-code'
+    const resolved = name === 'claude' ? 'claude-code' : name;
+    return this.providers.get(resolved);
   }
 
   /** Get the default provider. */

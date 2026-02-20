@@ -181,7 +181,7 @@ export interface BaseAgentMetadata {
    * uses default behavior.
    */
   readonly roleDefinitionRef?: ElementId;
-  /** Agent provider name (e.g., 'claude', 'opencode'). Defaults to 'claude'. */
+  /** Agent provider name (e.g., 'claude-code', 'opencode'). Defaults to 'claude-code'. */
   readonly provider?: string;
   /** Model identifier to use (e.g., 'claude-sonnet-4-20250514'). If not set, uses provider default. */
   readonly model?: string;
@@ -278,7 +278,7 @@ export interface RegisterDirectorInput {
   readonly maxConcurrentTasks?: number;
   /** Optional reference to a role definition for system prompt and behaviors */
   readonly roleDefinitionRef?: ElementId;
-  /** Agent provider (e.g., 'claude', 'opencode'). Defaults to 'claude'. */
+  /** Agent provider (e.g., 'claude-code', 'opencode'). Defaults to 'claude-code'. */
   readonly provider?: string;
   /** Model identifier to use (e.g., 'claude-sonnet-4-20250514'). If not set, uses provider default. */
   readonly model?: string;
@@ -304,7 +304,7 @@ export interface RegisterWorkerInput {
   readonly maxConcurrentTasks?: number;
   /** Optional reference to a role definition for system prompt and behaviors */
   readonly roleDefinitionRef?: ElementId;
-  /** Agent provider (e.g., 'claude', 'opencode'). Defaults to 'claude'. */
+  /** Agent provider (e.g., 'claude-code', 'opencode'). Defaults to 'claude-code'. */
   readonly provider?: string;
   /** Model identifier to use (e.g., 'claude-sonnet-4-20250514'). If not set, uses provider default. */
   readonly model?: string;
@@ -343,7 +343,7 @@ export interface RegisterStewardInput {
   readonly maxConcurrentTasks?: number;
   /** Optional reference to a role definition for system prompt and behaviors */
   readonly roleDefinitionRef?: ElementId;
-  /** Agent provider (e.g., 'claude', 'opencode'). Defaults to 'claude'. */
+  /** Agent provider (e.g., 'claude-code', 'opencode'). Defaults to 'claude-code'. */
   readonly provider?: string;
   /** Model identifier to use (e.g., 'claude-sonnet-4-20250514'). If not set, uses provider default. */
   readonly model?: string;

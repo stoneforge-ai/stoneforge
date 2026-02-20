@@ -1685,7 +1685,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
 
     // Get the configured executable for this agent
     const agentExecutablePath = (meta as { executablePath?: string }).executablePath;
-    const providerName = (meta as { provider?: string }).provider ?? 'claude';
+    const providerName = (meta as { provider?: string }).provider ?? 'claude-code';
 
     // Determine the effective executable path that would be used
     // Priority: agent-specific → workspace-wide default → provider default

@@ -20,7 +20,7 @@ export { ClaudeInteractiveProvider } from './interactive.js';
  * Claude Agent Provider - the default provider using Claude Code CLI and SDK.
  */
 export class ClaudeAgentProvider implements AgentProvider {
-  readonly name = 'claude';
+  readonly name = 'claude-code';
   readonly headless: HeadlessProvider;
   readonly interactive: InteractiveProvider;
 
@@ -56,7 +56,7 @@ export class ClaudeAgentProvider implements AgentProvider {
       // SDK query creation failed (e.g., missing executable, spawn error)
       throw new ProviderError(
         `Failed to initialize Claude SDK query: ${error instanceof Error ? error.message : String(error)}`,
-        'claude'
+        'claude-code'
       );
     }
 
@@ -83,7 +83,7 @@ export class ClaudeAgentProvider implements AgentProvider {
       // SDK query failed (e.g., auth error, process crash, "Query closed before response")
       throw new ProviderError(
         `Failed to list models from Claude SDK: ${error instanceof Error ? error.message : String(error)}`,
-        'claude'
+        'claude-code'
       );
     } finally {
       // Always close the query to clean up resources

@@ -140,14 +140,14 @@ describe('OrchestratorAPI', () => {
       const director = await api.registerDirector({
         name: 'ProviderDirector',
         createdBy: systemEntity,
-        provider: 'claude',
+        provider: 'claude-code',
         model: 'claude-sonnet-4-20250514',
         executablePath: '/usr/local/bin/claude',
       });
 
       const meta = getAgentMetadata(director);
       expect(meta).toBeDefined();
-      expect(meta?.provider).toBe('claude');
+      expect(meta?.provider).toBe('claude-code');
       expect(meta?.model).toBe('claude-sonnet-4-20250514');
       expect(meta?.executablePath).toBe('/usr/local/bin/claude');
 
@@ -155,7 +155,7 @@ describe('OrchestratorAPI', () => {
       const fetched = await api.getAgent(director.id as unknown as EntityId);
       expect(fetched).toBeDefined();
       const fetchedMeta = getAgentMetadata(fetched!);
-      expect(fetchedMeta?.provider).toBe('claude');
+      expect(fetchedMeta?.provider).toBe('claude-code');
       expect(fetchedMeta?.model).toBe('claude-sonnet-4-20250514');
       expect(fetchedMeta?.executablePath).toBe('/usr/local/bin/claude');
     });
@@ -165,14 +165,14 @@ describe('OrchestratorAPI', () => {
         name: 'ProviderWorker',
         workerMode: 'ephemeral',
         createdBy: systemEntity,
-        provider: 'claude',
+        provider: 'claude-code',
         model: 'claude-sonnet-4-20250514',
         executablePath: '/usr/local/bin/claude',
       });
 
       const meta = getAgentMetadata(worker);
       expect(meta).toBeDefined();
-      expect(meta?.provider).toBe('claude');
+      expect(meta?.provider).toBe('claude-code');
       expect(meta?.model).toBe('claude-sonnet-4-20250514');
       expect(meta?.executablePath).toBe('/usr/local/bin/claude');
 
@@ -180,7 +180,7 @@ describe('OrchestratorAPI', () => {
       const fetched = await api.getAgent(worker.id as unknown as EntityId);
       expect(fetched).toBeDefined();
       const fetchedMeta = getAgentMetadata(fetched!);
-      expect(fetchedMeta?.provider).toBe('claude');
+      expect(fetchedMeta?.provider).toBe('claude-code');
       expect(fetchedMeta?.model).toBe('claude-sonnet-4-20250514');
       expect(fetchedMeta?.executablePath).toBe('/usr/local/bin/claude');
     });
@@ -190,14 +190,14 @@ describe('OrchestratorAPI', () => {
         name: 'ProviderSteward',
         stewardFocus: 'merge',
         createdBy: systemEntity,
-        provider: 'claude',
+        provider: 'claude-code',
         model: 'claude-sonnet-4-20250514',
         executablePath: '/usr/local/bin/claude',
       });
 
       const meta = getAgentMetadata(steward);
       expect(meta).toBeDefined();
-      expect(meta?.provider).toBe('claude');
+      expect(meta?.provider).toBe('claude-code');
       expect(meta?.model).toBe('claude-sonnet-4-20250514');
       expect(meta?.executablePath).toBe('/usr/local/bin/claude');
 
@@ -205,7 +205,7 @@ describe('OrchestratorAPI', () => {
       const fetched = await api.getAgent(steward.id as unknown as EntityId);
       expect(fetched).toBeDefined();
       const fetchedMeta = getAgentMetadata(fetched!);
-      expect(fetchedMeta?.provider).toBe('claude');
+      expect(fetchedMeta?.provider).toBe('claude-code');
       expect(fetchedMeta?.model).toBe('claude-sonnet-4-20250514');
       expect(fetchedMeta?.executablePath).toBe('/usr/local/bin/claude');
     });

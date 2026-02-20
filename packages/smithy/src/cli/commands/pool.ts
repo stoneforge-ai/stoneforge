@@ -67,7 +67,7 @@ async function createPoolClient(options: GlobalOptions): Promise<{
  * Format: "role[:workerMode|stewardFocus][:priority][:maxSlots][:provider][:model]"
  * Examples:
  *   "worker:ephemeral:100:5"                          - ephemeral workers, priority 100, max 5 slots
- *   "worker:ephemeral:100:5:claude:claude-sonnet-4-20250514" - with provider and model
+ *   "worker:ephemeral:100:5:claude-code:claude-sonnet-4-20250514" - with provider and model
  *   "worker:persistent:50"                            - persistent workers, priority 50
  *   "steward:merge"                                   - merge stewards
  *   "worker"                                          - all workers with default settings
@@ -428,7 +428,7 @@ async function poolCreateHandler(
       if (!typeConfig) {
         return failure(
           `Invalid agent type format: ${typeStr}. ` +
-          `Use: role[:mode|focus][:priority][:maxSlots][:provider][:model] (e.g., worker:ephemeral:100:5:claude:claude-sonnet-4-20250514)`,
+          `Use: role[:mode|focus][:priority][:maxSlots][:provider][:model] (e.g., worker:ephemeral:100:5:claude-code:claude-sonnet-4-20250514)`,
           ExitCode.VALIDATION
         );
       }
@@ -486,7 +486,7 @@ Agent Type Format Examples:
   worker:ephemeral                                      Ephemeral workers only
   worker:ephemeral:100                                  Ephemeral workers with priority 100
   worker:persistent:50:3                                Persistent workers, priority 50, max 3 slots
-  worker:ephemeral:100:5:claude:claude-sonnet-4-20250514  With provider and model
+  worker:ephemeral:100:5:claude-code:claude-sonnet-4-20250514  With provider and model
   steward:merge                                         Merge stewards
   steward:docs:80                                       Docs stewards with priority 80
 
@@ -495,7 +495,7 @@ Examples:
   sf pool create workers --size 10 -t worker:ephemeral -t worker:persistent
   sf pool create merge-pool --size 2 -t steward:merge:100
   sf pool create production --size 20 --tags "prod,critical"
-  sf pool create ai-pool --size 3 -t worker:ephemeral:100:5:claude:claude-sonnet-4-20250514`,
+  sf pool create ai-pool --size 3 -t worker:ephemeral:100:5:claude-code:claude-sonnet-4-20250514`,
   options: poolCreateOptions,
   handler: poolCreateHandler as Command['handler'],
 };

@@ -94,7 +94,7 @@ describe('ClaudeAgentProvider', () => {
     it('should have correct provider name', async () => {
       const { ClaudeAgentProvider } = await import('./index.js');
       const provider = new ClaudeAgentProvider();
-      expect(provider.name).toBe('claude');
+      expect(provider.name).toBe('claude-code');
     });
 
     it('should create headless and interactive providers', async () => {

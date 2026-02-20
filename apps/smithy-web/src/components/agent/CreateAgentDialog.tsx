@@ -171,7 +171,7 @@ interface FormState {
 
 /** Default executable name per provider (used as placeholder text) */
 const providerDefaultExecutable: Record<string, string> = {
-  claude: 'claude',
+  'claude-code': 'claude',
   opencode: 'opencode',
   codex: 'codex',
 };
@@ -184,7 +184,7 @@ const defaultState: FormState = {
   triggers: [],
   playbookId: '',
   tags: '',
-  provider: 'claude',
+  provider: 'claude-code',
   model: '',
   executablePath: '',
 };
@@ -217,7 +217,7 @@ export function CreateAgentDialog({
     ...defaultState,
     role: initialRole ?? 'steward',
     stewardFocus: initialStewardFocus ?? 'merge',
-    provider: agentDefaults.defaultProvider || 'claude',
+    provider: agentDefaults.defaultProvider || 'claude-code',
     model: agentDefaults.defaultModels[agentDefaults.defaultProvider] ?? '',
   });
 
@@ -273,7 +273,7 @@ export function CreateAgentDialog({
       ...defaultState,
       role: initialRole ?? 'steward',
       stewardFocus: initialStewardFocus ?? 'merge',
-      provider: agentDefaults.defaultProvider || 'claude',
+      provider: agentDefaults.defaultProvider || 'claude-code',
       model: agentDefaults.defaultModels[agentDefaults.defaultProvider] ?? '',
     });
     setError(null);
@@ -307,7 +307,7 @@ export function CreateAgentDialog({
       name: form.name.trim(),
       role: form.role,
       tags: form.tags.trim() ? form.tags.split(',').map(t => t.trim()).filter(Boolean) : undefined,
-      provider: form.provider !== 'claude' ? form.provider : undefined,
+      provider: form.provider !== 'claude-code' ? form.provider : undefined,
       model: form.model || undefined, // Only include if not empty (not using default)
       executablePath: form.executablePath.trim() || undefined, // Only include if not empty (not using default)
     };

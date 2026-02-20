@@ -108,7 +108,7 @@ export function AgentCard({
               className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded bg-[var(--color-surface-elevated)] text-[var(--color-text-tertiary)] border border-[var(--color-border)]"
               data-testid={`agent-provider-${agent.id}`}
             >
-              {getProviderLabel(agentMeta?.provider || 'claude').toLowerCase()}
+              {getProviderLabel(agentMeta?.provider || 'claude-code').toLowerCase()}
             </span>
             {agentMeta?.model && (
               <span
@@ -341,7 +341,7 @@ export function AgentCard({
         isOpen={changeProviderOpen}
         onClose={() => setChangeProviderOpen(false)}
         agentId={agent.id}
-        currentProvider={agentMeta?.provider ?? 'claude'}
+        currentProvider={agentMeta?.provider ?? 'claude-code'}
         currentExecutablePath={agentMeta?.executablePath}
       />
 
@@ -351,7 +351,7 @@ export function AgentCard({
         onClose={() => setChangeModelOpen(false)}
         agentId={agent.id}
         currentModel={agentMeta?.model}
-        currentProvider={agentMeta?.provider ?? 'claude'}
+        currentProvider={agentMeta?.provider ?? 'claude-code'}
       />
 
       {/* Change Triggers Dialog (steward only) */}

@@ -263,7 +263,7 @@ interface AgentDefaultsSectionProps {
 
 /** Default executable names for each provider (used as placeholders) */
 const PROVIDER_DEFAULT_EXECUTABLES: Record<string, string> = {
-  claude: 'claude',
+  'claude-code': 'claude',
   opencode: 'opencode',
   codex: 'codex',
 };
@@ -283,7 +283,7 @@ function AgentDefaultsSection({ settings, setSettings, setDefaultModel, resetToD
     if (providers.length > 0) return providers;
     // Fallback to known providers if API hasn't loaded yet
     return [
-      { name: 'claude', available: true, installInstructions: '' },
+      { name: 'claude-code', available: true, installInstructions: '' },
       { name: 'opencode', available: true, installInstructions: '' },
       { name: 'codex', available: true, installInstructions: '' },
     ];

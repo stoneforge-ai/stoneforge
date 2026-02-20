@@ -45,7 +45,7 @@ export interface StewardScheduleSettings {
 }
 
 /** Provider name type for agent providers */
-export type AgentProvider = 'claude' | 'opencode' | 'codex';
+export type AgentProvider = 'claude-code' | 'opencode' | 'codex';
 
 export interface AgentDefaultsSettings {
   /** Default provider used when creating new agents */
@@ -87,7 +87,7 @@ const DEFAULT_STEWARD_SCHEDULE_SETTINGS: StewardScheduleSettings = {
 };
 
 const DEFAULT_AGENT_DEFAULTS_SETTINGS: AgentDefaultsSettings = {
-  defaultProvider: 'claude',
+  defaultProvider: 'claude-code',
   defaultModels: {},
 };
 

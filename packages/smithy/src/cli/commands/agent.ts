@@ -455,7 +455,7 @@ const agentRegisterOptions: CommandOption[] = [
   },
   {
     name: 'provider',
-    description: 'Agent provider (e.g., claude, opencode)',
+    description: 'Agent provider (e.g., claude-code, opencode)',
     hasValue: true,
   },
   {
@@ -606,7 +606,7 @@ Options:
   --reportsTo <id>        Manager entity ID (for workers/stewards)
   --roleDef <id>          Role definition document ID
   --trigger <cron>        Steward cron trigger (e.g., "0 2 * * *")
-  --provider <name>       Agent provider (e.g., claude, opencode)
+  --provider <name>       Agent provider (e.g., claude-code, opencode)
   --model <model>         LLM model to use (e.g., claude-sonnet-4-5-20250929)
 
 Examples:

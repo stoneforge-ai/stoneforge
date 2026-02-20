@@ -69,7 +69,7 @@ export function useProviders() {
 
 /**
  * Hook to fetch models available for a specific provider
- * @param providerName - The provider name (e.g., 'claude', 'openai')
+ * @param providerName - The provider name (e.g., 'claude-code', 'openai')
  */
 export function useProviderModels(providerName: string | undefined) {
   return useQuery<ProviderModelsResponse, Error>({

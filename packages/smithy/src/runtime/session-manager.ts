@@ -561,8 +561,8 @@ export class SessionManagerImpl implements SessionManager {
       model: modelOverride,
     };
 
-    const resolvedPath = this.resolveExecutablePath(providerName ?? 'claude', agentExecutablePath);
-    console.log('[session-manager] Starting session for agent', agentId, 'mode:', spawnOptions.mode, 'provider:', providerName ?? 'claude', 'model:', modelOverride ?? 'default', 'executablePath:', resolvedPath ?? 'default', 'prompt length:', options?.initialPrompt?.length ?? 0);
+    const resolvedPath = this.resolveExecutablePath(providerName ?? 'claude-code', agentExecutablePath);
+    console.log('[session-manager] Starting session for agent', agentId, 'mode:', spawnOptions.mode, 'provider:', providerName ?? 'claude-code', 'model:', modelOverride ?? 'default', 'executablePath:', resolvedPath ?? 'default', 'prompt length:', options?.initialPrompt?.length ?? 0);
 
     // Spawn the session
     const result = await this.spawner.spawn(agentId, meta.agentRole, spawnOptions);
@@ -1286,7 +1286,8 @@ export class SessionManagerImpl implements SessionManager {
     executablePath: string
   ): AgentProvider {
     switch (providerName) {
-      case 'claude':
+      case 'claude-code':
+      case 'claude': // backward compatibility
         return new ClaudeAgentProvider(executablePath);
       case 'opencode':
         return new OpenCodeAgentProvider({ executablePath });
@@ -1306,7 +1307,7 @@ export class SessionManagerImpl implements SessionManager {
     providerName: string | undefined,
     agentExecutablePath?: string
   ): Promise<AgentProvider | undefined> {
-    const effectiveProvider = providerName ?? 'claude';
+    const effectiveProvider = providerName ?? 'claude-code';
     const resolvedPath = this.resolveExecutablePath(effectiveProvider, agentExecutablePath);
 
     if (resolvedPath) {
@@ -1315,12 +1316,12 @@ export class SessionManagerImpl implements SessionManager {
     }
 
     // No custom path — use registry singleton for non-default providers
-    if (effectiveProvider !== 'claude') {
+    if (effectiveProvider !== 'claude-code') {
       const registry = getProviderRegistry();
       return registry.getOrThrow(effectiveProvider);
     }
 
-    // Default claude provider — no override needed (spawner uses claude by default)
+    // Default claude-code provider — no override needed (spawner uses claude by default)
     return undefined;
   }
 
