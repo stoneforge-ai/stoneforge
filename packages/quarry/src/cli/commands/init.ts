@@ -58,7 +58,7 @@ database: stoneforge.db
 
 # Sync settings
 sync:
-  auto_export: false
+  auto_export: true
   elements_file: elements.jsonl
   dependencies_file: dependencies.jsonl
 
