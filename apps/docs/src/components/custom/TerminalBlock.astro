@@ -1,0 +1,100 @@
+---
+interface Props {
+  title?: string;
+  class?: string;
+}
+
+const { title, class: className = '' } = Astro.props;
+---
+
+<div class:list={['sf-terminal', className]}>
+  <div class="sf-terminal-accent"></div>
+  <div class="sf-terminal-chrome">
+    <span class="sf-terminal-dot sf-terminal-dot--red"></span>
+    <span class="sf-terminal-dot sf-terminal-dot--yellow"></span>
+    <span class="sf-terminal-dot sf-terminal-dot--green"></span>
+    {title && <span class="sf-terminal-title">{title}</span>}
+  </div>
+  <div class="sf-terminal-body">
+    <slot />
+  </div>
+</div>
+
+<style>
+  /* Terminal always dark (conventional) — uses hardcoded dark tokens */
+  .sf-terminal {
+    position: relative;
+    border-radius: 0.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: #08090c;
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.02);
+    margin: 1.5rem 0;
+  }
+
+  .sf-terminal-accent {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(to right, transparent, #60a5fa, #a78bfa, transparent);
+  }
+
+  .sf-terminal-chrome {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    background: #0f1117;
+  }
+
+  .sf-terminal-dot {
+    width: 0.75rem;
+    height: 0.75rem;
+    border-radius: 50%;
+  }
+
+  .sf-terminal-dot--red {
+    background: rgba(248, 113, 113, 0.3);
+    border: 1px solid rgba(248, 113, 113, 0.15);
+  }
+
+  .sf-terminal-dot--yellow {
+    background: rgba(251, 191, 36, 0.3);
+    border: 1px solid rgba(251, 191, 36, 0.15);
+  }
+
+  .sf-terminal-dot--green {
+    background: rgba(74, 222, 128, 0.3);
+    border: 1px solid rgba(74, 222, 128, 0.15);
+    animation: sf-pulse-glow 3s ease-in-out infinite;
+  }
+
+  .sf-terminal-title {
+    margin-left: 0.5rem;
+    font-family: var(--sf-font-code);
+    font-size: 0.6875rem;
+    color: #64748b;
+  }
+
+  .sf-terminal-body {
+    padding: 1.25rem;
+    font-family: var(--sf-font-code);
+    font-size: 0.8125rem;
+    line-height: 1.8;
+    color: #94a3b8;
+  }
+
+  .sf-terminal-body :global(pre) {
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    border: none;
+  }
+
+  .sf-terminal-body :global(code) {
+    font-family: var(--sf-font-code);
+  }
+</style>

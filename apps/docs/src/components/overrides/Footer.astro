@@ -1,0 +1,225 @@
+---
+import type { Props } from '@astrojs/starlight/props';
+---
+
+<footer class="sf-footer">
+  <div class="sf-footer-gradient"></div>
+  <div class="sf-footer-inner">
+    <div class="sf-footer-grid">
+      <!-- Logo + description -->
+      <div class="sf-footer-brand">
+        <a href="https://stoneforge.ai" class="sf-footer-logo">
+          <img src="/logo.png" alt="" width="24" height="24" />
+          <span>stoneforge</span>
+        </a>
+        <p>Multi-agent orchestration platform for AI coding agents. Open source, Apache 2.0.</p>
+      </div>
+
+      <!-- Link groups -->
+      <div class="sf-footer-links">
+        <div class="sf-footer-group">
+          <h4>Documentation</h4>
+          <ul>
+            <li><a href="/getting-started/introduction/">Getting Started</a></li>
+            <li><a href="/guides/first-multi-agent-project/">Guides</a></li>
+            <li><a href="/architecture/event-sourcing/">Architecture</a></li>
+            <li><a href="/reference/cli/">Reference</a></li>
+          </ul>
+        </div>
+        <div class="sf-footer-group">
+          <h4>Community</h4>
+          <ul>
+            <li><a href="https://github.com/stoneforge-ai/stoneforge" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+            <li><a href="https://discord.gg/NBCaUUv8Vm" target="_blank" rel="noopener noreferrer">Discord</a></li>
+            <li><a href="https://x.com/stoneforge_ai" target="_blank" rel="noopener noreferrer">X / Twitter</a></li>
+          </ul>
+        </div>
+        <div class="sf-footer-group">
+          <h4>More</h4>
+          <ul>
+            <li><a href="https://stoneforge.ai" target="_blank" rel="noopener noreferrer">Website</a></li>
+            <li><a href="https://github.com/stoneforge-ai/stoneforge/blob/master/LICENSE" target="_blank" rel="noopener noreferrer">Apache 2.0 License</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="sf-footer-bottom">
+      <hr />
+      <span>&copy; {new Date().getFullYear()} Stoneforge</span>
+    </div>
+  </div>
+</footer>
+
+<style>
+  /* Footer stays dark in both themes (conventional) */
+  .sf-footer {
+    position: relative;
+    background: #08090c;
+    color: #94a3b8;
+    margin-top: 3rem;
+  }
+
+
+  .sf-footer-gradient {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(to right, transparent, #60a5fa, #a78bfa, transparent);
+    opacity: 0.6;
+  }
+
+  .sf-footer-inner {
+    max-width: 72rem;
+    margin: 0 auto;
+    padding: 3.5rem 1.5rem 2rem;
+  }
+
+  .sf-footer-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 2.5rem;
+  }
+
+  @media (min-width: 768px) {
+    .sf-footer-grid {
+      flex-direction: row;
+      gap: 4rem;
+    }
+  }
+
+  .sf-footer-brand {
+    max-width: 280px;
+  }
+
+  .sf-footer-logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.625rem;
+    text-decoration: none;
+    margin-bottom: 1rem;
+  }
+
+  .sf-footer-logo img {
+    object-fit: contain;
+  }
+
+  .sf-footer-logo span {
+    font-family: var(--sf-font-headline);
+    font-weight: 600;
+    font-size: 1.125rem;
+    letter-spacing: 0.125em;
+    color: #f1f5f9;
+  }
+
+  .sf-footer-brand p {
+    font-size: 0.8125rem;
+    color: #64748b;
+    line-height: 1.6;
+  }
+
+  .sf-footer-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2.5rem;
+    margin-left: auto;
+  }
+
+  @media (min-width: 768px) {
+    .sf-footer-links {
+      gap: 4rem;
+    }
+  }
+
+  .sf-footer-group h4 {
+    font-family: var(--sf-font-headline);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: #64748b;
+    margin-bottom: 1rem;
+  }
+
+  .sf-footer-group ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+  }
+
+  .sf-footer-group a {
+    font-size: 0.8125rem;
+    color: #64748b;
+    text-decoration: none;
+    transition: color 0.2s ease;
+  }
+
+  .sf-footer-group a:hover {
+    color: #f1f5f9;
+  }
+
+  .sf-footer-bottom {
+    margin-top: 3rem;
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+  }
+
+  .sf-footer-bottom hr {
+    flex: 1;
+    height: 1px;
+    border: none;
+    background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.06), transparent);
+  }
+
+  .sf-footer-bottom span {
+    font-family: var(--sf-font-code);
+    font-size: 0.75rem;
+    color: #64748b;
+    white-space: nowrap;
+  }
+
+  /* --- Light mode footer --- */
+  :global(:root[data-theme='light']) .sf-footer {
+    background: #f8fafc;
+    color: #475569;
+  }
+
+  :global(:root[data-theme='light']) .sf-footer-gradient {
+    background: linear-gradient(to right, transparent, #2563eb, #7c3aed, transparent);
+    opacity: 0.4;
+  }
+
+  :global(:root[data-theme='light']) .sf-footer-logo span {
+    color: #273644;
+  }
+
+  :global(:root[data-theme='light']) .sf-footer-brand p {
+    color: #64748b;
+  }
+
+  :global(:root[data-theme='light']) .sf-footer-group h4 {
+    color: #94a3b8;
+  }
+
+  :global(:root[data-theme='light']) .sf-footer-group a {
+    color: #64748b;
+  }
+
+  :global(:root[data-theme='light']) .sf-footer-group a:hover {
+    color: #0f172a;
+  }
+
+  :global(:root[data-theme='light']) .sf-footer-bottom hr {
+    background: linear-gradient(to right, transparent, rgba(15, 23, 42, 0.08), transparent);
+  }
+
+  :global(:root[data-theme='light']) .sf-footer-bottom span {
+    color: #94a3b8;
+  }
+</style>

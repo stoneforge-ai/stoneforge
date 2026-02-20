@@ -1,0 +1,46 @@
+/* =============================================================================
+   STONEFORGE DOCS — LIGHT THEME
+   Clean whites with slate-blue tones. WCAG AA+ compliant.
+
+   IMPORTANT: Starlight SWAPS white/black in light mode:
+   - --sl-color-white  = darkest text color
+   - --sl-color-black  = lightest bg color
+   - gray-1 = darkest gray, gray-6/7 = lightest gray
+   ============================================================================= */
+
+:root[data-theme='light'],
+[data-theme='light'] ::backdrop {
+  /* --- Accent (darker blue for AA on white) --- */
+  --sl-color-accent-low:  rgba(37, 99, 235, 0.08);
+  --sl-color-accent:      #2563eb;
+  --sl-color-accent-high: #1e3a5f;
+
+  /* --- Gray scale: dark → light (Starlight convention for light mode) --- */
+  --sl-color-white: #0f172a;       /* Primary text / headings */
+  --sl-color-gray-1: #1e293b;      /* Strong secondary text */
+  --sl-color-gray-2: #334155;      /* Body text */
+  --sl-color-gray-3: #475569;      /* Muted text / captions */
+  --sl-color-gray-4: #94a3b8;      /* Placeholder / disabled */
+  --sl-color-gray-5: #cbd5e1;      /* Borders / dividers */
+  --sl-color-gray-6: #f1f5f9;      /* Surface / sidebar bg */
+  --sl-color-black: #ffffff;        /* Page background */
+
+  /* --- Navigation & sidebar --- */
+  --sl-color-bg-nav: rgba(255, 255, 255, 0.88);
+  --sl-color-bg-sidebar: #f8fafc;
+  --sl-color-hairline: rgba(15, 23, 42, 0.08);
+  --sl-color-hairline-light: #e2e8f0;
+  --sl-color-hairline-shade: #e2e8f0;
+
+  /* --- Text --- */
+  --sl-color-text: #334155;
+  --sl-color-text-accent: #2563eb;
+
+  /* --- Inline code --- */
+  --sl-color-bg-inline-code: rgba(37, 99, 235, 0.06);
+
+  /* --- Shadows (soft, warm) --- */
+  --sl-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
+  --sl-shadow-md: 0 4px 6px rgba(15, 23, 42, 0.04), 0 2px 4px rgba(15, 23, 42, 0.06);
+  --sl-shadow-lg: 0 10px 25px rgba(15, 23, 42, 0.06), 0 4px 10px rgba(15, 23, 42, 0.04);
+}

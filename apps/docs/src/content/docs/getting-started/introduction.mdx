@@ -1,0 +1,32 @@
+---
+title: Introduction
+description: What is Stoneforge and why does it exist? Learn about multi-agent orchestration for AI coding agents.
+---
+
+Stoneforge is an open-source multi-agent orchestration platform for AI coding agents. It coordinates multiple AI agents working in parallel on your codebase — each in its own isolated git worktree — and merges their work back together automatically.
+
+## Why Stoneforge?
+
+Modern AI coding assistants are powerful, but they work one task at a time. Stoneforge changes that by letting you break a project into independent tasks and dispatch them to multiple agents simultaneously.
+
+- **Parallel execution** — Multiple agents work on different parts of your codebase at the same time
+- **Git worktree isolation** — Each agent gets its own clean working copy, eliminating conflicts
+- **Automatic merging** — Completed work is merged back to your main branch with conflict resolution
+- **Event-sourced state** — Every action is recorded, making the system auditable and recoverable
+- **Provider agnostic** — Use Claude, GPT-4, Gemini, or any compatible LLM provider
+
+## How it works
+
+1. You describe a high-level goal or set of tasks
+2. The **Planner** agent breaks work into discrete elements with dependency tracking
+3. The **Orchestrator** dispatches elements to available coding agents
+4. Each agent works in an isolated git worktree
+5. Completed elements are automatically synced and merged
+6. You review the unified result
+
+## Next steps
+
+import { LinkCard } from '@astrojs/starlight/components';
+
+<LinkCard title="Installation" description="Get Stoneforge set up on your machine" href="/getting-started/installation/" />
+<LinkCard title="Quick Start" description="Build your first multi-agent project" href="/getting-started/quick-start/" />

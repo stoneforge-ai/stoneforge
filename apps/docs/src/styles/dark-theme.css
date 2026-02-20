@@ -1,0 +1,38 @@
+/* =============================================================================
+   STONEFORGE DOCS — DARK THEME (default)
+   Premium dark palette with depth and contrast
+   ============================================================================= */
+
+:root {
+  /* --- Accent --- */
+  --sl-color-accent-low:  rgba(96, 165, 250, 0.1);
+  --sl-color-accent:      #60a5fa;
+  --sl-color-accent-high: #dbeafe;
+
+  /* --- Gray scale: light → dark (Starlight convention for dark mode) --- */
+  --sl-color-white: #f1f5f9;
+  --sl-color-gray-1: #cbd5e1;
+  --sl-color-gray-2: #94a3b8;
+  --sl-color-gray-3: #64748b;
+  --sl-color-gray-4: #334155;
+  --sl-color-gray-5: #1e293b;
+  --sl-color-gray-6: #0f1117;
+  --sl-color-black: #08090c;
+
+  /* --- Navigation & sidebar --- */
+  --sl-color-bg-nav: rgba(8, 9, 12, 0.82);
+  --sl-color-bg-sidebar: var(--sf-bg-primary);
+  --sl-color-hairline: rgba(255, 255, 255, 0.06);
+
+  /* --- Text --- */
+  --sl-color-text: var(--sf-text-secondary);
+  --sl-color-text-accent: var(--sf-accent);
+
+  /* --- Inline code --- */
+  --sl-color-bg-inline-code: rgba(96, 165, 250, 0.08);
+
+  /* --- Shadows (deep, premium) --- */
+  --sl-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --sl-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.3);
+  --sl-shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.5), 0 4px 12px rgba(0, 0, 0, 0.3);
+}

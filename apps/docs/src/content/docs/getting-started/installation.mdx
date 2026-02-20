@@ -1,0 +1,61 @@
+---
+title: Installation
+description: Install and configure Stoneforge on macOS, Linux, or Windows.
+---
+
+import { Tabs, TabItem, Steps } from '@astrojs/starlight/components';
+
+## Prerequisites
+
+- **Node.js** 18 or later
+- **Git** 2.30 or later (worktree support required)
+- **pnpm** 8+ (recommended) or npm
+
+## Install
+
+<Tabs>
+  <TabItem label="pnpm">
+    ```bash
+    pnpm add -g stoneforge
+    ```
+  </TabItem>
+  <TabItem label="npm">
+    ```bash
+    npm install -g stoneforge
+    ```
+  </TabItem>
+  <TabItem label="From source">
+    ```bash
+    git clone https://github.com/stoneforge-ai/stoneforge.git
+    cd stoneforge
+    pnpm install
+    pnpm build
+    ```
+  </TabItem>
+</Tabs>
+
+## Configure your provider
+
+<Steps>
+1. Set your LLM provider API key:
+   ```bash
+   export ANTHROPIC_API_KEY="sk-ant-..."
+   ```
+
+2. Initialize Stoneforge in your project:
+   ```bash
+   cd your-project
+   sf init
+   ```
+
+3. Verify the installation:
+   ```bash
+   sf status
+   ```
+</Steps>
+
+## Next steps
+
+import { LinkCard } from '@astrojs/starlight/components';
+
+<LinkCard title="Quick Start" description="Build your first multi-agent project" href="/getting-started/quick-start/" />

@@ -1,0 +1,154 @@
+---
+interface Props {
+  title: string;
+  icon?: string;
+  class?: string;
+}
+
+const { title, icon, class: className = '' } = Astro.props;
+---
+
+<div class:list={['sf-feature-card', className]}>
+  <div class="sf-feature-card-glow"></div>
+  <div class="sf-feature-card-accent"></div>
+  {icon && <div class="sf-feature-card-icon" set:html={icon} />}
+  <h3 class="sf-feature-card-title">{title}</h3>
+  <div class="sf-feature-card-body">
+    <slot />
+  </div>
+</div>
+
+<style>
+  .sf-feature-card {
+    position: relative;
+    padding: 1.5rem;
+    background: var(--sf-surface);
+    border: 1px solid var(--sl-color-hairline);
+    border-radius: 0.75rem;
+    transition: border-color 0.4s var(--sf-ease-out-expo),
+                box-shadow 0.4s var(--sf-ease-out-expo),
+                transform 0.3s var(--sf-ease-out-expo);
+    overflow: hidden;
+  }
+
+  /* Gradient hover overlay */
+  .sf-feature-card-glow {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, transparent 30%, rgba(96, 165, 250, 0.05) 50%, rgba(167, 139, 250, 0.03) 70%, transparent 90%);
+    opacity: 0;
+    transition: opacity 0.4s var(--sf-ease-out-expo);
+    pointer-events: none;
+  }
+
+  /* Accent top-line that fades in on hover */
+  .sf-feature-card-accent {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--sf-gradient-brand);
+    opacity: 0;
+    transition: opacity 0.4s var(--sf-ease-out-expo);
+  }
+
+  .sf-feature-card:hover {
+    border-color: var(--sf-border-accent);
+    box-shadow: 0 0 20px rgba(96, 165, 250, 0.06), var(--sf-shadow-md);
+    transform: translateY(-2px);
+  }
+
+  .sf-feature-card:hover .sf-feature-card-glow {
+    opacity: 1;
+  }
+
+  .sf-feature-card:hover .sf-feature-card-accent {
+    opacity: 1;
+  }
+
+  .sf-feature-card-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 0.5rem;
+    background: var(--sl-color-accent-low);
+    color: var(--sl-color-accent);
+    border: 1px solid transparent;
+    margin-bottom: 1rem;
+    transition: border-color 0.4s var(--sf-ease-out-expo),
+                box-shadow 0.4s var(--sf-ease-out-expo);
+  }
+
+  .sf-feature-card:hover .sf-feature-card-icon {
+    border-color: var(--sf-border-accent);
+    box-shadow: 0 0 12px rgba(96, 165, 250, 0.15);
+  }
+
+  .sf-feature-card-title {
+    font-family: var(--sf-font-headline);
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--sl-color-white);
+    margin: 0 0 0.5rem;
+    transition: color 0.3s ease;
+  }
+
+  .sf-feature-card:hover .sf-feature-card-title {
+    color: var(--sl-color-accent-high);
+  }
+
+  .sf-feature-card-body {
+    font-size: 0.875rem;
+    color: var(--sl-color-gray-3);
+    line-height: 1.6;
+  }
+
+  .sf-feature-card-body :global(p) {
+    margin: 0;
+  }
+
+  .sf-feature-card-body :global(a) {
+    color: var(--sl-color-accent);
+    text-decoration: none;
+    font-weight: 500;
+  }
+
+  .sf-feature-card-body :global(a:hover) {
+    text-decoration: underline;
+  }
+
+  /* ---- Light mode ---- */
+  :global([data-theme='light']) .sf-feature-card {
+    background: #ffffff;
+    border-color: #e2e8f0;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  }
+
+  :global([data-theme='light']) .sf-feature-card:hover {
+    border-color: rgba(37, 99, 235, 0.2);
+    box-shadow: 0 4px 16px rgba(37, 99, 235, 0.06), var(--sf-shadow-md);
+  }
+
+  :global([data-theme='light']) .sf-feature-card-glow {
+    background: linear-gradient(135deg, transparent 30%, rgba(37, 99, 235, 0.03) 50%, rgba(124, 58, 237, 0.02) 70%, transparent 90%);
+  }
+
+  :global([data-theme='light']) .sf-feature-card-title {
+    color: #0f172a;
+  }
+
+  :global([data-theme='light']) .sf-feature-card:hover .sf-feature-card-title {
+    color: #2563eb;
+  }
+
+  :global([data-theme='light']) .sf-feature-card-body {
+    color: #475569;
+  }
+
+  :global([data-theme='light']) .sf-feature-card:hover .sf-feature-card-icon {
+    box-shadow: 0 0 12px rgba(37, 99, 235, 0.1);
+  }
+</style>

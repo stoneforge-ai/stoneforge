@@ -1,0 +1,47 @@
+---
+import type { Props } from '@astrojs/starlight/props';
+import Default from '@astrojs/starlight/components/Head.astro';
+---
+
+<Default {...Astro.props}><slot /></Default>
+
+<!-- Google Fonts: Space Grotesk (headings), IBM Plex Sans (body), JetBrains Mono (code) -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap"
+  rel="stylesheet"
+/>
+
+<!-- Scroll reveal IntersectionObserver -->
+<script is:inline>
+(function() {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    // Make all reveal elements immediately visible
+    document.addEventListener('DOMContentLoaded', function() {
+      document.querySelectorAll('[data-sf-reveal], [data-sf-stagger]').forEach(function(el) {
+        el.classList.add('sf-revealed');
+      });
+    });
+    return;
+  }
+
+  var observer = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('sf-revealed');
+        observer.unobserve(entry.target);
+      }
+    });
+  }, {
+    threshold: 0.1,
+    rootMargin: '0px 0px -40px 0px'
+  });
+
+  document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('[data-sf-reveal], [data-sf-stagger]').forEach(function(el) {
+      observer.observe(el);
+    });
+  });
+})();
+</script>

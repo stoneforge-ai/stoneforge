@@ -1,0 +1,68 @@
+---
+title: Quick Start
+description: Go from zero to your first multi-agent orchestration in under 10 minutes.
+---
+
+import { Steps, Aside } from '@astrojs/starlight/components';
+
+This guide walks you through a complete multi-agent workflow — from creating a plan to watching agents execute in parallel.
+
+## Your first orchestration
+
+<Steps>
+1. **Initialize your project**
+
+   Navigate to a git repository and initialize Stoneforge:
+   ```bash
+   cd my-project
+   sf init
+   ```
+
+2. **Create a plan**
+
+   Describe what you want to build. Stoneforge's planner will break it into discrete elements:
+   ```bash
+   sf plan "Add user authentication with login, signup, and password reset"
+   ```
+
+3. **Review the plan**
+
+   Open the Quarry UI to see the generated elements and their dependencies:
+   ```bash
+   sf quarry
+   ```
+
+4. **Start orchestration**
+
+   Dispatch elements to agents and watch them work in parallel:
+   ```bash
+   sf run
+   ```
+
+5. **Review results**
+
+   When all agents complete, review the merged changes:
+   ```bash
+   git log --oneline -10
+   ```
+</Steps>
+
+<Aside type="tip">
+  Use `sf status` at any time to see what agents are working on and how far along the orchestration is.
+</Aside>
+
+## What just happened?
+
+Behind the scenes, Stoneforge:
+1. Used an AI planner to decompose your request into independent work units (elements)
+2. Analyzed dependencies between elements to determine execution order
+3. Created isolated git worktrees for each agent
+4. Dispatched elements to agents as their dependencies were satisfied
+5. Merged completed work back to your branch
+
+## Next steps
+
+import { LinkCard } from '@astrojs/starlight/components';
+
+<LinkCard title="Core Concepts" description="Understand the ideas behind Stoneforge" href="/getting-started/core-concepts/" />
+<LinkCard title="Your First Multi-Agent Project" description="A deeper walkthrough with real code" href="/guides/first-multi-agent-project/" />

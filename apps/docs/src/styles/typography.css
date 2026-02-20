@@ -1,0 +1,103 @@
+/* =============================================================================
+   STONEFORGE DOCS — TYPOGRAPHY
+   Space Grotesk headings, IBM Plex Sans body, refined hierarchy
+   ============================================================================= */
+
+/* --- Headings: Space Grotesk --- */
+.sl-markdown-content h1,
+.sl-markdown-content h2,
+.sl-markdown-content h3,
+.sl-markdown-content h4,
+.sl-markdown-content h5,
+.sl-markdown-content h6 {
+  font-family: var(--sf-font-headline);
+  line-height: 1.2;
+}
+
+.sl-markdown-content h1 {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.sl-markdown-content h2 {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* H3/H4: Differentiated colors for visual hierarchy */
+.sl-markdown-content h3 {
+  color: var(--sl-color-gray-1);
+}
+
+.sl-markdown-content h4 {
+  color: var(--sl-color-gray-2);
+}
+
+/* --- Sidebar headings --- */
+.sidebar-pane h2,
+nav[aria-label="Main"] .top-level > li > details > summary span {
+  font-family: var(--sf-font-headline);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+/* --- Page title: gradient text treatment --- */
+.content-panel h1#_top {
+  font-family: var(--sf-font-headline);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  background: linear-gradient(135deg, var(--sl-color-white) 0%, var(--sl-color-accent) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+:root[data-theme='light'] .content-panel h1#_top {
+  background: linear-gradient(135deg, #0f172a 20%, #2563eb 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* --- Inline code in prose --- */
+.sl-markdown-content :not(pre) > code {
+  padding: 0.15em 0.4em;
+  border-radius: 0.3rem;
+  font-size: 0.875em;
+}
+
+/* --- Ordered list markers: accent-colored --- */
+.sl-markdown-content ol > li::marker {
+  color: var(--sl-color-accent);
+  font-weight: 600;
+}
+
+/* --- Strong text: brighter for emphasis --- */
+.sl-markdown-content strong {
+  color: var(--sl-color-white);
+}
+
+/* --- Table styling --- */
+.sl-markdown-content table {
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.sl-markdown-content table th {
+  font-family: var(--sf-font-headline);
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Light mode: blue-tinted table header background */
+:root[data-theme='light'] .sl-markdown-content table th {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+/* --- Blockquote refinement --- */
+.sl-markdown-content blockquote {
+  border-left-color: var(--sl-color-accent);
+}

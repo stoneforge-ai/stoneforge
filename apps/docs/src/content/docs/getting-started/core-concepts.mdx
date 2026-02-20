@@ -1,0 +1,51 @@
+---
+title: Core Concepts
+description: Understand the fundamental building blocks of Stoneforge — elements, agents, worktrees, and the orchestration loop.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Before diving deeper, let's define the key concepts you'll encounter throughout the documentation.
+
+## Elements
+
+An **element** is the atomic unit of work in Stoneforge. Each element represents a single, well-defined task — like "add a login form component" or "write unit tests for the auth service."
+
+Elements have:
+- A **title** and **description** explaining what needs to be done
+- A **status** that progresses through `open → in_progress → resolved`
+- **Dependencies** on other elements that must complete first
+- An **assigned agent** that executes the work
+
+## Agents
+
+An **agent** is an AI coding assistant (like Claude or GPT-4) that executes elements. Each agent runs in its own isolated git worktree, so multiple agents can work on the same repository simultaneously without conflicts.
+
+## Worktrees
+
+Stoneforge uses **git worktrees** to give each agent a clean, isolated copy of your repository. This is the key to safe parallel execution — agents can make changes freely without interfering with each other.
+
+<Aside>
+  Git worktrees are a built-in Git feature that allows multiple working trees to be attached to the same repository. Stoneforge manages worktree lifecycle automatically.
+</Aside>
+
+## The Orchestration Loop
+
+The orchestration loop is the core engine that drives Stoneforge:
+
+1. **Check** for elements whose dependencies are satisfied
+2. **Dispatch** ready elements to available agents
+3. **Monitor** agent progress
+4. **Sync** completed work back to the main branch
+5. **Repeat** until all elements are resolved
+
+## Event Sourcing
+
+Every action in Stoneforge is recorded as an immutable event. This means:
+- You can always see exactly what happened and when
+- The system can recover from crashes by replaying events
+- State is derived from the event log, never mutated directly
+
+## Quarry
+
+**Quarry** is Stoneforge's project management interface — think of it as a kanban board for your AI agents. It shows elements, their statuses, dependencies, and real-time agent progress.
