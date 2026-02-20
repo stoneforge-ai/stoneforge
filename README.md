@@ -38,6 +38,8 @@ Running one AI coding agent is simple. Running several in parallel — a planner
 
 Stoneforge is a multi-agent orchestration platform that solves these problems. Install it, start the server, and use the web dashboard to direct a team of AI coding agents. A Director plans the work, Workers execute in isolated git worktrees, Stewards auto-merge and clean up, and a dispatch daemon keeps everyone busy.
 
+Beyond orchestration, Stoneforge merges the entire software project management stack into one agent-first platform — issues and tasks (replacing Linear/GitHub Issues), notes and documents (replacing Notion/Obsidian), messages and chats (replacing Slack/Discord), code and branches (replacing manual git workflows), and merge requests (replacing GitHub PR workflows). Everything lives in one system so agents never lose context switching between tools.
+
 Stoneforge has two main layers:
 
 - **Smithy** (`@stoneforge/smithy`) — the orchestrator. Spawns agents, dispatches tasks, manages sessions, handles worktree isolation and merge review. **This is what you install.**
@@ -47,19 +49,19 @@ Stoneforge has two main layers:
 
 Claude Code now has an experimental [agent teams](https://docs.anthropic.com/en/docs/claude-code/agent-teams) feature — here's how Stoneforge compares:
 
-| | Claude Code Agent Teams | Stoneforge |
-|---|---|---|
-| **State** | Ephemeral — file-based task list, no persistence across sessions | Event-sourced — SQLite + JSONL, survives restarts, full audit trail |
-| **UI** | Terminal-only (tmux split panes or inline) | Web dashboard with real-time agent output, kanban boards, metrics |
-| **Branch isolation** | Manual — "avoid editing the same file" | Automatic — each worker gets its own git worktree |
-| **Task dispatch** | Lead assigns or teammates self-claim | Dispatch daemon auto-assigns by priority, respects dependencies |
-| **Merge** | Manual | Merge steward runs tests, squash-merges on pass, creates fix task on fail |
-| **Communication** | Lead-mediated messages, broadcast | Persistent channels with threading, inbox triage, searchable history |
-| **Knowledge base** | CLAUDE.md only | Versioned document libraries with FTS5 + semantic search |
-| **Structured processes** | Ad-hoc task lists | Playbook templates → resumable workflows with durable state |
-| **Provider lock-in** | Claude Code only | Claude Code, OpenCode, or OpenAI Codex |
-| **Scaling** | Single plan — limited by one account's rate limits | Multi-plan — split agents across multiple Claude MAX/Pro plans via custom executable paths ([setup guide](packages/smithy/README.md#scaling-with-multiple-plans)) |
-| **Status** | Experimental, known limitations (no session resumption, task lag) | Usable today — some edge cases still have sharp edges |
+|                          | Claude Code Agent Teams                                           | Stoneforge                                                                                                                                                        |
+| ------------------------ | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **State**                | Ephemeral — file-based task list, no persistence across sessions  | Event-sourced — SQLite + JSONL, survives restarts, full audit trail                                                                                               |
+| **UI**                   | Terminal-only (tmux split panes or inline)                        | Web dashboard with real-time agent output, kanban boards, metrics                                                                                                 |
+| **Branch isolation**     | Manual — "avoid editing the same file"                            | Automatic — each worker gets its own git worktree                                                                                                                 |
+| **Task dispatch**        | Lead assigns or teammates self-claim                              | Dispatch daemon auto-assigns by priority, respects dependencies                                                                                                   |
+| **Merge**                | Manual                                                            | Merge steward runs tests, squash-merges on pass, creates fix task on fail                                                                                         |
+| **Communication**        | Lead-mediated messages, broadcast                                 | Persistent channels with threading, inbox triage, searchable history                                                                                              |
+| **Knowledge base**       | CLAUDE.md only                                                    | Versioned document libraries with FTS5 + semantic search                                                                                                          |
+| **Structured processes** | Ad-hoc task lists                                                 | Playbook templates → resumable workflows with durable state                                                                                                       |
+| **Provider lock-in**     | Claude Code only                                                  | Claude Code, OpenCode, or OpenAI Codex                                                                                                                            |
+| **Scaling**              | Single plan — limited by one account's rate limits                | Multi-plan — split agents across multiple Claude MAX/Pro plans via custom executable paths ([setup guide](packages/smithy/README.md#scaling-with-multiple-plans)) |
+| **Status**               | Experimental, known limitations (no session resumption, task lag) | Usable today — some edge cases still have sharp edges                                                                                                             |
 
 Compared to running a single agent (Claude Code, Cursor), Stoneforge gives you parallel execution with coordination. Compared to background agents (Cursor background agents, Codex), it adds dependency-aware scheduling, merge automation, and a persistent knowledge layer. Compared to custom scripts and task runners, you get a web dashboard, event-sourced state, and merge review built in.
 
@@ -87,8 +89,8 @@ npm install -g @stoneforge/smithy
 # 2. Initialize a workspace in your project
 cd your-project && sf init
 
-# 3. Start the server + web dashboard
-sf serve                              # runs on http://localhost:3457
+# 3. Start the server + web dashboard at http://localhost:3457
+sf serve
 
 # 4. Open the dashboard
 open http://localhost:3457
@@ -96,10 +98,10 @@ open http://localhost:3457
 
 Once the dashboard is running:
 
-1. **Register a Director** — Agents page, or CLI: `sf agent register Director --role director`
+1. **Register a Director** — Agents page, or CLI: `sf agent register director --role director`
 2. **Start the Director** — Director Panel in the right sidebar, or CLI: `sf agent start <id>`
-3. **Register workers** — Agents page, or CLI: `sf agent register Worker1 --role worker`
-4. **Register a Merge Steward** — Agents page, or CLI: `sf agent register MergeSteward --role steward --focus merge`
+3. **Register workers** — Agents page, or CLI: `sf agent register e-worker-1 --role worker`
+4. **Register a Merge Steward** — Agents page, or CLI: `sf agent register m-steward-1 --role steward --focus merge`
 5. **Tell the Director your goal** via the Director Panel
 6. **Watch it work** — Activity page shows live agent output, Tasks page shows progress, Merge Requests shows completed work
 
@@ -117,7 +119,8 @@ Agents can use **Claude Code** (default), **OpenCode**, or **OpenAI Codex** as t
 | **Ephemeral Worker**  | Spawned automatically by the dispatch daemon to complete a specific task. Executes in an isolated worktree, commits, pushes, then completes or hands off. You register them and the daemon handles the rest. |
 | **Persistent Worker** | Started and stopped manually (by you) for one-off or exploratory work. Runs an interactive session and is not auto-dispatched for tasks.                                                                     |
 | **Steward**           | Handles maintenance workflows — merge review, documentation scanning, recovery of stuck tasks, custom repeatable workflows. Runs on triggers or schedules.                                                   |
-| **Dispatch Daemon**   | Background process that watches for ready (unblocked, unassigned) tasks and assigns them to idle workers from the pool.                                                                                      |
+
+The **dispatch daemon** is a background process (not an agent role) that watches for ready tasks and assigns them to idle workers. Start it with `sf daemon start`.
 
 ### The Orchestration Loop
 
@@ -247,6 +250,8 @@ Control concurrent execution with pool size limits. Manage via the Agents > Pool
 ### Providers
 
 Default provider is **Claude Code**. Also supports **OpenCode** and **OpenAI Codex**. Set per-agent at registration (`--provider opencode`) or per-session at start.
+
+You do **not** configure API keys in Stoneforge. Authentication is configured within the underlying agent harness CLI (Claude Code, OpenCode, or Codex) and passes through to Stoneforge automatically.
 
 ---
 
