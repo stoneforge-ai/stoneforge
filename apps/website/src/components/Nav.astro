@@ -31,18 +31,31 @@ const links = [
       ))}
     </div>
 
-    <!-- Desktop CTA -->
-    <a
-      href="https://github.com/stoneforge-ai/stoneforge"
-      target="_blank"
-      rel="noopener noreferrer"
-      class="hidden md:inline-flex items-center gap-2 h-8 px-3.5 rounded-lg text-[12px] font-medium text-[var(--site-text-secondary)] bg-[var(--site-bg-elevated)] border border-[var(--site-border)] hover:border-[var(--site-border-accent)] hover:text-[var(--site-accent)] transition-all duration-200"
-    >
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-      </svg>
-      Star on GitHub
-    </a>
+    <!-- Desktop CTAs -->
+    <div class="hidden md:flex items-center gap-2">
+      <a
+        href="https://docs.stoneforge.ai"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="inline-flex items-center gap-2 h-8 px-3.5 rounded-lg text-[12px] font-medium text-[var(--site-text-secondary)] bg-[var(--site-bg-elevated)] border border-[var(--site-border)] hover:border-[var(--site-border-accent)] hover:text-[var(--site-accent)] transition-all duration-200"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/>
+        </svg>
+        Docs
+      </a>
+      <a
+        href="https://github.com/stoneforge-ai/stoneforge"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="inline-flex items-center gap-2 h-8 px-3.5 rounded-lg text-[12px] font-medium text-[var(--site-text-secondary)] bg-[var(--site-bg-elevated)] border border-[var(--site-border)] hover:border-[var(--site-border-accent)] hover:text-[var(--site-accent)] transition-all duration-200"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+        </svg>
+        Star on GitHub
+      </a>
+    </div>
 
     <!-- Mobile hamburger -->
     <button
@@ -83,6 +96,17 @@ const links = [
     </a>
   ))}
   <div class="w-12 h-px bg-[var(--site-border)] my-2"></div>
+  <a
+    href="https://docs.stoneforge.ai"
+    target="_blank"
+    rel="noopener noreferrer"
+    class="inline-flex items-center gap-2 h-12 px-6 rounded-xl border border-[var(--site-border)] text-sm text-[var(--site-text-primary)] hover:border-[var(--site-border-accent)] transition-colors"
+  >
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/>
+    </svg>
+    Docs
+  </a>
   <a
     href="https://github.com/stoneforge-ai/stoneforge"
     target="_blank"
