@@ -620,7 +620,7 @@ export const entityListCommand: Command = {
 
 Options:
   --type, -t    Filter by entity type: agent, human, or system
-  --limit, -n   Maximum number of entities to return
+  --limit, -l   Maximum number of entities to return
 
 Examples:
   sf entity list

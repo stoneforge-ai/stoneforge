@@ -34,7 +34,7 @@ export type DurationString = `${number}${'ms' | 's' | 'm' | 'h' | 'd'}`;
 export interface SyncConfig {
   /** Auto-export on mutations (default: true) */
   autoExport: boolean;
-  /** Debounce interval for exports (default: 500ms) */
+  /** Debounce interval for exports (default: 300000ms / 5 minutes) */
   exportDebounce: Duration;
   /** Elements JSONL file name (default: 'elements.jsonl') */
   elementsFile: string;

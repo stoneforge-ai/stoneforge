@@ -263,7 +263,7 @@ Arguments:
 Options:
   -a, --all              Include read and archived items (default: unread only)
   -s, --status <status>  Filter by status: unread, read, or archived
-  -n, --limit <n>        Maximum number of items to return
+  -l, --limit <n>        Maximum number of items to return
   -F, --full             Show complete message content instead of truncated preview
 
 Examples:
@@ -610,7 +610,7 @@ Without a subcommand, lists inbox items for an entity.
 Options for list:
   -a, --all              Include read and archived items
   -s, --status <status>  Filter by status: unread, read, archived
-  -n, --limit <n>        Maximum number of items
+  -l, --limit <n>        Maximum number of items
   -F, --full             Show complete message content
 
 Examples:
