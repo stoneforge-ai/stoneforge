@@ -10,14 +10,14 @@ All elements share these properties:
 
 ```typescript
 interface Element {
-  id: ElementId;           // Hash-based unique identifier
-  type: ElementType;       // Discriminator: 'task', 'entity', 'document', etc.
-  createdAt: Timestamp;    // ISO 8601
-  updatedAt: Timestamp;    // ISO 8601
-  createdBy: EntityId;     // Reference to creator entity
-  tags: string[];          // Categorization
+  readonly id: ElementId;           // Hash-based unique identifier
+  readonly type: ElementType;       // Discriminator: 'task', 'entity', 'document', etc.
+  readonly createdAt: Timestamp;    // ISO 8601
+  updatedAt: Timestamp;             // ISO 8601
+  readonly createdBy: EntityId;     // Reference to creator entity
+  tags: string[];                   // Categorization
   metadata: Record<string, unknown>;  // Arbitrary JSON (64KB limit)
-  deletedAt?: Timestamp;   // ISO 8601 soft-delete timestamp, undefined if active
+  deletedAt?: Timestamp;            // ISO 8601 soft-delete timestamp, undefined if active
 }
 ```
 
@@ -85,11 +85,11 @@ type Complexity = 1 | 2 | 3 | 4 | 5;
 
 ```typescript
 interface Entity extends Element {
-  type: 'entity';
-  name: string;              // Unique, case-sensitive
-  entityType: EntityTypeValue;
-  reportsTo?: EntityId;      // Reports to
-  publicKey?: string;        // Ed25519 public key (for crypto mode)
+  readonly type: 'entity';
+  readonly name: string;              // Unique, case-sensitive
+  readonly entityType: EntityTypeValue;
+  readonly reportsTo?: EntityId;      // Reports to
+  readonly publicKey?: string;        // Ed25519 public key (for crypto mode)
 }
 
 const EntityTypeValue = { AGENT: 'agent', HUMAN: 'human', SYSTEM: 'system' } as const;
@@ -113,12 +113,12 @@ type EntityTypeValue = (typeof EntityTypeValue)[keyof typeof EntityTypeValue];
 
 ```typescript
 interface Message extends Element {
-  type: 'message';
-  sender: EntityId;
+  readonly type: 'message';
+  readonly sender: EntityId;
   channelId: ChannelId;      // Required (mutable for channel merge operations)
-  threadId: MessageId | null; // null for non-threaded messages
-  contentRef: DocumentId;    // Reference to content Document
-  attachments: readonly DocumentId[];  // Attachment Documents
+  readonly threadId: MessageId | null; // null for non-threaded messages
+  readonly contentRef: DocumentId;    // Reference to content Document
+  readonly attachments: readonly DocumentId[];  // Attachment Documents
 }
 ```
 
@@ -191,11 +191,11 @@ type DocumentStatus = 'active' | 'archived';
 
 ```typescript
 interface Dependency {
-  blockedId: ElementId;
-  blockerId: ElementId;
-  type: DependencyType;
-  createdAt: Timestamp;
-  createdBy: EntityId;
+  readonly blockedId: ElementId;
+  readonly blockerId: ElementId;
+  readonly type: DependencyType;
+  readonly createdAt: Timestamp;
+  readonly createdBy: EntityId;
   metadata: Record<string, unknown>;
 }
 
@@ -244,8 +244,8 @@ interface TimerGateMetadata extends AwaitsMetadataBase {
 interface ApprovalGateMetadata extends AwaitsMetadataBase {
   gateType: 'approval';
   requiredApprovers: EntityId[];  // Required, min 1
-  currentApprovers?: EntityId[];
   approvalCount?: number;
+  currentApprovers?: EntityId[];
 }
 
 interface ExternalGateMetadata extends AwaitsMetadataBase {
@@ -329,18 +329,18 @@ type WorkflowStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelle
 
 ```typescript
 interface Channel extends Element {
-  type: 'channel';
-  name: string;
-  description: string | null;
-  channelType: ChannelType;
-  members: EntityId[];
-  permissions: ChannelPermissions;
+  readonly type: 'channel';
+  readonly name: string;
+  readonly description: string | null;
+  readonly channelType: ChannelType;
+  readonly members: readonly EntityId[];
+  readonly permissions: ChannelPermissions;
 }
 
 interface ChannelPermissions {
-  visibility: 'public' | 'private';
-  joinPolicy: 'open' | 'invite-only' | 'request';
-  modifyMembers: EntityId[];
+  readonly visibility: 'public' | 'private';
+  readonly joinPolicy: 'open' | 'invite-only' | 'request';
+  readonly modifyMembers: readonly EntityId[];
 }
 
 type ChannelType = 'direct' | 'group';
@@ -413,14 +413,14 @@ interface Playbook extends Element {
 
 ```typescript
 interface InboxItem {
-  id: string;
-  recipientId: EntityId;
-  messageId: MessageId;
-  channelId: ChannelId;
-  sourceType: InboxSourceType;
-  status: InboxStatus;
-  readAt: Timestamp | null;
-  createdAt: Timestamp;
+  readonly id: string;
+  readonly recipientId: EntityId;
+  readonly messageId: MessageId;
+  readonly channelId: ChannelId;
+  readonly sourceType: InboxSourceType;
+  readonly status: InboxStatus;
+  readonly readAt: Timestamp | null;
+  readonly createdAt: Timestamp;
 }
 
 type InboxStatus = 'unread' | 'read' | 'archived';
@@ -437,13 +437,13 @@ type InboxSourceType = 'direct' | 'mention' | 'thread_reply';
 
 ```typescript
 interface Event {
-  id: number;                                      // Auto-incrementing integer
-  elementId: ElementId;
-  eventType: EventType;
-  actor: EntityId;
-  oldValue: Record<string, unknown> | null;
-  newValue: Record<string, unknown> | null;
-  createdAt: Timestamp;
+  readonly id: number;                                      // Auto-incrementing integer
+  readonly elementId: ElementId;
+  readonly eventType: EventType;
+  readonly actor: EntityId;
+  readonly oldValue: Record<string, unknown> | null;
+  readonly newValue: Record<string, unknown> | null;
+  readonly createdAt: Timestamp;
 }
 
 type EventType =

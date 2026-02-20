@@ -34,7 +34,7 @@ const task = await api.create({
 ### Read
 
 ```typescript
-const task = await api.get(taskId);
+const task = await api.get(taskId);  // Returns T | null (null if not found)
 
 // With hydration (resolve document references)
 const hydratedTask = await api.get(taskId, {
@@ -213,7 +213,7 @@ await api.addDependency({
 ### Remove dependency
 
 ```typescript
-await api.removeDependency(blockedId, blockerId, 'blocks');
+await api.removeDependency(blockedId, blockerId, 'blocks', actor?);  // actor optional
 ```
 
 ### Get dependencies
@@ -248,7 +248,7 @@ await api.removeApproval(blockedId, blockerId, approverId);
 await api.addTaskToPlan(taskId, planId, options?);     // taskId first!
 await api.removeTaskFromPlan(taskId, planId, actor?);
 await api.createTaskInPlan(planId, { title: 'Task', priority: 2 });
-const tasks = await api.getTasksInPlan(planId);
+const tasks = await api.getTasksInPlan(planId, filter?);
 const progress = await api.getPlanProgress(planId);
 
 // Bulk operations
@@ -269,7 +269,8 @@ const tasks = await api.getTasksInWorkflow(workflowId);
 const ready = await api.getReadyTasksInWorkflow(workflowId);
 const ordered = await api.getOrderedTasksInWorkflow(workflowId);  // Topological sort
 const progress = await api.getWorkflowProgress(workflowId);
-await api.deleteWorkflow(workflowId);  // Hard delete
+const deleteResult = await api.deleteWorkflow(workflowId, options?);  // Hard delete
+// deleteResult.tasksDeleted, deleteResult.dependenciesDeleted
 await api.garbageCollectWorkflows({ maxAgeMs: 7 * 24 * 60 * 60 * 1000 });  // 7 days
 ```
 
@@ -581,5 +582,5 @@ const isBlocked = blockedTasks.some(t => t.id === taskId);
 // Or check via BlockedCacheService directly
 import { createBlockedCacheService } from '@stoneforge/quarry';
 const blockedCache = createBlockedCacheService(storage);
-const isBlocked = blockedCache.isBlocked(taskId);
+const blockInfo = blockedCache.isBlocked(taskId);  // Returns BlockingInfo | null
 ```

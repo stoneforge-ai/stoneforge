@@ -430,7 +430,7 @@ List ready (unblocked, open) tasks.
 | ---------------------- | --------------------------------- |
 | `-a, --assignee <id>`  | Filter by assignee                |
 | `-p, --priority <1-5>` | Filter by priority                |
-| `-t, --type <type>`    | Filter by element type            |
+| `-t, --type <type>`    | Filter by task type (bug, feature, task, chore) |
 | `-l, --limit <n>`      | Maximum results                   |
 
 ```bash
@@ -555,7 +555,7 @@ List tasks with optional filtering.
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | `-s, --status <status>` | Filter by status                                                                                                             |
 | `--ready`               | Show only dispatch-ready tasks (accounts for blocked cache, draft plans, scheduled-for-future, ephemeral workflows, and plan-level blocking). Mutually exclusive with `--status`. |
-| `-t, --type <type>`     | Filter by element type                                                                                                       |
+| `-t, --type <type>`     | Filter by task type (bug, feature, task, chore). When used with `--ready`, validated against task types.                      |
 | `-p, --priority <1-5>`  | Filter by priority                                                                                                           |
 | `-a, --assignee <id>`   | Filter by assignee                                                                                                           |
 | `--tag <tag>`           | Filter by tag (can be repeated for AND logic)                                                                                |
@@ -1325,7 +1325,7 @@ Delete a team.
 | Option                | Description              |
 | --------------------- | ------------------------ |
 | `-r, --reason <text>` | Reason for deletion      |
-| `-f, --force`         | Skip confirmation        |
+| `-f, --force`         | Skip confirmation for teams with members |
 
 ```bash
 sf team delete el-team123
@@ -1369,7 +1369,7 @@ Delete a library.
 
 | Option          | Description                       |
 | --------------- | --------------------------------- |
-| `-f, --force`   | Skip confirmation                 |
+| `-f, --force`   | Force deletion even if library has contents |
 
 ```bash
 # Create a library
@@ -1804,7 +1804,7 @@ Options:
   --after <date>         Events after date
   --before <date>        Events before date
   -f, --format <fmt>     Output format (timeline/table)
-  -l, --limit <n>        Maximum number of events to return
+  -l, --limit <n>        Maximum number of events to return (default: 50)
 ```
 
 ## CLI Plugins
@@ -2194,7 +2194,7 @@ sf merge --cleanup --message "docs: automated documentation fixes"
 | Command                                    | Description                            |
 | ------------------------------------------ | -------------------------------------- |
 | `sf task handoff <id>`                     | Hand off task to another agent         |
-| `sf task complete <id>`                    | Complete task and create merge request (OPEN/IN_PROGRESS only) |
+| `sf task complete <id>`                    | Complete task and create merge request (not CLOSED/REVIEW)     |
 | `sf task sync <id>`                        | Sync task branch with main             |
 | `sf task merge <id>`                       | Squash-merge task branch and close it  |
 | `sf task reject <id>`                      | Mark merge as failed and reopen task   |
@@ -2202,7 +2202,7 @@ sf merge --cleanup --message "docs: automated documentation fixes"
 
 #### task complete
 
-Complete a task and create a merge request. The task must be in OPEN or IN_PROGRESS status.
+Complete a task and create a merge request. The task must not be in CLOSED or REVIEW status.
 
 | Option                    | Description                                          |
 | ------------------------- | ---------------------------------------------------- |
@@ -2211,7 +2211,7 @@ Complete a task and create a merge request. The task must be in OPEN or IN_PROGR
 | `--no-mr`                 | Skip merge request creation                          |
 | `--mr-title <text>`       | Custom merge request title                           |
 | `--mr-body <text>`        | Custom merge request body                            |
-| `-b, --baseBranch <name>` | Base branch for the merge request                    |
+| `-b, --baseBranch <name>` | Base branch for the merge request (default: main)    |
 
 ```bash
 sf task complete el-abc123
@@ -2229,7 +2229,7 @@ Hand off a task to another agent.
 | `-m, --message <text>`    | Handoff message for the next agent                   |
 | `-b, --branch <name>`     | Branch associated with the task                      |
 | `-w, --worktree <path>`   | Worktree path for the task                           |
-| `-s, --sessionId <id>`    | Session ID to associate with the handoff             |
+| `-s, --sessionId <id>`    | Session ID of the agent handing off (defaults to `STONEFORGE_SESSION_ID` env var or auto-generated) |
 
 ```bash
 sf task handoff el-abc123

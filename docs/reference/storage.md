@@ -256,24 +256,21 @@ import { createSyncService } from '@stoneforge/quarry';
 const syncService = createSyncService(storage);
 
 // Incremental (dirty only)
-await syncService.export();
+await syncService.export({ outputDir: '.stoneforge/sync' });
 
 // Full export
-await syncService.export({ full: true });
-
-// Custom path
-await syncService.export({ outputPath: '/path/to/export.jsonl' });
+await syncService.export({ outputDir: '.stoneforge/sync', full: true });
 ```
 
 ### Import
 
 ```typescript
 // Standard import (merge)
-const result = await syncService.import(jsonlPath);
-// result.imported, result.skipped, result.conflicts
+const result = await syncService.import({ inputDir: '.stoneforge/sync' });
+// result.elementsImported, result.elementsSkipped, result.conflicts
 
 // Force import (remote always wins)
-await syncService.import(jsonlPath, { force: true });
+await syncService.import({ inputDir: '.stoneforge/sync', force: true });
 ```
 
 ### Serialization

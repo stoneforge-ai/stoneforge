@@ -51,8 +51,12 @@ depService.removeAllDependents(blockerId);
 // Count without fetching
 const count = depService.countDependencies(blockedId, type?);
 
-// Cycle detection
-const hasCycle = depService.detectCycle(blockedId, blockerId, type);
+// Cycle detection (returns CycleDetectionResult, not boolean)
+const result = depService.detectCycle(blockedId, blockerId, type);
+// result.hasCycle - whether a cycle was detected
+// result.nodesVisited - number of nodes traversed
+// result.depthLimitReached - whether depth limit was hit
+// result.cyclePath? - path forming the cycle (if found)
 ```
 
 ### Cycle Detection
@@ -81,10 +85,14 @@ const blockedCache = createBlockedCacheService(storage);
 ### Query Methods
 
 ```typescript
-// Check if element is blocked
-const isBlocked = blockedCache.isBlocked(elementId);
+// Check if element is blocked (returns BlockingInfo | null, not boolean)
+const blockInfo = blockedCache.isBlocked(elementId);
+// blockInfo.elementId - the blocked element
+// blockInfo.blockedBy - what's blocking it
+// blockInfo.reason - human-readable reason
+// blockInfo.previousStatus - status before being blocked
 
-// Get all blocked elements
+// Get all blocked elements (returns BlockingInfo[])
 const allBlocked = blockedCache.getAllBlocked();
 
 // Get elements blocked by a specific element
@@ -173,8 +181,9 @@ const complexity = priorityService.calculateAggregateComplexity(taskId);
 // Enhance tasks with effective priority (synchronous)
 const enhanced = priorityService.enhanceTasksWithEffectivePriority(tasks);
 
-// Sort by effective priority
-priorityService.sortByEffectivePriority(tasks);  // WARNING: mutates array in place!
+// Sort by effective priority (requires enhanced tasks, not plain Task[])
+const enhanced = priorityService.enhanceTasksWithEffectivePriority(tasks);
+priorityService.sortByEffectivePriority(enhanced);  // WARNING: mutates array in place!
 ```
 
 ### Direction Semantics
@@ -375,8 +384,9 @@ const safeQuery = escapeFts5Query(userInput);
 // Automatically determines the optimal number of results to return
 // based on score distribution (detects the "elbow" where scores drop off)
 const topResults = applyAdaptiveTopK(scoredResults, {
-  maxResults?: number,    // Hard upper limit
-  minResults?: number,    // Minimum results to return
+  sensitivity?: number,   // Elbow detection sensitivity (default: 1.5)
+  maxResults?: number,    // Hard upper limit (default: 50)
+  minResults?: number,    // Minimum results to return (default: 1)
 });
 ```
 

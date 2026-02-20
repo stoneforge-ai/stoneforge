@@ -59,9 +59,20 @@ const steward = await api.registerSteward({
   maxConcurrentTasks: 1,  // Optional, default: 1
 });
 
-// Custom steward with playbook
+// Custom steward with playbook reference (preferred)
 const customSteward = await api.registerSteward({
   name: 'CleanupSteward',
+  stewardFocus: 'custom',
+  playbookId: 'el-playbook123',  // Reference to a Workflow Template
+  triggers: [
+    { type: 'cron', schedule: '0 2 * * *' },
+  ],
+  createdBy: directorEntityId,
+});
+
+// Custom steward with inline playbook (deprecated, prefer playbookId)
+const legacySteward = await api.registerSteward({
+  name: 'LegacySteward',
   stewardFocus: 'custom',
   playbook: '## Stale Branch Cleanup\n\n1. List branches older than 14 days\n2. Archive those with no open tasks',
   triggers: [
@@ -207,8 +218,8 @@ type MergeStatus =
 // Update agent session
 await api.updateAgentSession(agentId, 'session-123', 'running');
 
-// Session states
-type SessionState = 'idle' | 'running' | 'suspended' | 'terminated';
+// Session status values (inline union on BaseAgentMetadata.sessionStatus)
+// 'idle' | 'running' | 'suspended' | 'terminated'
 ```
 
 ---
