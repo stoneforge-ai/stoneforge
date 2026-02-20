@@ -182,7 +182,6 @@ const complexity = priorityService.calculateAggregateComplexity(taskId);
 const enhanced = priorityService.enhanceTasksWithEffectivePriority(tasks);
 
 // Sort by effective priority (requires enhanced tasks, not plain Task[])
-const enhanced = priorityService.enhanceTasksWithEffectivePriority(tasks);
 priorityService.sortByEffectivePriority(enhanced);  // WARNING: mutates array in place!
 ```
 
