@@ -1,0 +1,90 @@
+name: Deploy Docs
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'apps/docs/**'
+      - '.github/workflows/deploy-docs.yml'
+  pull_request:
+    branches: [master]
+    paths:
+      - 'apps/docs/**'
+      - '.github/workflows/deploy-docs.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-docs-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  deployments: write
+  pull-requests: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    name: Build & Deploy
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build docs
+        run: pnpm turbo run build --filter=@stoneforge/docs
+
+      - name: Deploy to Cloudflare Pages
+        id: deploy
+        working-directory: apps/docs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          DEPLOY_OUTPUT=$(pnpm exec wrangler pages deploy dist --project-name=stoneforge-docs --branch=${{ github.event_name == 'push' && 'master' || github.head_ref }} 2>&1)
+          echo "$DEPLOY_OUTPUT"
+          DEPLOY_URL=$(echo "$DEPLOY_OUTPUT" | grep -oE 'https://[^ ]+\.pages\.dev')
+          echo "deployment-url=$DEPLOY_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Comment preview URL on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const url = '${{ steps.deploy.outputs.deployment-url }}';
+            if (!url) return;
+            const body = `### Cloudflare Pages Preview (Docs)\n\nDeployed to: ${url}`;
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c =>
+              c.user.login === 'github-actions[bot]' &&
+              c.body.includes('Cloudflare Pages Preview (Docs)')
+            );
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
