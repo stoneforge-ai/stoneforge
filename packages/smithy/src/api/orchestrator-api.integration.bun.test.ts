@@ -209,6 +209,41 @@ describe('OrchestratorAPI', () => {
       expect(fetchedMeta?.model).toBe('claude-sonnet-4-20250514');
       expect(fetchedMeta?.executablePath).toBe('/usr/local/bin/claude');
     });
+
+    test('registerSteward persists playbook and playbookId', async () => {
+      const steward = await api.registerSteward({
+        name: 'PlaybookSteward',
+        stewardFocus: 'custom',
+        playbook: '## Custom Playbook\nReview all PRs for security issues.',
+        playbookId: 'tmpl-abc123',
+        createdBy: systemEntity,
+      });
+
+      const meta = getAgentMetadata(steward) as StewardMetadata;
+      expect(meta).toBeDefined();
+      expect(meta.playbook).toBe('## Custom Playbook\nReview all PRs for security issues.');
+      expect(meta.playbookId).toBe('tmpl-abc123');
+
+      // Verify the fields survive a round-trip through the database
+      const fetched = await api.getAgent(steward.id as unknown as EntityId);
+      expect(fetched).toBeDefined();
+      const fetchedMeta = getAgentMetadata(fetched!) as StewardMetadata;
+      expect(fetchedMeta.playbook).toBe('## Custom Playbook\nReview all PRs for security issues.');
+      expect(fetchedMeta.playbookId).toBe('tmpl-abc123');
+    });
+
+    test('registerSteward without playbook fields leaves them undefined', async () => {
+      const steward = await api.registerSteward({
+        name: 'NoPlaybookSteward',
+        stewardFocus: 'merge',
+        createdBy: systemEntity,
+      });
+
+      const meta = getAgentMetadata(steward) as StewardMetadata;
+      expect(meta).toBeDefined();
+      expect(meta.playbook).toBeUndefined();
+      expect(meta.playbookId).toBeUndefined();
+    });
   });
 
   describe('Agent Queries', () => {

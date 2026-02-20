@@ -328,6 +328,8 @@ export class OrchestratorAPIImpl extends QuarryAPIImpl implements OrchestratorAP
       agentRole: 'steward',
       stewardFocus: input.stewardFocus,
       triggers: input.triggers,
+      playbook: input.playbook,
+      playbookId: input.playbookId,
       sessionStatus: 'idle',
       maxConcurrentTasks: input.maxConcurrentTasks,
       roleDefinitionRef: input.roleDefinitionRef,
