@@ -1,6 +1,6 @@
 # Stoneforge Configuration
 
-actor: el-39hd
+actor: el-1k0b
 database: stoneforge.db
 sync:
   auto_export: true
