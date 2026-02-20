@@ -135,8 +135,8 @@ const task = await assignmentService.unassignTask(taskId);
 // Start task
 const task = await assignmentService.startTask(taskId, 'session-456');
 
-// Complete task
-const task = await assignmentService.completeTask(taskId);
+// Complete task (returns TaskCompletionResult with task and optional merge request info)
+const { task, mergeRequestUrl } = await assignmentService.completeTask(taskId);
 ```
 
 ### Handoff
@@ -313,8 +313,8 @@ The daemon runs several polling loops (additional loops enabled via config):
 | **Steward Triggers** | Check for triggered conditions and create workflows from playbooks |
 | **Workflow Tasks** | Assign workflow tasks to available stewards |
 | **Closed-Unmerged Reconciliation** | Detect CLOSED tasks with non-merged mergeStatus and move them back to REVIEW |
-| **Plan Auto-Completion** | Auto-complete plans when all tasks are closed (enable via `planAutoCompleteEnabled`) |
-| **Stuck-Merge Recovery** | Detect and recover stalled merge operations (enable via `stuckMergeRecoveryEnabled`) |
+| **Plan Auto-Completion** | Auto-complete plans when all tasks are closed (enabled by default; disable via `planAutoCompleteEnabled: false`) |
+| **Stuck-Merge Recovery** | Detect and recover stalled merge operations (enabled by default; disable via `stuckMergeRecoveryEnabled: false`) |
 
 ### Worker Dispatch Behavior
 
