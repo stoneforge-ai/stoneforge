@@ -1055,6 +1055,9 @@ if (check.canSpawn) {
 // Get pools governing an agent type
 const pools = await poolService.getPoolsForAgentType('worker', 'ephemeral');
 
+// For stewards, pass stewardFocus instead of workerMode
+const stewardPools = await poolService.getPoolsForAgentType('steward', undefined, 'merge');
+
 // Get next spawn priority when multiple tasks are pending
 const nextRequest = await poolService.getNextSpawnPriority(poolId, pendingRequests);
 ```

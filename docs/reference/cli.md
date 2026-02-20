@@ -1201,7 +1201,7 @@ sf channel merge -s el-ch111 -t el-ch222 --name "combined-channel"
 | Command                  | Description                                        |
 | ------------------------ | -------------------------------------------------- |
 | `sf message send`        | Send message to channel, entity, or as reply       |
-| `sf message reply <id>`  | Reply to a message (shorthand for send --reply-to) |
+| `sf message reply <id>`  | Reply to a message (shorthand for send --replyTo)  |
 | `sf message thread <id>` | View thread messages                               |
 | `sf message list`        | List messages                                      |
 
@@ -1211,7 +1211,7 @@ sf channel merge -s el-ch111 -t el-ch222 --name "combined-channel"
 | ----------------------- | -------------------------------------------------------------------------------- |
 | `-c, --channel <id>`    | Channel to send to                                                               |
 | `-T, --to <entity>`     | Entity to send DM to (finds or creates DM channel)                               |
-| `-r, --reply-to <msg>`  | Message ID to reply to (auto-sets channel, thread, swaps sender/recipient in DM) |
+| `-r, --replyTo <msg>`   | Message ID to reply to (auto-sets channel, thread, swaps sender/recipient in DM) |
 | `-m, --content <text>`  | Message content                                                                  |
 | `--file <path>`         | Read content from file                                                           |
 | `-t, --thread <id>`     | Reply to message (creates thread)                                                |
@@ -1229,12 +1229,12 @@ sf message send --to el-user456 -m "Direct message"
 sf --from agent-1 message send --to agent-2 -m "Message from agent-1"
 
 # Reply to a message (auto-swaps sender/recipient in DM)
-sf message send --reply-to el-msg789 -m "Reply to your message"
+sf message send --replyTo el-msg789 -m "Reply to your message"
 ```
 
 #### message reply
 
-Shorthand for `sf message send --reply-to`. Automatically sets channel and thread from the replied-to message. In DM channels, sender/recipient are swapped unless `--from` is specified.
+Shorthand for `sf message send --replyTo`. Automatically sets channel and thread from the replied-to message. In DM channels, sender/recipient are swapped unless `--from` is specified.
 
 | Option                  | Description                       |
 | ----------------------- | --------------------------------- |
