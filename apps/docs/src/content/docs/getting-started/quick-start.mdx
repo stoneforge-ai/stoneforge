@@ -3,66 +3,99 @@ title: Quick Start
 description: Go from zero to your first multi-agent orchestration in under 10 minutes.
 ---
 
-import { Steps, Aside } from '@astrojs/starlight/components';
+import { Steps, Aside, LinkCard } from '@astrojs/starlight/components';
+import TerminalBlock from '../../../components/custom/TerminalBlock.astro';
 
-This guide walks you through a complete multi-agent workflow — from creating a plan to watching agents execute in parallel.
+This guide walks you through a complete multi-agent workflow — from installing Stoneforge to watching agents execute tasks in parallel.
 
-## Your first orchestration
+<Aside type="caution">
+  Before starting, make sure you have **Node.js 18+** (or Bun) and **Git 2.30+** installed. Your default agent provider (e.g. Claude Code) should already be set up and working.
+</Aside>
+
+## From zero to orchestrating
 
 <Steps>
-1. **Initialize your project**
+1. **Install the Stoneforge CLI**
 
-   Navigate to a git repository and initialize Stoneforge:
    ```bash
-   cd my-project
+   npm install -g @stoneforge/smithy
+   ```
+
+2. **Initialize a workspace in your project**
+
+   ```bash
+   cd your-project
    sf init
    ```
 
-2. **Create a plan**
+3. **Start the server and web dashboard**
 
-   Describe what you want to build. Stoneforge's planner will break it into discrete elements:
    ```bash
-   sf plan "Add user authentication with login, signup, and password reset"
+   sf serve
    ```
 
-3. **Review the plan**
+   The dashboard opens at [http://localhost:3457](http://localhost:3457).
 
-   Open the Quarry UI to see the generated elements and their dependencies:
+4. **Register a Director**
+
    ```bash
-   sf quarry
+   sf agent register director --role director
    ```
 
-4. **Start orchestration**
+5. **Start the Director**
 
-   Dispatch elements to agents and watch them work in parallel:
    ```bash
-   sf run
+   sf agent start <id>
    ```
 
-5. **Review results**
+   Use the ID printed by the previous command. You can also start the Director from the Director Panel in the dashboard's right sidebar.
 
-   When all agents complete, review the merged changes:
+6. **Register workers**
+
    ```bash
-   git log --oneline -10
+   sf agent register e-worker-1 --role worker
+   sf agent register e-worker-2 --role worker
    ```
+
+7. **Register a Merge Steward**
+
+   ```bash
+   sf agent register m-steward-1 --role steward --focus merge
+   ```
+
+8. **Give the Director your goal**
+
+   Open the **Director Panel** in the dashboard sidebar and describe what you want to build. The Director will break it into tasks with priorities and dependencies.
+
+9. **Watch it work**
+
+    - **Activity** page — live agent output from all running agents
+    - **Tasks** page — task statuses, assignments, and progress
+    - **Merge Requests** page — completed work waiting for or passing merge review
 </Steps>
-
-<Aside type="tip">
-  Use `sf status` at any time to see what agents are working on and how far along the orchestration is.
-</Aside>
 
 ## What just happened?
 
-Behind the scenes, Stoneforge:
-1. Used an AI planner to decompose your request into independent work units (elements)
-2. Analyzed dependencies between elements to determine execution order
-3. Created isolated git worktrees for each agent
-4. Dispatched elements to agents as their dependencies were satisfied
-5. Merged completed work back to your branch
+Behind the scenes, Stoneforge executed a coordinated workflow:
+
+1. The **Director** decomposed your goal into tasks with priorities and dependencies
+2. The **dispatch daemon** detected ready (unblocked, unassigned) tasks and assigned them to idle workers
+3. Each **worker** spawned in an isolated git worktree (`agent/{worker-name}/{task-id}-{slug}`)
+4. Workers executed their tasks, committed, and pushed their branches
+5. Completed tasks created **merge requests** for the merge steward
+6. The **merge steward** ran tests, squash-merged passing branches, and created fix tasks for failures
+7. The loop repeated until all tasks were closed
+
+## Tips
+
+<Aside type="tip">
+  - Run `sf doctor` to check system health at any time
+  - Run `sf agent list` to see registered agents and their statuses
+  - Run `sf task list` to see all tasks and their current statuses
+  - Run `sf daemon status` to check dispatch daemon status
+</Aside>
 
 ## Next steps
 
-import { LinkCard } from '@astrojs/starlight/components';
-
-<LinkCard title="Core Concepts" description="Understand the ideas behind Stoneforge" href="/getting-started/core-concepts/" />
-<LinkCard title="Your First Multi-Agent Project" description="A deeper walkthrough with real code" href="/guides/first-multi-agent-project/" />
+<LinkCard title="Core Concepts" description="Understand the building blocks of Stoneforge" href="/getting-started/core-concepts/" />
+<LinkCard title="First Multi-Agent Project" description="A deeper walkthrough with real code" href="/guides/first-multi-agent-project/" />

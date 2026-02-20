@@ -1,51 +1,201 @@
 ---
 title: Core Concepts
-description: Understand the fundamental building blocks of Stoneforge — elements, agents, worktrees, and the orchestration loop.
+description: Understand the fundamental building blocks of Stoneforge — elements, tasks, agents, worktrees, and the orchestration loop.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import { Aside, LinkCard } from "@astrojs/starlight/components";
+import ConceptCard from "../../../components/custom/ConceptCard.astro";
 
-Before diving deeper, let's define the key concepts you'll encounter throughout the documentation.
+Before diving deeper, let's define the key concepts you'll encounter throughout Stoneforge.
 
 ## Elements
 
-An **element** is the atomic unit of work in Stoneforge. Each element represents a single, well-defined task — like "add a login form component" or "write unit tests for the auth service."
+An **element** is the atomic unit of data in Stoneforge. Everything in the system — tasks, messages, documents, entities, plans, workflows — is an element. All elements share a common base:
 
-Elements have:
-- A **title** and **description** explaining what needs to be done
-- A **status** that progresses through `open → in_progress → resolved`
-- **Dependencies** on other elements that must complete first
-- An **assigned agent** that executes the work
+- **`id`** — unique identifier (e.g. `el-3a8f`)
+- **`type`** — one of: `task`, `message`, `document`, `entity`, `plan`, `workflow`, `playbook`, `channel`, `library`, `team`
+- **`createdBy`** — the entity that created this element
+- **`createdAt` / `updatedAt`** — timestamps
+- **`tags`** — freeform labels for filtering and organization
+- **`metadata`** — extensible key-value data
+
+Each element type adds its own fields on top of this base. Tasks have statuses and priorities. Messages have content and channels. Documents have titles and version history.
+
+## Tasks
+
+Tasks are the primary work unit in Stoneforge. They track what needs to be done, who's doing it, and what's blocking progress.
+
+### Status lifecycle
+
+```
+                    ┌──────────┐
+                    │ backlog  │
+                    └────┬─────┘
+                         │ triaged
+                         ▼
+                   ┌──────────┐
+            ┌──────│   open   │──────┐
+            │      └────┬─────┘      │
+            │           │ assigned   │
+            │           ▼            │
+            │      ┌───────────┐     │
+            ├──────│in_progress│─────┤
+            │      └────┬──────┘     │
+            │           │ completed  │
+            │           ▼            │
+            │      ┌──────────┐      │
+            │      │  review  │      │
+            │      └────┬─────┘      │
+            │           │ merged     │
+            │           ▼            │
+       ┌────▼────┐ ┌──────────┐      │
+       │deferred │ │  closed  │      │
+       └─────────┘ └──────────┘      │
+                                     │
+                               ┌─────▼───┐
+                               │ blocked │
+                               └─────────┘
+```
+
+<Aside>
+  The `blocked` status is **computed** — a task is automatically marked as
+  blocked when it has unresolved dependencies. When all dependencies are
+  satisfied, the task returns to its previous status.
+</Aside>
+
+Valid statuses: `backlog`, `open`, `in_progress`, `blocked`, `deferred`, `review`, `closed`, `tombstone`.
 
 ## Agents
 
-An **agent** is an AI coding assistant (like Claude or GPT-4) that executes elements. Each agent runs in its own isolated git worktree, so multiple agents can work on the same repository simultaneously without conflicts.
+Agents are AI coding assistants that execute tasks. Each agent has a **role** that determines its behavior:
+
+| Role                  | Description                                                                                                                                |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Director**          | Strategic planner. Receives your goal, breaks it into tasks with priorities and dependencies. Runs as a persistent session.                |
+| **Ephemeral Worker**  | Auto-dispatched by the daemon to complete a specific task. Executes in an isolated worktree, commits, pushes, then completes or hands off. |
+| **Persistent Worker** | Manually started for one-off or exploratory work. Not auto-dispatched.                                                                     |
+| **Steward**           | Handles maintenance — merge review, documentation scanning, recovery of stuck tasks, custom workflows. Runs on triggers or schedules.      |
+
+<Aside>
+  The **dispatch daemon** is a background process (not an agent role) that assigns ready tasks to idle workers. It runs alongside your agents and handles task dispatch, inbox routing, and merge steward coordination.
+</Aside>
+
+Agents can use **Claude Code** (default), **OpenCode**, or **OpenAI Codex** as their underlying provider. Authentication is configured within the provider CLI and passes through automatically — no API keys needed in Stoneforge.
+
+## Agent pools
+
+**Agent pools** provide concurrency control over agent spawning. A pool defines a maximum number of agents that can run simultaneously, with optional per-type limits and priorities. Without pools, the dispatch daemon spawns agents for every available task with no cap.
+
+Pools are especially useful when you need to:
+- Limit total resource usage (CPU, memory, API costs)
+- Reserve capacity for merge stewards so merges don't wait behind workers
+- Distribute rate limits across providers
 
 ## Worktrees
 
-Stoneforge uses **git worktrees** to give each agent a clean, isolated copy of your repository. This is the key to safe parallel execution — agents can make changes freely without interfering with each other.
+Stoneforge uses **git worktrees** to give each worker an isolated copy of your repository. This is the key to safe parallel execution — multiple agents can make changes simultaneously without interfering with each other.
 
-<Aside>
-  Git worktrees are a built-in Git feature that allows multiple working trees to be attached to the same repository. Stoneforge manages worktree lifecycle automatically.
-</Aside>
+Each worker's worktree lives on a branch named:
 
-## The Orchestration Loop
+```
+agent/{worker-name}/{task-id}-{slug}
+```
+
+For example: `agent/Worker1/el-3a8f-add-login-form`
+
+Stoneforge manages the full worktree lifecycle: creation, branch setup, and cleanup after merge.
+
+## The orchestration loop
 
 The orchestration loop is the core engine that drives Stoneforge:
 
-1. **Check** for elements whose dependencies are satisfied
-2. **Dispatch** ready elements to available agents
-3. **Monitor** agent progress
-4. **Sync** completed work back to the main branch
-5. **Repeat** until all elements are resolved
+1. You communicate your goal to the **Director** via the Director Panel
+2. Director creates a **plan** with tasks, priorities, and dependencies
+3. **Dispatch daemon** detects ready (unblocked, unassigned) tasks
+4. Daemon assigns tasks to idle **workers** from the pool
+5. Each worker spawns in an isolated **git worktree**
+6. Worker executes, commits, pushes, then completes or hands off
+7. **Merge steward** reviews — runs tests, squash-merges on pass, creates fix task on fail
+8. Loop repeats for remaining tasks
 
-## Event Sourcing
+## Merge process
 
-Every action in Stoneforge is recorded as an immutable event. This means:
-- You can always see exactly what happened and when
-- The system can recover from crashes by replaying events
-- State is derived from the event log, never mutated directly
+When a worker finishes a task:
 
-## Quarry
+1. Worker commits and pushes changes on its worktree branch
+2. A **merge request** is created automatically
+3. The **merge steward** picks up the merge request
+4. Steward runs your test command against the branch
+5. **Tests pass** — squash-merge into main, clean up worktree
+6. **Tests fail** — create a fix task, assign to next available worker
 
-**Quarry** is Stoneforge's project management interface — think of it as a kanban board for your AI agents. It shows elements, their statuses, dependencies, and real-time agent progress.
+### Handoff
+
+When a worker can't complete a task (hits an obstacle, runs out of context), it **hands off** — the task returns to the pool with context notes describing what was tried and where it got stuck. The next available worker picks it up from the existing branch and worktree, continuing where the previous worker left off.
+
+## Dual storage
+
+Stoneforge uses a dual storage model — SQLite for fast queries, JSONL files for durable, git-trackable persistence:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                         SQLite                              │
+│  • Fast queries with indexes                                │
+│  • Full-text search (FTS5)                                  │
+│  • Materialized views (blocked cache)                       │
+│  • Ephemeral — rebuilt from JSONL on sync                   │
+└────────────────────────────┬────────────────────────────────┘
+                             │ sync
+┌────────────────────────────▼────────────────────────────────┐
+│                         JSONL                               │
+│  • Git-tracked, append-only                                 │
+│  • Source of truth for all durable data                     │
+│  • Human-readable, diff-friendly                            │
+│  • Mergeable across branches                                │
+└─────────────────────────────────────────────────────────────┘
+```
+
+<Aside type="tip">
+  **Key principle:** SQLite is the **cache**, JSONL is the **source of truth**.
+  The database can always be rebuilt from the JSONL files, but not the other way
+  around. This means your project data travels with your git repository and
+  merges cleanly across branches.
+</Aside>
+
+## Next steps
+
+<LinkCard
+  title="Event Sourcing"
+  description="How Stoneforge records and replays state changes"
+  href="/architecture/event-sourcing/"
+/>
+<LinkCard
+  title="Storage"
+  description="Deep dive into the dual storage model"
+  href="/architecture/storage/"
+/>
+<LinkCard
+  title="Sync & Merge"
+  description="How data synchronizes across branches"
+  href="/architecture/sync-and-merge/"
+/>
+<LinkCard
+  title="Orchestration Loop"
+  description="The engine that drives multi-agent execution"
+  href="/architecture/orchestration-loop/"
+/>
+<LinkCard
+  title="Agent Roles"
+  description="Detailed guide to each agent role"
+  href="/guides/agent-roles/"
+/>
+<LinkCard
+  title="Agent Pools"
+  description="Control concurrency with agent pools"
+  href="/guides/agent-pools/"
+/>
+<LinkCard
+  title="Auto-Dispatch"
+  description="How the dispatch daemon assigns work"
+  href="/guides/auto-dispatch/"
+/>

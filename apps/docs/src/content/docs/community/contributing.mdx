@@ -1,6 +1,216 @@
 ---
 title: Contributing
-description: How to contribute to Stoneforge — development setup, code style, and pull request guidelines.
+description: How to contribute to Stoneforge — development setup, coding standards, and pull request guidelines.
 ---
 
-We welcome contributions to Stoneforge! Here's how to get started. Coming soon.
+import { Steps, Aside, LinkCard, Tabs, TabItem } from '@astrojs/starlight/components';
+import FeatureCard from '../../../components/custom/FeatureCard.astro';
+
+Thanks for your interest in contributing to Stoneforge! Whether you're fixing a bug, adding a feature, improving documentation, or writing tests, this guide has everything you need to get started.
+
+## Prerequisites
+
+Before you begin, make sure you have:
+
+- **Node.js** 18+ (for building and running dev servers)
+- **pnpm** 8.15+ (the monorepo package manager)
+- **Bun** (for running tests)
+- **Git** (for cloning and branching)
+
+## Development setup
+
+<Steps>
+1. **Fork and clone** the repository
+
+   ```bash
+   git clone https://github.com/stoneforge-ai/stoneforge.git
+   cd stoneforge
+   ```
+
+2. **Install dependencies**
+
+   ```bash
+   pnpm install
+   ```
+
+3. **Verify everything builds**
+
+   ```bash
+   npx turbo run typecheck
+   ```
+
+4. **Start the dev server** (most common workflow)
+
+   ```bash
+   # Orchestrator only (smithy-server + smithy-web)
+   pnpm dev:smithy
+
+   # Everything (all 4 services)
+   pnpm dev
+   ```
+</Steps>
+
+## Project structure
+
+| Package | Description | Key exports |
+|---------|-------------|-------------|
+| `packages/core` | Core types, errors, ID generation | `ElementType`, `Task`, `Entity`, `ErrorCode` |
+| `packages/storage` | SQLite storage (Bun/Node/browser) | `createStorage`, `initializeSchema` |
+| `packages/quarry` | SDK, API, services, sync, CLI | `QuarryAPI`, `SyncService`, CLI commands |
+| `packages/smithy` | Agent orchestration library | `OrchestratorAPI`, `SpawnerService` |
+| `packages/ui` | Shared React 19 components | `Button`, `Card`, `TaskCard`, charts, hooks |
+| `packages/shared-routes` | Shared Hono route factories | `createElementsRoutes`, `createEntityRoutes` |
+| `apps/smithy-server` | Orchestration API server (port 3457) | — |
+| `apps/smithy-web` | Agent management dashboard (port 5174) | — |
+| `apps/quarry-server` | Core API server (port 3456) | — |
+| `apps/quarry-web` | Element management dashboard (port 5173) | — |
+
+## Running tests
+
+Tests use **Bun** as the test runner. Run them per-package:
+
+<Tabs>
+<TabItem label="Individual packages">
+```bash
+cd packages/core && bun test src
+cd packages/storage && bun test src
+cd packages/quarry && bun test src
+cd packages/smithy && bun test src
+```
+</TabItem>
+<TabItem label="Typecheck all">
+```bash
+npx turbo run typecheck
+```
+</TabItem>
+<TabItem label="Full suite">
+```bash
+pnpm test
+pnpm lint
+pnpm typecheck
+```
+</TabItem>
+</Tabs>
+
+## Making changes
+
+<Steps>
+1. **Create a feature branch** from `master`
+
+   ```bash
+   git checkout -b feat/my-feature master
+   ```
+
+2. **Make your changes** — keep commits focused and descriptive
+
+3. **Add a changeset** if your change affects published packages
+
+   ```bash
+   pnpm changeset
+   ```
+
+   The changeset CLI will walk you through selecting affected packages and writing a summary. Create **one changeset file per affected package**.
+
+4. **Ensure typecheck and tests pass**
+
+   ```bash
+   npx turbo run typecheck
+   bun test src  # in the relevant package directory
+   ```
+
+5. **Submit a pull request** against `master`
+</Steps>
+
+<Aside type="tip">
+Not sure if you need a changeset? If your change modifies code in any `packages/*` directory that gets published to npm, add one. Documentation-only changes, test-only changes, and app-only changes don't need changesets.
+</Aside>
+
+## Coding standards
+
+Stoneforge follows strict conventions across the codebase:
+
+<div class="card-grid" data-sf-stagger>
+  <FeatureCard title="TypeScript strict mode">
+    All packages use strict TypeScript. No `any` types, no implicit returns, no unchecked nulls.
+  </FeatureCard>
+  <FeatureCard title="Branded IDs">
+    Always use branded IDs from `@stoneforge/core` — never raw strings for entity or element IDs. This prevents accidentally passing the wrong ID type.
+  </FeatureCard>
+  <FeatureCard title="Event-sourced data">
+    Create events, not mutable state. Data changes are appended to JSONL files and materialized into SQLite. Never mutate SQLite directly.
+  </FeatureCard>
+  <FeatureCard title="Minimal dependencies">
+    Keep the dependency footprint small. Prefer standard library APIs and existing internal utilities over adding new packages.
+  </FeatureCard>
+</div>
+
+## What to contribute
+
+Not sure where to start? Here are some high-impact areas:
+
+- **Bug fixes** — check [open issues](https://github.com/stoneforge-ai/stoneforge/issues) labeled `bug`
+- **Documentation** — fix inaccuracies, add examples, improve clarity
+- **Tests** — increase coverage, especially for edge cases in orchestration flows
+- **Provider integrations** — improve OpenCode or Codex provider support
+- **Dashboard UX** — improve the web dashboard components in `packages/ui` or `apps/smithy-web`
+
+## Contributor License Agreement (CLA)
+
+All contributors must sign a Contributor License Agreement before their first pull request can be merged. The CLA bot will automatically comment on your PR with instructions when you submit it.
+
+<Aside>
+The CLA preserves the project's ability to offer commercial licensing and adapt licensing in the future. Your contributions remain attributed to you, and the project stays healthy for all users.
+</Aside>
+
+If you're contributing on behalf of an employer, ask for the **Corporate CLA** so we can add your GitHub username(s) to the authorized list.
+
+## Code of Conduct
+
+We are committed to providing a welcoming and inclusive experience for everyone. All participants are expected to follow the [Contributor Covenant Code of Conduct](https://www.contributor-covenant.org/version/2/1/code_of_conduct/).
+
+**In short:**
+
+- Use welcoming and inclusive language
+- Be respectful of differing viewpoints and experiences
+- Gracefully accept constructive criticism
+- Focus on what is best for the community
+
+Report unacceptable behavior to **conduct@stoneforge.ai**. All complaints are reviewed promptly and confidentially.
+
+## Security vulnerabilities
+
+Found a security issue? **Do not open a public issue.**
+
+Email **security@stoneforge.ai** with:
+- Description of the vulnerability
+- Steps to reproduce
+- Potential impact
+
+| Timeline | Commitment |
+|----------|-----------|
+| Acknowledgment | Within 48 hours |
+| Initial assessment | Within 1 week |
+| Fix timeline | Depends on severity, typically within 30 days |
+
+We consider security research conducted in good faith to be authorized. See our full [Security Policy](https://github.com/stoneforge-ai/stoneforge/blob/master/SECURITY.md) for details.
+
+## License
+
+Stoneforge is licensed under **Apache 2.0** across all packages. Your contributions are licensed under the same terms.
+
+## Get help
+
+<LinkCard title="Discord" description="Ask questions and chat with contributors in real time" href="https://discord.gg/NBCaUUv8Vm" />
+<LinkCard title="GitHub Issues" description="Report bugs and request features" href="https://github.com/stoneforge-ai/stoneforge/issues" />
+
+<style>{`
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.card-grid > * {
+  margin-top: 0 !important;
+}
+`}</style>

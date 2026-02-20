@@ -1,6 +1,314 @@
 ---
 title: Orchestrator API
-description: Programmatic API reference for Stoneforge's orchestration engine.
+description: Programmatic TypeScript API reference for Stoneforge's orchestration engine — agent registration, task assignment, sessions, and merge management.
 ---
 
-Reference for the orchestrator's TypeScript API and runtime services. Coming soon.
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+import ParamTable from '../../../components/custom/ParamTable.astro';
+
+The `OrchestratorAPI` extends the [Quarry API](/reference/quarry-api/) with agent orchestration capabilities. It's the primary interface for managing agents, dispatching tasks, and coordinating the orchestration loop.
+
+## Initialization
+
+```typescript
+import { createOrchestratorAPI } from '@stoneforge/smithy';
+import { createStorage, initializeSchema } from '@stoneforge/storage';
+
+const storage = createStorage({ path: '.stoneforge/stoneforge.db' });
+initializeSchema(storage);
+
+const api = createOrchestratorAPI(storage);
+```
+
+The `OrchestratorAPI` inherits all methods from [`QuarryAPI`](/reference/quarry-api/) — you can use `api.create()`, `api.list()`, `api.ready()`, etc. alongside orchestration-specific methods.
+
+---
+
+## Agent registration
+
+### Register a Director
+
+```typescript
+const director = await api.registerDirector({
+  name: 'MainDirector',
+  createdBy: humanEntityId,
+  maxConcurrentTasks: 1,       // Default: 1
+  provider: 'claude-code',     // Optional
+  model: 'sonnet',             // Optional
+  executablePath: 'claude',    // Optional
+});
+```
+
+### Register a Worker
+
+```typescript
+const worker = await api.registerWorker({
+  name: 'Worker-1',
+  workerMode: 'ephemeral',     // 'ephemeral' or 'persistent'
+  createdBy: directorEntityId,
+  reportsTo: directorEntityId, // Optional: management hierarchy
+  maxConcurrentTasks: 2,       // Default: 1
+  roleDefinitionRef: roleDefId, // Optional: link to role definition
+});
+```
+
+### Register a Steward
+
+```typescript
+// Merge steward (triggered by events)
+const steward = await api.registerSteward({
+  name: 'MergeSteward',
+  stewardFocus: 'merge',      // 'merge' | 'docs' | 'recovery' | 'custom'
+  triggers: [
+    { type: 'event', event: 'task_completed' },
+  ],
+  createdBy: directorEntityId,
+  maxConcurrentTasks: 1,
+});
+
+// Custom steward with cron schedule
+const customSteward = await api.registerSteward({
+  name: 'CleanupSteward',
+  stewardFocus: 'custom',
+  playbook: '## Stale Branch Cleanup\n\n1. List branches older than 14 days\n2. Archive those with no open tasks',
+  triggers: [
+    { type: 'cron', schedule: '0 2 * * *' },
+  ],
+  createdBy: directorEntityId,
+});
+```
+
+---
+
+## Agent queries
+
+```typescript
+// Get specific agent
+const agent = await api.getAgent(entityId);
+const agentByName = await api.getAgentByName('Worker-1');
+
+// Get the director
+const director = await api.getDirector();
+
+// List and filter agents
+const allAgents = await api.listAgents();
+const workers = await api.listAgents({ role: 'worker' });
+const ephemeralWorkers = await api.listAgents({
+  role: 'worker',
+  workerMode: 'ephemeral',
+});
+
+// Role-specific queries
+const stewards = await api.getStewards();
+const availableWorkers = await api.getAvailableWorkers();
+const allWorkers = await api.getAgentsByRole('worker');
+```
+
+---
+
+## Agent channels
+
+Each agent gets a dedicated channel on registration. Used for dispatch notifications and inter-agent messaging.
+
+```typescript
+// Get channel ID (via OrchestratorAPI)
+const channelId = await api.getAgentChannel(agentId);
+
+// Get full channel object (via AgentRegistry)
+import { createAgentRegistry } from '@stoneforge/smithy';
+
+const registry = createAgentRegistry(api);
+const channel = await registry.getAgentChannel(agentId);
+const channelId = await registry.getAgentChannelId(agentId);
+
+// Channel name utilities
+import { generateAgentChannelName, parseAgentChannelName } from '@stoneforge/smithy';
+
+generateAgentChannelName('Worker-1');       // 'agent-Worker-1'
+parseAgentChannelName('agent-Worker-1');    // 'Worker-1' or null
+```
+
+---
+
+## Task assignment
+
+### Basic assignment
+
+```typescript
+// Auto-generates branch and worktree names
+const task = await api.assignTaskToAgent(taskId, workerId);
+
+// With explicit options
+const task = await api.assignTaskToAgent(taskId, workerId, {
+  branch: 'agent/worker-1/task-feat-auth',
+  worktree: '.stoneforge/.worktrees/worker-1-feat-auth',
+  sessionId: 'claude-session-123',
+  markAsStarted: true,  // Also sets task status to 'in_progress'
+});
+```
+
+### Orchestrator task metadata
+
+Each task carries orchestration metadata — branch, worktree, merge status, handoff history, etc.
+
+```typescript
+// Get metadata
+const meta = await api.getTaskOrchestratorMeta(taskId);
+
+// Replace entire metadata
+await api.setTaskOrchestratorMeta(taskId, fullMeta);
+
+// Partial update (merge)
+await api.updateTaskOrchestratorMeta(taskId, {
+  mergeStatus: 'pending',
+});
+```
+
+```typescript
+interface OrchestratorTaskMeta {
+  assignedAgent?: EntityId;
+  branch?: string;
+  worktree?: string;
+  sessionId?: string;
+  startedAt?: Timestamp;
+  completedAt?: Timestamp;
+  mergedAt?: Timestamp;
+  mergeStatus?: MergeStatus;
+  mergeFailureReason?: string;
+  testRunCount?: number;
+  lastTestResult?: TestResult;
+  // Handoff context
+  handoffBranch?: string;
+  handoffWorktree?: string;
+  handoffAt?: Timestamp;
+  handoffFrom?: EntityId;
+  handoffHistory?: HandoffHistoryEntry[];
+  // Merge request info
+  mergeRequestUrl?: string;
+  mergeRequestId?: number;
+  mergeRequestProvider?: string;
+  completionSummary?: string;
+  lastCommitHash?: string;
+  // Session history
+  sessionHistory?: readonly TaskSessionHistoryEntry[];
+}
+```
+
+### MergeStatus
+
+| Status | Description |
+| --- | --- |
+| `pending` | Task completed, awaiting merge |
+| `testing` | Steward is running tests |
+| `merging` | Tests passed, merge in progress |
+| `merged` | Successfully merged |
+| `conflict` | Merge conflict detected |
+| `test_failed` | Tests failed |
+| `failed` | Merge failed (other reason) |
+| `not_applicable` | No merge needed |
+
+---
+
+## Session management
+
+```typescript
+// Update agent session state
+await api.updateAgentSession(agentId, 'session-123', 'running');
+```
+
+Session states:
+
+```typescript
+type SessionState = 'idle' | 'running' | 'suspended' | 'terminated';
+```
+
+---
+
+## Agent types
+
+### AgentRole
+
+```typescript
+type AgentRole = 'director' | 'worker' | 'steward';
+```
+
+### AgentMetadata
+
+Agent metadata is a discriminated union based on `agentRole`:
+
+```typescript
+interface BaseAgentMetadata {
+  agentRole: AgentRole;
+  channelId?: ChannelId;
+  sessionId?: string;
+  worktree?: string;
+  sessionStatus?: 'idle' | 'running' | 'suspended' | 'terminated';
+  lastActivityAt?: Timestamp;
+  maxConcurrentTasks?: number;
+  roleDefinitionRef?: ElementId;
+  provider?: string;
+  model?: string;
+  executablePath?: string;
+}
+
+interface DirectorMetadata extends BaseAgentMetadata {
+  agentRole: 'director';
+}
+
+interface WorkerMetadata extends BaseAgentMetadata {
+  agentRole: 'worker';
+  workerMode: 'ephemeral' | 'persistent';
+  branch?: string;
+}
+
+interface StewardMetadata extends BaseAgentMetadata {
+  agentRole: 'steward';
+  stewardFocus: 'merge' | 'docs' | 'recovery' | 'custom';
+  triggers?: StewardTrigger[];
+  playbookId?: string;
+  lastExecutedAt?: Timestamp;
+  nextScheduledAt?: Timestamp;
+}
+```
+
+### StewardTrigger
+
+```typescript
+interface CronTrigger {
+  type: 'cron';
+  schedule: string;          // e.g., '0 2 * * *'
+}
+
+interface EventTrigger {
+  type: 'event';
+  event: string;             // e.g., 'task_completed'
+  condition?: string;
+}
+
+type StewardTrigger = CronTrigger | EventTrigger;
+```
+
+### Type guards
+
+```typescript
+import {
+  isDirectorMetadata,
+  isWorkerMetadata,
+  isStewardMetadata,
+  isCronTrigger,
+  isEventTrigger,
+} from '@stoneforge/smithy';
+
+if (isWorkerMetadata(agent.metadata.agent)) {
+  console.log(agent.metadata.agent.workerMode);
+}
+
+if (isStewardMetadata(agent.metadata.agent)) {
+  console.log(agent.metadata.agent.stewardFocus);
+}
+```
+
+---
+
+<LinkCard title="Services Reference" description="Detailed docs for orchestrator services — DispatchDaemon, MergeStewardService, WorkerTaskService, and more" href="/reference/services/" />
+<LinkCard title="Quarry API" description="The data API that OrchestratorAPI extends — CRUD, queries, dependencies, sync" href="/reference/quarry-api/" />

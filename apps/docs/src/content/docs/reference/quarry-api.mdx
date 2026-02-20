@@ -1,6 +1,478 @@
 ---
 title: Quarry API
-description: REST API reference for Stoneforge's Quarry project management server.
+description: Programmatic TypeScript API reference for Stoneforge's data layer — CRUD operations, queries, dependencies, plans, workflows, sync, and more.
 ---
 
-Complete reference for the Quarry HTTP API endpoints. Coming soon.
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+import ParamTable from '../../../components/custom/ParamTable.astro';
+
+The `QuarryAPI` is the core data interface for Stoneforge. It manages elements (tasks, documents, entities, etc.), dependencies, plans, workflows, channels, and sync operations. The [Orchestrator API](/reference/orchestrator-api/) extends this with agent-specific capabilities.
+
+## Initialization
+
+```typescript
+import { createQuarryAPI } from '@stoneforge/quarry';
+import { createStorage, initializeSchema } from '@stoneforge/storage';
+
+const storage = createStorage({ path: '.stoneforge/stoneforge.db' });
+initializeSchema(storage);
+const api = createQuarryAPI(storage);
+```
+
+---
+
+## CRUD operations
+
+### Create
+
+```typescript
+const task = await api.create({
+  type: 'task',
+  createdBy: entityId,
+  title: 'Implement feature',
+  priority: 2,
+  taskType: 'feature',
+});
+```
+
+Required fields for all elements: `type`, `createdBy`. Each element type has its own additional fields — see [Core Types](/reference/core-types/).
+
+### Read
+
+```typescript
+const task = await api.get(taskId);
+
+// With hydration (resolve document references)
+const hydrated = await api.get(taskId, {
+  hydrate: { description: true, content: true, attachments: true },
+});
+```
+
+### Update
+
+```typescript
+const updated = await api.update(taskId, {
+  status: 'in_progress',
+  assignee: entityId,
+});
+```
+
+<Aside>
+  There are no dedicated `close()`, `assign()`, or `defer()` methods — use `update()` for all status changes: `api.update(taskId, { status: 'closed', closeReason: 'Done' })`.
+</Aside>
+
+### Delete
+
+Soft-delete (tombstone). The element is marked as deleted but not removed.
+
+```typescript
+await api.delete(taskId);
+```
+
+---
+
+## Query operations
+
+### List with filters
+
+```typescript
+const tasks = await api.list({
+  type: 'task',
+  status: 'open',                     // Exact match
+  priority: 2,
+  tags: ['urgent'],                   // AND logic (all required)
+  tagsAny: ['frontend', 'backend'],   // OR logic (any matches)
+});
+
+// Arrays for OR matching
+const tasks = await api.list({
+  type: 'task',
+  status: ['open', 'in_progress'],    // Either status
+  priority: [1, 2],                   // Either priority
+});
+```
+
+### Paginated list
+
+```typescript
+const result = await api.listPaginated({
+  type: 'task',
+  status: 'open',
+  limit: 20,
+  offset: 0,
+});
+// result.items, result.total, result.hasMore
+```
+
+### Document filtering
+
+```typescript
+// By category
+const specs = await api.list({ type: 'document', category: 'spec' });
+
+// By status (default: 'active' only)
+const archived = await api.list({ type: 'document', status: 'archived' });
+
+// Paginated with both filters
+const result = await api.listPaginated({
+  type: 'document',
+  category: 'prd',
+  status: 'active',
+  limit: 20,
+});
+```
+
+### Search
+
+```typescript
+const results = await api.search('keyword', {
+  type: ['task', 'document'],   // Accepts ElementType or ElementType[]
+});
+```
+
+<Aside type="caution">
+  Search has a **100 result hard limit** and searches title, content, and tags only.
+</Aside>
+
+### Full-text document search (FTS5)
+
+```typescript
+const results = await api.searchDocumentsFTS('search query', {
+  category: 'spec',            // Optional category filter
+  status: 'active',            // Optional (default: 'active')
+  hardCap: 50,                 // Max results before adaptive filtering
+  elbowSensitivity: 1.5,      // Adaptive top-K sensitivity
+  minResults: 1,               // Minimum results to return
+});
+```
+
+Uses FTS5 with BM25 ranking, snippet generation, and adaptive elbow detection for top-K filtering.
+
+### Channel search
+
+```typescript
+const channels = await api.searchChannels('channel-name');
+```
+
+---
+
+## Task operations
+
+### Ready tasks
+
+Tasks that are unblocked, open, not in draft plans, and not future-scheduled.
+
+```typescript
+const ready = await api.ready();
+const withEphemeral = await api.ready({ includeEphemeral: true });
+```
+
+`ready()` excludes:
+- Blocked tasks
+- Tasks in draft plans
+- Future-scheduled tasks (`scheduledFor > now`)
+- Ephemeral workflow tasks (unless `includeEphemeral: true`)
+
+### Backlog tasks
+
+```typescript
+const backlog = await api.backlog();
+const filtered = await api.backlog({ priority: 1 });
+```
+
+### Blocked tasks
+
+```typescript
+const blocked = await api.blocked();
+```
+
+---
+
+## Dependency operations
+
+### Add / remove
+
+```typescript
+await api.addDependency({
+  blockedId: taskA,
+  blockerId: taskB,
+  type: 'blocks',
+  actor: actorId,  // Optional, falls back to blocked element's createdBy
+});
+
+await api.removeDependency(blockedId, blockerId, 'blocks');
+```
+
+### Query
+
+```typescript
+// What this element depends on
+const deps = await api.getDependencies(elementId, types?);
+
+// What depends on this element
+const dependents = await api.getDependents(elementId, types?);
+
+// Full tree
+const tree = await api.getDependencyTree(elementId);
+```
+
+### Gate satisfaction
+
+```typescript
+await api.satisfyGate(blockedId, blockerId, actor);
+await api.recordApproval(blockedId, blockerId, approverId);
+await api.removeApproval(blockedId, blockerId, approverId);
+```
+
+---
+
+## Plan operations
+
+```typescript
+// Add/remove tasks
+await api.addTaskToPlan(taskId, planId);        // taskId first!
+await api.removeTaskFromPlan(taskId, planId, actor?);
+await api.createTaskInPlan(planId, { title: 'Task', priority: 2 });
+
+// Query
+const tasks = await api.getTasksInPlan(planId);
+const progress = await api.getPlanProgress(planId);
+
+// Bulk operations
+await api.bulkClosePlanTasks(planId, { closeReason: 'Done' });
+await api.bulkDeferPlanTasks(planId, { filter: { status: 'open' } });
+await api.bulkReassignPlanTasks(planId, newAssigneeId);
+await api.bulkTagPlanTasks(planId, { addTags: ['v2'], removeTags: ['v1'] });
+```
+
+<Aside>
+  Bulk operations use `closeReason`, `addTags`/`removeTags` — not `reason`, `add`/`remove`.
+</Aside>
+
+---
+
+## Workflow operations
+
+```typescript
+const tasks = await api.getTasksInWorkflow(workflowId);
+const ready = await api.getReadyTasksInWorkflow(workflowId);
+const ordered = await api.getOrderedTasksInWorkflow(workflowId); // Topological sort
+const progress = await api.getWorkflowProgress(workflowId);
+await api.deleteWorkflow(workflowId);  // Hard delete
+```
+
+### Garbage collection
+
+```typescript
+await api.garbageCollectWorkflows({ maxAgeMs: 7 * 24 * 60 * 60 * 1000 });
+await api.garbageCollectTasks({ maxAgeMs: 7 * 24 * 60 * 60 * 1000 });
+```
+
+<Aside>
+  `maxAgeMs` is in milliseconds, not a duration string.
+</Aside>
+
+---
+
+## Channel operations
+
+```typescript
+// Find or create direct channel
+const { channel, created } = await api.findOrCreateDirectChannel(entityA, entityB, actor);
+
+// Membership
+await api.addChannelMember(channelId, entityId);
+await api.removeChannelMember(channelId, entityId);
+await api.leaveChannel(channelId, actor);
+
+// Merge channels
+const result = await api.mergeChannels(sourceId, targetId, {
+  newName: 'merged-channel',
+  actor: actorEntityId,
+});
+// result.target, result.sourceArchived, result.messagesMoved
+```
+
+---
+
+## Entity operations
+
+```typescript
+const entity = await api.lookupEntityByName('agent-name');
+await api.setEntityManager(entityId, managerId, actor);
+await api.clearEntityManager(entityId, actor);
+const reports = await api.getDirectReports(managerId);
+const chain = await api.getManagementChain(entityId);
+const orgChart = await api.getOrgChart(rootEntityId?);
+```
+
+### Send direct message
+
+Convenience method — finds or creates a direct channel and sends a message in one call.
+
+```typescript
+const result = await api.sendDirectMessage(senderEntityId, {
+  recipient: recipientEntityId,
+  contentRef: documentId,       // Must create the Document first
+  attachments: [docId1],        // Optional
+  tags: ['urgent'],             // Optional
+});
+// result.channel, result.message, result.created
+```
+
+<Aside>
+  `sendDirectMessage()` requires a `DocumentId` for `contentRef` — create the content document first, then pass its ID.
+</Aside>
+
+---
+
+## Document operations
+
+### Archive / unarchive
+
+```typescript
+await api.archiveDocument(docId);
+await api.unarchiveDocument(docId);
+// Equivalent: api.update(docId, { status: 'archived' })
+```
+
+### Embedding service
+
+Register an embedding service for automatic semantic indexing:
+
+```typescript
+import { EmbeddingService, LocalEmbeddingProvider } from '@stoneforge/quarry/services';
+
+const provider = new LocalEmbeddingProvider('/path/to/model');
+const embeddingService = new EmbeddingService(storage, { provider });
+
+// Auto-embed on create/update, auto-remove on delete
+api.registerEmbeddingService(embeddingService);
+```
+
+### Reindex FTS
+
+```typescript
+const result = api.reindexAllDocumentsFTS();
+// result.indexed, result.errors
+```
+
+<Aside type="caution">
+  Import/sync does not automatically update the FTS index. Call `reindexAllDocumentsFTS()` after importing documents.
+</Aside>
+
+---
+
+## History & timeline
+
+```typescript
+const events = await api.getEvents(elementId);
+const allEvents = await api.listEvents({ type: 'created' });
+const count = await api.countEvents({ elementId });
+
+// Document versioning
+const version = await api.getDocumentVersion(docId, versionNum);
+const history = await api.getDocumentHistory(docId);
+
+// Time travel
+const snapshot = await api.reconstructAtTime(elementId, timestamp);
+const timeline = await api.getElementTimeline(elementId);
+```
+
+---
+
+## Sync operations
+
+### Export
+
+```typescript
+await api.export();
+await api.export({ outputPath: './export.jsonl' });
+await api.export({ includeDeleted: true });
+```
+
+<ParamTable title="ExportOptions" params={[
+  { name: 'format', type: 'string', default: 'jsonl', description: 'Export format.' },
+  { name: 'types', type: 'ElementType[]', description: 'Element types to export (default: all).' },
+  { name: 'modifiedAfter', type: 'Timestamp', description: 'Only elements modified after this time.' },
+  { name: 'includeDeleted', type: 'boolean', description: 'Include soft-deleted elements.' },
+  { name: 'includeDependencies', type: 'boolean', description: 'Export dependencies.' },
+  { name: 'includeEvents', type: 'boolean', description: 'Export events.' },
+  { name: 'outputPath', type: 'string', description: 'Output file path (returns string if omitted).' },
+]} />
+
+### Import
+
+```typescript
+await api.import({ inputPath: './export.jsonl' });
+await api.import({ data: jsonlString });
+await api.import({ inputPath: './data.jsonl', dryRun: true });
+```
+
+<ParamTable title="ImportOptions" params={[
+  { name: 'inputPath', type: 'string', description: 'Input file path.' },
+  { name: 'data', type: 'string', description: 'Raw JSONL data (alternative to inputPath).' },
+  { name: 'conflictStrategy', type: 'string', default: 'error', description: "Conflict resolution: 'skip', 'overwrite', or 'error'." },
+  { name: 'validateFirst', type: 'boolean', description: 'Validate all data before importing.' },
+  { name: 'dryRun', type: 'boolean', description: 'Validate without importing.' },
+]} />
+
+---
+
+## System
+
+```typescript
+const stats = await api.stats();
+```
+
+---
+
+## Common patterns
+
+### Task with description
+
+```typescript
+// 1. Create description document
+const desc = await api.create({
+  type: 'document',
+  createdBy: actorId,
+  title: 'Task Description',
+  content: '# Requirements\n\n...',
+  contentType: 'markdown',
+});
+
+// 2. Create task referencing the description
+const task = await api.create({
+  type: 'task',
+  createdBy: actorId,
+  title: 'Implement feature',
+  descriptionRef: desc.id,
+  priority: 2,
+  taskType: 'feature',
+});
+```
+
+### Check if a task is blocked
+
+```typescript
+// Via API
+const blockedTasks = await api.blocked();
+const isBlocked = blockedTasks.some(t => t.id === taskId);
+
+// Via BlockedCacheService (O(1) lookup)
+import { createBlockedCacheService } from '@stoneforge/quarry';
+const blockedCache = createBlockedCacheService(storage);
+const isBlocked = blockedCache.isBlocked(taskId);
+```
+
+### Multi-filter query
+
+```typescript
+const tasks = await api.list({
+  type: 'task',
+  status: ['open', 'in_progress'],
+  priority: [1, 2],
+  assignee: agentId,
+  tags: ['urgent'],
+});
+```

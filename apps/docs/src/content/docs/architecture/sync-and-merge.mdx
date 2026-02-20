@@ -1,6 +1,301 @@
 ---
 title: Sync & Merge
-description: How completed agent work is synchronized and merged back to your branch.
+description: How Stoneforge synchronizes data across branches with content hashing, merge strategies, and automated branch merging.
 ---
 
-Learn about the sync and merge pipeline that integrates parallel agent work. Coming soon.
+import { Aside, Steps, LinkCard } from '@astrojs/starlight/components';
+
+Sync and merge are two related but distinct systems in Stoneforge. **Data sync** keeps project data (tasks, documents, dependencies) consistent across branches using JSONL files. **Branch merge** integrates completed agent work back into the main branch using the MergeStewardService. Together, they ensure your project stays coherent across parallel work streams.
+
+## Data sync: JSONL as source of truth
+
+Stoneforge's [dual storage model](/architecture/storage/) uses SQLite for fast runtime queries and JSONL files for durable, git-friendly persistence. Sync is the bridge between them:
+
+- **Export** (SQLite → JSONL): Serialize element state from the database to `.stoneforge/sync/` files
+- **Import** (JSONL → SQLite): Read JSONL files and merge them into the SQLite database
+
+The JSONL files are committed to Git and travel with your repository. When branches diverge and reconverge, the import process uses content hashing and merge strategies to reconcile differences.
+
+## Content hashing
+
+Every element has a `content_hash` — a hash computed from its semantic content. Before merging two versions of the same element, Stoneforge compares their hashes:
+
+- **Identical hashes** → skip (no conflict, no work needed)
+- **Different hashes** → apply merge strategies to decide which version wins
+
+The hash covers all fields that represent the element's actual content. These fields are **excluded** from the hash because they don't represent semantic changes:
+
+- `id` (identity, never changes)
+- `createdAt` (set once at creation)
+- `updatedAt` (changes on every write, not a content field)
+- `createdBy` (set once at creation)
+- `contentHash` (the hash itself)
+
+<Aside>
+  The identical-hash fast path is important for performance. In most sync operations, the majority of elements haven't changed — the hash comparison lets Stoneforge skip them instantly without comparing every field.
+</Aside>
+
+## Merge strategies
+
+When two versions of the same element have different content hashes, Stoneforge applies a set of deterministic rules to decide which version wins.
+
+### Resolution rules
+
+| Scenario | Winner | Rationale |
+| --- | --- | --- |
+| Same content hash | Skip (identical) | No conflict exists |
+| Fresh tombstone vs. live | Tombstone wins | Deletion should propagate |
+| Expired tombstone vs. live | Live wins | Old deletions shouldn't resurface |
+| Closed vs. open | Closed wins | Completion is sticky |
+| Both same status | Later `updatedAt` wins | Last-write-wins tiebreaker |
+| Tags differ | Set union | Never lose tags in merge |
+| `force: true` | Remote always | Manual override for rebuilds |
+
+### Tombstone handling
+
+Soft-deleted elements have a `deletedAt` timestamp. Tombstones are classified by age:
+
+- **Fresh tombstone** (within TTL, default 30 days): Wins over a live element. The deletion should propagate to other branches.
+- **Expired tombstone** (past TTL): Loses to a live element. An ancient deletion shouldn't override an element that's been recreated or kept alive elsewhere.
+
+### Status merge
+
+Closed status is **sticky** — if one version is closed and the other is open, closed always wins regardless of timestamps. This prevents a scenario where an agent on a stale branch accidentally reopens a completed task.
+
+### Tag merge
+
+Tags use **set union** — they're combined, never removed. If the local version has tags `["api", "auth"]` and the remote has `["auth", "testing"]`, the merged result is `["api", "auth", "testing"]`.
+
+This means you can never lose tags through sync. If you need to remove a tag, do it explicitly after the merge.
+
+### Dependency merge
+
+Dependencies use a **removal-wins** strategy. If one side removed a dependency that existed in the original, the removal is honored. If one side added a new dependency, it's kept. This prevents deleted dependencies from "resurrecting" during sync.
+
+## Conflict records
+
+Every merge decision is recorded as a `ConflictRecord` for auditability:
+
+| Resolution type | Meaning |
+| --- | --- |
+| `IDENTICAL` | Same content hash — no conflict |
+| `LOCAL_WINS` | Local version kept (newer or force-local) |
+| `REMOTE_WINS` | Remote version kept (newer or closed) |
+| `TAGS_MERGED` | Tags combined from both versions |
+| `DEPENDENCY_ADDED` | New dependency imported from remote |
+| `DEPENDENCY_REMOVED` | Dependency removal honored |
+
+Each record includes both content hashes, both `updatedAt` timestamps, and the resolution timestamp. This lets you trace exactly what happened during any sync operation.
+
+## The sync loop
+
+Here's the full developer workflow for keeping data in sync across branches:
+
+```
+┌─────────────────────────────────────────────────────┐
+│                    Sync Loop                         │
+│                                                      │
+│   1. Developer makes changes (SQLite modified)       │
+│                    │                                 │
+│                    ▼                                 │
+│   2. Export: SQLite → JSONL  (sf sync export)        │
+│                    │                                 │
+│                    ▼                                 │
+│   3. Git add / commit / push                        │
+│                    │                                 │
+│                    ▼                                 │
+│   4. Other developer: git pull                      │
+│                    │                                 │
+│                    ▼                                 │
+│   5. Import: JSONL → SQLite  (sf sync import)        │
+│              (merge resolution happens here)         │
+│                    │                                 │
+│                    ▼                                 │
+│   6. Export: SQLite → JSONL  (normalize)             │
+│                    │                                 │
+│                    ▼                                 │
+│   7. Git commit (clean state)                       │
+│                                                      │
+└─────────────────────────────────────────────────────┘
+```
+
+Steps 6–7 normalize the JSONL files after import, ensuring the exported state matches what's in SQLite. This prevents drift between the two layers.
+
+## Git conflict resolution
+
+When `git pull` or `git merge` produces conflicts in the JSONL files, don't try to resolve them manually. Let Stoneforge handle the semantic merge:
+
+<Steps>
+
+1. **Accept both versions** — For the conflicted JSONL files, accept both sides by concatenating all lines. Duplicate entries are fine.
+
+2. **Import** — Run `sf sync import`. Stoneforge reads all lines, deduplicates by element ID, and applies the merge strategies described above.
+
+3. **Export** — Run `sf sync export`. This writes the clean, merged state back to the JSONL files, removing any duplicates or conflicts.
+
+4. **Commit** — Commit the resolved JSONL files. The data is now cleanly merged.
+
+</Steps>
+
+## Branch merge: the MergeStewardService
+
+While data sync handles JSONL files, branch merge handles **code**. When a worker completes a task, its code changes need to be tested and merged into the main branch. This is the job of the MergeStewardService.
+
+### The merge flow
+
+```
+Task branch (agent/e-worker-1/el-3a8f-add-login)
+         │
+         │  1. Worker completes task
+         │     (sf task complete el-3a8f)
+         │
+         ▼
+┌──────────────────┐
+│  Task moves to   │
+│  REVIEW status   │
+│  mergeStatus:    │
+│  "pending"       │
+└────────┬─────────┘
+         │
+         │  2. Daemon assigns to merge steward
+         │
+         ▼
+┌──────────────────┐
+│  Steward creates │
+│  temp worktree   │──── .stoneforge/.worktrees/_merge-el-3a8f/
+│  (detached HEAD  │     checked out at origin/master
+│   at origin/master)│
+└────────┬─────────┘
+         │
+         │  3. Run tests in temp worktree
+         │
+    ┌────┴──────────┐
+    ▼               ▼
+┌────────┐    ┌──────────┐
+│ PASS   │    │  FAIL    │
+└───┬────┘    └────┬─────┘
+    │              │
+    │              │  Create fix task
+    │              │  with test output
+    │              ▼
+    │         Task stays
+    │         in REVIEW
+    │
+    │  4. Squash merge in temp worktree
+    │     git merge --squash <task-branch>
+    │
+    │  5. Commit: "Add login (el-3a8f)"
+    │
+    │  6. Push: git push origin HEAD:master
+    │
+    │  7. Remove temp worktree
+    │
+    │  8. Fast-forward local master
+    │
+    │  9. Delete task branch + worktree
+    │
+    ▼
+┌──────────────────┐
+│  Task moves to   │
+│  CLOSED status   │
+│  mergeStatus:    │
+│  "merged"        │
+└──────────────────┘
+```
+
+### Why detached HEAD
+
+The merge happens in a temporary worktree with a **detached HEAD** at `origin/master` (the merge steward auto-detects the repository's default branch, and the target branch can be customized via config). This design has two important properties:
+
+1. **Main repo is never at risk** — If the merge fails, crashes, or is interrupted, the main repository's HEAD is untouched. The temporary worktree is cleaned up in a `finally` block.
+
+2. **No branch locking** — Git prevents two worktrees from checking out the same branch. By using detached HEAD, the merge worktree doesn't lock the default branch, so local sync operations can continue in the main repository.
+
+### Two-phase merge
+
+The merge runs in two phases:
+
+- **Phase A** — Merge and push in the temporary worktree. This is the critical path: squash merge, commit, push to remote.
+- **Phase B** — After the temporary worktree is cleaned up, sync the local main branch with the remote via fast-forward. This is best-effort — if it fails, the remote is already updated.
+
+## Standard merge alternative
+
+By default, Stoneforge uses **squash merge** — all commits from the task branch are combined into a single commit on main. This keeps the main branch history clean and linear.
+
+If you prefer to preserve the full commit history from task branches, you can switch to **standard merge**:
+
+| Strategy | Commit history | Main branch |
+| --- | --- | --- |
+| `squash` (default) | Single commit per task | Clean, linear |
+| `merge` | All original commits preserved | Merge commits present |
+
+Standard merge uses `git merge --no-ff` instead of `git merge --squash`, creating a merge commit that preserves the full branch history.
+
+## Merge status tracking
+
+Tasks in REVIEW status track their merge progress through a `mergeStatus` field in metadata:
+
+| Status | Meaning | Next action |
+| --- | --- | --- |
+| `pending` | Awaiting merge steward | Steward will run tests |
+| `testing` | Tests currently running | Wait for results |
+| `merging` | Merge in progress | Wait for completion |
+| `merged` | Successfully merged | Task moves to CLOSED |
+| `test_failed` | Tests failed | Fix task created |
+| `conflict` | Merge conflict detected | Fix task created |
+| `failed` | Merge failed (other reason) | Fix task created |
+| `not_applicable` | No merge needed | Task moves to CLOSED |
+
+When tests fail or a conflict is detected, the merge steward creates a **fix task** with the test output or conflict details, and assigns it back to the pool. The original task stays in REVIEW until the fix is merged.
+
+## Merge configuration
+
+The MergeStewardService is configurable:
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `mergeStrategy` | `'squash'` | `'squash'` (single commit) or `'merge'` (preserve history) |
+| `autoPushAfterMerge` | `true` | Push target branch to remote after merge |
+| `autoCleanup` | `true` | Clean up task worktree after merge |
+| `deleteBranchAfterMerge` | `true` | Delete source branch (local + remote) after merge |
+
+## Recovery
+
+If the SQLite database corrupts or gets out of sync with the JSONL files:
+
+```bash
+# Delete the cache
+rm .stoneforge/stoneforge.db
+
+# Rebuild from JSONL
+sf sync import
+```
+
+The JSONL files are the source of truth. The database can always be regenerated from them.
+
+<Aside type="caution">
+  Never commit the SQLite database to Git. It's a binary file that doesn't merge and will cause conflicts. Only the `.stoneforge/sync/` JSONL files and `config.yaml` should be tracked in version control.
+</Aside>
+
+## Next steps
+
+<LinkCard
+  title="Storage"
+  description="Deep dive into the dual storage model, SQLite schema, and JSONL format"
+  href="/architecture/storage/"
+/>
+<LinkCard
+  title="Worktree Isolation"
+  description="How agents get isolated worktrees and how merge worktrees protect main"
+  href="/architecture/worktree-isolation/"
+/>
+<LinkCard
+  title="Event Sourcing"
+  description="How every state change is recorded as an immutable event"
+  href="/architecture/event-sourcing/"
+/>
+<LinkCard
+  title="Auto-Merge"
+  description="Guide to configuring the merge steward and test commands"
+  href="/guides/auto-merge/"
+/>

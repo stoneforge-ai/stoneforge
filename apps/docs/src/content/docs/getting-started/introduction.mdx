@@ -3,30 +3,163 @@ title: Introduction
 description: What is Stoneforge and why does it exist? Learn about multi-agent orchestration for AI coding agents.
 ---
 
-Stoneforge is an open-source multi-agent orchestration platform for AI coding agents. It coordinates multiple AI agents working in parallel on your codebase — each in its own isolated git worktree — and merges their work back together automatically.
+import FeatureCard from '../../../components/custom/FeatureCard.astro';
+import { LinkCard } from '@astrojs/starlight/components';
+import { Aside } from '@astrojs/starlight/components';
 
-## Why Stoneforge?
+Stoneforge is a web dashboard and runtime for orchestrating AI coding agents. It coordinates multiple AI agents working in parallel on your codebase — each in its own isolated git worktree — and merges their work back together automatically.
 
-Modern AI coding assistants are powerful, but they work one task at a time. Stoneforge changes that by letting you break a project into independent tasks and dispatch them to multiple agents simultaneously.
+## The problem
 
-- **Parallel execution** — Multiple agents work on different parts of your codebase at the same time
-- **Git worktree isolation** — Each agent gets its own clean working copy, eliminating conflicts
-- **Automatic merging** — Completed work is merged back to your main branch with conflict resolution
-- **Event-sourced state** — Every action is recorded, making the system auditable and recoverable
-- **Provider agnostic** — Use Claude, GPT-4, Gemini, or any compatible LLM provider
+Running one AI coding agent is simple. Running several in parallel — a planner, coders, a reviewer — breaks down fast:
+
+<div class="card-grid" data-sf-stagger>
+  <FeatureCard title="Merge conflicts">
+    Agents edit the same files on the same branch, creating conflicts that require manual resolution.
+  </FeatureCard>
+  <FeatureCard title="Wasted work">
+    Two agents grab the same task, or one starts on work that's blocked by something else.
+  </FeatureCard>
+  <FeatureCard title="Lost context">
+    When an agent fails mid-task, the next one starts from scratch with no knowledge of what was tried.
+  </FeatureCard>
+  <FeatureCard title="No visibility">
+    You can't see what's happening until you check each terminal individually.
+  </FeatureCard>
+</div>
+
+## One platform
+
+Stoneforge merges the entire software project management stack into a single agent-first system:
+
+<div class="card-grid" data-sf-stagger>
+  <FeatureCard title="Tasks">
+    Issue tracking with priorities, dependencies, and scheduling — replacing Linear, GitHub Issues, and Jira.
+  </FeatureCard>
+  <FeatureCard title="Documents">
+    Versioned document libraries with full-text and semantic search — replacing Notion and Obsidian.
+  </FeatureCard>
+  <FeatureCard title="Messages">
+    Channel-based messaging with threading and inbox triage — replacing Slack and Discord.
+  </FeatureCard>
+  <FeatureCard title="Code & merges">
+    Git worktree isolation with automated merge review and test gating — replacing manual branch and PR workflows.
+  </FeatureCard>
+</div>
+
+Everything lives in one system and one interface, so agents (and you) never lose context switching between tools.
+
+## Two layers
+
+<Aside>
+  Most users only interact with Smithy — it's what you install and run. Quarry works behind the scenes.
+</Aside>
+
+Stoneforge has two main layers:
+
+- **Smithy** (`@stoneforge/smithy`) — the orchestrator. Spawns agents, dispatches tasks, manages sessions, handles worktree isolation and merge review. **This is what you install.**
+- **Quarry** (`@stoneforge/quarry`) — the underlying data SDK. Event-sourced task management, sync, and storage. Used by Smithy internally; also available standalone for custom integrations.
 
 ## How it works
 
-1. You describe a high-level goal or set of tasks
-2. The **Planner** agent breaks work into discrete elements with dependency tracking
-3. The **Orchestrator** dispatches elements to available coding agents
-4. Each agent works in an isolated git worktree
-5. Completed elements are automatically synced and merged
-6. You review the unified result
+```
+    You ──── "Build feature X" ────▶ Director
+                                        │
+                                   creates plan
+                                   with tasks
+                                        │
+                                        ▼
+                                  ┌────────────┐
+                                  │ Task Pool  │ ◀─── priorities, dependencies
+                                  └─────┬──────┘
+                                        │
+                              daemon assigns ready
+                              tasks to idle workers
+                                        │
+                        ┌───────────────┼────────────────┐
+                        ▼               ▼                ▼
+                  ┌───────────┐   ┌───────────┐    ┌───────────┐
+                  │  Worker1  │   │  Worker2  │    │  Worker3  │
+                  │(worktree) │   │(worktree) │    │(worktree) │
+                  └────┬──────┘   └─────┬─────┘    └────┬──────┘
+                       │                │               │
+                commit & push    commit & push   commit & push
+                       │                │               │
+                       └────────────────┼───────────────┘
+                                        ▼
+                                ┌──────────────┐
+                                │    Steward   │
+                                │(merge review)│
+                                └──────┬───────┘
+                                       │
+                          tests pass? ──▶ squash-merge
+                          tests fail? ──▶ task handoff created
+```
+
+1. You communicate your goal to the **Director** via the Director Panel in the web dashboard
+2. Director creates a plan with tasks, priorities, and dependencies
+3. **Dispatch daemon** detects ready (unblocked, unassigned) tasks and assigns them to idle workers
+4. Workers spawn in isolated **git worktrees** (`agent/{worker-name}/{task-id}-{slug}`)
+5. Worker executes, commits, pushes, then completes (creating a merge request) or hands off (returns task to queue with notes)
+6. **Merge steward** runs tests, squash-merges on pass, creates a fix task on fail
+7. Loop repeats for remaining tasks
+
+## Agent roles
+
+| Role | What it does |
+| --- | --- |
+| **Director** | Your strategic planner. You describe a goal, the Director breaks it into tasks with priorities and dependencies. Runs as a persistent session. |
+| **Ephemeral Worker** | Spawned automatically by the dispatch daemon to complete a specific task. Executes in an isolated worktree, commits, pushes, then completes or hands off. |
+| **Persistent Worker** | Started and stopped manually for one-off or exploratory work. Runs an interactive session and is not auto-dispatched. |
+| **Steward** | Handles maintenance workflows — merge review, documentation scanning, recovery of stuck tasks, custom workflows. Runs on triggers or schedules. |
+
+The **dispatch daemon** is a background process (not an agent role) that watches for ready tasks and assigns them to idle workers. Start it with `sf daemon start`.
+
+## What you get
+
+<div class="card-grid" data-sf-stagger>
+  <FeatureCard title="Messaging">
+    Channels, threads, and inbox triage so agents share context and escalate blockers without losing messages.
+  </FeatureCard>
+  <FeatureCard title="Issue tracking">
+    Priorities, dependencies, scheduling, kanban views, and plan grouping — all visible in the web dashboard.
+  </FeatureCard>
+  <FeatureCard title="Documentation">
+    Versioned document libraries with full-text and semantic search, so agents always have up-to-date project context.
+  </FeatureCard>
+  <FeatureCard title="Workflows">
+    Playbook templates that instantiate into resumable task sequences with durable state — if a step fails, the workflow resumes from there.
+  </FeatureCard>
+</div>
+
+## How is it different?
+
+|                          | Claude Code Agent Teams | Stoneforge |
+| --- | --- | --- |
+| **State** | Ephemeral — file-based task list, no persistence across sessions | Event-sourced — SQLite + JSONL, survives restarts, full audit trail |
+| **UI** | Terminal-only (tmux split panes or inline) | Web dashboard with real-time agent output, kanban boards, metrics |
+| **Branch isolation** | Manual — "avoid editing the same file" | Automatic — each worker gets its own git worktree |
+| **Task dispatch** | Lead assigns or teammates self-claim | Dispatch daemon auto-assigns by priority, respects dependencies |
+| **Merge** | Manual | Merge steward runs tests, squash-merges on pass, creates fix task on fail |
+| **Communication** | Lead-mediated messages, broadcast | Persistent channels with threading, inbox triage, searchable history |
+| **Knowledge base** | CLAUDE.md only | Versioned document libraries with FTS5 + semantic search |
+| **Structured processes** | Ad-hoc task lists | Playbook templates with resumable workflows and durable state |
+| **Provider lock-in** | Claude Code only | Claude Code, OpenCode, or OpenAI Codex |
+| **Scaling** | Single plan — limited by one account's rate limits | Multi-plan — split agents across multiple plans via custom executable paths |
 
 ## Next steps
 
-import { LinkCard } from '@astrojs/starlight/components';
-
 <LinkCard title="Installation" description="Get Stoneforge set up on your machine" href="/getting-started/installation/" />
-<LinkCard title="Quick Start" description="Build your first multi-agent project" href="/getting-started/quick-start/" />
+<LinkCard title="Quick Start" description="Go from zero to your first multi-agent orchestration" href="/getting-started/quick-start/" />
+
+<style>{`
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.card-grid > * {
+  margin-top: 0 !important;
+}
+`}</style>

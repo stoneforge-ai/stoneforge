@@ -3,4 +3,190 @@ title: Your First Multi-Agent Project
 description: A complete walkthrough building a real feature with multiple AI agents working in parallel.
 ---
 
-A detailed guide to building a real feature using Stoneforge's multi-agent orchestration. Coming soon.
+import { Steps, Aside, LinkCard } from '@astrojs/starlight/components';
+
+This guide walks you through building a real feature — a user profile system with an API endpoint, UI component, and tests — using Stoneforge's multi-agent orchestration. You'll see exactly what happens at each stage, from planning to merge.
+
+<Aside type="tip">
+  This guide assumes you've completed the [Quick Start](/getting-started/quick-start/) and have a running workspace with a server, a Director, at least two workers, and a merge steward registered.
+</Aside>
+
+## What we're building
+
+We'll ask Stoneforge to add a user profile feature to an app. This involves:
+
+- A REST API endpoint (`GET /api/users/:id/profile`)
+- A React component (`<UserProfile />`)
+- Unit tests for both
+
+This is a good multi-agent task because the API and UI work can happen in parallel, while the tests depend on both being complete.
+
+## Step 1: Describe your goal to the Director
+
+Open the **Director Panel** in the dashboard sidebar and describe what you want:
+
+```
+Add a user profile feature:
+- GET /api/users/:id/profile endpoint that returns name, email, avatar, and bio
+- React <UserProfile /> component that fetches and displays the profile
+- Unit tests for the endpoint and the component
+```
+
+The Director reads your goal and begins planning.
+
+## Step 2: Watch the Director create a plan
+
+Within a few seconds, the Director creates a plan with tasks, priorities, and dependencies. You'll see it appear on the **Tasks** page:
+
+```
+Plan: "User Profile Feature"  (draft → active)
+├── Task 1: Implement GET /api/users/:id/profile endpoint  [priority: 2]
+├── Task 2: Create UserProfile React component              [priority: 2]
+├── Task 3: Write API endpoint unit tests                   [priority: 3, blocked by Task 1]
+└── Task 4: Write UserProfile component tests               [priority: 3, blocked by Task 2]
+```
+
+Notice the structure:
+
+- **Tasks 1 and 2** have no dependencies on each other — they can run in parallel
+- **Task 3** is blocked by Task 1 (can't write API tests until the API exists)
+- **Task 4** is blocked by Task 2 (can't write component tests until the component exists)
+
+The Director creates the plan in **draft** status, adds all tasks and dependencies, then **activates** it. This prevents the dispatch daemon from assigning tasks before dependencies are set.
+
+## Step 3: Activate the plan and watch dispatch
+
+Once the plan is activated, the dispatch daemon detects ready tasks. On its next poll cycle:
+
+1. It finds **Task 1** and **Task 2** are unblocked and unassigned
+2. It assigns Task 1 to **Worker1** and Task 2 to **Worker2**
+3. Each worker spawns in an isolated git worktree:
+
+```
+agent/e-worker-1/el-a1b2-implement-profile-endpoint/
+agent/e-worker-2/el-c3d4-create-userprofile-component/
+```
+
+Each worker gets a dispatch message in its inbox containing the task title, description, and acceptance criteria.
+
+## Step 4: Monitor progress
+
+Switch to the **Activity** page to see real-time output from both workers. You'll see them working simultaneously — Worker1 writing the API endpoint while Worker2 builds the React component.
+
+The **Tasks** page shows live status updates:
+
+| Task | Status | Assignee |
+|------|--------|----------|
+| Implement profile endpoint | `in_progress` | e-worker-1 |
+| Create UserProfile component | `in_progress` | e-worker-2 |
+| Write API endpoint tests | `blocked` | — |
+| Write component tests | `blocked` | — |
+
+<Aside>
+  Workers commit and push frequently. You can check their branches at any time with `git log agent/e-worker-1/el-a1b2-implement-profile-endpoint`.
+</Aside>
+
+## Step 5: Handle a handoff
+
+Sometimes a worker can't complete a task — it hits a blocker, runs out of context, or needs different expertise. When this happens, the worker **hands off**:
+
+```bash
+sf task handoff el-a1b2 --message "Implemented endpoint and routes. CORS config needs infrastructure access I don't have."
+```
+
+What happens behind the scenes:
+
+1. The task is **unassigned** from the worker
+2. The **branch and worktree are preserved** in task metadata
+3. A **handoff note** is appended to the task description
+4. The task returns to the pool — the daemon assigns it to the next available worker
+5. The new worker **spawns in the same worktree**, sees the existing code, and reads the handoff notes to continue where the previous worker left off
+
+## Step 6: Merge review
+
+When a worker finishes, it runs `sf task complete <id>`. The task moves to `review` status and a merge request is created. The merge steward picks it up:
+
+<Steps>
+1. **Steward detects** the completed task in REVIEW status
+
+2. **Creates a temporary worktree** with a detached HEAD at `origin/master`
+
+3. **Runs your test command** against the merged code
+
+4. **Tests pass** — squash-merges the branch into master with a commit message like `Implement GET /api/users/:id/profile endpoint (el-a1b2)`
+
+5. **Pushes to remote**, syncs the local master branch, and cleans up the worktree and branch
+
+6. **Tests fail** — creates a fix task with the test output, assigns it back to the pool
+</Steps>
+
+The merge happens in a **temporary worktree** — it never touches your main repository's HEAD. This keeps your working directory clean and prevents lock contention.
+
+## Step 7: Verify the result
+
+Once all four tasks are merged, check your main branch:
+
+```bash
+git log --oneline -4
+```
+
+```
+f8a2c1d Write UserProfile component tests (el-e8f9)
+3b7d4e2 Write API endpoint unit tests (el-g0h1)
+a1c5e9f Create UserProfile React component (el-c3d4)
+9d2b6f8 Implement GET /api/users/:id/profile endpoint (el-a1b2)
+```
+
+Each task's work is a clean squash commit on master. No merge conflicts, no coordination overhead.
+
+## What happened behind the scenes
+
+```
+You ── "Add user profile feature" ──▶ Director
+                                          │
+                                     creates plan
+                                     4 tasks, 2 deps
+                                          │
+                                          ▼
+                                    ┌────────────┐
+                                    │ Task Pool  │
+                                    └─────┬──────┘
+                                          │
+                              daemon assigns ready tasks
+                                          │
+                              ┌───────────┴───────────┐
+                              ▼                       ▼
+                        ┌───────────┐           ┌───────────┐
+                        │  Worker1  │           │  Worker2  │
+                        │ (API)     │           │ (UI)      │
+                        └─────┬─────┘           └─────┬─────┘
+                              │ complete              │ complete
+                              ▼                       ▼
+                        unblocks Task 3         unblocks Task 4
+                              │                       │
+                              ▼                       ▼
+                        ┌───────────┐           ┌───────────┐
+                        │  Worker1  │           │  Worker2  │
+                        │ (API test)│           │ (UI test) │
+                        └─────┬─────┘           └─────┬─────┘
+                              │                       │
+                              └───────────┬───────────┘
+                                          ▼
+                                   ┌──────────────┐
+                                   │ Merge Steward│
+                                   │ test → merge │
+                                   └──────┬───────┘
+                                          │
+                                          ▼
+                                    ┌──────────┐
+                                    │  master  │
+                                    └──────────┘
+```
+
+The entire flow — planning, dispatch, parallel execution, dependency resolution, merge review — happened automatically. You described a goal, and Stoneforge coordinated the agents to deliver it.
+
+## Next steps
+
+<LinkCard title="Agent Roles" description="Deep dive into Directors, Workers, and Stewards" href="/guides/agent-roles/" />
+<LinkCard title="Task Planning" description="Structure work for optimal parallel execution" href="/guides/task-planning/" />
+<LinkCard title="Auto-Dispatch" description="How the daemon assigns work automatically" href="/guides/auto-dispatch/" />

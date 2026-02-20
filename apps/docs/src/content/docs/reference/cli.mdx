@@ -3,4 +3,1211 @@ title: CLI Reference
 description: Complete reference for all Stoneforge CLI commands and options.
 ---
 
-Complete reference for the `sf` command-line interface. Coming soon.
+import { Tabs, TabItem, Aside, LinkCard } from '@astrojs/starlight/components';
+import TerminalBlock from '../../../components/custom/TerminalBlock.astro';
+
+The `sf` command-line interface is the primary way to interact with Stoneforge. While agents use the CLI internally, human operators typically use the [web dashboard](/guides/first-multi-agent-project/) — but the CLI is essential for setup, debugging, and scripting.
+
+## Global flags
+
+These flags work with any `sf` command:
+
+| Flag | Description |
+| --- | --- |
+| `--help, -h` | Show help |
+| `--version, -V` | Show version |
+| `--json` | Output as JSON (machine-readable) |
+| `--quiet, -q` | Minimal output (IDs only) |
+| `--verbose, -v` | Enable debug output |
+| `--actor <name>` | Specify acting entity |
+| `--from <name>` | Alias for `--actor` |
+| `--db <path>` | Override database path |
+| `--sign-key <key>` | Private key for signing (base64 PKCS8) |
+| `--sign-key-file <path>` | Path to file containing private key |
+
+<Aside type="tip">
+  The `--json` flag is useful for piping output to tools like `jq`. The `--quiet` flag returns only IDs — great for scripting: `sf create task --title "Fix bug" -q | xargs sf show`.
+</Aside>
+
+## Command aliases
+
+Many commands have shorter aliases for convenience:
+
+| Alias | Maps to |
+| --- | --- |
+| `add`, `new` | `create` |
+| `rm`, `remove` | `delete` |
+| `ls` | `list` |
+| `s`, `get` | `show` |
+| `todo`, `tasks` | `ready` |
+| `done`, `complete` | `close` |
+| `st` | `status` |
+| `dep` | `dependency` |
+| `msg` | `message` |
+| `doc` | `document` |
+
+---
+
+## Setup & system
+
+### `sf init`
+
+Initialize a new Stoneforge workspace in the current directory.
+
+```bash
+sf init [--name <name>] [--actor <actor>]
+```
+
+Creates a `.stoneforge/` directory containing `config.yaml`, `stoneforge.db`, `.gitignore`, and a `playbooks/` directory. If `.stoneforge/` already exists (e.g. after cloning) but no database is present, it creates the database and auto-imports from existing JSONL sync files.
+
+### `sf serve`
+
+Start the Stoneforge server and web dashboard.
+
+<Tabs>
+  <TabItem label="Orchestrator (default)">
+    ```bash
+    # Start the orchestrator server + dashboard
+    sf serve
+    # or explicitly:
+    sf serve smithy --port 3457
+    ```
+  </TabItem>
+  <TabItem label="Data platform only">
+    ```bash
+    # Start just the Quarry data server
+    sf serve quarry --port 3456
+    ```
+  </TabItem>
+</Tabs>
+
+| Option | Description |
+| --- | --- |
+| `-p, --port <port>` | Port to listen on |
+| `-H, --host <host>` | Host to bind to |
+
+### `sf doctor`
+
+Check system health and diagnose issues. Runs 9 diagnostic checks: workspace, database, connection, schema version, schema tables, integrity, foreign keys, blocked cache consistency, and storage size.
+
+```bash
+sf doctor [--verbose] [--json]
+```
+
+<TerminalBlock title="sf doctor">
+System Health Check
+
+[OK] workspace: Workspace found at /Users/you/my-project/.stoneforge
+
+[OK] database: Database connection successful
+
+[OK] schema_version: Schema is at version 9 (up to date)
+
+[OK] blocked_cache: Blocked cache is consistent
+
+Summary: 9 ok, 0 warnings, 0 errors
+</TerminalBlock>
+
+### `sf stats`
+
+Show workspace statistics — element counts by type, ready/blocked tasks, dependency and event counts, database size.
+
+```bash
+sf stats [--json]
+```
+
+### `sf identity whoami`
+
+Show the current actor identity. This is a subcommand of the `sf identity` command group.
+
+### `sf completion`
+
+Generate shell completion scripts.
+
+<Tabs>
+  <TabItem label="bash">
+    ```bash
+    source <(sf completion bash)
+    # or persist:
+    sf completion bash > ~/.local/share/bash-completion/completions/sf
+    ```
+  </TabItem>
+  <TabItem label="zsh">
+    ```bash
+    source <(sf completion zsh)
+    # or persist:
+    sf completion zsh > ~/.zsh/completions/_sf
+    ```
+  </TabItem>
+  <TabItem label="fish">
+    ```bash
+    sf completion fish > ~/.config/fish/completions/sf.fish
+    ```
+  </TabItem>
+</Tabs>
+
+### `sf migrate`
+
+Run database migrations. Migrations run automatically when needed, but this lets you check status or trigger manually.
+
+```bash
+sf migrate [--dry-run]
+```
+
+### `sf reset`
+
+Reset a Stoneforge workspace.
+
+```bash
+sf reset [--force] [--full] [--server <url>]
+```
+
+**Default reset** removes the database, sync files, uploads, and worktrees but preserves `config.yaml`. **Full reset** deletes the entire `.stoneforge/` folder and reinitializes.
+
+<Aside type="caution">
+  `sf reset --full --force` permanently deletes all workspace data. This cannot be undone.
+</Aside>
+
+---
+
+## CRUD commands
+
+Generic element operations that work across all types.
+
+### `sf create`
+
+```bash
+sf create <type> [options]
+```
+
+| Option | Description |
+| --- | --- |
+| `-t, --title <text>` | Title (required for tasks) |
+| `-d, --description <text>` | Description (creates a linked document) |
+| `-p, --priority <1-5>` | Priority: 1 = critical, 5 = minimal |
+| `-c, --complexity <1-5>` | Complexity: 1 = trivial, 5 = very complex |
+| `--type <type>` | Task type: `bug`, `feature`, `task`, `chore` |
+| `-a, --assignee <id>` | Assignee entity ID |
+| `--tag <tag>` | Add tag (repeatable) |
+| `--plan <id\|name>` | Attach to a plan |
+
+```bash
+sf create task --title "Fix login bug" --priority 1 --type bug
+sf create task -t "Add dark mode" -d "Implement theme switching" --tag ui
+sf create task -t "Implement feature" --plan "Sprint 3"
+```
+
+### `sf list`
+
+```bash
+sf list [type] [--status <s>] [--priority <1-5>] [--assignee <id>] [--tag <tag>] [--limit <n>] [--offset <n>]
+```
+
+Filter values accept exact matches. Arrays use OR matching for status and priority.
+
+### `sf show`
+
+```bash
+sf show <id> [--events] [--events-limit <n>]
+```
+
+Displays detailed information about any element. Supports short IDs (prefix matching).
+
+### `sf update`
+
+```bash
+sf update <id> [--title <text>] [--status <s>] [--priority <1-5>] [--add-tag <tag>] [--remove-tag <tag>] [--assignee <id>]
+```
+
+Pass `--assignee ""` to unassign.
+
+### `sf delete`
+
+Soft-delete an element (tombstone). Messages cannot be deleted — they are immutable.
+
+```bash
+sf delete <id> [--reason <text>] [--force]
+```
+
+---
+
+## Task commands
+
+### `sf task create`
+
+Alias for `sf create task`. Same options as [`sf create`](#sf-create) above.
+
+### `sf task list`
+
+```bash
+sf task list [--status <s>] [--ready] [--priority <1-5>] [--assignee <id>] [--type <type>] [--tag <tag>] [--limit <n>] [--offset <n>]
+```
+
+<Aside type="tip">
+  Use `--ready` instead of `--status open` for the most accurate view of dispatchable tasks. It accounts for blocked cache, draft plans, future scheduling, and ephemeral workflows.
+</Aside>
+
+### `sf task ready`
+
+List ready (unblocked, open) tasks — the queue that the dispatch daemon draws from.
+
+```bash
+sf task ready [--assignee <id>] [--priority <1-5>] [--type <type>] [--limit <n>]
+```
+
+### `sf task blocked`
+
+List blocked tasks with their block reasons.
+
+```bash
+sf task blocked [--assignee <id>] [--priority <1-5>] [--limit <n>]
+```
+
+### `sf task backlog`
+
+```bash
+sf task backlog [--priority <1-5>] [--limit <n>]
+```
+
+### `sf task activate`
+
+Move a task from backlog to open status.
+
+```bash
+sf task activate <id>
+```
+
+### `sf task close`
+
+```bash
+sf task close <id> [--reason <text>]
+```
+
+### `sf task reopen`
+
+```bash
+sf task reopen <id> [--message <text>]
+```
+
+The `--message` text is appended to the task description.
+
+### `sf task assign`
+
+```bash
+sf task assign <task-id> <entity>
+sf task assign <task-id> <entity> --unassign
+```
+
+### `sf task defer / undefer`
+
+```bash
+sf task defer <id> --until 2025-06-01
+sf task undefer <id>
+```
+
+### `sf task describe`
+
+Set or show a task's description. Descriptions are stored as versioned documents.
+
+```bash
+sf task describe <id> --content "Implement the login feature"
+sf task describe <id> --file specs/login.md
+sf task describe <id> --append --content "Additional notes"
+sf task describe <id> --show
+```
+
+---
+
+## Dependency commands
+
+<Aside>
+  **Semantics:** `sf dependency add --type=blocks A B` means **A is blocked BY B** — B must complete before A can start.
+</Aside>
+
+### `sf dependency add`
+
+```bash
+sf dependency add --type=<type> <blocked-id> <blocker-id> [--metadata <json>]
+```
+
+Types: `blocks`, `parent-child`, `awaits`, `relates-to`, `references`, `supersedes`, `duplicates`, `caused-by`, `validates`, `mentions`, `authored-by`, `assigned-to`, `approved-by`, `replies-to`.
+
+### `sf dependency remove`
+
+```bash
+sf dependency remove <blocked-id> <blocker-id> --type=<type>
+```
+
+### `sf dependency list`
+
+```bash
+sf dependency list <id> [--direction out|in|both] [--type <type>]
+```
+
+### `sf dependency tree`
+
+```bash
+sf dependency tree <id> [--depth <n>]
+```
+
+---
+
+## Plan commands
+
+Plans group related tasks. Plans start in `draft` status — **tasks in draft plans are NOT dispatchable**.
+
+```bash
+# Recommended workflow
+sf plan create --title "Feature X"                        # 1. Create (draft)
+sf create task --title "Task 1" --plan "Feature X"        # 2. Add tasks
+sf dependency add --type=blocks el-task2 el-task1          # 3. Set deps
+sf plan activate <plan-id>                                 # 4. Activate
+```
+
+### `sf plan create`
+
+```bash
+sf plan create --title <text> [--status draft|active] [--tag <tag>]
+```
+
+### `sf plan list / show`
+
+```bash
+sf plan list [--status draft|active|completed|cancelled] [--tag <tag>] [--limit <n>]
+sf plan show <id> [--tasks] [--json]
+```
+
+### `sf plan activate / complete / cancel`
+
+```bash
+sf plan activate <id>
+sf plan complete <id>
+sf plan cancel <id> [--reason <text>]
+```
+
+### `sf plan add-task / remove-task / tasks`
+
+```bash
+sf plan add-task <plan-id> <task-id>
+sf plan remove-task <plan-id> <task-id>
+sf plan tasks <plan-id> [--status <s>] [--limit <n>]
+```
+
+### `sf plan auto-complete`
+
+Auto-complete active plans where all tasks are closed.
+
+```bash
+sf plan auto-complete [--dry-run] [--json]
+```
+
+---
+
+## Workflow commands
+
+Workflows are instantiated from playbooks — reusable task sequences with durable state.
+
+### `sf workflow create`
+
+```bash
+sf workflow create <playbook> [--var name=value] [--ephemeral] [--title <text>]
+```
+
+### `sf workflow list / show / tasks / progress`
+
+```bash
+sf workflow list [--status <s>] [--ephemeral] [--durable] [--limit <n>]
+sf workflow show <id>
+sf workflow tasks <id> [--ready] [--status <s>]
+sf workflow progress <id>
+```
+
+### `sf workflow delete / promote / gc`
+
+```bash
+sf workflow delete <id> [--force]    # --force required for durable
+sf workflow promote <id>             # Ephemeral to durable
+sf workflow gc [--age <days>] [--dry-run]
+```
+
+---
+
+## Entity commands
+
+### `sf entity register`
+
+```bash
+sf entity register <name> [--type agent|human|system] [--public-key <key>] [--tag <tag>]
+```
+
+Entity names must start with a letter and match `/^[a-zA-Z][a-zA-Z0-9_-]*$/`. Reserved names: `system`, `anonymous`, `unknown`.
+
+### `sf entity list`
+
+```bash
+sf entity list [--type agent|human|system] [--limit <n>]
+```
+
+### Management hierarchy
+
+```bash
+sf entity set-manager <entity> <manager>
+sf entity clear-manager <entity>
+sf entity reports <manager>
+sf entity chain <entity>
+```
+
+---
+
+## Document commands
+
+### `sf document create`
+
+```bash
+sf document create --title <text> [--content <text>] [--file <path>] [--type text|markdown|json] [--category <cat>] [--tag <tag>]
+```
+
+Categories: `spec`, `prd`, `decision-log`, `changelog`, `tutorial`, `how-to`, `explanation`, `reference`, `runbook`, `meeting-notes`, `post-mortem`, `other`.
+
+### `sf document list`
+
+```bash
+sf document list [--category <cat>] [--status active|archived] [--all] [--limit <n>]
+```
+
+<Aside>
+  Archived documents are hidden from default list and search results. Use `--all` or `--status archived` to include them.
+</Aside>
+
+### `sf document search`
+
+Full-text search with BM25 ranking and adaptive top-K filtering.
+
+```bash
+sf document search "query" [--category <cat>] [--status <s>] [--limit <n>]
+```
+
+### `sf document update`
+
+Update content, creating a new version. Each update preserves history.
+
+```bash
+sf document update <id> --content "New content"
+sf document update <id> --file updated-spec.md
+```
+
+### `sf document history / rollback`
+
+```bash
+sf document history <id> [--limit <n>]
+sf document rollback <id> <version>
+```
+
+### `sf document archive / unarchive / delete`
+
+```bash
+sf document archive <id>
+sf document unarchive <id>
+sf document delete <id> [--reason <text>] [--force]
+```
+
+### `sf document reindex`
+
+Rebuild the FTS5 search index. Required after importing documents via `sf import`.
+
+```bash
+sf document reindex
+```
+
+---
+
+## Channel commands
+
+### `sf channel create`
+
+```bash
+sf channel create --name <name> [--description <text>] [--type group|direct] [--visibility public|private] [--policy open|invite-only|request] [--member <id>]
+```
+
+### `sf channel list`
+
+```bash
+sf channel list [--type group|direct] [--member <id>] [--limit <n>]
+```
+
+### Membership
+
+```bash
+sf channel join <id>
+sf channel leave <id>
+sf channel members <id>
+sf channel add <channel-id> <entity-id>
+sf channel remove <channel-id> <entity-id>
+```
+
+### `sf channel merge`
+
+Merge all messages from source into target. The source is archived after the merge.
+
+```bash
+sf channel merge --source <id> --target <id> [--name <new-name>]
+```
+
+---
+
+## Message commands
+
+### `sf message send`
+
+```bash
+sf message send --channel <id> --content "Hello!"       # To channel
+sf message send --to <entity> -m "Direct message"        # DM
+sf message send --reply-to <msg-id> -m "Reply text"      # Reply
+```
+
+| Option | Description |
+| --- | --- |
+| `-c, --channel <id>` | Channel to send to |
+| `-T, --to <entity>` | Entity to DM (finds or creates DM channel) |
+| `-r, --reply-to <msg>` | Reply to message (auto-sets channel/thread) |
+| `-m, --content <text>` | Message content |
+| `--file <path>` | Read content from file |
+| `-a, --attachment <id>` | Attach document (repeatable) |
+
+### `sf message reply`
+
+Shorthand for `sf message send --reply-to`. In DM channels, sender/recipient are auto-swapped.
+
+```bash
+sf message reply <msg-id> --content "Thanks!"
+```
+
+### `sf message list / thread`
+
+```bash
+sf message list --channel <id> [--sender <id>] [--rootOnly] [--limit <n>]
+sf message thread <msg-id> [--limit <n>]
+```
+
+---
+
+## Inbox commands
+
+```bash
+sf inbox <entity>                  # List unread items
+sf inbox <entity> --full           # Full message content
+sf inbox <entity> --all            # Include read/archived
+sf inbox read <id>                 # Mark as read
+sf inbox read-all <entity>         # Mark all as read
+sf inbox unread <id>               # Mark as unread
+sf inbox archive <id>              # Archive
+sf inbox count <entity>            # Count unread
+sf show <inbox-id>                 # Full inbox item
+```
+
+---
+
+## Library commands
+
+Libraries organize documents into hierarchical collections.
+
+```bash
+sf library create --name "API Docs" [--tag <tag>]
+sf library list [--limit <n>]
+sf library roots                                        # Root libraries
+sf library docs <lib-id>                                # Documents in library
+sf library stats <lib-id>                               # Statistics
+sf library add <lib-id> <doc-id>                        # Add document
+sf library remove <lib-id> <doc-id>                     # Remove document
+sf library nest <child-lib> <parent-lib>                # Create hierarchy
+sf library delete <id> [--force]
+```
+
+---
+
+## Team commands
+
+```bash
+sf team create --name "Backend" [--member <id>] [--tag <tag>]
+sf team list [--member <id>] [--limit <n>]
+sf team add <team-id> <entity-id>
+sf team remove <team-id> <entity-id>
+sf team members <team-id>
+sf team delete <id> [--reason <text>] [--force]
+```
+
+---
+
+## Playbook commands
+
+```bash
+sf playbook list [--limit <n>]
+sf playbook show <name|id> [--steps] [--variables]
+sf playbook validate <name|id> [--var name=value] [--create]
+sf playbook create -n <name> -t <title> [-s id:title[:deps]] [-v name:type[:default][:required]]
+```
+
+```bash
+# Create a deployment playbook
+sf playbook create -n deploy -t "Deployment Process" \
+  -s "build:Build app" \
+  -s "test:Run tests:build" \
+  -v "env:string" \
+  -v "debug:boolean:false:false"
+```
+
+---
+
+## Embeddings commands
+
+```bash
+sf embeddings install                          # Install local model
+sf embeddings status                           # Model status
+sf embeddings reindex                          # Rebuild index
+sf embeddings search "authentication flow"     # Semantic search
+```
+
+---
+
+## Sync commands
+
+Also available under `sf sync export`, `sf sync import`, `sf sync status`.
+
+### `sf export`
+
+```bash
+sf export [--output <dir>] [--full] [--include-ephemeral]
+```
+
+### `sf import`
+
+```bash
+sf import [--input <dir>] [--dry-run] [--force]
+```
+
+<Aside type="caution">
+  Import does not update the FTS5 index or embeddings. After importing, run `sf document reindex` and `sf embeddings reindex`.
+</Aside>
+
+### `sf status`
+
+Show sync status — dirty elements, last export time.
+
+---
+
+## Config commands
+
+```bash
+sf config show [key]
+sf config set <path> <value>
+sf config unset <path>
+sf config edit
+```
+
+See the [Configuration reference](/reference/configuration/) for all available config paths.
+
+---
+
+## Identity commands
+
+```bash
+sf identity whoami
+sf identity keygen [--json] [--quiet]
+sf identity mode [soft|cryptographic|hybrid]
+sf identity sign --data "text" --sign-key <key> --actor <name>
+sf identity verify --signature <sig> --public-key <key> --signed-at <time> --data "text"
+sf identity hash --data "text"
+```
+
+See the [Identity reference](/reference/identity/) for full details on modes, key management, and signature verification.
+
+---
+
+## Garbage collection
+
+```bash
+sf gc workflows [--age <days>] [--limit <n>] [--dry-run]
+```
+
+| | `sf gc workflows` | `sf workflow gc` |
+| --- | --- | --- |
+| **Default age** | 1 day | 7 days |
+| **`--limit` flag** | Yes | No |
+| **Best for** | Automated cleanup (cron) | Manual cleanup |
+
+---
+
+## History command
+
+View the event timeline for any element.
+
+```bash
+sf history <id> [--type <event-type>] [--actor <name>] [--after <date>] [--before <date>] [--format timeline|table] [--limit <n>]
+```
+
+---
+
+## Install command
+
+```bash
+sf install skills [--force]
+```
+
+Installs Claude skills files to `.claude/skills/`. Use `--force` to overwrite existing files.
+
+---
+
+## Docs commands
+
+### `sf docs init`
+
+Bootstrap the Documentation library and Documentation Directory for the workspace. Idempotent — running multiple times produces the same result without duplicates.
+
+```bash
+sf docs init [--json] [--quiet]
+```
+
+Creates:
+1. A **Documentation** library (if it doesn't exist)
+2. A **Documentation Directory** document (reference category, with a starter template)
+3. A parent-child link between the directory and the library
+
+### `sf docs add`
+
+Add one or more documents to the Documentation library.
+
+```bash
+sf docs add <doc-id> [doc-id2 ...]
+```
+
+The Documentation library must exist — run `sf docs init` first. Already-added documents are skipped.
+
+```bash
+sf docs add el-doc123
+sf docs add el-doc123 el-doc456 el-doc789
+```
+
+---
+
+## Plugins
+
+The `sf` CLI is extensible through plugins. A plugin is an npm package that exports a `cliPlugin` object, which registers additional commands and aliases with the CLI.
+
+### How plugins work
+
+<Aside type="tip">
+  The `@stoneforge/smithy` plugin is auto-discovered — you don't need to configure it. It's loaded automatically when the package is installed.
+</Aside>
+
+When `sf` starts, the plugin loader:
+
+1. **Discovers** plugins from two sources:
+   - **Known first-party packages** — `@stoneforge/smithy` is auto-detected
+   - **User-configured packages** — listed in `config.yaml` under `plugins.packages`
+2. **Imports** each package and looks for a named `cliPlugin` export
+3. **Validates** the plugin structure (name, version, commands array)
+4. **Registers** commands and aliases with the CLI
+
+### Plugin resolution rules
+
+- Built-in commands always take precedence over plugin commands
+- Plugin commands can **merge subcommands** into existing command groups
+- Aliases cannot conflict with existing commands
+- If a package is not found, it's silently skipped (no error)
+
+### Configuring custom plugins
+
+Add third-party plugins in `.stoneforge/config.yaml`:
+
+```yaml
+plugins:
+  packages:
+    - "@custom/my-plugin"
+    - "another-stoneforge-plugin"
+```
+
+Each package must export a `cliPlugin` conforming to the `CLIPlugin` interface:
+
+```typescript
+import type { CLIPlugin } from '@stoneforge/quarry/cli';
+
+export const cliPlugin: CLIPlugin = {
+  name: 'my-plugin',
+  version: '1.0.0',
+  commands: [/* Command objects */],
+  aliases: {
+    'shortcut': 'my-command subcommand',
+  },
+  init: async () => { /* optional async setup */ },
+};
+```
+
+### The Smithy plugin
+
+The `@stoneforge/smithy` package ships a built-in plugin named `orchestrator` that adds all agent orchestration commands to the CLI. It registers 6 command groups (`agent`, `daemon`, `dispatch`, `merge`, `pool`, `task`) and 2 aliases (`agents` → `agent list`, `pools` → `pool list`).
+
+These commands are documented in the [Orchestration commands](#orchestration-commands) section below.
+
+---
+
+## Orchestration commands
+
+These commands are provided by the `@stoneforge/smithy` plugin and are available when the smithy package is installed. They handle agent lifecycle, task dispatch, merge operations, and pool management.
+
+### `sf agent`
+
+Manage orchestrator agents — register, start, stop, and monitor.
+
+#### `sf agent list`
+
+```bash
+sf agent list [options]
+```
+
+| Option | Description |
+| --- | --- |
+| `-r, --role <role>` | Filter by role: `director`, `worker`, `steward` |
+| `-s, --status <status>` | Filter by session status: `idle`, `running`, `suspended`, `terminated` |
+| `-m, --workerMode <mode>` | Filter by worker mode: `ephemeral`, `persistent` |
+| `-f, --focus <focus>` | Filter by steward focus: `merge`, `docs`, `recovery`, `custom` |
+| `--reportsTo <id>` | Filter by manager entity ID |
+| `--hasSession` | Only show agents with active sessions |
+
+Alias: `sf agents`
+
+#### `sf agent show`
+
+```bash
+sf agent show <id>
+```
+
+Display detailed information about a registered agent, including role, session status, and metadata.
+
+#### `sf agent register`
+
+```bash
+sf agent register <name> --role <role> [options]
+```
+
+| Option | Description |
+| --- | --- |
+| `-r, --role <role>` | Agent role: `director`, `worker`, `steward` **(required)** |
+| `-m, --mode <mode>` | Worker mode: `ephemeral`, `persistent` |
+| `-f, --focus <focus>` | Steward focus: `merge`, `docs`, `recovery`, `custom` |
+| `-t, --maxTasks <n>` | Maximum concurrent tasks (default: 1) |
+| `--tags <tags>` | Comma-separated tags |
+| `--reportsTo <id>` | Manager entity ID |
+| `--roleDef <id>` | Role definition document ID |
+| `--trigger <cron>` | Steward cron trigger (e.g., `"0 2 * * *"`) |
+| `--provider <name>` | Agent provider: `claude-code`, `opencode`, `codex` |
+| `--model <model>` | LLM model to use |
+
+```bash
+sf agent register Director --role director
+sf agent register Worker1 --role worker --mode ephemeral
+sf agent register MergeSteward --role steward --focus merge
+sf agent register Reviewer --role steward --focus custom --trigger "0 */4 * * *"
+```
+
+#### `sf agent start`
+
+```bash
+sf agent start <id> [options]
+```
+
+| Option | Description |
+| --- | --- |
+| `-p, --prompt <text>` | Initial prompt to send to agent |
+| `-m, --mode <mode>` | Spawn mode: `headless`, `interactive` |
+| `-r, --resume <id>` | Provider session ID to resume |
+| `-w, --workdir <path>` | Working directory for agent |
+| `--cols <n>` | Terminal columns for interactive mode (default: 120) |
+| `--rows <n>` | Terminal rows for interactive mode (default: 30) |
+| `--timeout <ms>` | Timeout in milliseconds (default: 120000) |
+| `-e, --env <KEY=VALUE>` | Environment variable (repeatable) |
+| `-t, --taskId <id>` | Task ID to assign to agent |
+| `--stream` | Stream agent output after starting |
+| `--provider <name>` | Override agent provider for this session |
+| `--model <model>` | Override model for this session |
+
+#### `sf agent stop`
+
+```bash
+sf agent stop <id> [--no-graceful] [--reason <text>]
+```
+
+| Option | Description |
+| --- | --- |
+| `-g, --graceful` | Graceful shutdown (default: true) |
+| `--no-graceful` | Force immediate shutdown |
+| `-r, --reason <text>` | Reason for stopping |
+
+#### `sf agent stream`
+
+```bash
+sf agent stream <id>
+```
+
+Get the agent's output channel for live streaming.
+
+---
+
+### `sf daemon`
+
+Manage the dispatch daemon — the background process that auto-assigns ready tasks to idle workers.
+
+#### `sf daemon start`
+
+```bash
+sf daemon start [--server <url>]
+```
+
+<Aside>
+  The dispatch daemon starts automatically with `sf serve`. You only need this command if running the daemon separately.
+</Aside>
+
+#### `sf daemon stop`
+
+```bash
+sf daemon stop [--server <url>] [--force]
+```
+
+#### `sf daemon status`
+
+```bash
+sf daemon status [--server <url>]
+```
+
+Shows daemon status, uptime, tasks dispatched, and rate limit info.
+
+#### `sf daemon sleep`
+
+Pause dispatch until a specified time.
+
+```bash
+sf daemon sleep --until "3am"
+sf daemon sleep --until "tomorrow at 9:30am"
+sf daemon sleep --duration 3600
+```
+
+| Option | Description |
+| --- | --- |
+| `-u, --until <time>` | Sleep until time (e.g., `"3am"`, `"Feb 22 at 9:30am"`) |
+| `-d, --duration <secs>` | Sleep for duration in seconds |
+
+One of `--until` or `--duration` is required (not both).
+
+#### `sf daemon wake`
+
+Immediately resume dispatch. Clears rate limits and sleep timer.
+
+```bash
+sf daemon wake [--server <url>]
+```
+
+---
+
+### `sf dispatch`
+
+Manually dispatch a task to a specific agent. This bypasses the dispatch daemon — useful for debugging or one-off assignments.
+
+```bash
+sf dispatch <task-id> <agent-id> [options]
+```
+
+| Option | Description |
+| --- | --- |
+| `-b, --branch <branch>` | Git branch for task |
+| `-w, --worktree <path>` | Worktree path for task |
+| `-s, --session <id>` | Session ID to associate |
+| `-m, --markAsStarted` | Mark task as started after dispatch |
+
+---
+
+### `sf merge`
+
+Squash-merge a branch into the default branch. This is the same merge operation used by the merge steward, available as a standalone command.
+
+```bash
+sf merge [options]
+```
+
+| Option | Description |
+| --- | --- |
+| `-b, --branch <name>` | Source branch to merge (default: current branch) |
+| `-i, --into <name>` | Target branch (default: auto-detected master/main) |
+| `-m, --message <text>` | Commit message (default: `"Merge <branch>"`) |
+| `--cleanup` | Delete source branch and worktree after merge |
+
+The merge process:
+1. Fetches latest from origin
+2. Creates a temporary worktree at the target branch
+3. Squash-merges the source branch
+4. Commits and pushes
+5. Cleans up the temporary worktree
+6. Optionally removes the source branch and worktree (`--cleanup`)
+
+---
+
+### `sf pool`
+
+Manage agent pools for controlling concurrency.
+
+#### `sf pool list`
+
+```bash
+sf pool list [--enabled] [--available] [--tag <tag>]
+```
+
+| Option | Description |
+| --- | --- |
+| `-e, --enabled` | Only show enabled pools |
+| `-a, --available` | Only show pools with available slots |
+| `-t, --tag <tag>` | Filter by tag |
+
+Alias: `sf pools`
+
+#### `sf pool show`
+
+```bash
+sf pool show <id|name>
+```
+
+#### `sf pool create`
+
+```bash
+sf pool create <name> [options]
+```
+
+| Option | Description |
+| --- | --- |
+| `-s, --size <n>` | Maximum pool size (default: 5) |
+| `-d, --description <text>` | Pool description |
+| `-t, --agentType <config>` | Agent type config (repeatable, see format below) |
+| `--tags <tags>` | Comma-separated tags |
+| `--disabled` | Create pool in disabled state |
+
+The `--agentType` flag uses a colon-separated format:
+
+```
+role[:mode|focus][:priority][:maxSlots][:provider][:model]
+```
+
+```bash
+sf pool create workers --size 5 \
+  -t "worker:ephemeral:100:5:claude-code" \
+  -t "steward:merge:80:1"
+```
+
+#### `sf pool update`
+
+```bash
+sf pool update <id|name> [--size <n>] [--enable] [--disable] [--agentType <config>]
+```
+
+#### `sf pool delete`
+
+```bash
+sf pool delete <id|name> [--force]
+```
+
+Use `--force` to delete even if agents are active.
+
+#### `sf pool status`
+
+```bash
+sf pool status <id|name>
+```
+
+Shows pool status with active agents and slot utilization.
+
+#### `sf pool refresh`
+
+```bash
+sf pool refresh
+```
+
+Refresh pool status from active sessions. Useful if pool counts drift.
+
+---
+
+### `sf task` (orchestration)
+
+<Aside>
+  These are orchestration-specific task commands added by the smithy plugin. They extend the [core task commands](#task-commands) with merge and handoff workflows.
+</Aside>
+
+#### `sf task handoff`
+
+Hand off a task to another agent. The task returns to the pool with context notes, and the branch/worktree are preserved for the next worker.
+
+```bash
+sf task handoff <task-id> [options]
+```
+
+| Option | Description |
+| --- | --- |
+| `-m, --message <text>` | Handoff message with context for the next worker |
+| `-b, --branch <name>` | Override branch to preserve |
+| `-w, --worktree <path>` | Override worktree path to preserve |
+| `-s, --sessionId <id>` | Session ID (defaults to current session) |
+
+#### `sf task complete`
+
+Complete a task and optionally create a merge request.
+
+```bash
+sf task complete <task-id> [options]
+```
+
+| Option | Description |
+| --- | --- |
+| `-s, --summary <text>` | Summary of accomplishments |
+| `-c, --commitHash <hash>` | Commit hash for final commit |
+| `--no-mr` | Skip merge request creation |
+| `--mr-title <title>` | Custom merge request title |
+| `--mr-body <body>` | Custom merge request body |
+| `-b, --baseBranch <name>` | Base branch for merge request (default: main) |
+
+#### `sf task merge`
+
+Squash-merge a task branch and close the task.
+
+```bash
+sf task merge <task-id> [--summary <text>]
+```
+
+Validates the task is in REVIEW status, performs the squash-merge, pushes, sets merge status to `merged`, closes the task, and cleans up the branch and worktree.
+
+#### `sf task reject`
+
+Mark a task merge as failed and reopen it.
+
+```bash
+sf task reject <task-id> --reason <text> [--message <text>]
+```
+
+| Option | Description |
+| --- | --- |
+| `-r, --reason <text>` | Reason for rejection **(required)** |
+| `-m, --message <text>` | Handoff message for the next worker |
+
+#### `sf task sync`
+
+Sync a task branch with the main branch (merge main into the task branch).
+
+```bash
+sf task sync <task-id>
+```
+
+Fetches from origin, merges main/master into the task branch, and reports success, conflicts, or errors.
+
+#### `sf task merge-status`
+
+Update the merge status of a task.
+
+```bash
+sf task merge-status <task-id> <status>
+```
+
+Valid statuses: `pending`, `testing`, `merging`, `merged`, `conflict`, `test_failed`, `failed`, `not_applicable`. Terminal statuses (`merged`, `not_applicable`) automatically close the task.

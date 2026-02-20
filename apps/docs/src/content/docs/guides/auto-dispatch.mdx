@@ -3,4 +3,301 @@ title: Auto-Dispatch
 description: How Stoneforge automatically dispatches elements to available agents based on dependency resolution.
 ---
 
-Understand how the orchestrator automatically assigns work to agents as dependencies are satisfied. Coming soon.
+import { Steps, Aside, LinkCard } from '@astrojs/starlight/components';
+
+The dispatch daemon is the engine that connects plans to execution. It continuously polls for ready tasks, available workers, and pending messages — then makes assignment decisions automatically. No manual task assignment required.
+
+## What auto-dispatch solves
+
+Without the daemon, you'd need to manually:
+
+- Watch for tasks becoming unblocked
+- Find idle workers
+- Assign tasks to workers
+- Route messages between agents
+- Recover orphaned work after server restarts
+
+The dispatch daemon handles all of this in a continuous background loop.
+
+## How it works
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                 DISPATCH DAEMON (continuous polling)              │
+│                                                                   │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────┐│
+│  │   Orphan    │  │   Inbox     │  │   Worker    │  │ Steward ││
+│  │  Recovery   │  │  Routing    │  │ Availability│  │ Triggers││
+│  │  Polling    │  │  Polling    │  │  Polling    │  │ Polling ││
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └────┬────┘│
+│         │                │                │               │      │
+│  ┌──────┴──────┐  ┌──────┴──────┐  ┌──────┴──────┐  ┌────┴────┐│
+│  │  Workflow   │  │Closed-Unmrgd│  │   Plan      │  │ Stuck   ││
+│  │   Task      │  │Reconcilitn  │  │   Auto-     │  │ Merge   ││
+│  │  Polling    │  │  Polling    │  │  Complete   │  │Recovery ││
+│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────┘│
+└──────────────────────────────────────────────────────────────────┘
+```
+
+Each poll cycle runs these loops in order. The default poll interval is 5 seconds.
+
+## The polling loops
+
+### 1. Orphan recovery
+
+**Purpose:** Recover workers that had active tasks when the server restarted.
+
+When the orchestrator restarts, worker sessions are terminated but their task assignments persist. Without recovery, these tasks would be stuck — assigned to a worker that's no longer running.
+
+The orphan recovery loop:
+1. Finds ephemeral workers with no active session
+2. Checks if they have assigned tasks (OPEN or IN_PROGRESS)
+3. **Tries to resume** the previous session if a session ID exists in task metadata
+4. **Falls back to a fresh spawn** if resume fails or no session ID exists
+5. Reuses the existing worktree and branch when available
+
+This runs immediately on daemon startup and at the beginning of each poll cycle.
+
+### 2. Inbox message routing
+
+**Purpose:** Deliver messages and spawn triage sessions.
+
+The daemon processes inboxes differently by agent role:
+
+| Agent type | Has active session | Action |
+|---|---|---|
+| Ephemeral worker | Yes | Leave messages unread (session handles them) |
+| Ephemeral worker | No | Accumulate for triage batch |
+| Persistent worker | Yes | Forward as user input |
+| Persistent worker | No | Messages wait until session starts |
+| Director | Yes | Forward as user input (with idle debounce) |
+| Director | No | Messages accumulate until session starts |
+
+**Director forwarding:** When `directorInboxForwardingEnabled` is `true` (the default), directors with an active session receive inbox messages as user input — the same mechanism used for persistent workers. To avoid interrupting the user mid-thought, the daemon waits until the session has been idle for at least `directorInboxIdleThresholdMs` (default: 2 minutes) before forwarding. If the user is actively typing, messages are left unread and retried on the next poll cycle.
+
+**Triage sessions:** When an idle agent has accumulated non-dispatch messages, the daemon spawns a triage session to process them. Triage runs in a temporary read-only worktree and processes one channel batch per session. Workers with pending triage are excluded from task assignment until triage completes.
+
+### 3. Worker availability
+
+**Purpose:** Assign tasks to idle workers.
+
+This is the core dispatch loop:
+
+<Steps>
+1. Find all **ephemeral workers** without an active session
+
+2. Skip workers that have unread messages (triage takes priority)
+
+3. For each available worker, query for the **highest priority ready task** via `api.ready()`
+
+4. **Assign** the task to the worker
+
+5. **Spawn** the worker in an isolated worktree on a task branch
+
+6. Send a **dispatch message** to the worker's inbox with the task details
+</Steps>
+
+A task is "ready" when it meets all of these conditions:
+- Status is OPEN (not blocked, closed, or deferred)
+- Not assigned to any agent
+- In an **active** plan (not draft or cancelled)
+- Not scheduled for the future
+- All blocking dependencies are resolved
+
+<Aside type="tip">
+  The daemon uses `api.ready()` which automatically filters out blocked tasks, tasks in draft plans, and future-scheduled tasks. You don't need to check these conditions manually.
+</Aside>
+
+### 4. Steward trigger polling
+
+**Purpose:** Activate steward workflows based on events and schedules.
+
+The daemon checks for triggered conditions (merge request created, scheduled time reached) and creates new workflows from the associated playbook templates. These workflows are picked up by the next loop.
+
+### 5. Workflow task polling
+
+**Purpose:** Assign workflow tasks to available stewards.
+
+Similar to worker availability, but for stewards:
+1. Find incomplete workflows without an assigned steward
+2. Find available stewards (no active session)
+3. Assign highest priority workflow task
+4. Spawn the steward session
+
+### 6. Closed-unmerged reconciliation
+
+**Purpose:** Recover tasks stuck with `status=CLOSED` but not actually merged.
+
+Tasks can end up closed without being merged — for example, when `sf task close` is run on a REVIEW-status task, or from race conditions between CLI commands and steward processing. This loop detects these stuck tasks and moves them back to REVIEW so the merge steward can process them.
+
+Safety mechanisms:
+- **Grace period** (default: 120 seconds) — avoids racing with in-progress close+merge sequences
+- **Safety valve** — stops after 3 reconciliation attempts per task to prevent infinite loops
+
+### 7. Plan auto-completion
+
+**Purpose:** Auto-complete plans when all child tasks are closed.
+
+The daemon finds active plans and checks whether every child task has reached `CLOSED` status. When all tasks are closed, it marks the plan as completed using the core `canAutoComplete()` check. This eliminates the need to manually close plans after the last task finishes.
+
+### 8. Stuck merge recovery
+
+**Purpose:** Detect tasks stuck in `merging` or `testing` mergeStatus and reset them for a fresh retry.
+
+Merge operations can stall due to crashes, timeouts, or race conditions — leaving tasks with a `merging` or `testing` mergeStatus indefinitely. The daemon detects these stuck tasks after a configurable grace period (`stuckMergeRecoveryGracePeriodMs`, default: 10 minutes) and resets their mergeStatus to `pending` so the merge steward can pick them up again.
+
+## Starting the daemon
+
+```bash
+sf daemon start
+```
+
+Check daemon status at any time:
+
+```bash
+sf daemon status
+```
+
+The status output shows whether the daemon is running, its poll interval, and whether rate limiting is active.
+
+### Autopilot button
+
+The dashboard header has an **Autopilot** toggle button (play/stop icon):
+
+- **Green** = daemon running
+- **Gray** = daemon stopped
+
+One click starts or stops the daemon — equivalent to `sf daemon start` / `sf daemon stop`. The status indicator updates in real-time.
+
+### Daemon control commands
+
+```bash
+sf daemon start              # Start the daemon
+sf daemon status             # Check status
+sf daemon stop               # Stop the daemon
+
+# Pause dispatch temporarily
+sf daemon sleep --until "3am"
+sf daemon sleep --duration 3600
+
+# Resume dispatch immediately
+sf daemon wake
+```
+
+<Aside>
+  `sf daemon sleep` pauses task dispatch while keeping the daemon process alive. Useful for rate limit management or maintenance windows.
+</Aside>
+
+## Priority-based assignment
+
+When multiple tasks are ready, the daemon assigns the one with the **highest priority** (lowest number) first. If priorities are equal, the oldest task wins.
+
+```
+Ready tasks:
+  Task A  [priority: 3]  ← assigned third
+  Task B  [priority: 1]  ← assigned first
+  Task C  [priority: 2]  ← assigned second
+```
+
+This means critical infrastructure tasks (priority 1) always get assigned before nice-to-have improvements (priority 4-5), even if the improvement was created first.
+
+## Pool constraints
+
+When agent pools are configured, the daemon checks pool capacity **before every spawn**:
+
+```
+Ready task found + idle worker available
+                │
+                ▼
+      poolService.canSpawn()
+                │
+        ┌───────┴───────┐
+        ▼               ▼
+   canSpawn=true    canSpawn=false
+        │               │
+        ▼               ▼
+   Spawn agent     Task stays in
+                   ready queue,
+                   retried next cycle
+```
+
+If the pool is at capacity, the daemon skips that task and logs the reason. The task is not lost — it remains in the ready queue and is retried on every subsequent poll cycle until a slot opens.
+
+<LinkCard title="Agent Pools" description="Full guide to pool configuration and concurrency control" href="/guides/agent-pools/" />
+
+## Rate limit handling
+
+The daemon automatically detects and handles provider rate limits:
+
+1. **Detection** — when a provider session reports a rate limit, the daemon parses the reset time
+2. **Tracking** — rate limit state is tracked in memory per provider executable
+3. **Fallback** — if a fallback chain is configured, the daemon tries the next provider
+4. **Auto-pause** — if all providers are limited, the daemon pauses dispatch
+5. **Auto-resume** — dispatch resumes automatically at the soonest reset time
+
+Manual control is also available:
+
+```bash
+sf daemon sleep --duration 3600   # Pause dispatch for 1 hour
+sf daemon wake                    # Resume immediately
+```
+
+## Message triage
+
+When an idle agent has accumulated non-dispatch messages across channels, the daemon spawns a **triage session**:
+
+1. Messages are **grouped by channel**
+2. One triage session handles **one channel batch** per poll cycle
+3. The triage session counts as an **active session** (no double-spawn)
+4. Remaining channels are processed in subsequent cycles
+
+Triage sessions run in a **read-only worktree** on the default branch. They evaluate messages, categorize them, and produce structured triage results.
+
+## Recovery after restart
+
+When the orchestrator server restarts:
+
+1. `reconcileOnStartup()` resets agent session statuses from `running` to `idle`
+2. Task assignments persist (assignee and status are unchanged)
+3. **Orphan recovery** detects workers with assigned tasks but no session
+4. The daemon attempts to **resume** existing sessions, falling back to fresh spawns
+5. Existing worktrees and branches are reused when available
+
+This means a server restart doesn't lose work — agents pick up where they left off.
+
+## Configuration
+
+The daemon's behavior can be tuned through configuration:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `pollIntervalMs` | `5000` | How often the daemon polls (milliseconds) |
+| `workerAvailabilityPollEnabled` | `true` | Enable/disable worker availability polling |
+| `inboxPollEnabled` | `true` | Enable/disable inbox message routing |
+| `stewardTriggerPollEnabled` | `true` | Enable/disable steward trigger polling |
+| `workflowTaskPollEnabled` | `true` | Enable/disable workflow task polling |
+| `orphanRecoveryEnabled` | `true` | Recover orphaned task assignments on startup |
+| `planAutoCompleteEnabled` | `true` | Auto-complete plans when all tasks are closed |
+| `closedUnmergedReconciliationEnabled` | `true` | Detect and fix stuck closed-unmerged tasks |
+| `closedUnmergedGracePeriodMs` | `120000` | Grace period before reconciling (avoids racing) |
+| `stuckMergeRecoveryEnabled` | `true` | Detect and recover stalled merge operations |
+| `stuckMergeRecoveryGracePeriodMs` | `600000` | Grace period before recovering stuck merges (10 min) |
+| `maxResumeAttemptsBeforeRecovery` | `3` | Resume attempts before spawning a recovery steward |
+| `maxSessionDurationMs` | `0` (disabled) | Max worker session duration before termination |
+| `maxStewardSessionDurationMs` | `1800000` | Max steward session duration (30 min) |
+| `directorInboxForwardingEnabled` | `true` | Auto-forward inbox messages to director's session |
+| `directorInboxIdleThresholdMs` | `120000` | Idle time before forwarding to director (2 min) |
+
+## Monitoring dispatch
+
+- **Dashboard Activity page** — live agent output from all running agents
+- **Dashboard Tasks page** — task statuses, assignments, and who's working on what
+- `sf daemon status` — daemon process status and configuration
+- `sf task list --status in_progress` — currently executing tasks
+- `sf agent list` — registered agents and their session status
+
+## Next steps
+
+<LinkCard title="Auto-Merge" description="How completed work is tested and merged" href="/guides/auto-merge/" />
+<LinkCard title="Agent Pools" description="Control agent concurrency with pools" href="/guides/agent-pools/" />
+<LinkCard title="Agent Roles" description="Understand the agents the daemon coordinates" href="/guides/agent-roles/" />

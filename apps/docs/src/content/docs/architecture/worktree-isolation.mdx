@@ -1,6 +1,233 @@
 ---
 title: Worktree Isolation
-description: How git worktrees enable safe parallel agent execution.
+description: How Stoneforge uses git worktrees to give each agent an isolated copy of your repository for safe parallel execution.
 ---
 
-Learn how Stoneforge leverages git worktrees to give each agent an isolated working environment. Coming soon.
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+import FeatureCard from '../../../components/custom/FeatureCard.astro';
+
+Stoneforge uses **git worktrees** to give each agent an isolated copy of your repository. This is the key to safe parallel execution — multiple agents can modify the same files simultaneously because they're each working on their own branch in their own directory.
+
+## Why worktrees
+
+The fundamental problem with multiple agents on a single repository is **conflicts**. If two agents edit the same file on the same branch, one will overwrite the other's work. Traditional solutions — file locking, turn-taking, "avoid editing the same file" — don't scale.
+
+Git worktrees solve this by giving each agent a **full copy** of the repository with its own branch, while sharing the same `.git` history underneath.
+
+<div class="card-grid" data-sf-stagger>
+  <FeatureCard title="Full isolation">
+    Each agent works in its own directory on its own branch. No agent can accidentally overwrite another's changes.
+  </FeatureCard>
+  <FeatureCard title="Shared history">
+    All worktrees share the same git object database. Creating a worktree is cheap — just a checkout, not a full clone.
+  </FeatureCard>
+  <FeatureCard title="Lightweight">
+    A worktree is much lighter than a full clone. It reuses the existing .git directory and creates only the working tree files.
+  </FeatureCard>
+</div>
+
+## Worktree layout
+
+All agent worktrees live under `.stoneforge/.worktrees/` in the project root:
+
+```
+your-project/
+├── .stoneforge/
+│   ├── .worktrees/
+│   │   ├── e-worker-1-implement-login/       # Ephemeral worker task
+│   │   │   └── (full repo checkout)
+│   │   ├── e-worker-2-add-tests/             # Another ephemeral worker
+│   │   │   └── (full repo checkout)
+│   │   ├── p-worker-1-session-20240115/      # Persistent worker session
+│   │   │   └── (full repo checkout)
+│   │   └── _merge-el-3a8f/                   # Temporary merge worktree
+│   │       └── (detached HEAD checkout)
+│   ├── stoneforge.db
+│   └── sync/
+├── src/
+├── package.json
+└── ...
+```
+
+Each worktree is a complete checkout of the repository. Agents start with their working directory set to the worktree, so all file operations, builds, and tests run in isolation.
+
+## Ephemeral worker worktrees
+
+Ephemeral workers are spawned automatically by the dispatch daemon to execute a specific task. Each gets a dedicated worktree and branch:
+
+| Component | Pattern |
+| --- | --- |
+| **Worktree path** | `.stoneforge/.worktrees/{worker-name}-{task-slug}/` |
+| **Branch name** | `agent/{worker-name}/{task-id}-{slug}` |
+| **Lifecycle** | Created on dispatch, preserved through handoffs, cleaned up after merge |
+
+### Example
+
+```
+Worktree: .stoneforge/.worktrees/e-worker-1-implement-login/
+Branch:   agent/e-worker-1/el-3a8f-implement-login
+
+    ┌───────────────────────────────────────┐
+    │  e-worker-1                            │
+    │  Branch: agent/e-worker-1/el-3a8f-... │
+    │                                        │
+    │  Working dir: .stoneforge/.worktrees/ │
+    │    e-worker-1-implement-login/         │
+    │                                        │
+    │  ✓ Full repo checkout                  │
+    │  ✓ Own branch                          │
+    │  ✓ Can build, test, commit, push       │
+    └───────────────────────────────────────┘
+```
+
+The worktree and branch persist across handoffs. If a worker can't complete the task and hands off, the next worker spawns in the **same worktree** with the same branch, continuing from the existing code state.
+
+## Persistent worker worktrees
+
+Persistent workers are started manually for interactive work with a human. Their worktrees are session-scoped rather than task-scoped:
+
+| Component | Pattern |
+| --- | --- |
+| **Worktree path** | `.stoneforge/.worktrees/{worker-name}-session-{timestamp}/` |
+| **Branch name** | `session/{worker-name}-{timestamp}` |
+| **Lifecycle** | Created on session start, cleaned up after merge or session end |
+
+### Example
+
+```
+Worktree: .stoneforge/.worktrees/p-worker-1-session-20240115-143022/
+Branch:   session/p-worker-1-20240115-143022
+```
+
+The key difference from ephemeral workers: persistent workers use `sf merge` for direct squash merge instead of `sf task complete` which creates a merge request for steward review.
+
+<Aside>
+  Persistent workers are not auto-dispatched. You start them manually with `sf agent start`, and they stay alive for the duration of your interactive session.
+</Aside>
+
+## The handoff mechanism
+
+When a worker can't complete a task — missing access, context window exhaustion, needs different expertise — it **hands off**. The task returns to the pool with context notes, and the next worker picks it up from the existing code state.
+
+```
+Worker 1 (can't complete)          Worker 2 (picks up)
+         │                                  │
+         ▼                                  │
+  ┌──────────────┐                          │
+  │ sf task      │                          │
+  │ handoff      │                          │
+  │ el-3a8f      │                          │
+  │ --message    │                          │
+  │ "note..."    │                          │
+  └──────┬───────┘                          │
+         │                                  │
+    1. Unassign worker                      │
+    2. Save branch/worktree ref             │
+    3. Append handoff note                  │
+    4. Task returns to pool                 │
+         │                                  │
+         │        daemon assigns            │
+         └─────────────────────────────────▶│
+                                            │
+                                   5. Spawn in same worktree
+                                   6. See previous branch state
+                                   7. Read handoff notes
+                                   8. Continue working
+```
+
+### What gets preserved
+
+The handoff stores branch and worktree references in the task's metadata:
+
+```
+metadata.orchestrator: {
+  handoffBranch: "agent/e-worker-1/el-3a8f-implement-login",
+  handoffWorktree: ".stoneforge/.worktrees/e-worker-1-implement-login",
+  lastSessionId: "sess-xyz789",
+  handoffAt: "2026-02-03T12:00:00.000Z"
+}
+```
+
+### Handoff notes
+
+Each handoff appends a note to the task's description document, giving the next worker context about what was tried and where things got stuck:
+
+```
+[AGENT HANDOFF NOTE]: Completed API integration and unit tests.
+Unable to resolve CORS issue — requires infrastructure access.
+Branch contains working local implementation with all endpoints.
+```
+
+<Aside type="tip">
+  Handoff history is preserved as an array in the task metadata. You can see every handoff a task has been through, including which agent handed off, what they wrote, and when — useful for debugging tasks that have been through multiple workers.
+</Aside>
+
+## Merge worktrees
+
+When the merge steward processes a completed task, it creates a **temporary worktree** with a detached HEAD at `origin/master` (or your configured target branch). The merge steward auto-detects the repository's default branch, so this works regardless of whether your project uses `master`, `main`, or another branch name. This is a safety measure — the merge happens in an isolated directory so the main repository's HEAD is never at risk.
+
+```
+Temporary merge worktree:
+  Path:   .stoneforge/.worktrees/_merge-el-3a8f/
+  HEAD:   detached at origin/master
+```
+
+The merge steward:
+1. Creates the temporary worktree with `git worktree add --detach`
+2. Runs `git merge --squash <task-branch>` in the temp worktree
+3. Commits the squashed changes
+4. Pushes from the detached HEAD: `git push origin HEAD:master`
+5. Removes the temporary worktree (always, via `finally` block)
+6. Syncs the local master branch via fast-forward
+
+A safety guard (`execGitSafe`) rejects any git operation that accidentally targets the main repository instead of the merge worktree.
+
+## Triage worktrees
+
+When the dispatch daemon needs to process accumulated messages for an idle agent, it spawns a triage session in a **temporary detached worktree** checked out on the repository's default branch. The worktree is cleaned up automatically when the triage session exits.
+
+Triage worktrees are lightweight and short-lived — they exist only for the duration of the message-processing session.
+
+## Key design principles
+
+1. **Workers spawn inside the worktree** — The agent process starts with its working directory set to the worktree. All file operations, builds, and test runs happen in isolation by default.
+
+2. **Isolation is enforced by git** — Each worktree is on its own branch. Git prevents two worktrees from checking out the same branch simultaneously, guaranteeing no conflicts.
+
+3. **Branch persistence across handoffs** — When a task is handed off, the branch and worktree reference are saved in task metadata. The next agent continues from the exact same code state.
+
+4. **Merge worktrees protect main** — All merges happen in temporary detached-HEAD worktrees. The main repository's HEAD is never modified directly by the merge process.
+
+<Aside type="caution">
+  Don't manually delete worktree directories — this can leave stale git worktree entries that cause errors. Stoneforge manages the full worktree lifecycle automatically: the merge steward cleans up after successful merges, and orphaned worktrees are pruned on startup.
+</Aside>
+
+## Next steps
+
+<LinkCard
+  title="Orchestration Loop"
+  description="How the dispatch daemon assigns tasks and manages the worker lifecycle"
+  href="/architecture/orchestration-loop/"
+/>
+<LinkCard
+  title="Sync & Merge"
+  description="How completed task branches are tested and squash-merged into main"
+  href="/architecture/sync-and-merge/"
+/>
+<LinkCard
+  title="First Multi-Agent Project"
+  description="Step-by-step guide to setting up workers and running your first orchestration"
+  href="/guides/first-multi-agent-project/"
+/>
+
+<style>{`
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.card-grid > * {
+  margin-top: 0 !important;
+}
+`}</style>

@@ -1,6 +1,1004 @@
 ---
 title: Services
-description: Reference for Stoneforge's internal service architecture.
+description: Reference for Stoneforge's service layer — dependency management, blocked cache, dispatch, merge automation, worker lifecycle, and more.
 ---
 
-Documentation for the orchestrator's service layer — ElementService, SyncService, WorktreeService, and more. Coming soon.
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+import ParamTable from '../../../components/custom/ParamTable.astro';
+
+Stoneforge's functionality is organized into services across two packages:
+
+- **SDK services** (`@stoneforge/quarry`) — data layer: dependencies, blocked cache, priority, inbox, sync, search, embeddings
+- **Orchestrator services** (`@stoneforge/smithy`) — agent layer: dispatch, assignment, merge, sessions, pools, steward scheduling
+
+---
+
+## SDK services
+
+### DependencyService
+
+Manages relationships between elements with automatic cycle detection.
+
+```typescript
+import { createDependencyService } from '@stoneforge/quarry';
+const depService = createDependencyService(storage);
+```
+
+```typescript
+// Add (auto-checks for cycles on blocking types)
+depService.addDependency({
+  blockedId, blockerId, type: 'blocks', createdBy: actorId,
+  metadata: { /* gate config for 'awaits' type */ },
+});
+
+// Remove
+depService.removeDependency(blockedId, blockerId, type, actorId);
+
+// Query
+depService.exists(blockedId, blockerId, type);
+depService.getDependency(blockedId, blockerId, type);
+depService.getDependencies(blockedId, type?);         // Outgoing
+depService.getDependents(blockerId, type?);            // Incoming
+depService.getDependenciesForMany(blockedIds, type?);  // Bulk
+
+// Remove all
+depService.removeAllDependencies(blockedId, type?);
+depService.removeAllDependents(blockerId);
+
+// Count
+depService.countDependencies(blockedId, type?);
+
+// Cycle detection (BFS, depth limit: 100)
+depService.detectCycle(blockedId, blockerId, type);
+```
+
+<Aside>
+  `addDependency()` **automatically** checks for cycles on blocking types (`blocks`, `awaits`, `parent-child`). Self-referential dependencies are rejected immediately with `CYCLE_DETECTED`.
+</Aside>
+
+---
+
+### BlockedCacheService
+
+Materialized view of blocked status. Provides O(1) lookups instead of traversing the dependency graph.
+
+```typescript
+import { createBlockedCacheService } from '@stoneforge/quarry';
+const blockedCache = createBlockedCacheService(storage);
+```
+
+#### Queries
+
+```typescript
+blockedCache.isBlocked(elementId);         // boolean
+blockedCache.getAllBlocked();               // All blocked elements
+blockedCache.getBlockedBy(blockerId);      // Elements blocked by a specific element
+```
+
+#### Event handlers
+
+Call these after mutations to keep the cache in sync:
+
+```typescript
+blockedCache.onDependencyAdded(blockedId, blockerId, type, metadata?);
+blockedCache.onDependencyRemoved(blockedId, blockerId, type);
+blockedCache.onStatusChanged(elementId, oldStatus, newStatus);
+blockedCache.onElementDeleted(elementId);
+```
+
+#### Gate satisfaction
+
+```typescript
+blockedCache.satisfyGate(blockedId, blockerId, actor);
+blockedCache.recordApproval(blockedId, blockerId, approver);
+blockedCache.removeApproval(blockedId, blockerId, approver);
+```
+
+#### Auto-transitions
+
+Wire up automatic `blocked` / `unblocked` status transitions:
+
+```typescript
+blockedCache.setStatusTransitionCallback({
+  onBlock: (elementId, previousStatus) => {
+    // Task should become blocked — previousStatus is saved for restoration
+    api.update(elementId, { status: 'blocked' });
+  },
+  onUnblock: (elementId, statusToRestore) => {
+    // Task should unblock — restore to the status before blocking
+    api.update(elementId, { status: statusToRestore });
+  },
+});
+```
+
+Events generated: `auto_blocked` and `auto_unblocked` with actor `'system:blocked-cache'`.
+
+#### Rebuild
+
+```typescript
+blockedCache.rebuild(); // Full cache rebuild with topological ordering
+```
+
+---
+
+### PriorityService
+
+Calculates effective priority based on the dependency graph. A task's effective priority is the highest priority among all tasks that depend on it.
+
+```typescript
+import { createPriorityService } from '@stoneforge/quarry';
+const priorityService = createPriorityService(storage);
+```
+
+```typescript
+// Single task (synchronous)
+const result = priorityService.calculateEffectivePriority(taskId);
+// result.effectivePriority, result.basePriority, result.isInfluenced,
+// result.dependentInfluencers
+
+// Batch (synchronous)
+const results = priorityService.calculateEffectivePriorities(taskIds);
+// Map<ElementId, EffectivePriorityResult>
+
+// Enhance and sort tasks
+const enhanced = priorityService.enhanceTasksWithEffectivePriority(tasks);
+priorityService.sortByEffectivePriority(tasks); // WARNING: mutates in place!
+
+// Aggregate complexity (downstream direction)
+const complexity = priorityService.calculateAggregateComplexity(taskId);
+```
+
+| Metric | Direction | Description |
+| --- | --- | --- |
+| Effective priority | **Upstream** | Tasks that depend on this task |
+| Aggregate complexity | **Downstream** | Tasks this task depends on |
+
+---
+
+### InboxService
+
+Manages notification items for entities.
+
+```typescript
+import { createInboxService } from '@stoneforge/quarry';
+const inboxService = createInboxService(storage);
+```
+
+```typescript
+// Query
+inboxService.getInbox(recipientId, filter?);
+inboxService.getInboxPaginated(recipientId, filter?);
+inboxService.getUnreadCount(recipientId);
+
+// Status changes
+inboxService.markAsRead(itemId);
+inboxService.markAsUnread(itemId);
+inboxService.markAllAsRead(recipientId);
+inboxService.archive(itemId);
+inboxService.markAsReadBatch(itemIds);
+
+// Create (usually done automatically on message send)
+inboxService.addToInbox({
+  recipientId, messageId, channelId,
+  sourceType: 'direct' | 'mention' | 'thread_reply',
+});
+
+// Cascade delete
+inboxService.deleteByMessage(messageId);
+inboxService.deleteByRecipient(recipientId);
+```
+
+```typescript
+interface InboxFilter {
+  status?: InboxStatus | InboxStatus[];
+  sourceType?: InboxSourceType | InboxSourceType[];
+  channelId?: ChannelId;
+  after?: Timestamp;
+  before?: Timestamp;
+  limit?: number;
+  offset?: number;
+}
+```
+
+---
+
+### SyncService
+
+Manages JSONL-based export/import for data portability and git-based collaboration.
+
+```typescript
+import { createSyncService } from '@stoneforge/quarry';
+const syncService = createSyncService(storage);
+```
+
+#### Export
+
+```typescript
+// Incremental (dirty elements only)
+await syncService.export({ outputDir: '/path/to/output' });
+
+// Full export
+await syncService.export({ outputDir: '/path/to/output', full: true });
+
+// Synchronous (for CLI/testing)
+syncService.exportSync({ outputDir: '/path/to/output', full: true });
+
+// Export to string (for API use)
+const { elements, dependencies } = syncService.exportToString();
+```
+
+#### Import
+
+```typescript
+// Standard import (merge)
+const result = await syncService.import({ inputDir: '/path/to/input' });
+// result.elementsImported, result.elementsSkipped, result.conflicts
+
+// Force (remote always wins)
+await syncService.import({ inputDir: '/path/to/input', force: true });
+
+// Dry run
+await syncService.import({ inputDir: '/path/to/input', dryRun: true });
+
+// From strings (for API use)
+syncService.importFromStrings(elementsJsonl, dependenciesJsonl, { force: true });
+```
+
+#### Merge strategy
+
+- Newer `updatedAt` wins by default
+- `closed` and `tombstone` statuses **always win**
+- Tags merged as union (cannot remove via sync)
+- Content hash excludes timestamps for conflict detection
+
+---
+
+### EmbeddingService
+
+Manages document embeddings for semantic search.
+
+```typescript
+import { EmbeddingService, LocalEmbeddingProvider } from '@stoneforge/quarry/services';
+
+const provider = new LocalEmbeddingProvider('/path/to/model');
+const embeddingService = new EmbeddingService(storage, { provider });
+```
+
+```typescript
+// Semantic search
+const results = await embeddingService.searchSemantic(query, limit);
+// Array<{ documentId, similarity }>
+
+// Hybrid search (FTS5 + embeddings via Reciprocal Rank Fusion)
+const results = await embeddingService.searchHybrid(query, ftsDocIds, limit);
+// Array<{ documentId, score }>
+
+// Reindex all
+const result = await embeddingService.reindexAll(
+  documents.map(d => ({ id: d.id, content: d.content })),
+  (indexed, total) => console.log(`${indexed}/${total}`),
+);
+```
+
+Register with the API for auto-embedding on create/update/delete:
+
+```typescript
+api.registerEmbeddingService(embeddingService);
+```
+
+<Aside>
+  Auto-embedding is fire-and-forget. Documents added via import are **not** auto-embedded — use `sf embeddings reindex` after import.
+</Aside>
+
+---
+
+### IdLengthCache
+
+Calculates minimum unique ID prefix length for short IDs.
+
+```typescript
+import { createIdLengthCache } from '@stoneforge/quarry';
+const idLengthCache = createIdLengthCache(storage, { ttlMs: 60000 });
+
+idLengthCache.getHashLength();  // Min unique prefix length
+idLengthCache.refresh();        // Force refresh
+idLengthCache.isStale();        // Check if stale
+```
+
+---
+
+## Orchestrator services
+
+### TaskAssignmentService
+
+Comprehensive task assignment management — assign, unassign, start, complete, handoff.
+
+```typescript
+import { createTaskAssignmentService } from '@stoneforge/smithy';
+const assignmentService = createTaskAssignmentService(api, mergeRequestProvider?);
+```
+
+#### Assignment lifecycle
+
+```typescript
+// Assign
+const task = await assignmentService.assignToAgent(taskId, agentId, {
+  branch: 'custom/branch',
+  worktree: '.stoneforge/.worktrees/custom',
+  sessionId: 'session-123',
+  markAsStarted: true,
+});
+
+// Unassign
+await assignmentService.unassignTask(taskId);
+
+// Start
+await assignmentService.startTask(taskId, 'session-456');
+
+// Complete
+await assignmentService.completeTask(taskId);
+```
+
+#### Handoff
+
+When a worker can't finish a task, it hands off — the task returns to the pool with context notes.
+
+```typescript
+await assignmentService.handoffTask(taskId, {
+  sessionId: 'session-123',
+  message: 'Completed API integration, needs CORS fix',
+  branch: 'agent/worker-1/abc123-implement-login',
+  worktree: '.stoneforge/.worktrees/worker-1-implement-login',
+});
+```
+
+The message is appended as `[AGENT HANDOFF NOTE]` to the task description. Handoff history is recorded in metadata.
+
+#### Workload queries
+
+```typescript
+const tasks = await assignmentService.getAgentTasks(agentId);
+const workload = await assignmentService.getAgentWorkload(agentId);
+// workload.totalTasks, workload.inProgressCount, workload.awaitingMergeCount
+const hasCapacity = await assignmentService.agentHasCapacity(agentId);
+```
+
+#### Status queries
+
+```typescript
+const unassigned = await assignmentService.getUnassignedTasks();
+const inProgress = await assignmentService.getTasksByAssignmentStatus('in_progress');
+const awaitingMerge = await assignmentService.getTasksAwaitingMerge();
+const assignments = await assignmentService.listAssignments({
+  agentId,
+  taskStatus: 'in_progress',
+  mergeStatus: 'pending',
+});
+```
+
+---
+
+### DispatchService
+
+Combines assignment with notification — dispatches tasks to agents and sends them messages.
+
+```typescript
+import { createDispatchService } from '@stoneforge/smithy';
+const dispatchService = createDispatchService(api, assignmentService, registry);
+```
+
+```typescript
+// Dispatch a task to an agent
+const result = await dispatchService.dispatch(taskId, agentId, {
+  branch: 'custom/branch',
+  priority: 10,
+  restart: true,
+  markAsStarted: true,
+  notificationMessage: 'Custom message',
+  dispatchedBy: senderEntityId,
+});
+// result.task, result.agent, result.notification, result.channel
+
+// Batch dispatch
+const results = await dispatchService.dispatchBatch(
+  [taskId1, taskId2], agentId, { priority: 5 },
+);
+
+// Notify without assignment
+await dispatchService.notifyAgent(
+  agentId,
+  'restart-signal',   // 'task-assignment' | 'task-reassignment' | 'restart-signal'
+  'Please restart your session',
+  { reason: 'configuration change' },
+);
+```
+
+---
+
+### DispatchDaemon
+
+The continuously-running background process that coordinates all agent activity.
+
+```typescript
+import { createDispatchDaemon } from '@stoneforge/smithy';
+
+const daemon = createDispatchDaemon(
+  api, agentRegistry, sessionManager, dispatchService,
+  worktreeManager, taskAssignment, stewardScheduler,
+  inboxService, { pollIntervalMs: 5000 },
+  poolService, settingsService,
+);
+
+await daemon.start();
+await daemon.stop();
+daemon.updateConfig({ pollIntervalMs: 10000 });
+```
+
+#### Polling loops
+
+| Loop | Purpose |
+| --- | --- |
+| **Orphan Recovery** | Resume workers with assigned tasks but no active session |
+| **Worker Availability** | Match idle ephemeral workers with highest-priority ready tasks |
+| **Inbox Polling** | Deliver messages to agents, spawn sessions when needed |
+| **Steward Triggers** | Check conditions and create workflows from playbooks |
+| **Workflow Tasks** | Assign workflow tasks to available stewards |
+| **Closed-Unmerged Reconciliation** | Move CLOSED tasks with unmerged branches back to REVIEW |
+| **Plan Auto-Completion** | Complete plans when all tasks are closed |
+| **Stuck-Merge Recovery** | Detect and recover stalled merge operations |
+
+#### Worker dispatch behavior
+
+1. Find ephemeral workers without an active session
+2. For each: query ready, unassigned tasks via `api.ready()`
+3. Assign highest-priority task to worker
+4. Send dispatch message to worker's inbox
+5. Spawn worker in task worktree
+
+#### Inbox routing
+
+| Agent type | Active session | No session |
+| --- | --- | --- |
+| **Ephemeral worker** | Leave unread | Accumulate for triage batch |
+| **Persistent worker** | Forward as user input | Wait |
+| **Steward** | Leave unread | Accumulate for triage batch |
+| **Director** | Forward as user input (idle debounce) | Messages accumulate |
+
+---
+
+### MergeStewardService
+
+Automated branch integration — runs tests, merges, and creates fix tasks on failure. All merge operations run in a **temporary worktree** to avoid corrupting the main repository's HEAD.
+
+```typescript
+import { createMergeStewardService } from '@stoneforge/smithy';
+
+const mergeSteward = createMergeStewardService(
+  api, taskAssignmentService, dispatchService, agentRegistry,
+  {
+    workspaceRoot: '/project',
+    mergeStrategy: 'squash',           // 'squash' (default) or 'merge'
+    autoPushAfterMerge: true,
+    autoCleanup: true,
+    deleteBranchAfterMerge: true,
+    testCommand: 'npm test',
+    testTimeoutMs: 300000,
+    targetBranch: 'main',              // Auto-detected if omitted
+  },
+  worktreeManager,
+);
+```
+
+<ParamTable title="MergeStewardService Options" params={[
+  { name: 'workspaceRoot', type: 'string', required: true, description: 'Workspace root directory (git repo).' },
+  { name: 'mergeStrategy', type: 'string', default: 'squash', description: "Merge strategy: 'squash' or 'merge'." },
+  { name: 'autoPushAfterMerge', type: 'boolean', default: 'true', description: 'Push target branch to remote after merge.' },
+  { name: 'autoCleanup', type: 'boolean', default: 'true', description: 'Remove task worktree after successful merge.' },
+  { name: 'deleteBranchAfterMerge', type: 'boolean', default: 'true', description: 'Delete source branch (local + remote) after merge.' },
+  { name: 'testCommand', type: 'string', default: 'npm test', description: 'Command to run tests.' },
+  { name: 'testTimeoutMs', type: 'number', default: '300000', description: 'Test timeout in milliseconds.' },
+  { name: 'autoMerge', type: 'boolean', default: 'true', description: 'Automatically merge when tests pass.' },
+  { name: 'targetBranch', type: 'string', description: 'Branch to merge into (auto-detected).' },
+]} />
+
+```typescript
+// Process a single task
+const result = await mergeSteward.processTask(taskId, {
+  skipTests: false,
+  forceMerge: false,
+  mergeCommitMessage: 'Custom message',
+});
+
+// Process all pending
+const batch = await mergeSteward.processAllPending();
+
+// Individual operations
+const testResult = await mergeSteward.runTests(taskId);
+const mergeResult = await mergeSteward.attemptMerge(taskId, 'Commit message');
+await mergeSteward.cleanupAfterMerge(taskId, true);
+await mergeSteward.updateMergeStatus(taskId, 'merged');
+
+// Create fix task on failure
+const fixTaskId = await mergeSteward.createFixTask(taskId, {
+  type: 'test_failure',      // 'test_failure' | 'merge_conflict' | 'general'
+  errorDetails: 'Test output...',
+  affectedFiles: ['src/file.ts'],
+});
+```
+
+#### Merge strategy
+
+**Squash merge** (default):
+1. Creates a detached HEAD worktree at `origin/<target>`
+2. Runs `git merge --squash` and `git commit`
+3. Pushes `HEAD:<target>` from the worktree
+4. Cleans up temp worktree, then syncs local target branch
+
+**Standard merge**: Same flow but creates a merge commit preserving branch history.
+
+#### On failure
+
+- Temp merge worktree is always cleaned up (via `finally`)
+- Task's worktree and branch are **NOT** cleaned up (worker needs them for fixes)
+- A fix task is created with `tags: ['fix']` and assigned to the original agent
+
+---
+
+### WorkerTaskService
+
+Complete worker-task lifecycle — dispatch, worktree creation, worker spawning, and completion.
+
+```typescript
+import { createWorkerTaskService } from '@stoneforge/smithy';
+
+const workerTaskService = createWorkerTaskService(
+  api, taskAssignment, agentRegistry, dispatchService,
+  spawnerService, sessionManager, worktreeManager,
+);
+```
+
+```typescript
+// Start a worker on a task (full lifecycle)
+const result = await workerTaskService.startWorkerOnTask(taskId, agentId, {
+  branch: 'custom/branch',
+  baseBranch: 'main',
+  additionalPrompt: 'Focus on test coverage',
+  skipWorktree: false,
+});
+// result.task, result.agent, result.dispatch, result.worktree, result.session
+
+// Complete a task
+const result = await workerTaskService.completeTask(taskId, {
+  summary: 'Implemented login feature',
+  commitHash: 'abc123',
+  runTests: false,
+});
+
+// Build task context prompt
+const prompt = await workerTaskService.buildTaskContextPrompt(taskId, workerId);
+
+// Cleanup after merge/abandon
+await workerTaskService.cleanupTask(taskId, deleteBranch?);
+```
+
+---
+
+### WorktreeManager
+
+Manages git worktrees for agent sessions.
+
+```typescript
+import { createWorktreeManager } from '@stoneforge/smithy';
+
+const worktreeManager = createWorktreeManager({
+  workspaceRoot: '/project',
+  worktreeDir: '.stoneforge/.worktrees',
+  defaultBaseBranch: 'master',
+});
+```
+
+```typescript
+// Create read-only worktree (for triage sessions)
+const result = await worktreeManager.createReadOnlyWorktree({
+  agentName: 'worker-alice',
+  purpose: 'triage',
+});
+// Detached HEAD at tip of default branch — no new Git branch created
+// Path: .stoneforge/.worktrees/{agent-name}-{purpose}/
+```
+
+---
+
+### StewardScheduler
+
+Executes stewards on cron schedules or in response to events.
+
+```typescript
+import { createStewardScheduler } from '@stoneforge/smithy';
+const scheduler = createStewardScheduler(agentRegistry, executor, {
+  maxHistoryPerSteward: 100,
+  defaultTimeoutMs: 300000,
+  startImmediately: false,
+});
+```
+
+```typescript
+// Lifecycle
+await scheduler.start();
+await scheduler.stop();
+
+// Steward management
+await scheduler.registerSteward(stewardId);
+await scheduler.unregisterSteward(stewardId);
+await scheduler.refreshSteward(stewardId);
+const count = await scheduler.registerAllStewards();
+
+// Manual execution
+const result = await scheduler.executeSteward(stewardId, context?);
+
+// Event publishing
+const triggered = await scheduler.publishEvent('task_completed', { task: data });
+
+// Status
+const jobs = scheduler.getScheduledJobs(stewardId?);
+const subs = scheduler.getEventSubscriptions(stewardId?);
+const history = scheduler.getExecutionHistory({
+  stewardId, success: true, limit: 10,
+});
+const stats = scheduler.getStats();
+```
+
+#### Events
+
+```typescript
+scheduler.on('execution:started', (entry) => { /* ... */ });
+scheduler.on('execution:completed', (entry) => { /* ... */ });
+scheduler.on('execution:failed', (entry) => { /* ... */ });
+scheduler.on('steward:registered', (stewardId) => { /* ... */ });
+scheduler.on('steward:unregistered', (stewardId) => { /* ... */ });
+```
+
+---
+
+### AgentPoolService
+
+Controls concurrent agent execution with pool-based limits.
+
+```typescript
+import { createAgentPoolService } from '@stoneforge/smithy';
+const poolService = createAgentPoolService(api, sessionManager, agentRegistry);
+```
+
+#### Create pool
+
+```typescript
+const pool = await poolService.createPool({
+  name: 'default',
+  description: 'Default agent pool',
+  maxSize: 5,
+  agentTypes: [
+    { role: 'worker', workerMode: 'ephemeral', priority: 100 },
+    { role: 'worker', workerMode: 'persistent', priority: 50, maxSlots: 2 },
+    { role: 'steward', stewardFocus: 'merge', priority: 80 },
+  ],
+  enabled: true,
+  tags: ['production'],
+  createdBy: userEntityId,
+});
+```
+
+<Aside>
+  Directors are not pool-managed — pools only apply to workers and stewards.
+</Aside>
+
+#### Query and manage
+
+```typescript
+const pool = await poolService.getPool(poolId);
+const pool = await poolService.getPoolByName('default');
+const pools = await poolService.listPools({ enabled: true, hasAvailableSlots: true });
+
+await poolService.updatePool(poolId, { maxSize: 10, enabled: true });
+await poolService.deletePool(poolId);
+```
+
+#### Pool status
+
+```typescript
+const status = await poolService.getPoolStatus(poolId);
+// status.activeCount, status.availableSlots, status.activeByType, status.activeAgentIds
+
+await poolService.refreshAllPoolStatus();
+```
+
+#### Spawn decisions
+
+The dispatch daemon uses these to check constraints before spawning:
+
+```typescript
+const check = await poolService.canSpawn({
+  role: 'worker',
+  workerMode: 'ephemeral',
+  agentId: entityId,
+});
+
+if (check.canSpawn) {
+  // Safe to spawn
+} else {
+  console.log(check.reason);
+  // e.g., "Pool 'default' is at capacity (5 agents)"
+}
+```
+
+#### Lifecycle tracking
+
+```typescript
+await poolService.onAgentSpawned(agentId);
+await poolService.onAgentSessionEnded(agentId);
+```
+
+---
+
+### RoleDefinitionService
+
+Manages reusable role definitions — stored prompts and behavioral configurations for agents.
+
+```typescript
+import { createRoleDefinitionService } from '@stoneforge/smithy';
+const roleDefService = createRoleDefinitionService(api);
+```
+
+```typescript
+// Create
+const roleDef = await roleDefService.createRoleDefinition({
+  role: 'worker',
+  name: 'Frontend Developer',
+  description: 'Specialized in React and TypeScript',
+  systemPrompt: 'You are a frontend developer...',
+  maxConcurrentTasks: 1,
+  behaviors: {
+    onStartup: 'Check for existing work.',
+    onStuck: 'Break down the problem.',
+    onError: 'Log and notify the director.',
+  },
+  workerMode: 'persistent',
+  tags: ['frontend'],
+  createdBy: userEntityId,
+});
+
+// Query
+const roleDef = await roleDefService.getRoleDefinition(roleDefId);
+const prompt = await roleDefService.getSystemPrompt(roleDefId);
+const defaultDir = await roleDefService.getDefaultRoleDefinition('director');
+const all = await roleDefService.listRoleDefinitions({ role: 'worker' });
+
+// Update
+await roleDefService.updateRoleDefinition(roleDefId, {
+  name: 'Senior Frontend Developer',
+  systemPrompt: 'Updated prompt...',
+  behaviors: { onError: 'New error handling' },
+});
+
+// Delete
+await roleDefService.deleteRoleDefinition(roleDefId);
+```
+
+#### AgentBehaviors
+
+```typescript
+interface AgentBehaviors {
+  onStartup?: string;         // Appended when agent starts
+  onTaskAssigned?: string;    // Appended when task is assigned
+  onStuck?: string;           // Appended when agent appears stuck
+  onHandoff?: string;         // Appended before creating a handoff
+  onError?: string;           // Appended when handling errors
+}
+```
+
+---
+
+### DocsStewardService
+
+Scans documentation for issues and applies automated fixes.
+
+```typescript
+import { createDocsStewardService } from '@stoneforge/smithy';
+
+const docsSteward = createDocsStewardService({
+  workspaceRoot: '/project',
+  docsDir: 'docs',
+  sourceDirs: ['packages', 'apps'],
+  autoPush: true,
+});
+```
+
+```typescript
+// Scan all documentation
+const result = await docsSteward.scanAll();
+// result.issues, result.filesScanned, result.durationMs
+
+// Individual verifications
+await docsSteward.verifyFilePaths();
+await docsSteward.verifyInternalLinks();
+await docsSteward.verifyExports();
+await docsSteward.verifyCliCommands();
+await docsSteward.verifyTypeFields();
+await docsSteward.verifyApiMethods();
+
+// Session lifecycle
+const worktree = await docsSteward.createSessionWorktree('d-steward-1');
+await docsSteward.commitFix('Fix broken link', ['docs/README.md']);
+await docsSteward.mergeAndCleanup(branchName, 'docs: fix issues');
+await docsSteward.cleanupSession(worktreePath, branchName);
+```
+
+| Issue complexity | Examples | Action |
+| --- | --- | --- |
+| `low` | Typos, broken links, stale paths | Self-fix |
+| `medium` | Outdated exports, API changes | Self-fix |
+| `high` | Ambiguous product decisions | Escalate to Director |
+
+---
+
+### PluginExecutor
+
+Executes steward plugins — playbooks, scripts, and commands for automated maintenance.
+
+```typescript
+import { createPluginExecutor } from '@stoneforge/smithy';
+
+const executor = createPluginExecutor({
+  api,
+  workspaceRoot: '/project',
+});
+```
+
+```typescript
+// Execute a single plugin
+const result = await executor.execute(plugin);
+
+// Batch execution
+const batch = await executor.executeBatch(plugins);
+// batch.total, batch.succeeded, batch.failed, batch.allSucceeded
+
+// Validation
+const validation = executor.validate(plugin);
+// { valid: boolean, errors: string[] }
+
+// Built-in plugins
+const plugin = executor.getBuiltIn('gc-ephemeral-tasks');
+const names = executor.listBuiltIns();
+```
+
+Built-in plugins: `gc-ephemeral-tasks`, `cleanup-stale-worktrees`, `gc-ephemeral-workflows`, `health-check-agents`.
+
+---
+
+### SettingsService
+
+Manages workspace-wide runtime settings and agent defaults. These are stored in SQLite (not `config.yaml`) and managed via the dashboard or API.
+
+```typescript
+import { createSettingsService } from '@stoneforge/smithy';
+const settingsService = createSettingsService(storage);
+```
+
+```typescript
+// Get/set individual settings
+const value = await settingsService.getSetting('defaultProvider');
+await settingsService.setSetting('defaultProvider', 'claude-code');
+
+// Agent defaults (provider, model, executable paths, fallback chain)
+const defaults = await settingsService.getAgentDefaults();
+// defaults.defaultProvider, defaults.defaultModels, defaults.defaultExecutablePaths, defaults.fallbackChain
+
+await settingsService.setAgentDefaults({
+  defaultProvider: 'claude-code',
+  defaultModels: { 'claude-code': 'claude-sonnet-4-20250514' },
+  defaultExecutablePaths: { 'claude-code': '/usr/local/bin/claude' },
+  fallbackChain: ['claude', 'opencode'],
+});
+```
+
+Agent defaults are used by the Create Agent dialog and the dispatch daemon when spawning agents without explicit provider/model configuration.
+
+---
+
+### RateLimitTracker
+
+In-memory tracker for provider rate limit state. Used by the dispatch daemon to avoid spawning agents on rate-limited providers.
+
+```typescript
+import { createRateLimitTracker } from '@stoneforge/smithy';
+const tracker = createRateLimitTracker();
+```
+
+```typescript
+// Mark a provider as rate-limited
+tracker.markLimited('claude', resetTime);
+
+// Check if a provider is currently limited
+tracker.isLimited('claude');  // boolean
+
+// Find an available executable from a list
+const exec = tracker.getAvailableExecutable(['claude', 'opencode']);
+
+// Check if all providers are limited
+tracker.isAllLimited(['claude', 'opencode']);  // boolean
+
+// Get soonest reset time across all tracked providers
+const resetAt = tracker.getSoonestResetTime();
+
+// Clear all rate limit state
+tracker.clear();
+```
+
+---
+
+### MergeRequestProvider
+
+Interface for pluggable merge request backends. Stoneforge ships with two implementations:
+
+```typescript
+import {
+  createLocalMergeProvider,
+  createGitHubMergeProvider,
+} from '@stoneforge/smithy';
+
+// Local provider (default) — no-op, merges happen locally
+const local = createLocalMergeProvider();
+
+// GitHub provider — creates PRs via the `gh` CLI
+const github = createGitHubMergeProvider();
+```
+
+```typescript
+interface MergeRequestProvider {
+  createMergeRequest(params: {
+    title: string;
+    sourceBranch: string;
+    targetBranch: string;
+    description?: string;
+  }): Promise<{ url?: string }>;
+}
+```
+
+The Local provider returns immediately with no side effects. The GitHub provider shells out to `gh pr create` and returns the PR URL.
+
+---
+
+## Service integration pattern
+
+Services are typically created together and wired up:
+
+```typescript
+import {
+  createDependencyService,
+  createBlockedCacheService,
+  createPriorityService,
+  createInboxService,
+  createIdLengthCache,
+} from '@stoneforge/quarry';
+
+const depService = createDependencyService(storage);
+const blockedCache = createBlockedCacheService(storage);
+const priorityService = createPriorityService(storage);
+const inboxService = createInboxService(storage);
+const idLengthCache = createIdLengthCache(storage);
+
+// Wire up auto-transitions
+blockedCache.setStatusTransitionCallback({
+  onBlock: (elementId, previousStatus) => {
+    storage.run(
+      'UPDATE elements SET data = json_set(data, "$.status", ?) WHERE id = ?',
+      ['blocked', elementId],
+    );
+  },
+  onUnblock: (elementId, statusToRestore) => {
+    storage.run(
+      'UPDATE elements SET data = json_set(data, "$.status", ?) WHERE id = ?',
+      [statusToRestore, elementId],
+    );
+  },
+});
+```

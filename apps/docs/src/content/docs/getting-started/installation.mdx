@@ -3,25 +3,26 @@ title: Installation
 description: Install and configure Stoneforge on macOS, Linux, or Windows.
 ---
 
-import { Tabs, TabItem, Steps } from '@astrojs/starlight/components';
+import { Tabs, TabItem, Steps, Aside, LinkCard } from '@astrojs/starlight/components';
+import TerminalBlock from '../../../components/custom/TerminalBlock.astro';
+import ParamTable from '../../../components/custom/ParamTable.astro';
 
 ## Prerequisites
 
-- **Node.js** 18 or later
+- **Node.js** 18 or later (or **Bun**, any recent version)
 - **Git** 2.30 or later (worktree support required)
-- **pnpm** 8+ (recommended) or npm
 
 ## Install
 
 <Tabs>
-  <TabItem label="pnpm">
-    ```bash
-    pnpm add -g stoneforge
-    ```
-  </TabItem>
   <TabItem label="npm">
     ```bash
-    npm install -g stoneforge
+    npm install -g @stoneforge/smithy
+    ```
+  </TabItem>
+  <TabItem label="pnpm">
+    ```bash
+    pnpm add -g @stoneforge/smithy
     ```
   </TabItem>
   <TabItem label="From source">
@@ -34,28 +35,149 @@ import { Tabs, TabItem, Steps } from '@astrojs/starlight/components';
   </TabItem>
 </Tabs>
 
-## Configure your provider
+## Initialize your project
 
 <Steps>
-1. Set your LLM provider API key:
-   ```bash
-   export ANTHROPIC_API_KEY="sk-ant-..."
-   ```
-
-2. Initialize Stoneforge in your project:
+1. Navigate to a git repository:
    ```bash
    cd your-project
-   sf init
    ```
 
-3. Verify the installation:
+2. Initialize Stoneforge:
    ```bash
-   sf status
+   sf init
    ```
 </Steps>
 
+## What `sf init` creates
+
+The `sf init` command creates a `.stoneforge/` directory at the root of your project:
+
+```
+your-project/
+├── AGENTS.md              # Context file for AI coding agents (if no AGENTS.md or CLAUDE.md exists)
+└── .stoneforge/
+    ├── config.yaml        # Project configuration
+    ├── stoneforge.db      # SQLite database (local cache)
+    ├── .gitignore         # Ignores db and local-only files
+    └── playbooks/         # Workflow templates
+```
+
+## Agent providers
+
+Stoneforge orchestrates agents — it doesn't include an AI model itself. You need at least one agent provider CLI installed and working before starting Stoneforge.
+
+<Aside type="tip">
+  You do **not** configure API keys in Stoneforge. Authentication is handled by the provider CLI itself and passes through automatically.
+</Aside>
+
+### Install a provider
+
+<Tabs>
+  <TabItem label="Claude Code (default)">
+    ```bash
+    npm install -g @anthropic-ai/claude-code
+    ```
+
+    Then authenticate:
+
+    ```bash
+    claude
+    ```
+
+    Requires a Claude Pro, Max, or Team plan, or an Anthropic API key. See the [Claude Code docs](https://docs.anthropic.com/en/docs/claude-code) for setup details.
+  </TabItem>
+  <TabItem label="OpenCode">
+    ```bash
+    npm install -g @opencode-ai/sdk
+    ```
+
+    Then authenticate:
+
+    ```bash
+    opencode
+    ```
+
+    See the [OpenCode repository](https://github.com/nicholasgriffintn/opencode) for provider configuration.
+  </TabItem>
+  <TabItem label="OpenAI Codex">
+    ```bash
+    npm install -g @openai/codex
+    ```
+
+    Stoneforge communicates with Codex via a built-in JSON-RPC adapter — no Stoneforge-specific Codex plugin is needed, but the `codex` CLI itself must be installed.
+
+    Then authenticate:
+
+    ```bash
+    codex
+    ```
+
+    Requires an OpenAI API key. See the [Codex CLI docs](https://github.com/openai/codex) for setup details.
+  </TabItem>
+</Tabs>
+
+### Set the provider per-agent
+
+The default provider is **Claude Code**. To use a different provider, set it at registration:
+
+```bash
+sf agent register Worker1 --role worker --provider claude-code
+sf agent register Worker2 --role worker --provider opencode
+sf agent register Worker3 --role worker --provider codex
+```
+
+You can mix providers in the same workspace — for example, use Claude Code for your Director and Codex for workers.
+
+## Verify installation
+
+Run `sf doctor` to check that everything is configured correctly:
+
+<TerminalBlock title="sf doctor">
+System Health Check
+
+[OK] workspace: Workspace found at /Users/you/my-project/.stoneforge
+
+[OK] database: Database found at /Users/you/my-project/.stoneforge/stoneforge.db
+
+[OK] connection: Database connection successful
+
+[OK] schema_version: Schema is at version 9 (up to date)
+
+[OK] schema_tables: All expected tables present
+
+[OK] integrity: Database integrity check passed
+
+[OK] foreign_keys: Foreign key constraints satisfied
+
+[OK] blocked_cache: Blocked cache is consistent
+
+[OK] storage: Database size: 256 KB
+
+Summary: 9 ok, 0 warnings, 0 errors
+
+System is healthy.
+</TerminalBlock>
+
+## Configuration
+
+The `.stoneforge/config.yaml` file controls project-level settings:
+
+<ParamTable params={[
+  { name: 'actor', type: 'string', description: 'Default actor name or ID for operations.' },
+  { name: 'database', type: 'string', default: 'stoneforge.db', description: 'SQLite database filename, relative to .stoneforge/.' },
+  { name: 'sync.auto_export', type: 'boolean', default: 'true', description: 'Automatically export mutations to JSONL files.' },
+  { name: 'sync.export_debounce', type: 'number', default: '300000', description: 'Debounce interval in ms for batching exports (5 minutes).' },
+  { name: 'sync.elements_file', type: 'string', default: 'elements.jsonl', description: 'JSONL filename for exported elements.' },
+  { name: 'sync.dependencies_file', type: 'string', default: 'dependencies.jsonl', description: 'JSONL filename for exported dependencies.' },
+  { name: 'identity.mode', type: 'string', default: 'soft', description: 'Identity verification mode: soft (name-based), cryptographic (Ed25519 signatures), or hybrid (accepts both).' },
+  { name: 'identity.time_tolerance', type: 'number', default: '300000', description: 'Time tolerance in ms for signature expiry in cryptographic mode (5 minutes).' },
+  { name: 'playbooks.paths', type: 'string[]', default: '[".stoneforge/playbooks", "~/.stoneforge/playbooks"]', description: 'Search paths for playbook definitions.' },
+  { name: 'tombstone.ttl', type: 'number', default: '2592000000', description: 'Time-to-live in ms for soft-deleted records before permanent removal (30 days).' },
+  { name: 'tombstone.min_ttl', type: 'number', default: '604800000', description: 'Minimum allowed TTL in ms for tombstones (7 days).' },
+  { name: 'plugins.packages', type: 'string[]', default: '[]', description: 'NPM package names that export CLI plugins.' }
+]} />
+
 ## Next steps
 
-import { LinkCard } from '@astrojs/starlight/components';
-
-<LinkCard title="Quick Start" description="Build your first multi-agent project" href="/getting-started/quick-start/" />
+<LinkCard title="Quick Start" description="Go from zero to your first multi-agent orchestration" href="/getting-started/quick-start/" />

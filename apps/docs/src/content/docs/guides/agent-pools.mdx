@@ -1,0 +1,203 @@
+---
+title: Agent Pools
+description: Control agent concurrency with pools — limit how many agents run simultaneously and prioritize agent types.
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+Agent pools give you concurrency control over agent spawning. Without pools, every idle worker gets a task the moment one becomes ready — which can overwhelm your machine or hit rate limits fast. Pools let you cap the total number of concurrent agents and prioritize which types get spawned first.
+
+## What pools solve
+
+Without pools, the dispatch daemon spawns an agent for every ready task it finds an idle worker for. With 10 registered workers and 10 ready tasks, you get 10 simultaneous sessions. Pools let you say "run at most 4 agents at a time" regardless of how many workers are registered.
+
+<Aside>
+  Directors are **never** pool-managed. Pools only govern ephemeral workers and stewards. If you don't create any pools, the daemon imposes no concurrency limits.
+</Aside>
+
+## How pools work
+
+A pool has a **maxSize** (the concurrency cap) and a list of **agent type configurations** that define which agents can occupy pool slots.
+
+```
+Pool: "default" (maxSize: 4)
+│
+├── Agent Type: worker:ephemeral  (priority: 100, maxSlots: 3)
+├── Agent Type: steward:merge     (priority: 80,  maxSlots: 1)
+└── Agent Type: steward:docs      (priority: 50,  maxSlots: 1)
+
+Active: [e-worker-1, e-worker-2, m-steward-1]  → 3/4 slots used
+```
+
+Before every spawn, the daemon calls `poolService.canSpawn()`. If the pool is at capacity, the task stays in the ready queue and is retried on the next poll cycle.
+
+## Agent type configuration
+
+Each agent type entry in a pool defines:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `role` | `worker` \| `steward` | Agent role (directors excluded) |
+| `workerMode` | `ephemeral` \| `persistent` | Worker mode filter (workers only) |
+| `stewardFocus` | `merge` \| `docs` \| `recovery` \| `custom` | Steward focus filter (stewards only) |
+| `priority` | `number` | Higher = spawned first when multiple types compete for a slot (default: 0) |
+| `maxSlots` | `number` | Maximum slots this type can occupy within the pool (default: pool maxSize) |
+| `provider` | `string` | Provider name for agents of this type (e.g., `claude-code`) |
+| `model` | `string` | Model ID for agents of this type (e.g., `claude-sonnet-4-20250514`) |
+
+## CLI walkthrough
+
+### Creating a pool
+
+```bash
+# Simple pool with a size limit
+sf pool create default --size 4
+
+# Pool with agent type configurations
+sf pool create ci-pool --size 6 \
+  -t worker:ephemeral:100:3 \
+  -t steward:merge:80:1
+
+# Pool with provider-specific types
+sf pool create multi-model --size 6 \
+  -t worker:ephemeral:100:3:claude-code:claude-sonnet-4-20250514 \
+  -t worker:ephemeral:80:3:opencode
+```
+
+### Agent type format string
+
+The `-t` flag accepts a colon-separated format:
+
+```
+role[:mode|focus][:priority][:maxSlots][:provider][:model]
+```
+
+| Position | Field | Examples |
+|----------|-------|----------|
+| 1 | Role | `worker`, `steward` |
+| 2 | Mode or focus | `ephemeral`, `persistent`, `merge`, `docs`, `custom` |
+| 3 | Priority | `100`, `80`, `50` (higher = higher priority) |
+| 4 | Max slots | `3`, `1` |
+| 5 | Provider | `claude-code`, `opencode`, `codex` |
+| 6 | Model | `claude-sonnet-4-20250514` |
+
+Only the role is required. Omitted fields use defaults.
+
+### Managing pools
+
+```bash
+# List all pools
+sf pool list
+
+# Show pool details
+sf pool show default
+
+# Check pool status (active agents, available slots)
+sf pool status default
+
+# Update pool size or configuration
+sf pool update default --size 8
+
+# Refresh pool status (recalculate active counts)
+sf pool refresh default
+
+# Delete a pool
+sf pool delete default
+```
+
+## Pool + dispatch daemon interaction
+
+The daemon checks pool constraints on every spawn attempt:
+
+```
+Daemon poll cycle
+       │
+       ▼
+  Find ready task + idle worker
+       │
+       ▼
+  poolService.canSpawn({
+    role: 'worker',
+    workerMode: 'ephemeral',
+    agentId: workerId
+  })
+       │
+  ┌────┴────┐
+  ▼         ▼
+canSpawn  canSpawn
+= true    = false
+  │         │
+  ▼         ▼
+Spawn     Skip, retry
+worker    next cycle
+```
+
+When `canSpawn` returns `false`, the daemon logs the reason (e.g., "Pool 'default' is at capacity (4 agents)") and moves on. The task remains in the ready queue for the next poll cycle.
+
+After a session ends, the daemon calls `poolService.onAgentSessionEnded()` to free the slot.
+
+## Strategy patterns
+
+### Resource-constrained environments
+
+Cap total agents to avoid overwhelming CPU/memory:
+
+```bash
+sf pool create default --size 3 \
+  -t worker:ephemeral:100:2 \
+  -t steward:merge:80:1
+```
+
+Three agents max — two workers and one steward. Even if you have 5 registered workers, only 2 run simultaneously.
+
+### Rate limit distribution
+
+Spread load across providers with provider-specific pools:
+
+```bash
+sf pool create claude-pool --size 3 \
+  -t worker:ephemeral:100:3:claude-code
+
+sf pool create opencode-pool --size 3 \
+  -t worker:ephemeral:100:3:opencode
+```
+
+Each provider gets its own concurrency cap. Claude workers don't compete with OpenCode workers for slots.
+
+### Dedicated merge capacity
+
+Reserve a slot for the merge steward so merges never wait behind workers:
+
+```bash
+sf pool create default --size 5 \
+  -t worker:ephemeral:100:4 \
+  -t steward:merge:120:1
+```
+
+The merge steward has `priority: 120` (higher than workers at 100), so when a slot opens and both a merge and a worker task are ready, the merge steward gets the slot. The `maxSlots: 1` ensures exactly one merge runs at a time.
+
+## Monitoring pools
+
+### CLI
+
+```bash
+# Quick status overview
+sf pool status default
+# Output:
+#   Pool: default (4/6 slots used)
+#   Active: e-worker-1, e-worker-2, e-worker-3, m-steward-1
+#   Available: 2 slots
+
+# Detailed pool info
+sf pool show default
+```
+
+### Dashboard
+
+The dashboard **Agents** page shows pool membership and capacity. The pool status badge shows `{active}/{maxSize}` for each pool.
+
+## Next steps
+
+<LinkCard title="Auto-Dispatch" description="How the daemon assigns tasks and respects pool limits" href="/guides/auto-dispatch/" />
+<LinkCard title="Multi-Provider Support" description="Use different providers in pool agent types" href="/guides/multi-provider/" />
+<LinkCard title="Agent Roles" description="Understand the agents that pools govern" href="/guides/agent-roles/" />

@@ -3,4 +3,336 @@ title: Task Planning
 description: How to create effective plans that decompose work into parallelizable elements.
 ---
 
-Master the art of breaking down complex features into well-structured, parallelizable elements. Coming soon.
+import { Steps, Aside, LinkCard } from '@astrojs/starlight/components';
+
+Good plans are the difference between agents working efficiently in parallel and agents waiting on each other in a single-threaded chain. This guide covers how to structure work for optimal multi-agent execution.
+
+## Why planning matters
+
+Without planning, you get serial execution — one task after another. With good planning, independent tasks run in parallel while dependent tasks wait only for what they actually need. A well-structured plan for a 10-task feature might complete in the time it takes to do 4 tasks sequentially.
+
+## Anatomy of a plan
+
+A plan is a container for related tasks. It has a title, a status, and a set of tasks connected by dependencies.
+
+```
+Plan: "User Authentication"  [status: active]
+│
+├── Task 1: Set up auth middleware         [priority: 1]
+├── Task 2: Create login endpoint          [priority: 2, blocked by 1]
+├── Task 3: Create signup endpoint         [priority: 2, blocked by 1]
+├── Task 4: Build login form component     [priority: 2]
+├── Task 5: Build signup form component    [priority: 2]
+├── Task 6: Write auth middleware tests    [priority: 3, blocked by 1]
+├── Task 7: Write endpoint integration tests [priority: 3, blocked by 2, 3]
+└── Task 8: Write component tests          [priority: 3, blocked by 4, 5]
+```
+
+In this plan:
+- Tasks 1, 4, and 5 can start immediately (no blockers)
+- Tasks 2 and 3 wait for task 1 only
+- Tasks 6, 7, and 8 wait for their respective dependencies
+- With 3 workers, you get significant parallelization
+
+## Creating plans via CLI
+
+<Steps>
+1. **Create a plan** (defaults to draft status)
+
+   ```bash
+   sf plan create --title "User Authentication"
+   ```
+
+2. **Add tasks to the plan**
+
+   ```bash
+   sf task create --title "Set up auth middleware" --priority 1 --plan "User Authentication"
+   sf task create --title "Create login endpoint" --priority 2 --plan "User Authentication"
+   sf task create --title "Create signup endpoint" --priority 2 --plan "User Authentication"
+   ```
+
+3. **Set dependencies between tasks**
+
+   ```bash
+   # "Create login endpoint" is blocked BY "Set up auth middleware"
+   sf dependency add el-task2 el-task1 --type blocks
+   sf dependency add el-task3 el-task1 --type blocks
+   ```
+
+4. **Activate the plan** (tasks become dispatchable)
+
+   ```bash
+   sf plan activate <plan-id>
+   ```
+</Steps>
+
+<Aside type="caution">
+  Always use the **draft → activate** workflow when creating tasks with dependencies. Tasks in draft plans are **not dispatched** — this prevents the daemon from assigning tasks before you've finished setting up dependencies. If you create tasks outside a plan, the daemon may dispatch them immediately.
+</Aside>
+
+## Setting priorities
+
+Tasks have a priority from 1 (critical) to 5 (minimal). The dispatch daemon assigns the highest priority (lowest number) task first.
+
+| Priority | Level | When to use |
+|----------|-------|-------------|
+| **1** | Critical | Blockers, infrastructure, shared foundations |
+| **2** | High | Core feature work, main deliverables |
+| **3** | Normal | Tests, documentation, polish |
+| **4** | Low | Nice-to-haves, non-blocking improvements |
+| **5** | Minimal | Cleanup, refactoring, tech debt |
+
+<Aside type="tip">
+  Set foundation tasks (middleware, database schemas, shared utilities) to priority 1 so they complete first and unblock everything that depends on them.
+</Aside>
+
+## Dependencies
+
+Dependencies control execution order. Stoneforge supports three blocking dependency types:
+
+### `blocks`
+
+The most common type. "Task B is blocked by Task A" means Task B can't start until Task A is closed.
+
+```bash
+# Task B (blocked) is blocked BY Task A (blocker)
+sf dependency add <task-B-id> <task-A-id> --type blocks
+```
+
+### `parent-child`
+
+Links tasks to their parent plan. Created automatically when you use `--plan` during task creation.
+
+### `awaits`
+
+Gate dependencies — wait for approval, a timer, or an external event before proceeding. Used for approval workflows and deployment gates.
+
+### Dependency direction
+
+The direction matters: `sf dependency add A B --type blocks` means **A is blocked by B** (B must complete first). Think of it as "A waits for B."
+
+```
+blocks:  A (waiting) ←── B (must complete first)
+```
+
+### Cross-plan dependencies
+
+Tasks can depend on tasks in **other plans**. This enables plan-to-plan gating without direct plan-level dependencies.
+
+```
+Plan A: "Auth System"
+├── Task A1: Create auth middleware
+├── Task A2: Add login endpoint (blocked by A1)
+└── Task A3: Auth integration tests (blocked by A2)  ← gate task
+
+Plan B: "User Dashboard"
+├── Task B1: Dashboard layout (blocked by A3)  ← cross-plan dependency
+├── Task B2: User profile page (blocked by B1)
+└── Task B3: Dashboard tests (blocked by B2)
+```
+
+Plan B's tasks remain blocked until Plan A completes its gate task (A3). The dependency is set at the task level — plans themselves don't have direct dependencies.
+
+**Pattern:** Create a "gate" task at the end of one plan, and have tasks in other plans depend on it. This keeps plans independently manageable while enforcing execution order across them.
+
+```bash
+# Task B1 is blocked by Task A3 (cross-plan)
+sf dependency add <task-B1-id> <task-A3-id> --type blocks
+```
+
+## Visualizing dependencies
+
+Use the dependency tree command to see the full dependency graph:
+
+```bash
+sf dependency tree <task-id>
+```
+
+Here's how common patterns look:
+
+### Independent tasks (maximum parallelism)
+
+```
+Plan
+├── Task A  (no deps)
+├── Task B  (no deps)
+├── Task C  (no deps)
+└── Task D  (no deps)
+```
+
+All four run simultaneously. Best for work with no shared state.
+
+### Diamond pattern
+
+```
+        Task A (foundation)
+       ╱       ╲
+  Task B       Task C  (parallel)
+       ╲       ╱
+        Task D (integration)
+```
+
+B and C run in parallel after A completes. D waits for both B and C. This is the most common pattern for features with shared setup and integration testing.
+
+### Sequential chain
+
+```
+Task A → Task B → Task C → Task D
+```
+
+Each task waits for the previous one. Avoid this unless tasks genuinely can't overlap — it eliminates all parallelism.
+
+### Fan-out / fan-in
+
+```
+              Task A
+         ╱    │    ╲
+    Task B  Task C  Task D   (fan-out)
+         ╲    │    ╱
+              Task E          (fan-in)
+```
+
+One setup task, multiple parallel work tasks, one integration task. Great for features decomposed by domain.
+
+## The draft → active lifecycle
+
+Plans start as **draft** by default. This is intentional:
+
+1. **Draft** — you add tasks and set dependencies without worrying about premature dispatch
+2. **Active** — tasks become visible to the dispatch daemon and are assigned as they become ready
+3. **Completed** — all tasks are closed (can be auto-completed by the daemon)
+4. **Cancelled** — plan was abandoned
+
+```bash
+sf plan create --title "Feature X"              # draft
+# ... add tasks and dependencies ...
+sf plan activate <plan-id>                      # active — dispatch begins
+```
+
+<Aside>
+  You can create a plan as immediately active with `sf plan create --title "Hotfix" --status active`, but only do this for plans without dependencies where premature dispatch isn't a concern.
+</Aside>
+
+## Parallelization strategies
+
+### Decompose by domain
+
+Split features into backend, frontend, and tests. Backend and frontend often have no dependencies on each other, so they run in parallel:
+
+```
+├── API endpoint           [priority: 2]
+├── React component        [priority: 2]
+├── API tests              [priority: 3, blocked by API]
+└── Component tests        [priority: 3, blocked by Component]
+```
+
+### Decompose by module
+
+For refactoring or cross-cutting changes, split by module:
+
+```
+├── Refactor auth module    [priority: 2]
+├── Refactor user module    [priority: 2]
+├── Refactor billing module [priority: 2]
+└── Integration tests       [priority: 3, blocked by all three]
+```
+
+### Foundation first
+
+When tasks share infrastructure, make the foundation high-priority with everything else depending on it:
+
+```
+├── Set up database schema  [priority: 1]
+├── Build API on schema     [priority: 2, blocked by schema]
+├── Build admin panel       [priority: 2, blocked by schema]
+└── Write seed data         [priority: 3, blocked by schema]
+```
+
+## Common patterns
+
+### Feature decomposition
+
+```bash
+sf plan create --title "Shopping Cart"
+sf task create --title "Cart data model and API" --priority 1 --plan "Shopping Cart"
+sf task create --title "Add-to-cart UI" --priority 2 --plan "Shopping Cart"
+sf task create --title "Cart summary sidebar" --priority 2 --plan "Shopping Cart"
+sf task create --title "Checkout flow" --priority 2 --plan "Shopping Cart"
+sf task create --title "Integration tests" --priority 3 --plan "Shopping Cart"
+# deps: UI, sidebar, checkout all blocked by data model; tests blocked by all
+```
+
+### Bug fix
+
+```bash
+sf plan create --title "Fix login timeout"
+sf task create --title "Reproduce and diagnose timeout" --priority 1 --plan "Fix login timeout"
+sf task create --title "Implement fix" --priority 1 --plan "Fix login timeout"
+sf task create --title "Add regression test" --priority 2 --plan "Fix login timeout"
+# Sequential: diagnose → fix → test
+```
+
+### Refactor
+
+```bash
+sf plan create --title "Migrate to new API client"
+sf task create --title "Create new API client wrapper" --priority 1 --plan "Migrate to new API client"
+sf task create --title "Migrate user service" --priority 2 --plan "Migrate to new API client"
+sf task create --title "Migrate billing service" --priority 2 --plan "Migrate to new API client"
+sf task create --title "Migrate notification service" --priority 2 --plan "Migrate to new API client"
+sf task create --title "Remove old client" --priority 3 --plan "Migrate to new API client"
+# deps: all migrations blocked by wrapper; removal blocked by all migrations
+```
+
+## Anti-patterns
+
+<Aside type="caution">
+  **Avoid these common planning mistakes:**
+
+  - **Too many dependencies** — if every task depends on every other task, you've created a sequential chain. Question whether each dependency is truly needed.
+  - **Single-threaded chains** — A → B → C → D → E eliminates all parallelism. Look for tasks that can overlap.
+  - **Tasks too large** — a task that takes an agent hours to complete delays everything that depends on it. Break large tasks into smaller, independently completable pieces.
+  - **Tasks too small** — a task that takes 30 seconds creates more overhead than value. Batch trivial work into meaningful units.
+  - **Missing dependencies** — if Task B reads files that Task A creates, add a dependency. Missing dependencies cause merge conflicts or broken builds.
+</Aside>
+
+## Monitoring plan progress
+
+```bash
+# List active plans
+sf plan list --status active
+
+# Show plan details with tasks
+sf plan show <plan-id> --tasks
+
+# Check task statuses
+sf task list --status open
+sf task list --status in_progress
+```
+
+The dashboard **Tasks** page shows a real-time view of all tasks with their statuses, assignees, and dependencies.
+
+## Reopening and resetting tasks
+
+### Reopen
+
+Closed tasks can be reopened if the work turns out to be incomplete or needs revision:
+
+```bash
+sf task reopen <id> --message "Tests revealed edge case not handled"
+```
+
+The message is appended to the task description so future workers have context on why it was reopened. In the dashboard, the Task Detail panel has a **Reopen** button that opens a dialog for an optional reason.
+
+### Reset
+
+The dashboard Task Detail panel has a **Reset** action that clears the assignee and any work metadata, returning the task to `open` status. Useful for:
+
+- Reassigning to a different agent
+- Starting fresh after a failed attempt
+- Clearing stale work data from an interrupted session
+
+## Next steps
+
+<LinkCard title="Auto-Dispatch" description="How the daemon assigns ready tasks to workers" href="/guides/auto-dispatch/" />
+<LinkCard title="Auto-Merge" description="How completed work is tested and merged" href="/guides/auto-merge/" />

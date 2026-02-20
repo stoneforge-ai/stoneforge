@@ -1,0 +1,272 @@
+---
+title: Workflows & Playbooks
+description: Define reusable process templates with playbooks and execute them as workflows — with variables, steps, and steward integration.
+---
+
+import { Steps, Aside, LinkCard } from '@astrojs/starlight/components';
+
+Playbooks are reusable templates that define a sequence of steps. Workflows are live instances of those templates — with resolved variables and trackable progress. Together they let you define repeatable processes (deployment checklists, release workflows, maintenance routines) and execute them on demand or on a schedule via custom stewards.
+
+## Concepts
+
+### Workflows
+
+A **workflow** is an executable task sequence. It has a title, a status, and an optional link to the playbook it was instantiated from. Workflows can also be created ad-hoc without a template.
+
+### Playbooks
+
+A **playbook** is a workflow template. It defines:
+- **Steps** — the tasks or functions to execute
+- **Variables** — parameters that get resolved at instantiation time
+- **Inheritance** — composition via `extends` to build on existing playbooks
+
+### Ephemeral vs durable workflows
+
+| | Ephemeral | Durable |
+|---|---|---|
+| **Persisted to JSONL** | No | Yes |
+| **Survives restart** | In-memory only | Fully persisted |
+| **Use case** | Internal orchestration, short-lived processes | User-defined processes, audit trail |
+| **Promotion** | Can be promoted to durable | Already durable |
+
+Ephemeral workflows are used internally by stewards and the dispatch daemon for short-lived orchestration. Durable workflows are for user-defined processes that need persistence and traceability.
+
+## Workflow status lifecycle
+
+```
+┌─────────┐
+│ pending │
+└────┬────┘
+     │ start
+     ▼
+┌─────────┐
+│ running │
+└────┬────┘
+     │
+┌────┼──────────┐
+▼    ▼           ▼
+completed  failed  cancelled
+```
+
+| Status | Description |
+|--------|-------------|
+| `pending` | Created but not started |
+| `running` | Actively executing |
+| `completed` | All steps finished successfully |
+| `failed` | Execution failed (with reason) |
+| `cancelled` | Manually cancelled (with reason) |
+
+Terminal states (`completed`, `failed`, `cancelled`) are final — no further transitions are allowed.
+
+## Playbook templates
+
+### Steps
+
+Playbooks define two types of steps:
+
+**Task steps** (default) — create agent tasks that get dispatched to workers:
+
+```yaml
+steps:
+  - id: setup_db
+    title: "Set up {{env}} database schema"
+    description: "Create tables and indexes for {{env}}"
+    priority: 1
+
+  - id: run_migrations
+    title: "Run database migrations"
+    dependsOn: [setup_db]
+    priority: 2
+```
+
+**Function steps** — execute code directly (TypeScript, Python, or shell):
+
+```yaml
+steps:
+  - id: notify_slack
+    stepType: function
+    runtime: shell
+    title: "Notify Slack channel"
+    command: 'curl -X POST "$SLACK_WEBHOOK" -d "{\"text\": \"Deployment complete\"}"'
+    timeout: 10000
+    dependsOn: [run_migrations]
+```
+
+Steps can depend on other steps via `dependsOn` and can be conditionally included via `condition`.
+
+### Variables
+
+Variables make playbooks reusable across different contexts:
+
+```yaml
+variables:
+  - name: env
+    type: string
+    required: true
+    description: "Target environment"
+    enum: [staging, production]
+
+  - name: run_tests
+    type: boolean
+    required: false
+    default: true
+    description: "Whether to run the test suite"
+
+  - name: replicas
+    type: number
+    required: false
+    default: 3
+```
+
+Variable types: `string`, `number`, `boolean`. Variables can have `default` values and `enum` constraints.
+
+Use `{{variableName}}` syntax in step titles, descriptions, and conditions for substitution:
+
+```yaml
+steps:
+  - id: deploy
+    title: "Deploy to {{env}}"
+    condition: "{{run_tests}}"  # Only include if run_tests is truthy
+```
+
+### Condition syntax
+
+Conditions control whether a step is included:
+
+| Syntax | Meaning |
+|--------|---------|
+| `{{var}}` | Include if `var` is truthy |
+| `!{{var}}` | Include if `var` is falsy |
+| `{{var}} == value` | Include if `var` equals `value` |
+| `{{var}} != value` | Include if `var` doesn't equal `value` |
+
+Falsy values: `""`, `"false"`, `"0"`, `"no"`, `"off"`, `null`, `undefined`.
+
+### Playbook inheritance
+
+Playbooks can extend other playbooks with the `extends` field:
+
+```yaml
+name: deploy_with_tests
+title: "Deploy with Test Suite"
+extends: [base_deploy]
+
+variables:
+  - name: test_command
+    type: string
+    required: false
+    default: "npm test"
+
+steps:
+  - id: run_tests
+    title: "Run test suite"
+    description: "Execute {{test_command}}"
+    dependsOn: [setup_db]  # Reference parent step
+```
+
+Inheritance rules:
+- Variables with the same name **replace** the parent's definition
+- Steps with the same ID **replace** the parent's step (preserving order)
+- New steps are appended after parent steps
+- Cycle detection prevents circular inheritance
+- Maximum inheritance depth: 10 levels
+
+## Use with custom stewards
+
+Custom stewards reference a playbook. When the steward is triggered (by cron or event), the daemon instantiates a workflow from the playbook and assigns it to the steward.
+
+### End-to-end example
+
+<Steps>
+1. **Create a playbook**
+
+   ```bash
+   sf playbook create nightly_cleanup \
+     --title "Nightly Cleanup" \
+     --step "gc_workflows:Garbage collect workflows:1" \
+     --step "gc_worktrees:Clean stale worktrees:2:gc_workflows" \
+     --step "health_check:Run agent health checks:3:gc_worktrees"
+   ```
+
+2. **Register a custom steward with a cron trigger**
+
+   ```bash
+   sf agent register cleanup-steward \
+     --role steward \
+     --focus custom \
+     --trigger "0 2 * * *" \
+     --playbook-id <playbook-id>
+   ```
+
+   This steward triggers at 2 AM daily.
+
+3. **Start the daemon and watch it execute**
+
+   ```bash
+   sf daemon start
+   ```
+
+   At 2 AM, the daemon:
+   - Detects the cron trigger has fired
+   - Creates a workflow instance from the `nightly_cleanup` playbook
+   - Assigns the workflow to `cleanup-steward`
+   - Spawns the steward session
+   - The steward works through the workflow steps in order
+</Steps>
+
+## CLI reference
+
+### Playbook commands
+
+```bash
+# Create a playbook
+sf playbook create <name> --title "Title" \
+  --step "id:title:priority[:dependsOn]" \
+  --var "name:type:required[:default]"
+
+# List playbooks
+sf playbook list
+
+# Show playbook details
+sf playbook show <name-or-id>
+
+# Validate a playbook (check steps, variables, inheritance)
+sf playbook validate <name-or-id>
+```
+
+### Workflow commands
+
+```bash
+# Instantiate a workflow from a playbook
+sf workflow create <playbook-name-or-id> --var env=production --var replicas=5
+
+# List workflows
+sf workflow list
+sf workflow list --status running
+
+# Show workflow details
+sf workflow show <workflow-id>
+
+# Show workflow tasks
+sf workflow tasks <workflow-id>
+
+# Show workflow progress
+sf workflow progress <workflow-id>
+
+# Promote ephemeral to durable
+sf workflow promote <workflow-id>
+
+# Garbage collect completed ephemeral workflows
+sf workflow gc
+sf workflow gc --max-age 1h
+```
+
+<Aside type="tip">
+  Use `sf workflow gc` periodically to clean up completed ephemeral workflows. The dispatch daemon's built-in `gc-ephemeral-workflows` plugin can also handle this automatically.
+</Aside>
+
+## Next steps
+
+<LinkCard title="Agent Roles" description="Learn about custom stewards and triggers" href="/guides/agent-roles/" />
+<LinkCard title="Auto-Dispatch" description="How the daemon triggers steward workflows" href="/guides/auto-dispatch/" />
+<LinkCard title="Services Reference" description="Programmatic API for workflows and playbooks" href="/reference/services/" />

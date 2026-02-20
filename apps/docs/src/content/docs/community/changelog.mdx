@@ -1,6 +1,268 @@
 ---
 title: Changelog
-description: Release notes and version history for Stoneforge.
+description: Release notes and version history for all Stoneforge packages.
 ---
 
-Track what's changed in each release. Coming soon.
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+All notable changes to Stoneforge are documented here. Versions are released as a unified set — all `@stoneforge/*` packages share the same version number.
+
+<Aside type="tip">
+  Stoneforge uses [changesets](https://github.com/changesets/changesets) for versioning. When contributing, run `pnpm changeset` to describe your changes.
+</Aside>
+
+---
+
+## v1.9.0
+
+<small>February 19, 2026</small>
+
+### New features
+
+- **`sf docs` CLI command** — new `sf docs init` and `sf docs add` subcommands for streamlined documentation infrastructure management
+- **Website and OG meta** — added project website with Cloudflare Pages deployment and OpenGraph meta tags
+
+### Bug fixes
+
+- **Kanban column counts** — fixed column header counts in both Smithy Web and Quarry Web to always show unfiltered totals; stale localStorage filters no longer make columns appear empty
+- **Recovery steward cascade** — prevented recovery steward cascade assignment during rate limiting by tracking stewards used per recovery cycle
+- **Orphan recovery guard** — skip `resumeCount` and `stewardRecoveryCount` increment during rate limits, preventing false recovery steward triggers for non-stuck tasks
+- **Prompt hardcoding** — replaced hardcoded library ID in role prompts with generic `sf docs init` and `sf docs add` commands
+
+### Maintenance
+
+- Fixed flaky ID generator uniqueness test
+
+---
+
+## v1.8.0
+
+<small>February 19, 2026</small>
+
+### New features
+
+- **Bulk task API** — added `PATCH /api/tasks/bulk` endpoint to smithy-server for batch status updates and deletions
+- **Shared bulk routes** — moved bulk task update/delete routes to the `@stoneforge/shared-routes` package for reuse across servers
+
+---
+
+## v1.7.0
+
+<small>February 19, 2026</small>
+
+### New features
+
+- **Bulk status actions in dashboard** — added bulk set-status action to the smithy-web task list for batch task management
+- **Session termination on reset** — task reset endpoint now terminates the associated session, preventing orphaned agent processes
+
+### Bug fixes
+
+- **Startup blocking** — fixed startup hang caused by stale session resume in `recoverOrphanedAssignments`
+- **Session init rejection** — `waitForInit` now rejects immediately on `resume_failed` or session exit instead of hanging
+- **Priority sort** — fixed inverted priority sort in steward task dispatch
+- **Worker unassignment race** — fixed non-atomic worker unassignment in `spawnRecoveryStewardForTask`
+- **Spawner race condition** — fixed terminated-to-terminated race condition in spawner `spawnHeadless` catch block
+
+### Maintenance
+
+- Updated CLI reference docs with undocumented commands and flags
+- Unskipped dispatch daemon priority sorting test
+- Fixed flaky `IdLengthCache` age test in CI
+
+---
+
+## v1.6.0
+
+<small>February 18, 2026</small>
+
+### Bug fixes
+
+- **Agent registration** — fixed agent registration to correctly persist provider, model, and `executablePath` fields
+- **Worktree cleanup** — added `git worktree prune` after worktree removal to clean up stale entries
+- **API completeness** — added missing methods to `QuarryAPI` interface; added workflows re-export to `@stoneforge/ui` barrel
+
+---
+
+## v1.5.0
+
+<small>February 18, 2026</small>
+
+### New features
+
+- **Rate limit handling** — full rate limit detection and handling pipeline:
+  - Rate limit message parser utility for extracting wait times from provider error messages
+  - In-memory rate limit state tracker service
+  - Rate limit detection in headless session spawner
+  - Daemon integration — dispatch daemon now pauses and retries on rate limits
+- **Daemon sleep/wake** — new `sf daemon sleep` and `sf daemon wake` CLI commands for manual dispatch control
+- **Already-merged detection** — merge steward now detects branches that are already merged before attempting a squash-merge, avoiding duplicate work
+
+### Bug fixes
+
+- **Stale worktrees** — prune stale git worktree entries before creating new worktrees; clean up worktrees on task reset; handle `WORKTREE_EXISTS` error gracefully
+- **Stale sessions** — clear stale `sessionId` from task metadata on failed resume
+- **Retry cap** — added retry cap for steward orphan recovery in daemon to prevent infinite loops
+- **Settings fallback** — added fallback chain to workspace settings
+
+---
+
+## v1.4.1
+
+<small>February 18, 2026</small>
+
+### Bug fixes
+
+- **Login shell spawning** — spawn headless sessions through login shell for custom executables, fixing path resolution issues when using non-default agent CLIs
+
+### Maintenance
+
+- Fixed stale references and missing CLI documentation
+- Fixed `createStorage` signatures, steward focus values, and added missing CLI aliases in docs
+
+---
+
+## v1.4.0
+
+<small>February 18, 2026</small>
+
+### New features
+
+- **Multi-plan support** — full custom executable path support for running agents across multiple Claude MAX/Pro plans:
+  - `executablePath` field on agent metadata types and API routes
+  - Per-agent executable path field in agent creation/edit UI
+  - Workspace-wide executable path inputs on the Settings page
+  - Server-side settings API for workspace-wide executable paths
+  - Executable paths wired into provider resolution during spawn
+- **AGENTS.md template** — `sf init` now generates a default `AGENTS.md` file and installs skills
+
+### Bug fixes
+
+- **CLI aliases** — registered missing aliases and updated help text; removed dead `--no-open` flag from `sf serve`
+
+### Maintenance
+
+- Updated READMEs with multi-plan Claude MAX/Pro setup instructions
+- Synced CLI reference documentation with source
+
+---
+
+## v1.2.0
+
+<small>February 18, 2026</small>
+
+### New features
+
+- **Recovery steward** — dispatch daemon now detects improper session exits and spawns recovery stewards automatically
+- **Custom steward improvements** — replaced Custom Steward playbook textarea with Workflow Template dropdown in the UI
+
+### Bug fixes
+
+- **Provider naming** — renamed `claude` provider to `Claude Code` in all dropdowns; defaulted pool agent type provider to `claude`
+- **Session termination** — fixed docs/custom steward sessions not terminating after agent completes
+- **Dashboard UX** — fixed workspace panel drag-and-drop titlebar drop double-fire; fixed Pool modal height overflow; replaced agent type provider/model text inputs with dropdowns
+- **E2E tests** — fixed pre-existing Playwright E2E test failures in smithy-web and quarry-web
+
+### Maintenance
+
+- Comprehensive documentation audit: fixed mismatches across Orchestrator Services, OrchestratorAPI, CLI, SDK Services, and QuarryAPI reference docs
+- Rewrote README to focus on web dashboard orchestration workflow
+
+---
+
+## v1.1.0
+
+<small>February 17, 2026</small>
+
+### New features
+
+- **Plan auto-completion** — plans now auto-complete when all child tasks are closed; includes a CLI command (`sf plan backfill-auto-complete`) to backfill stale plans
+
+### Bug fixes
+
+- **Conflict detection** — replaced naive conflict marker detection with line-boundary regex, fixing false positives
+- **`sf init` import** — fixed `sf init` to import from `.stoneforge/sync/` instead of stale root JSONL files
+- **Versioning** — prevented minor changesets from triggering major version bumps
+
+---
+
+## v1.0.3
+
+<small>February 17, 2026</small>
+
+### New features
+
+- **Steward execution** — wired up real focus-based dispatch for stewards (replacing stub executor); instantiated steward services in the Services container
+- **Local merges** — support local-only merges when no git remote is configured
+- **Auto-export** — wired up automatic JSONL export via `AutoExportService`
+- **Director panel** — fixed maximize action to use full site width instead of fixed overlay
+
+### Bug fixes
+
+- **CLI version** — fixed CLI version reporting and import FK violations
+- **Trigger-based stewards** — added integration tests for trigger-based steward execution
+
+---
+
+## v1.0.2
+
+<small>February 17, 2026</small>
+
+### Bug fixes
+
+- **`posix_spawnp` for Bun** — ensured spawn-helper permissions are set at runtime, fixing agent process spawning on fresh installs
+
+### Maintenance
+
+- Created unified GitHub release on publish instead of per-package releases
+
+---
+
+## v1.0.1
+
+<small>February 17, 2026</small>
+
+### Bug fixes
+
+- **`node-pty` spawn failure** — fixed `posix_spawnp` failure when installed from npm
+- **npm publishing** — fixed OIDC-based npm provenance publishing pipeline
+
+---
+
+## v1.0.0
+
+<small>February 17, 2026</small>
+
+### New features
+
+- **Dispatch-ready task listing** — exposed dispatch-ready task listing in the CLI (`sf task ready`)
+- **Blocked cache** — fixed blocked cache cascade for plan-level blocking dependencies
+- **Smart `sf init`** — `sf init` now handles cloned repos with existing `.stoneforge/` directories gracefully
+
+### Maintenance
+
+- Set up changesets for versioning and automated publishing
+- Fixed flaky list scaling performance test with warmup and median sampling
+
+---
+
+## v0.1.0
+
+<small>February 16, 2026</small>
+
+Initial public release of Stoneforge.
+
+### Packages
+
+- `@stoneforge/core` — core types, errors, ID generation, and utilities
+- `@stoneforge/storage` — SQLite storage with multi-runtime support (Bun, Node, browser)
+- `@stoneforge/quarry` — SDK with API, services, sync engine, and CLI
+- `@stoneforge/smithy` — AI agent orchestration (Director, Worker, Steward roles)
+- `@stoneforge/ui` — shared React UI components and design tokens
+- `@stoneforge/shared-routes` — shared Hono route factories
+
+### Applications
+
+- `quarry-server` — core Stoneforge API server
+- `quarry-web` — element management dashboard
+- `smithy-server` — agent orchestration API
+- `smithy-web` — agent management dashboard

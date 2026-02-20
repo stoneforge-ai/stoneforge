@@ -3,4 +3,293 @@ title: Custom Prompts
 description: Customize the prompts used by Stoneforge's agents to fit your project's needs.
 ---
 
-Tailor agent behavior by customizing the system prompts and role definitions. Coming soon.
+import { Steps, Tabs, TabItem, Aside, LinkCard } from '@astrojs/starlight/components';
+
+Stoneforge ships with built-in prompts for each agent role. You can override these with project-specific prompts to inject your tech stack, coding conventions, security guidelines, or team communication rules.
+
+## Built-in prompts
+
+Each role has a built-in prompt located in `packages/smithy/src/prompts/`:
+
+```
+prompts/
+├── director.md           # Director role
+├── worker.md             # Ephemeral worker role
+├── persistent-worker.md  # Persistent worker role
+├── message-triage.md     # Message triage sessions
+├── steward-base.md       # Base steward (all focuses)
+├── steward-merge.md      # Merge focus addendum
+├── steward-docs.md       # Docs focus addendum
+└── steward-recovery.md   # Recovery focus addendum
+```
+
+The worker prompt is selected automatically based on worker mode: ephemeral workers get `worker.md`, persistent workers get `persistent-worker.md`.
+
+Steward prompts are **composed**: `steward-base.md` + `steward-{focus}.md`. A merge steward gets the base prompt plus the merge-specific addendum.
+
+## Prompt anatomy
+
+Built-in prompts follow a consistent 5-section structure:
+
+### 1. Identity
+
+```markdown
+# Your Role: Worker
+
+You are a worker agent in the Stoneforge orchestration system.
+
+## Your Responsibilities
+- Execute assigned tasks
+- Report progress and blockers
+- Request help when stuck
+
+## Who You Report To
+- Director agent
+```
+
+### 2. System overview
+
+A table showing all roles, what they own, and who they report to. Gives the agent context about the broader system.
+
+### 3. Core workflows
+
+Step-by-step instructions for common actions — starting a task, completing work, handling blockers, communicating with other agents.
+
+### 4. Decision guidelines
+
+When to proceed independently vs. ask for help. When to escalate vs. hand off. Judgment scenarios for ambiguous situations.
+
+### 5. CLI quick reference
+
+Key `sf` commands the agent needs for its role — task management, messaging, merge commands.
+
+## Creating project overrides
+
+<Steps>
+1. **Create the prompts directory**
+
+   ```bash
+   mkdir -p .stoneforge/prompts
+   ```
+
+2. **Create a prompt override**
+
+   Create a file matching the role name:
+
+   ```bash
+   touch .stoneforge/prompts/worker.md
+   ```
+
+   You can start from the [built-in prompts on GitHub](https://github.com/stoneforge-ai/stoneforge/tree/master/packages/smithy/src/prompts) or write your own — only the filename needs to match.
+
+3. **Edit the override**
+
+   ```bash
+   # Add your project context, conventions, guidelines
+   vim .stoneforge/prompts/worker.md
+   ```
+</Steps>
+
+### Override structure
+
+```
+my-project/
+├── .stoneforge/
+│   └── prompts/
+│       ├── worker.md           # Overrides built-in worker prompt
+│       ├── director.md         # Overrides built-in director prompt
+│       └── steward-merge.md    # Overrides just the merge focus addendum
+└── src/
+```
+
+The loader checks `.stoneforge/prompts/` first, then falls back to built-in. You only need to override the prompts you want to change.
+
+<Aside type="tip">
+  **Steward overrides are independent.** You can override just the base (`steward-base.md`), just the focus addendum (`steward-merge.md`), or both. Unoverridden parts use the built-in.
+</Aside>
+
+## Examples
+
+<Tabs>
+  <TabItem label="Tech stack context">
+    Add your project's technology stack so workers make appropriate choices:
+
+    ```markdown
+    # Your Role: Worker
+
+    You are a worker agent in the Stoneforge orchestration system.
+
+    ## Project Context
+
+    This project uses:
+    - TypeScript with strict mode
+    - React 18 with hooks (functional components only)
+    - TanStack Query for data fetching
+    - Tailwind CSS for styling
+    - Vitest for testing
+
+    Follow these conventions:
+    - Use functional components only (no class components)
+    - Prefer named exports over default exports
+    - Write tests for all new code
+    - Use `pnpm` as the package manager
+
+    ## Your Responsibilities
+    ...
+    ```
+  </TabItem>
+  <TabItem label="Security guidelines">
+    Add security-specific instructions for security-sensitive projects:
+
+    ```markdown
+    ## Security Guidelines
+
+    Before any code change:
+    1. Check for credential exposure (no hardcoded secrets)
+    2. Validate all user inputs (use zod schemas)
+    3. Use parameterized queries (no string concatenation in SQL)
+    4. Review OWASP top 10 for relevant vulnerabilities
+    5. Never log sensitive data (PII, tokens, passwords)
+
+    Flag any security concerns to the Director immediately
+    via `sf message send <director-id> --content "Security concern: ..."`.
+    ```
+  </TabItem>
+  <TabItem label="Team communication">
+    Add team-specific communication guidelines:
+
+    ```markdown
+    ## Communication Guidelines
+
+    ### Channels
+    - Use task-specific channels for implementation discussion
+    - Use #architecture for cross-cutting concerns
+    - Use #blockers for escalation
+
+    ### Status Updates
+    - Post progress updates after completing each major step
+    - Always include what you did, what's next, and any blockers
+    - Keep updates concise (2-3 sentences)
+    ```
+  </TabItem>
+</Tabs>
+
+## Role definitions with behaviors
+
+For more dynamic customization, use `RoleDefinitionService` to create role definitions with **event-driven behaviors**:
+
+```typescript
+import { createRoleDefinitionService } from '@stoneforge/smithy';
+
+const roleDefService = createRoleDefinitionService(api);
+
+const roleDef = await roleDefService.createRoleDefinition({
+  role: 'worker',
+  name: 'Frontend Developer',
+  systemPrompt: 'You specialize in React and TypeScript...',
+  workerMode: 'ephemeral',
+  tags: ['frontend', 'senior'],
+  behaviors: {
+    onStartup: 'Pull latest from main branch. Check git status.',
+    onTaskAssigned: 'Read the full task description and acceptance criteria before writing any code.',
+    onStuck: 'Try breaking the problem into smaller steps. If blocked for 30+ minutes, escalate to Director.',
+    onError: 'Capture the full stack trace. Check recent commits for related changes.',
+  },
+});
+```
+
+### AgentBehaviors
+
+| Event | When it fires | Use for |
+|-------|---------------|---------|
+| `onStartup` | Agent session starts | Environment setup, branch sync |
+| `onTaskAssigned` | Task is assigned to agent | Reading specs, planning approach |
+| `onStuck` | Agent appears stuck | Escalation rules, alternative strategies |
+| `onHandoff` | Before creating a handoff | Documentation requirements, context preservation |
+| `onError` | When handling errors | Debugging steps, error reporting |
+
+<Aside>
+  Use **behaviors** for event-specific instructions rather than bloating the main prompt. Behaviors are appended at the right moment, keeping the base prompt concise.
+</Aside>
+
+## Building prompts in code
+
+For advanced use cases, you can load and compose prompts programmatically:
+
+```typescript
+import { loadRolePrompt, buildAgentPrompt } from '@stoneforge/smithy';
+
+// Load a prompt (checks project overrides first)
+const result = loadRolePrompt('worker', undefined, {
+  projectRoot: process.cwd(),
+});
+console.log(result?.source);  // 'built-in' or path to override
+console.log(result?.prompt);  // The prompt content
+
+// Build a complete prompt with task context
+const prompt = buildAgentPrompt({
+  role: 'worker',
+  taskContext: 'Implement OAuth login with Google and GitHub providers.',
+  additionalInstructions: 'Focus on security best practices. Use NextAuth.js.',
+  projectRoot: process.cwd(),
+});
+
+// Steward with focus
+const stewardPrompt = buildAgentPrompt({
+  role: 'steward',
+  stewardFocus: 'merge',
+  projectRoot: process.cwd(),
+});
+
+// Skip project overrides (built-in only)
+const builtInPrompt = buildAgentPrompt({
+  role: 'worker',
+  builtInOnly: true,
+});
+```
+
+## Best practices
+
+- **Keep prompts concise** — built-in prompts are additive to the provider's system prompt. Focus on role-specific guidance, not general coding advice.
+- **Use behaviors for context** — event-driven instructions are more effective than trying to cover everything in the main prompt.
+- **Override sparingly** — only override when you need different behavior. Partial overrides (just the focus, not the base) work well for stewards.
+- **Version control prompts** — store overrides in git so they're shared across the team:
+  ```bash
+  git add .stoneforge/prompts/
+  git commit -m "Add project-specific worker prompt"
+  ```
+- **Test with real agents** — after customizing, run an agent on a real task and observe behavior. Iterate based on actual performance.
+
+## Troubleshooting
+
+### Override not loading
+
+1. Check the file path: `.stoneforge/prompts/{role}.md`
+2. Filename must match exactly (case-sensitive): `worker.md`, not `Worker.md`
+3. Verify `projectRoot` is set correctly when loading programmatically
+
+### Steward focus not combining
+
+Check what loaded for each part:
+
+```typescript
+const result = loadRolePrompt('steward', 'merge', { projectRoot });
+console.log('Base:', result?.baseSource);   // 'built-in' or override path
+console.log('Focus:', result?.focusSource); // 'built-in' or override path
+```
+
+You can override just the base, just the focus, or both independently.
+
+### Prompt too long
+
+If the combined prompt is too long for your provider's context window:
+
+1. Move implementation details to **task descriptions** instead of the prompt
+2. Use **behaviors** for event-specific instructions
+3. Focus on **principles and guidelines**, not step-by-step procedures
+4. Link to external documentation in your project rather than inlining it
+
+## Next steps
+
+<LinkCard title="Agent Roles" description="Understand the roles these prompts configure" href="/guides/agent-roles/" />
+<LinkCard title="Multi-Provider Support" description="Use different providers for different agents" href="/guides/multi-provider/" />

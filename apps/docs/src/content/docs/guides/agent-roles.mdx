@@ -1,6 +1,423 @@
 ---
 title: Agent Roles
-description: Understand the different agent roles in Stoneforge — Planner, Coder, and Reviewer — and how they collaborate.
+description: Understand the different agent roles in Stoneforge — Director, Worker, and Steward — and how they collaborate.
 ---
 
-Learn about the specialized roles agents play in a Stoneforge orchestration. Coming soon.
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+import FeatureCard from '../../../components/custom/FeatureCard.astro';
+
+Stoneforge organizes work through a three-role hierarchy: **Directors** plan, **Workers** execute, and **Stewards** maintain. A background **Dispatch Daemon** connects them all by assigning work automatically.
+
+## The role hierarchy
+
+```
+Human Operator
+     │
+     ▼
+┌──────────┐
+│ Director │ ← Plans, prioritizes, coordinates
+└────┬─────┘
+     │ delegates to
+     ▼
+┌──────────┐     ┌──────────┐
+│ Workers  │     │ Stewards │
+└──────────┘     └──────────┘
+  Execute          Maintain
+  tasks            system
+```
+
+Each role has distinct responsibilities and authority levels. This separation prevents agents from overstepping while keeping work flowing efficiently.
+
+## Director
+
+The Director is the strategic coordinator. There's typically one Director per orchestration.
+
+### What Directors do
+
+- **Plan** — break down goals into tasks with priorities and dependencies
+- **Prioritize** — decide what matters most and set priority levels (1-5)
+- **Coordinate** — resolve blockers and adjust plans as work progresses
+- **Communicate** — interface with you (the human operator) via the Director Panel
+
+### What Directors don't do
+
+- Execute implementation tasks directly (that's Workers)
+- Dispatch tasks to workers (that's the Daemon)
+- Handle maintenance workflows (that's Stewards)
+- Monitor workers or push status updates (Directors report only when asked)
+
+### Registering and starting a Director
+
+```bash
+sf agent register director --role director
+sf agent start <id>
+```
+
+You can also start the Director from the **Director Panel** in the dashboard sidebar. The Director runs as a **persistent session** — it stays active and responsive to your messages.
+
+### Communicating with your Director
+
+Use the Director Panel to send goals and requests. The Director checks its inbox at natural breakpoints — it's not interrupted by incoming messages.
+
+```
+# Example goal
+Add OAuth login with Google and GitHub providers.
+Include error handling and rate limiting.
+```
+
+The Director will create a plan, add tasks, set dependencies, and activate the plan for dispatch.
+
+<Aside type="tip">
+  Keep goals focused. Instead of "Build the whole authentication system," try "Add OAuth login with Google and GitHub." The Director works best with clear, scoped objectives.
+</Aside>
+
+## Worker
+
+Workers are the implementers. Multiple workers operate in parallel, each in an isolated git worktree.
+
+### Ephemeral vs persistent workers
+
+| | Ephemeral Worker | Persistent Worker |
+|---|---|---|
+| **Session** | Task-scoped (shuts down after task) | Session-scoped (stays alive) |
+| **Spawning** | Automatic (dispatch daemon) | Manual (`sf agent start`) |
+| **Worktree** | `agent/{name}/{task-id}-{slug}` | `agent/{name}/session-{timestamp}` |
+| **Merge method** | `sf task complete` (creates merge request) | `sf merge` (direct squash merge) |
+| **Use case** | Automated task execution | Interactive work with human |
+| **Dispatch** | Auto-dispatched by daemon | Not auto-dispatched |
+
+### Ephemeral worker lifecycle
+
+```
+     Daemon assigns task
+            │
+            ▼
+  ┌──────────────────┐
+  │ Spawn in worktree│
+  │ agent/{name}/... │
+  └────────┬─────────┘
+           │
+           ▼
+  ┌──────────────────┐
+  │  Execute task    │
+  │  commit & push   │
+  └────────┬─────────┘
+           │
+     ┌─────┴──────┐
+     ▼            ▼
+┌─────────┐  ┌─────────┐
+│Complete │  │ Handoff │
+│sf task  │  │sf task  │
+│complete │  │handoff  │
+└────┬────┘  └────┬────┘
+     │            │
+     ▼            ▼
+  Task moves   Task returns
+  to REVIEW    to pool with
+  status       handoff notes
+     │
+     ▼
+  Process
+  terminates
+```
+
+### Worktree isolation
+
+Each worker gets its own git worktree — a full copy of the repository on a dedicated branch. This is the key to safe parallel execution. Workers can modify the same files simultaneously because they're each on their own branch.
+
+Branch naming: `agent/{worker-name}/{task-id}-{slug}`
+
+Example: `agent/e-worker-1/el-3a8f-add-login-form`
+
+### The handoff mechanism
+
+When a worker can't complete a task (missing access, context exhaustion, needs different expertise), it hands off:
+
+1. Task is **unassigned** from the current worker
+2. **Branch and worktree** are preserved in task metadata
+3. **Handoff note** is appended to the task description
+4. Task returns to the pool for reassignment
+5. Next worker **spawns in the same worktree** and continues from the existing code state
+
+The handoff note provides context:
+
+```
+[AGENT HANDOFF NOTE]: Completed API integration. Unable to resolve
+CORS issue — requires infrastructure access. Branch contains working
+local implementation.
+```
+
+### Starting a worker on a specific task
+
+You can bypass the dispatch daemon and manually start an ephemeral worker on a specific task:
+
+```bash
+sf agent start <agent-id> --taskId <task-id>
+```
+
+In the dashboard, the **Start Agent** dialog lets you:
+- Select an existing unassigned task from the dropdown
+- Or create a new task inline
+- Optionally add an initial message
+- Click **Start** (background) or **Start & Open** (navigate to workspace)
+
+This is useful for one-off work where you want to control exactly which agent handles a specific task.
+
+### Resuming past sessions
+
+Ephemeral worker sessions can be resumed to continue work with full prior context:
+
+```bash
+sf agent start <agent-id> --resume <provider-session-id>
+```
+
+Resume sends the stored transcript to the provider so the agent picks up where it left off. In the dashboard, the **Workspaces** panel shows past sessions grouped by provider session ID and sorted by date. Click **Resume** to continue any previous session.
+
+Useful for:
+- Picking up context-exhausted work (agent hit token limit)
+- Continuing after an interruption
+- Re-engaging with a complex task that needs the original context
+
+### Registering workers
+
+```bash
+# Ephemeral workers (auto-dispatched)
+sf agent register e-worker-1 --role worker
+sf agent register e-worker-2 --role worker
+
+# Persistent worker (manual, interactive)
+sf agent register p-worker-1 --role worker --mode persistent
+sf agent start <id>
+```
+
+<Aside>
+  Ephemeral workers don't need `sf agent start` — the dispatch daemon spawns them automatically when tasks are ready.
+</Aside>
+
+## Steward
+
+Stewards handle automated maintenance workflows. They're triggered by events, not assigned tasks directly.
+
+### Steward focuses
+
+| Focus | What it does |
+|-------|-------------|
+| **Merge** | Reviews completed task branches — runs tests, squash-merges on pass, creates fix tasks on fail |
+| **Docs** | Scans documentation for broken links, stale paths, outdated exports; auto-fixes and merges |
+| **Recovery** | Diagnoses and recovers tasks in broken state |
+| **Custom** | User-defined behavior via playbook templates |
+
+### Steward triggers
+
+Stewards are activated by **triggers** — either on a schedule (cron) or in response to events.
+
+#### Cron triggers
+
+Cron triggers use standard 5-field cron expressions:
+
+| Expression | Schedule |
+|------------|----------|
+| `0 2 * * *` | 2 AM daily |
+| `0 */4 * * *` | Every 4 hours |
+| `30 10 * * 1` | 10:30 AM every Monday |
+| `0 0 1 * *` | Midnight on the 1st of each month |
+| `*/15 * * * *` | Every 15 minutes |
+
+```bash
+sf agent register cleanup --role steward --focus custom --trigger "0 2 * * *"
+```
+
+#### Event triggers
+
+Event triggers fire when a matching event occurs. Optionally add a `condition` to filter:
+
+```typescript
+{
+  type: 'event',
+  event: 'task_completed',
+  condition: '{{status}} == closed'
+}
+```
+
+Supported events include `task_completed`, `branch_ready`, and custom events emitted by your workflows.
+
+Condition syntax: `{{variable}}` (truthy check), `{{var}} == value` (equality), `!{{var}}` (negation).
+
+#### Multiple triggers
+
+A steward can have both cron and event triggers. Any trigger firing activates the steward:
+
+```typescript
+triggers: [
+  { type: 'cron', schedule: '0 2 * * *' },
+  { type: 'event', event: 'branch_ready' },
+]
+```
+
+### How the merge steward works
+
+The merge steward is the most common steward type. When a worker completes a task:
+
+1. Task moves to **REVIEW** status
+2. Dispatch daemon assigns the task to an available merge steward
+3. Steward creates a **temporary worktree** at `origin/master` (detached HEAD)
+4. Runs your **test command** in the temp worktree
+5. **Tests pass** → squash-merge, push, clean up worktree and branch
+6. **Tests fail** → create a fix task with test output, assign back to the pool
+
+### How the docs steward works
+
+The docs steward keeps documentation in sync with your codebase. It scans for issues, classifies them by complexity, and auto-fixes what it can.
+
+**What it verifies:**
+- File paths referenced in documentation exist
+- Internal links between docs pages resolve
+- Exported symbols match actual code exports
+- CLI commands in docs match real CLI commands
+- Type fields and API method signatures are accurate
+
+**Issue classification:**
+
+| Complexity | Examples | Action |
+|------------|----------|--------|
+| `low` | Broken links, typos, stale file paths | Auto-fix |
+| `medium` | Outdated exports, renamed API methods | Auto-fix |
+| `high` | Ambiguous product decisions, major restructuring | Escalate to Director |
+
+Low-complexity issues with high-confidence fixes are applied automatically. The steward commits fixes to a `{stewardName}/docs/auto-updates` branch, squash-merges to the target branch, and cleans up.
+
+**Configuration:**
+
+```typescript
+createDocsStewardService({
+  workspaceRoot: '/project',
+  docsDir: 'docs',           // Where docs live
+  sourceDirs: ['packages', 'apps'], // Code to verify against
+  autoPush: true,            // Push fixes automatically
+});
+```
+
+<Aside type="tip">
+  The docs steward embodies an **evergreen documentation** philosophy — docs stay in sync with code automatically. Run it on a schedule (e.g., nightly) and it catches drift before it accumulates.
+</Aside>
+
+### Registering stewards
+
+```bash
+# Merge steward
+sf agent register m-steward-1 --role steward --focus merge
+
+# Docs steward
+sf agent register d-steward-1 --role steward --focus docs
+```
+
+<Aside type="tip">
+  You need at least one merge steward registered for the auto-merge workflow. Without one, completed tasks will stay in REVIEW status until you register and start a steward.
+</Aside>
+
+## Dispatch Daemon
+
+The dispatch daemon is the background process that connects Directors, Workers, and Stewards. It runs continuously and handles:
+
+- **Task assignment** — assigns ready tasks to idle ephemeral workers
+- **Message routing** — delivers messages between agents
+- **Steward triggers** — activates stewards based on events
+- **Orphan recovery** — re-spawns workers that were interrupted by server restart
+
+```bash
+sf daemon start    # Start the daemon
+sf daemon status   # Check daemon status
+sf daemon stop     # Stop the daemon
+```
+
+The daemon polls on a configurable interval (default: 5 seconds). See [Auto-Dispatch](/guides/auto-dispatch/) for the full details.
+
+## Naming conventions
+
+When creating agents through the dashboard UI, names are auto-populated:
+
+| Agent Type | Pattern | Examples |
+|------------|---------|----------|
+| Director | `director` | `director` |
+| Ephemeral Worker | `e-worker-{n}` | `e-worker-1`, `e-worker-2` |
+| Persistent Worker | `p-worker-{n}` | `p-worker-1`, `p-worker-2` |
+| Merge Steward | `m-steward-{n}` | `m-steward-1`, `m-steward-2` |
+| Docs Steward | `d-steward-{n}` | `d-steward-1`, `d-steward-2` |
+
+Names are editable before submission. The sequential number is based on existing agents of the same type.
+
+## Agent communication
+
+Agents communicate through the **inbox system**. Each agent has a dedicated channel for receiving messages.
+
+### Message types
+
+| Type | Description | Typical sender → receiver |
+|------|-------------|---------------------------|
+| `task-assignment` | New task assigned to an agent | Daemon → Worker |
+| `status-update` | Progress update on current work | Worker → Director |
+| `help-request` | Agent requesting assistance | Worker → Director |
+| `handoff` | Session handoff between agents | Worker → Worker |
+| `health-check` | Health monitoring ping | Daemon → Any agent |
+| `generic` | Freeform communication | Any → Any |
+
+### Communication flow
+
+```
+Human Operator
+     │ (Director Panel)
+     ▼
+┌──────────┐  status-update   ┌──────────┐
+│ Director │ ◄──────────────  │ Workers  │
+│          │  ──────────────▶ │          │
+└──────────┘  task-assignment  └──────────┘
+                                   │ handoff
+                                   ▼
+                              ┌──────────┐
+                              │  Worker  │
+                              └──────────┘
+     Steward ◄── triggers ── System
+```
+
+### Inbox routing rules
+
+The dispatch daemon routes messages differently by agent type:
+
+| Agent type | Has active session | Action |
+|---|---|---|
+| Director | — | Skipped (Directors check inbox manually) |
+| Ephemeral worker | Yes | Messages left unread (session handles them) |
+| Ephemeral worker | No (idle) | Accumulate for triage batch |
+| Persistent worker | Yes | Forwarded as real-time user input |
+| Persistent worker | No | Messages wait until session starts |
+
+## Best practices
+
+<div class="card-grid">
+  <FeatureCard title="Director tips">
+    Keep plans focused (5-10 tasks max). Set clear priorities and dependencies. Create tasks with enough detail for workers to execute independently. Report status only when the human asks.
+  </FeatureCard>
+  <FeatureCard title="Worker tips">
+    Read task specs fully before starting. Commit and push often. Escalate early when blocked — don't spin for 30+ minutes. Document blockers clearly in handoff notes.
+  </FeatureCard>
+  <FeatureCard title="Steward tips">
+    Register at least one merge steward for any orchestration that uses ephemeral workers. Don't over-automate — escalate uncertainty to the Director. Log all automated actions for audit.
+  </FeatureCard>
+</div>
+
+## Next steps
+
+<LinkCard title="Auto-Dispatch" description="How the daemon assigns work automatically" href="/guides/auto-dispatch/" />
+<LinkCard title="Custom Prompts" description="Customize agent behavior through prompt overrides" href="/guides/custom-prompts/" />
+
+<style>{`
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.card-grid > * {
+  margin-top: 0 !important;
+}
+`}</style>

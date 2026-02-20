@@ -1,6 +1,284 @@
 ---
 title: Orchestration Loop
-description: The core engine that drives multi-agent coordination in Stoneforge.
+description: The core engine that drives multi-agent coordination — dispatch daemon, polling loops, message routing, and recovery.
 ---
 
-Understand the check-dispatch-monitor-sync loop that powers Stoneforge's orchestration. Coming soon.
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+The orchestration loop is the engine that drives Stoneforge. It's a continuously running background process — the **Dispatch Daemon** — that connects Directors, Workers, and Stewards by polling for work, assigning tasks, routing messages, triggering workflows, and recovering from failures.
+
+## The big picture
+
+Here's the end-to-end flow from a human goal to merged code on main:
+
+```
+                                ┌─────────────────────────────────────┐
+                                │              HUMAN                   │
+                                │   (goals, requests, supervision)     │
+                                └─────────────────┬───────────────────┘
+                                                  │
+                                       sends message / goal
+                                                  │
+                                                  ▼
+                                ┌─────────────────────────────────────┐
+                                │            DIRECTOR                  │
+                                │  - Creates plans                     │
+                                │  - Creates tasks with priorities     │
+                                │  - Sets dependencies                 │
+                                └─────────────────┬───────────────────┘
+                                                  │
+                                        creates tasks
+                                                  │
+                                                  ▼
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│                        DISPATCH DAEMON (continuous polling)                       │
+│                                                                                  │
+│  ┌───────────────┐  ┌───────────────┐  ┌───────────────┐  ┌───────────────┐     │
+│  │   Worker      │  │   Message     │  │   Steward     │  │   Workflow    │     │
+│  │ Availability  │  │   Routing     │  │   Trigger     │  │    Task       │     │
+│  │   Polling     │  │              │  │   Polling     │  │   Polling     │     │
+│  └───────┬───────┘  └───────┬───────┘  └───────┬───────┘  └───────┬───────┘     │
+└──────────┼──────────────────┼──────────────────┼──────────────────┼──────────────┘
+           │                  │                  │                  │
+           ▼                  ▼                  ▼                  ▼
+┌───────────────┐  ┌───────────────┐  ┌───────────────┐  ┌───────────────┐
+│  EPHEMERAL    │  │  Route msgs   │  │ Create        │  │ Dispatch to   │
+│  WORKERS      │  │  by agent     │  │ workflow from │  │ available     │
+│               │  │  role; spawn  │  │ triggered     │  │ steward       │
+│ - Task exec   │  │  triage for   │  │ playbook      │  │               │
+│ - Commit/push │  │  idle agents  │  │               │  │               │
+│ - Close/hoff  │  │               │  │               │  │               │
+└───────┬───────┘  └───────────────┘  └───────┬───────┘  └───────┬───────┘
+        │                                     │                  │
+        │                                     └────────┬─────────┘
+        │ creates merge request                        │
+        │ on completion                                ▼
+        │                              ┌─────────────────────────────┐
+        └─────────────────────────────▶│          STEWARDS           │
+                                       │  - Merge review & testing   │
+                                       │  - Docs maintenance         │
+                                       └──────────────┬──────────────┘
+                                                      │
+                                        merge or create fix task
+                                                      │
+                                                      ▼
+                                       ┌─────────────────────────────┐
+                                       │       MAIN BRANCH           │
+                                       │    (merged, clean code)     │
+                                       └─────────────────────────────┘
+```
+
+### Flow summary
+
+1. **Human** sends a goal to the Director via the Director Panel
+2. **Director** creates a plan with tasks, priorities, and dependencies
+3. **Dispatch Daemon** continuously polls for ready work in multiple loops
+4. **Ephemeral Workers** execute tasks in isolated worktrees, commit, push, and close
+5. **Stewards** handle merge review, run tests, and squash-merge passing branches
+6. **Completed work** lands on the main branch
+
+The daemon is the connective tissue. Without it, tasks would sit unassigned and messages would go undelivered.
+
+## The Dispatch Daemon
+
+The daemon is a single process that runs multiple **polling loops** on a configurable interval (default: 5 seconds). Each cycle runs the loops in a fixed order:
+
+```
+┌─────────────────────────────────────────────────┐
+│              DAEMON POLL CYCLE                    │
+│                                                  │
+│  1. Orphan Recovery Polling                      │
+│     (recover workers from server restart)        │
+│                   │                              │
+│                   ▼                              │
+│  2. Message Routing                              │
+│     (route inbox messages, spawn triage)         │
+│                   │                              │
+│                   ▼                              │
+│  3. Worker Availability Polling                  │
+│     (assign tasks to idle workers)               │
+│                   │                              │
+│                   ▼                              │
+│  4. Steward Trigger Polling                      │
+│     (activate playbooks on events)               │
+│                   │                              │
+│                   ▼                              │
+│  5. Workflow Task Polling                        │
+│     (assign workflow tasks to stewards)          │
+│                   │                              │
+│                   ▼                              │
+│  6. Closed-Unmerged Reconciliation               │
+│     (recover stuck tasks)                        │
+│                   │                              │
+│                   ▼                              │
+│  7. Stuck Merge Recovery                         │
+│     (reset stalled merging/testing tasks)        │
+│                   │                              │
+│                   ▼                              │
+│  8. Plan Auto-Completion                         │
+│     (complete plans when all tasks closed)       │
+│                                                  │
+│  ─── sleep(interval) ─── repeat ───              │
+└─────────────────────────────────────────────────┘
+```
+
+The ordering matters. Orphan recovery runs first to handle any workers that were interrupted. Message routing runs before worker availability so that agents with unread triage messages are excluded from new task assignment.
+
+## Worker availability polling
+
+This is the core task-assignment loop. On each cycle:
+
+1. Find all registered ephemeral workers without an active session
+2. Skip workers with unread inbox messages (they need triage first)
+3. For each available worker, query for the highest-priority unassigned task that isn't blocked
+4. Assign the task to the worker
+5. Send a **dispatch message** to the worker's inbox with the full task context
+
+The dispatch message includes everything the worker needs to start:
+
+```
+## Task Assignment
+
+Worker ID: e-worker-1
+Director ID: director
+Task ID: el-3a8f
+Title: Add OAuth login
+Priority: 1
+
+### Description
+{full description content, including any handoff notes from previous workers}
+
+### Acceptance Criteria
+{acceptance criteria if present}
+
+### Instructions
+1. Read the task title and acceptance criteria carefully.
+2. Complete the task: make changes, commit, push, then run: sf task complete el-3a8f
+```
+
+<Aside>
+  The dispatch daemon only assigns tasks that are in plans with `active` status. Tasks in draft plans are invisible to dispatch — this is how Directors stage work before it's ready.
+</Aside>
+
+## Message routing
+
+The daemon routes messages differently based on agent role:
+
+| Agent type | Has active session | Behavior |
+| --- | --- | --- |
+| **Director** | Yes | Forward as user input (with idle debounce) |
+| **Director** | No | Messages accumulate until session starts |
+| **Ephemeral Worker** | Yes | Leave unread — active session will handle it |
+| **Ephemeral Worker** | No | Accumulate for triage batch |
+| **Persistent Worker** | Yes | Forward as user input in real-time |
+| **Persistent Worker** | No | Wait until session starts |
+| **Steward** | Yes | Leave unread — active session will handle it |
+| **Steward** | No | Accumulate for triage batch |
+
+### Message triage
+
+When an idle agent (no active session) has accumulated unread non-dispatch messages, the daemon spawns a **triage session** to process them. This ensures agents don't miss messages that arrive while they're between tasks.
+
+Key rules:
+- Messages are grouped by originating channel
+- Only one triage session per agent per poll cycle
+- Triage sessions operate in a temporary detached worktree
+- Triage takes priority over new task assignment — an agent with pending triage won't receive a new task until the triage is complete
+
+## Steward triggers and workflows
+
+Stewards are activated by **triggers**, not by direct task assignment. The trigger polling loop watches for conditions that should activate a steward:
+
+1. Check for triggered conditions (e.g., a task moved to REVIEW status)
+2. For each triggered condition, create a new workflow from the associated playbook template
+3. The workflow task is picked up by **workflow task polling**, which assigns it to an available steward
+
+This two-step process (trigger → workflow → assignment) means steward work goes through the same dispatch machinery as everything else. It also means workflows are durable — if a steward fails mid-workflow, the workflow can be resumed by another steward.
+
+## Orphan recovery
+
+When the orchestrator server restarts while ephemeral workers are mid-task, those workers lose their processes but their task assignments persist. Without recovery, these tasks would be stuck forever — assigned to workers that no longer exist.
+
+**The problem:**
+
+```
+Before restart:
+  e-worker-1 → session running → task "el-3a8f" in progress
+
+After restart:
+  e-worker-1 → session idle → task "el-3a8f" still assigned, status IN_PROGRESS
+  (worker availability polling skips this worker — it already has an assigned task)
+```
+
+**The solution:**
+
+Orphan recovery runs at the start of each poll cycle. For each worker with an assigned task but no active session:
+
+1. **Try resume first** — If a previous `sessionId` exists in the task metadata, attempt to resume that session with a prompt explaining the restart
+2. **Fall back to fresh spawn** — If no session ID or resume fails, spawn a fresh session with the full task prompt
+3. **Reuse existing worktree** — If the original worktree still exists, the worker continues from the existing code state
+
+<Aside type="tip">
+  Orphan recovery is enabled by default (`orphanRecoveryEnabled: true`). It also runs immediately on daemon startup after `reconcileOnStartup()` resets session statuses.
+</Aside>
+
+## Closed-unmerged reconciliation
+
+This is a safety net for tasks that end up in an inconsistent state. A task can reach `CLOSED` status without being merged — for example, if `sf task close` is run on a REVIEW task, or due to race conditions between CLI commands and steward processing.
+
+These tasks appear in the "Awaiting Merge" section of the web dashboard but are invisible to merge stewards, which only query for `status: REVIEW`.
+
+The reconciliation loop:
+
+1. Query for tasks with `status: CLOSED` and non-merged `mergeStatus`
+2. Skip tasks closed within the grace period (default: 120 seconds) to avoid racing with in-progress close+merge sequences
+3. Skip tasks with `reconciliationCount >= 3` as a safety valve against infinite loops
+4. Move the task back to `REVIEW` status and increment the reconciliation counter
+
+This ensures stuck tasks eventually get picked up by a merge steward.
+
+## Stuck merge recovery
+
+Merge operations can stall due to crashes, timeouts, or race conditions — leaving tasks with a `merging` or `testing` mergeStatus indefinitely. These tasks are invisible to the merge steward because it only picks up tasks with `pending` mergeStatus.
+
+The stuck merge recovery loop:
+
+1. Query for tasks with `mergeStatus` of `merging` or `testing`
+2. Skip tasks within the grace period (default: 10 minutes) to avoid racing with in-progress merge operations
+3. Skip tasks with a recovery count >= 3 as a safety valve
+4. Reset the task's `mergeStatus` back to `pending` and increment the recovery counter
+
+This ensures stalled merges don't block the pipeline permanently.
+
+## Plan auto-completion
+
+When all tasks in an active plan reach `CLOSED` status, there's no need for a human to manually close the plan. The plan auto-completion loop handles this automatically:
+
+1. Query for all plans with `active` status
+2. For each plan, check if every non-tombstone child task is `CLOSED`
+3. If all tasks are closed, mark the plan as `completed`
+
+This uses the core `canAutoComplete()` function to determine eligibility, ensuring consistent behavior between the daemon and manual plan management.
+
+## Next steps
+
+<LinkCard
+  title="Worktree Isolation"
+  description="How each agent gets an isolated copy of your repository"
+  href="/architecture/worktree-isolation/"
+/>
+<LinkCard
+  title="Dependency System"
+  description="How blocking dependencies control task readiness and auto-transitions"
+  href="/architecture/dependency-system/"
+/>
+<LinkCard
+  title="Auto-Dispatch"
+  description="Guide to configuring the dispatch daemon and worker pools"
+  href="/guides/auto-dispatch/"
+/>
+<LinkCard
+  title="Agent Roles"
+  description="Detailed guide to Director, Worker, and Steward roles"
+  href="/guides/agent-roles/"
+/>

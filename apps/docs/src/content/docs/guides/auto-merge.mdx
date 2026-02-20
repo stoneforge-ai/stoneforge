@@ -3,4 +3,234 @@ title: Auto-Merge
 description: How Stoneforge automatically merges completed agent work back to your main branch.
 ---
 
-Learn how completed element work is synced and merged back to your branch with automatic conflict resolution. Coming soon.
+import { Steps, Aside, LinkCard } from '@astrojs/starlight/components';
+
+When multiple agents work in parallel, merging their changes back to the main branch safely is the hardest problem. Stoneforge solves this with the merge steward — an automated agent that runs tests, squash-merges passing branches, and creates fix tasks for failures.
+
+## The merge problem
+
+With agents working in parallel on separate branches, you need to:
+
+- Test each branch against the latest main before merging
+- Handle merge conflicts when branches touch the same files
+- Handle test failures caused by integration issues
+- Clean up worktrees and branches after merge
+- Do all of this without corrupting your working directory
+
+The merge steward handles all of it automatically.
+
+## The merge lifecycle
+
+```
+Worker completes task
+        │
+        ▼
+  ┌───────────┐
+  │  REVIEW   │  mergeStatus: pending
+  └─────┬─────┘
+        │ steward picks up
+        ▼
+  ┌───────────┐
+  │  REVIEW   │  mergeStatus: testing
+  └─────┬─────┘
+        │
+   ┌────┴────┐
+   ▼         ▼
+ pass      fail
+   │         │
+   ▼         ▼
+┌────────┐ ┌──────────┐
+│REVIEW  │ │ REVIEW   │  mergeStatus: test_failed
+│merging │ └────┬─────┘
+└───┬────┘      │
+    │      fix task created
+    ▼      back to pool
+┌────────┐
+│ CLOSED │  mergeStatus: merged
+└────────┘
+```
+
+## Merge status values
+
+| Status | Meaning | What happens next |
+|--------|---------|-------------------|
+| `pending` | Awaiting merge steward | Steward picks it up on next poll |
+| `testing` | Tests running | Wait for results |
+| `merging` | Tests passed, merge in progress | Wait for completion |
+| `merged` | Successfully merged to main | Task moves to CLOSED |
+| `test_failed` | Tests failed | Fix task created; original stays in REVIEW |
+| `conflict` | Merge conflict detected | Fix task created; original stays in REVIEW |
+| `failed` | Merge failed (other reason) | Fix task created; original stays in REVIEW |
+| `not_applicable` | No merge needed | Task moves to CLOSED (e.g., fix already on master) |
+
+## How the merge steward works
+
+<Steps>
+1. **Detects** a completed task in REVIEW status with `mergeStatus: pending`
+
+2. **Creates a temporary worktree** with a detached HEAD at `origin/master`
+
+   ```
+   .stoneforge/.worktrees/_merge-<taskId>/
+   ```
+
+   This temp worktree is separate from the task's worktree. It uses a detached HEAD so it never locks the target branch.
+
+3. **Runs your test command** against the merged code
+
+   The steward merges the task branch into the temp worktree and runs the configured test command (default: `npm test`).
+
+4. **Tests pass** — squash-merge and push
+
+   - Creates a single squash commit: `{task title} ({task ID})`
+   - Pushes from detached HEAD: `git push origin HEAD:master`
+   - Syncs local master with remote
+   - Cleans up the temporary merge worktree
+   - Deletes the task worktree, local branch, and remote branch
+
+5. **Tests fail** — create a fix task
+
+   - Records the test output
+   - Creates a new fix task with `tags: ['fix']` containing the failure details
+   - Original task stays in REVIEW with `mergeStatus: test_failed`
+   - Fix task is dispatched to the next available worker
+</Steps>
+
+## Squash merge safety
+
+All merge operations run in a **temporary worktree** to protect your main repository:
+
+```
+Main repo HEAD ── untouched
+                                     ┌─────────────────────┐
+origin/master ──────────────────────▶│ Temp worktree       │
+                                     │ (detached HEAD)     │
+task branch ────── merge ──────────▶│                     │
+                                     │ git push HEAD:master│
+                                     └─────────────────────┘
+                                              │
+                                     cleanup (always)
+```
+
+Key safety properties:
+
+- The temp worktree uses a **detached HEAD**, so it never locks the target branch
+- A safety guard (`execGitSafe`) rejects any git operation that accidentally targets the main repo
+- The temp worktree is cleaned up in a `finally` block — even if the merge fails
+- The local master branch is synced with remote **after** the worktree is removed (avoids lock contention)
+
+<Aside type="tip">
+  Because merges happen in temporary worktrees, your main working directory is never affected. You can keep working while merges happen in the background.
+</Aside>
+
+## The two-phase merge
+
+The merge runs in two phases to avoid branch locking issues:
+
+**Phase A (temp worktree):**
+1. Fetch origin for fresh remote state
+2. Pre-flight conflict detection against `origin/master`
+3. Create temp worktree with detached HEAD
+4. Perform squash merge and commit
+5. Push to remote
+6. Remove temp worktree (always, via `finally`)
+
+**Phase B (main repo):**
+1. Sync local master with remote (best-effort fast-forward)
+2. Delete task worktree
+3. Delete source branch (local and remote)
+
+Phase B is best-effort — if it fails, the merge is still successful (the push in Phase A is what matters).
+
+## Handling merge conflicts
+
+When the steward detects a merge conflict:
+
+1. `mergeStatus` is set to `conflict`
+2. A **fix task** is created with details about the conflicting files
+3. The fix task is dispatched to an available worker
+4. The worker resolves conflicts in the existing task worktree
+5. When the fix is complete, the task goes through merge review again
+
+## Handling test failures
+
+When tests fail after merge:
+
+1. `mergeStatus` is set to `test_failed`
+2. A **fix task** is created with the test output
+3. The task worktree and branch are **preserved** (the worker needs them to fix the issue)
+4. The fix task is dispatched to an available worker
+5. The worker fixes the failing tests, and the cycle repeats
+
+<Aside>
+  Fix tasks are tagged with `['fix']` so you can filter for them: `sf task list --tag fix`.
+</Aside>
+
+## Closed-unmerged reconciliation
+
+Tasks can sometimes end up with `status=CLOSED` but without being merged (race conditions, manual `sf task close` on REVIEW tasks). These are invisible to the merge steward, which only looks for REVIEW-status tasks.
+
+The dispatch daemon's reconciliation loop detects and recovers these stuck tasks:
+
+1. Finds tasks with `status=CLOSED` and `mergeStatus` not `merged`
+2. Waits for a grace period (default: 120 seconds) to avoid racing
+3. Moves the task back to REVIEW status
+4. Merge steward processes it on the next cycle
+
+A safety valve stops reconciliation after 3 attempts per task.
+
+## Configuration
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `mergeStrategy` | `'squash'` | `'squash'` (single commit) or `'merge'` (preserve history) |
+| `autoPushAfterMerge` | `true` | Push target branch to remote after merge |
+| `autoCleanup` | `true` | Remove task worktree after successful merge |
+| `deleteBranchAfterMerge` | `true` | Delete source branch (local and remote) after merge |
+| `testCommand` | `'npm test'` | Command to run tests |
+| `testTimeoutMs` | `300000` | Test timeout in milliseconds (5 minutes) |
+| `autoMerge` | `true` | Automatically merge when tests pass |
+| `targetBranch` | auto-detect | Branch to merge into (defaults to master/main) |
+
+### Merge strategies
+
+**Squash merge** (default) — combines all commits from the task branch into a single commit on main. Keeps the main branch history clean and linear. Commit message: `{task title} ({task ID})`.
+
+**Standard merge** — creates a merge commit preserving the full branch history. Use when you need to see individual commits. Commit message: `Merge branch '{branch}' (Task: {task ID})`.
+
+## Branch cleanup
+
+After a successful merge, the steward cleans up:
+
+1. **Temporary merge worktree** — always removed (even on failure)
+2. **Task worktree directory** — removed after successful merge
+3. **Local branch** — deleted
+4. **Remote branch** — push-deleted from remote
+
+When tests fail or conflicts are detected, the task worktree and branch are **preserved** so the fix worker can continue from the existing state.
+
+## Merge request providers
+
+Stoneforge supports pluggable merge request providers that control how merges are announced externally:
+
+| Provider | Behavior | When to use |
+|----------|----------|-------------|
+| **Local** (default) | No-op — merge happens locally with no external notification | Solo development, local-only workflows |
+| **GitHub** | Creates a GitHub pull request via the `gh` CLI before merge | Team workflows, code review requirements |
+
+The merge request provider is separate from the merge steward. The steward handles the actual merge (tests, squash, cleanup). The provider handles external visibility — creating a PR that team members can review before or after merge.
+
+<Aside>
+  You can use both together: the steward automates the merge process while the GitHub provider creates a PR for visibility and review tracking.
+</Aside>
+
+## Monitoring merges
+
+- **Dashboard Merge Requests page** — shows tasks in REVIEW status with their merge status
+- `sf task list --status review` — list tasks awaiting merge
+- `sf task list --tag fix` — list fix tasks created from failures
+
+## Next steps
+
+<LinkCard title="Auto-Dispatch" description="How the daemon assigns work to agents" href="/guides/auto-dispatch/" />
+<LinkCard title="Task Planning" description="Structure work for optimal parallel execution" href="/guides/task-planning/" />

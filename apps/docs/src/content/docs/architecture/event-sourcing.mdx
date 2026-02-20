@@ -1,6 +1,211 @@
 ---
 title: Event Sourcing
-description: How Stoneforge uses event sourcing for reliable, auditable state management.
+description: How Stoneforge uses event sourcing for reliable, auditable state management — storing events, not state.
 ---
 
-Deep dive into Stoneforge's event-sourced architecture — immutable events, state derivation, and crash recovery. Coming soon.
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+import FeatureCard from '../../../components/custom/FeatureCard.astro';
+
+Stoneforge stores **events**, not state. Every mutation — creating a task, changing a priority, closing a bug — generates an immutable event record. Current state is derived by replaying events. The events are the source of truth; state is a cached computation.
+
+## Why events instead of state
+
+Traditional systems store only the current state. When you update a task's status from `open` to `in_progress`, the old status is overwritten and lost forever. In a multi-agent system, this creates serious problems:
+
+<div class="card-grid" data-sf-stagger>
+  <FeatureCard title="No audit trail">
+    Who changed what, and when? With state-only storage, you can't answer this without adding a separate logging system.
+  </FeatureCard>
+  <FeatureCard title="No time travel">
+    What did this task look like yesterday? The previous state is gone — overwritten by the latest update.
+  </FeatureCard>
+  <FeatureCard title="No accountability">
+    Which agent closed this task incorrectly? When multiple agents write to the same data, attribution disappears.
+  </FeatureCard>
+  <FeatureCard title="Conflict blindness">
+    Which update wins when two agents edit simultaneously? Without a history of changes, conflict resolution is guesswork.
+  </FeatureCard>
+</div>
+
+Event sourcing solves all of these by recording every change as a first-class, immutable record.
+
+## The Event record
+
+Every mutation in Stoneforge generates an event with these fields:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | `number` | Auto-incrementing, globally ordered |
+| `elementId` | `ElementId` | The element that was changed |
+| `eventType` | `EventType` | Category of change (e.g., `created`, `updated`, `closed`) |
+| `actor` | `EntityId` | Who made the change (agent ID, user ID, or `system:*`) |
+| `oldValue` | `object \| null` | Previous state (null for `created` events) |
+| `newValue` | `object \| null` | New state (null for `deleted` events) |
+| `createdAt` | `Timestamp` | When the change occurred |
+
+<Aside>
+  Events are **append-only** — they are never updated or deleted. This immutability guarantee is what makes the audit trail trustworthy. The only exception is GDPR compliance scenarios, handled through a separate data-erasure process.
+</Aside>
+
+## Event types
+
+Events are categorized by what changed. Each category captures different kinds of state transitions.
+
+### Lifecycle events
+
+Core element state changes:
+
+| Event | Meaning | oldValue | newValue |
+| --- | --- | --- | --- |
+| `created` | New element born | `null` | Full element state |
+| `updated` | Fields changed | Changed fields only | New values |
+| `closed` | Work completed | Prior state | State with `closedReason` |
+| `reopened` | Closed undone | Closed state | Open state |
+| `deleted` | Soft delete (tombstone) | Prior state | `null` |
+
+### Dependency events
+
+Relationship changes between elements:
+
+| Event | Meaning | Context |
+| --- | --- | --- |
+| `dependency_added` | New relationship created | Both element IDs and dependency type |
+| `dependency_removed` | Relationship deleted | Both element IDs and dependency type |
+
+### System events
+
+Events triggered by Stoneforge's internal machinery:
+
+| Event | Meaning | Actor |
+| --- | --- | --- |
+| `auto_blocked` | Element automatically blocked by unresolved dependency | `system:blocked-cache` |
+| `auto_unblocked` | All blocking dependencies resolved | `system:blocked-cache` |
+| `tag_added` | Tag attached to element | The agent or user who added it |
+| `tag_removed` | Tag removed from element | The agent or user who removed it |
+| `member_added` | Element added to a collection | The agent or user who added it |
+| `member_removed` | Element removed from a collection | The agent or user who removed it |
+
+## How state is derived
+
+State in Stoneforge is a **projection** of the event stream. Given a sequence of events for an element, you replay them in order to compute the current state:
+
+```
+  Event 1         Event 2         Event 3         Event 4
+  (created)       (updated)       (auto_blocked)  (closed)
+     │               │               │               │
+     ▼               ▼               ▼               ▼
+┌─────────┐    ┌─────────┐    ┌─────────┐    ┌─────────┐
+│ status:  │    │ status:  │    │ status:  │    │ status:  │
+│  open    │───▶│  open    │───▶│ blocked  │───▶│ closed   │
+│ priority:│    │ priority:│    │ priority:│    │ priority:│
+│  3       │    │  1       │    │  1       │    │  1       │
+└─────────┘    └─────────┘    └─────────┘    └─────────┘
+  Snapshot 1     Snapshot 2     Snapshot 3     Snapshot 4
+```
+
+Each event type maps to a state transformation:
+
+- **`created`** — Initialize state from `newValue`
+- **`updated` / `closed` / `reopened`** — Replace state with `newValue`
+- **`deleted`** — Set state to null (tombstone)
+- **`auto_blocked` / `auto_unblocked`** — Update the `status` field only
+- **Dependency/tag events** — Stored separately, don't modify element state
+
+The SQLite database stores the **latest computed state** for fast reads. But because every event is preserved, you can reconstruct the state at any point in history.
+
+## Timeline snapshots
+
+You can generate a complete timeline of an element's history — useful for debugging agent behavior and understanding how a task evolved:
+
+```
+[2024-01-15T09:00:00.000Z] Created by director-1
+  Status: open
+  Priority: 3
+
+[2024-01-15T09:30:00.000Z] Updated priority by director-1
+  Status: open
+  Priority: 1
+
+[2024-01-15T10:00:00.000Z] Automatically blocked (dependency not satisfied)
+  Status: blocked
+  Priority: 1
+
+[2024-01-15T11:00:00.000Z] Automatically unblocked (blockers resolved)
+  Status: open
+  Priority: 1
+
+[2024-01-15T12:00:00.000Z] Closed by worker-1: Done
+  Status: closed
+  Priority: 1
+```
+
+This timeline is reconstructed purely from the event stream. No separate logging infrastructure needed — the events *are* the log.
+
+## Events vs. JSONL sync
+
+The event system and the JSONL sync system are **separate systems** with different purposes. Don't confuse them:
+
+| Aspect | Events (SQLite) | Sync (JSONL) |
+| --- | --- | --- |
+| **Purpose** | Audit trail and history | Data portability and Git collaboration |
+| **Granularity** | Every individual mutation | Final state snapshots |
+| **Storage** | `events` SQL table | `.stoneforge/sync/*.jsonl` files |
+| **Use case** | "What happened to this task?" | "Sync this project across branches" |
+| **Persists across** | Server lifetime | Git history (forever) |
+
+<Aside type="caution">
+  Events capture the **journey** — every step of how data changed. JSONL captures the **destination** — the current state of each element. Events are local to the SQLite database and are not synced via Git. JSONL files are committed to Git and travel with your repository.
+</Aside>
+
+## Storage model
+
+Events are stored in a dedicated SQLite table with auto-incrementing IDs that provide a global ordering:
+
+```sql
+CREATE TABLE events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  element_id TEXT NOT NULL REFERENCES elements(id) ON DELETE CASCADE,
+  event_type TEXT NOT NULL,
+  actor TEXT NOT NULL,
+  old_value TEXT,    -- JSON
+  new_value TEXT,    -- JSON
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX idx_events_element ON events(element_id);
+CREATE INDEX idx_events_type ON events(event_type);
+CREATE INDEX idx_events_actor ON events(actor);
+CREATE INDEX idx_events_created_at ON events(created_at);
+```
+
+The four indexes support the most common query patterns: "all events for this element," "all events of this type," "all events by this actor," and "all events in this time range."
+
+## Next steps
+
+<LinkCard
+  title="Storage"
+  description="Deep dive into the dual storage model — SQLite, JSONL, dirty tracking, and multi-runtime backends"
+  href="/architecture/storage/"
+/>
+<LinkCard
+  title="Sync & Merge"
+  description="How content hashing and merge strategies keep data consistent across branches"
+  href="/architecture/sync-and-merge/"
+/>
+<LinkCard
+  title="Core Types Reference"
+  description="Full type definitions for events, elements, and dependencies"
+  href="/reference/core-types/"
+/>
+
+<style>{`
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.card-grid > * {
+  margin-top: 0 !important;
+}
+`}</style>

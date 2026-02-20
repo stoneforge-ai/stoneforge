@@ -1,6 +1,586 @@
 ---
 title: Core Types
-description: TypeScript type definitions for Stoneforge's core data structures.
+description: TypeScript type definitions for all Stoneforge data structures — elements, tasks, entities, documents, dependencies, and more.
 ---
 
-Reference for Element, Event, AgentConfig, and other core TypeScript types. Coming soon.
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+All types are exported from `@stoneforge/core`. Every data structure in Stoneforge is an **element** — tasks, entities, documents, messages, plans, workflows, channels, libraries, teams, and playbooks all share a common base.
+
+## Element
+
+The base type shared by all elements:
+
+```typescript
+interface Element {
+  id: ElementId;
+  type: ElementType;
+  createdAt: Timestamp;       // ISO 8601
+  updatedAt: Timestamp;       // ISO 8601
+  createdBy: EntityId;
+  tags: string[];
+  metadata: Record<string, unknown>;  // Arbitrary JSON (64KB limit)
+  deletedAt?: Timestamp;      // Soft-delete timestamp
+}
+
+type ElementType =
+  | 'task' | 'entity' | 'document' | 'message'
+  | 'plan' | 'workflow' | 'playbook' | 'channel'
+  | 'library' | 'team';
+```
+
+Type guards and utilities:
+
+```typescript
+import { isElement, generateId } from '@stoneforge/core';
+
+isElement(value);          // Type guard
+generateId(input);         // Generate hash-based ID
+```
+
+---
+
+## Task
+
+The primary work unit. Tasks track what needs to be done, who's doing it, and what's blocking progress.
+
+```typescript
+interface Task extends Element {
+  type: 'task';
+  title: string;
+  descriptionRef?: DocumentId;
+  acceptanceCriteria?: string;
+  status: TaskStatus;
+  priority: Priority;          // 1 (critical) to 5 (minimal)
+  complexity: Complexity;      // 1 (simplest) to 5 (most complex)
+  taskType: TaskTypeValue;
+  closeReason?: string;
+  assignee?: EntityId;
+  owner?: EntityId;
+  deadline?: Timestamp;
+  scheduledFor?: Timestamp;
+  closedAt?: Timestamp;
+  externalRef?: string;
+  deletedAt?: Timestamp;
+  deletedBy?: EntityId;
+  deleteReason?: string;
+}
+```
+
+### TaskStatus
+
+```typescript
+type TaskStatus =
+  | 'open'
+  | 'in_progress'
+  | 'blocked'       // Computed from dependencies
+  | 'deferred'
+  | 'backlog'
+  | 'review'
+  | 'closed'
+  | 'tombstone';    // Terminal — soft-deleted
+```
+
+<Aside>
+  The `blocked` status is **computed** — a task is automatically marked as blocked when it has unresolved blocking dependencies. When all blockers are satisfied, the task returns to its previous status. You don't set this manually.
+</Aside>
+
+### Status transitions
+
+| From | Allowed transitions |
+| --- | --- |
+| `open` | `in_progress`, `blocked`, `deferred`, `backlog`, `closed` |
+| `in_progress` | `open`, `blocked`, `deferred`, `review`, `closed` |
+| `blocked` | `open`, `in_progress`, `deferred`, `closed` |
+| `deferred` | `open`, `in_progress`, `backlog` |
+| `backlog` | `open`, `deferred`, `closed` |
+| `review` | `closed`, `in_progress` |
+| `closed` | `open` only |
+| `tombstone` | Terminal — no transitions |
+
+### Priority & complexity
+
+```typescript
+type Priority = 1 | 2 | 3 | 4 | 5;
+// 1 = critical, 2 = high, 3 = medium, 4 = low, 5 = minimal
+
+type Complexity = 1 | 2 | 3 | 4 | 5;
+// 1 = trivial, 2 = simple, 3 = moderate, 4 = complex, 5 = very complex
+```
+
+### TaskType
+
+```typescript
+const TaskTypeValue = {
+  BUG: 'bug',
+  FEATURE: 'feature',
+  TASK: 'task',
+  CHORE: 'chore',
+} as const;
+```
+
+### Utilities
+
+```typescript
+import { createTask, updateTaskStatus, isTask } from '@stoneforge/core';
+
+createTask(input);                        // Factory
+updateTaskStatus(task, newStatus);        // Validated transition
+isTask(element);                          // Type guard
+```
+
+---
+
+## Entity
+
+Represents any actor in the system — a human, an AI agent, or a system process.
+
+```typescript
+interface Entity extends Element {
+  type: 'entity';
+  name: string;                // Unique, case-sensitive
+  entityType: EntityTypeValue;
+  reportsTo?: EntityId;
+  publicKey?: string;          // Ed25519 public key (for cryptographic mode)
+}
+
+const EntityTypeValue = {
+  AGENT: 'agent',
+  HUMAN: 'human',
+  SYSTEM: 'system',
+} as const;
+```
+
+### Constraints
+
+- Names must match: `/^[a-zA-Z][a-zA-Z0-9_-]*$/`
+- Reserved names (case-insensitive): `system`, `anonymous`, `unknown`
+
+### Utilities
+
+```typescript
+import { createEntity, isEntity, validateEntity } from '@stoneforge/core';
+```
+
+---
+
+## Document
+
+Versioned content with full-text search support. Used for task descriptions, message content, knowledge base articles, and more.
+
+```typescript
+interface Document extends Element {
+  type: 'document';
+  title?: string;
+  contentType: ContentType;
+  content: string;
+  version: number;                        // Starts at 1
+  previousVersionId: DocumentId | null;   // null for version 1
+  category: DocumentCategory;
+  status: DocumentStatus;
+  immutable: boolean;
+}
+
+type ContentType = 'text' | 'markdown' | 'json';
+type DocumentStatus = 'active' | 'archived';
+```
+
+### DocumentCategory
+
+```typescript
+type DocumentCategory =
+  | 'spec'             // Technical specifications
+  | 'prd'              // Product requirement documents
+  | 'decision-log'     // Architecture/design decisions
+  | 'changelog'        // Release and change notes
+  | 'tutorial'         // Learning-oriented walkthroughs
+  | 'how-to'           // Goal-oriented instructions
+  | 'explanation'       // Conceptual discussion
+  | 'reference'        // Technical reference
+  | 'runbook'          // Operational procedures
+  | 'meeting-notes'    // Meeting summaries
+  | 'post-mortem'      // Incident analysis
+  | 'task-description' // System-managed
+  | 'message-content'  // System-managed
+  | 'other';           // Default
+```
+
+### Constraints
+
+- Content size limited to **10 MB** (UTF-8 bytes)
+- `category` and `status` are required (defaults applied at creation)
+- `task-description` and `message-content` are system-managed categories
+- Archived documents are hidden from default list/search results
+- When `immutable` is `true`, content updates are rejected
+- Documents with `message-content` category are automatically set to `immutable: true`
+
+### Utilities
+
+```typescript
+import { createDocument, isDocument, validateJsonContent } from '@stoneforge/core';
+```
+
+---
+
+## Message
+
+Immutable communication records between entities.
+
+```typescript
+interface Message extends Element {
+  type: 'message';
+  sender: EntityId;
+  channelId: ChannelId;
+  threadId: MessageId | null;            // null for non-threaded
+  contentRef: DocumentId;                // Reference to content Document
+  attachments: readonly DocumentId[];
+}
+```
+
+<Aside>
+  Messages are **immutable** after creation (except `channelId` for merge operations). Content is stored as a Document reference, not inline text — create a Document first, then reference its ID.
+</Aside>
+
+### Utilities
+
+```typescript
+import { createMessage, isMessage } from '@stoneforge/core';
+```
+
+---
+
+## Dependency
+
+Relationships between elements. Dependencies power blocking, ordering, threading, attribution, and more.
+
+```typescript
+interface Dependency {
+  blockedId: ElementId;
+  blockerId: ElementId;
+  type: DependencyType;
+  createdAt: Timestamp;
+  createdBy: EntityId;
+  metadata: Record<string, unknown>;
+}
+```
+
+### DependencyType
+
+```typescript
+type DependencyType =
+  // Blocking (trigger blocked status)
+  | 'blocks'         // blockedId waits for blockerId
+  | 'parent-child'   // blockedId (child) waits for blockerId (parent)
+  | 'awaits'         // blockedId waits for gate on blockerId
+  // Associative
+  | 'relates-to'     // Bidirectional association
+  | 'references'     // Citation
+  | 'supersedes'     // Replacement
+  | 'duplicates'     // Duplicate of
+  | 'caused-by'      // Causal link
+  | 'validates'      // Validates another element
+  | 'mentions'       // @mention reference
+  // Attribution
+  | 'authored-by'
+  | 'assigned-to'
+  | 'approved-by'
+  // Threading
+  | 'replies-to';
+```
+
+<Aside type="tip">
+  Only three types trigger the `blocked` status: `blocks`, `awaits`, and `parent-child`. All other types are associative — they express relationships without affecting task scheduling.
+</Aside>
+
+### Direction semantics
+
+| Type | Who waits |
+| --- | --- |
+| `blocks` | **blockedId** waits for blockerId |
+| `parent-child` | **blockedId** (child) waits for blockerId (parent) |
+| `awaits` | **blockedId** waits for gate on blockerId |
+| `relates-to` | Neither (bidirectional) |
+
+### Gate metadata
+
+The `awaits` dependency type supports gates — conditions that must be satisfied before the dependency is resolved:
+
+```typescript
+// Timer gate
+{ gateType: 'timer', waitUntil: Timestamp }
+
+// Approval gate
+{ gateType: 'approval', requiredApprovers: EntityId[], currentApprovers?: EntityId[] }
+
+// External gate
+{ gateType: 'external', externalSystem: string, externalId: string, satisfied?: boolean }
+
+// Webhook gate
+{ gateType: 'webhook', webhookUrl?: string, callbackId?: string, satisfied?: boolean }
+```
+
+---
+
+## Plan
+
+Groups related tasks. Plans start as `draft` — tasks in draft plans are not dispatchable.
+
+```typescript
+interface Plan extends Element {
+  type: 'plan';
+  title: string;
+  descriptionRef?: DocumentId;
+  status: PlanStatus;
+  completedAt?: Timestamp;
+  cancelledAt?: Timestamp;
+  cancelReason?: string;
+}
+
+type PlanStatus = 'draft' | 'active' | 'completed' | 'cancelled';
+```
+
+Tasks are added to plans via `parent-child` dependencies. Tasks in a plan are **not** blocked by plan status — they are only blocked by task-level dependencies.
+
+---
+
+## Workflow
+
+Instantiated from playbooks. Reusable task sequences with durable state.
+
+```typescript
+interface Workflow extends Element {
+  type: 'workflow';
+  title: string;
+  descriptionRef?: DocumentId;
+  status: WorkflowStatus;
+  playbookId?: PlaybookId;
+  ephemeral: boolean;
+  variables: Record<string, unknown>;
+  startedAt?: Timestamp;
+  finishedAt?: Timestamp;
+  failureReason?: string;
+  cancelReason?: string;
+}
+
+type WorkflowStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+```
+
+<Aside>
+  When `ephemeral` is `true`, the workflow and its tasks are not synced to JSONL files and don't persist across exports. Ephemeral workflows are used for internal orchestration.
+</Aside>
+
+---
+
+## Channel
+
+Communication channels between entities.
+
+```typescript
+interface Channel extends Element {
+  type: 'channel';
+  name: string;
+  description: string | null;
+  channelType: ChannelType;
+  members: EntityId[];
+  permissions: ChannelPermissions;
+}
+
+type ChannelType = 'direct' | 'group';
+
+interface ChannelPermissions {
+  visibility: 'public' | 'private';
+  joinPolicy: 'open' | 'invite-only' | 'request';
+  modifyMembers: EntityId[];
+}
+```
+
+Direct channel names are deterministic: `entityA:entityB` (sorted alphabetically).
+
+---
+
+## Library
+
+Hierarchical collections of documents.
+
+```typescript
+interface Library extends Element {
+  type: 'library';
+  name: string;
+  descriptionRef?: DocumentId;
+}
+```
+
+Documents and sub-libraries are linked via `parent-child` dependencies. Circular nesting is prevented at the API level.
+
+---
+
+## Team
+
+```typescript
+interface Team extends Element {
+  type: 'team';
+  name: string;
+  members: EntityId[];
+  descriptionRef?: DocumentId;
+  status?: TeamStatus;
+  deletedAt?: Timestamp;
+  deletedBy?: EntityId;
+  deleteReason?: string;
+}
+
+type TeamStatus = 'active' | 'tombstone';
+```
+
+---
+
+## Playbook
+
+Templates for workflows. Instantiated with variable substitution.
+
+```typescript
+interface Playbook extends Element {
+  type: 'playbook';
+  name: string;
+  title: string;
+  descriptionRef?: DocumentId;
+  version: number;
+  steps: PlaybookStep[];
+  variables: PlaybookVariable[];
+  extends?: string[];          // Parent playbook names
+}
+```
+
+Variable substitution uses `{{varName}}` syntax.
+
+---
+
+## InboxItem
+
+Notification items delivered to entity inboxes.
+
+```typescript
+interface InboxItem {
+  id: string;
+  recipientId: EntityId;
+  messageId: MessageId;
+  channelId: ChannelId;
+  sourceType: InboxSourceType;
+  status: InboxStatus;
+  readAt: Timestamp | null;    // null if archived without reading
+  createdAt: Timestamp;
+}
+
+type InboxStatus = 'unread' | 'read' | 'archived';
+type InboxSourceType = 'direct' | 'mention' | 'thread_reply';
+```
+
+---
+
+## Event
+
+Audit trail entries. Every mutation generates an event.
+
+```typescript
+interface Event {
+  id: number;                  // Auto-incrementing
+  elementId: ElementId;
+  eventType: EventType;
+  actor: EntityId;
+  oldValue: Record<string, unknown> | null;
+  newValue: Record<string, unknown> | null;
+  createdAt: Timestamp;
+}
+
+type EventType =
+  | 'created' | 'updated' | 'closed' | 'reopened' | 'deleted'
+  | 'dependency_added' | 'dependency_removed'
+  | 'tag_added' | 'tag_removed'
+  | 'member_added' | 'member_removed'
+  | 'comment_added' | 'comment_updated' | 'comment_deleted'
+  | 'comment_resolved' | 'comment_unresolved'
+  | 'auto_blocked' | 'auto_unblocked';
+```
+
+Auto-generated blocking events use actor `'system:blocked-cache'`.
+
+---
+
+## Branded ID types
+
+Stoneforge uses branded types to prevent accidentally mixing up IDs from different element types:
+
+```typescript
+type ElementId  = string & { readonly [ElementIdBrand]: typeof ElementIdBrand };
+type EntityId   = string & { readonly [EntityIdBrand]: typeof EntityIdBrand };
+type DocumentId = ElementId & { readonly [DocumentIdBrand]: typeof DocumentIdBrand };
+type MessageId  = ElementId & { readonly [MessageIdBrand]: typeof MessageIdBrand };
+type ChannelId  = ElementId & { readonly [ChannelIdBrand]: typeof ChannelIdBrand };
+type WorkflowId = ElementId & { readonly [WorkflowIdBrand]: typeof WorkflowIdBrand };
+type TeamId     = ElementId & { readonly [TeamIdBrand]: typeof TeamIdBrand };
+type LibraryId  = ElementId & { readonly [LibraryIdBrand]: typeof LibraryIdBrand };
+type PlaybookId = ElementId & { readonly [PlaybookIdBrand]: typeof PlaybookIdBrand };
+```
+
+### Cast utilities
+
+At trust boundaries (API responses, database rows, config values), use cast utilities instead of `as unknown as`:
+
+```typescript
+import { asEntityId, asElementId } from '@stoneforge/core';
+
+const entityId = asEntityId('ent-abc123');
+const elementId = asElementId('el-xyz789');
+```
+
+---
+
+## Error types
+
+Errors are organized by category with structured error codes:
+
+```typescript
+// Base class
+class StoneforgeError extends Error {
+  code: string;
+  details?: Record<string, unknown>;
+  httpStatus: number;
+}
+
+// Subclasses
+class ValidationError extends StoneforgeError {}   // Input validation
+class NotFoundError extends StoneforgeError {}      // Element/entity not found
+class ConflictError extends StoneforgeError {}      // Duplicate, cycle
+class ConstraintError extends StoneforgeError {}    // Immutability, structural
+class StorageError extends StoneforgeError {}       // Database errors
+class IdentityError extends StoneforgeError {}      // Auth/signature errors
+```
+
+### Error codes
+
+| Category | Codes |
+| --- | --- |
+| Validation | `INVALID_INPUT`, `INVALID_ID`, `INVALID_STATUS`, `TITLE_TOO_LONG`, `INVALID_CONTENT_TYPE`, `INVALID_JSON`, `MISSING_REQUIRED_FIELD`, `INVALID_TAG`, `INVALID_TIMESTAMP`, `INVALID_METADATA`, `INVALID_CATEGORY`, `INVALID_DOCUMENT_STATUS` |
+| Not Found | `NOT_FOUND`, `ENTITY_NOT_FOUND`, `DOCUMENT_NOT_FOUND`, `CHANNEL_NOT_FOUND`, `PLAYBOOK_NOT_FOUND`, `DEPENDENCY_NOT_FOUND` |
+| Conflict | `ALREADY_EXISTS`, `DUPLICATE_NAME`, `CYCLE_DETECTED`, `SYNC_CONFLICT`, `DUPLICATE_DEPENDENCY`, `CONCURRENT_MODIFICATION` |
+| Constraint | `IMMUTABLE`, `HAS_DEPENDENTS`, `INVALID_PARENT`, `MAX_DEPTH_EXCEEDED`, `MEMBER_REQUIRED`, `TYPE_MISMATCH`, `ALREADY_IN_PLAN` |
+| Storage | `DATABASE_ERROR`, `DATABASE_BUSY`, `EXPORT_FAILED`, `IMPORT_FAILED`, `MIGRATION_FAILED` |
+| Identity | `INVALID_SIGNATURE`, `SIGNATURE_VERIFICATION_FAILED`, `SIGNATURE_EXPIRED`, `INVALID_PUBLIC_KEY`, `ACTOR_NOT_FOUND`, `SIGNATURE_REQUIRED`, `NO_PUBLIC_KEY` |
+
+```typescript
+import { ErrorCode, StoneforgeError } from '@stoneforge/core';
+
+try {
+  await api.create({ /* ... */ });
+} catch (err) {
+  if (err instanceof StoneforgeError) {
+    switch (err.code) {
+      case ErrorCode.DUPLICATE_NAME:
+        // Handle duplicate
+        break;
+      case ErrorCode.CYCLE_DETECTED:
+        // Handle dependency cycle
+        break;
+    }
+  }
+}
+```

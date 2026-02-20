@@ -1,6 +1,217 @@
 ---
 title: Multi-Provider Support
-description: Use different LLM providers for different agents — Claude, GPT-4, Gemini, and more.
+description: Use different LLM providers for different agents — Claude Code, OpenCode, and OpenAI Codex.
 ---
 
-Configure Stoneforge to use different LLM providers for different agent roles. Coming soon.
+import { Tabs, TabItem, Aside, LinkCard } from '@astrojs/starlight/components';
+import ProviderBadge from '../../../components/custom/ProviderBadge.astro';
+
+Stoneforge supports multiple LLM providers. You can assign different providers to different agents — run your Director on the most capable model, workers on a fast/cheap model, and distribute load across providers to avoid rate limits.
+
+## Supported providers
+
+| Provider | Badge | CLI tool | Default |
+|----------|-------|----------|---------|
+| Claude Code | <ProviderBadge name="claude-code" color="#60a5fa" /> | `claude` | Yes |
+| OpenCode | <ProviderBadge name="opencode" color="#4ade80" /> | `opencode` | No |
+| OpenAI Codex | <ProviderBadge name="codex" color="#f59e0b" /> | Built-in (JSON-RPC over stdio) | No |
+
+<Aside type="tip">
+  You do **not** configure API keys in Stoneforge. Authentication is handled by the underlying provider CLI. If `claude` works in your terminal, it works with Stoneforge. Same for `opencode` and Codex.
+</Aside>
+
+## Provider setup
+
+<Tabs>
+  <TabItem label="Claude Code">
+    Claude Code is the default provider. If you've already set up the `claude` CLI, you're ready to go.
+
+    ```bash
+    # Verify Claude Code is working
+    claude --version
+
+    # Register agents (claude-code is the default, no --provider needed)
+    sf agent register director --role director
+    sf agent register e-worker-1 --role worker
+    ```
+  </TabItem>
+  <TabItem label="OpenCode">
+    Install the OpenCode SDK and configure it:
+
+    ```bash
+    # Install OpenCode
+    npm install -g @opencode-ai/sdk
+
+    # Verify it's working
+    opencode --version
+
+    # Register agents with OpenCode provider
+    sf agent register e-worker-2 --role worker --provider opencode
+    ```
+  </TabItem>
+  <TabItem label="Codex">
+    Stoneforge includes a built-in adapter for Codex, but you need the `codex` CLI tool installed. See the [Installation guide](/getting-started/installation/) for setup.
+
+    ```bash
+    # Register agents with Codex provider
+    sf agent register e-worker-3 --role worker --provider codex
+    ```
+  </TabItem>
+</Tabs>
+
+## Assigning providers to agents
+
+Set the provider at registration time with the `--provider` flag:
+
+```bash
+sf agent register director --role director --provider claude-code
+sf agent register e-worker-1 --role worker --provider claude-code
+sf agent register e-worker-2 --role worker --provider opencode
+sf agent register e-worker-3 --role worker --provider codex
+sf agent register m-steward-1 --role steward --focus merge --provider claude-code
+```
+
+<Aside>
+  If you omit `--provider`, the agent uses `claude-code` by default.
+</Aside>
+
+## Setting custom models
+
+You can specify which model an agent uses at several points:
+
+**At registration:**
+
+```bash
+sf agent register e-worker-1 --role worker --provider claude-code --model claude-sonnet-4-20250514
+```
+
+**At session start** (one-time override):
+
+```bash
+sf agent start <id> --model claude-opus-4-6
+```
+
+**In the dashboard:** The Create Agent dialog has a model dropdown that dynamically loads available models from the selected provider.
+
+**Default behavior:** If no model is specified, the agent uses the provider's default model.
+
+| Provider | Example model IDs |
+|----------|-------------------|
+| Claude Code | `claude-sonnet-4-20250514`, `claude-opus-4-6`, `claude-haiku-4-5-20251001` |
+| OpenCode | Provider-configured model |
+| Codex | `o3`, `o4-mini` |
+
+## Default model per provider
+
+Workspace-level defaults can be set in **Settings > Workspace > Agent Defaults** in the dashboard:
+
+- **Default provider** — pre-selected when creating new agents
+- **Default model per provider** — each provider can have its own default model
+- **Executable paths** — custom paths to provider CLI binaries
+
+These defaults are stored via the SettingsService (SQLite-backed, not in `config.yaml`). When creating a new agent, the dialog pre-fills the default provider and its corresponding default model. Agents can still override defaults at registration or session start.
+
+## Strategy patterns
+
+### Capability matching
+
+Use your most capable model for planning and your fastest model for execution:
+
+```bash
+# Director on the most capable model (planning, coordination)
+sf agent register director --role director --provider claude-code
+
+# Workers on a fast/cheap model (task execution)
+sf agent register e-worker-1 --role worker --provider opencode
+sf agent register e-worker-2 --role worker --provider opencode
+sf agent register e-worker-3 --role worker --provider opencode
+
+# Merge steward on a capable model (code review, test analysis)
+sf agent register m-steward-1 --role steward --focus merge --provider claude-code
+```
+
+### Rate limit distribution
+
+Spread agents across providers to avoid hitting any single provider's rate limits:
+
+```bash
+sf agent register e-worker-1 --role worker --provider claude-code
+sf agent register e-worker-2 --role worker --provider opencode
+sf agent register e-worker-3 --role worker --provider codex
+```
+
+With three workers on three different providers, you can run three tasks in parallel without hitting rate limits on any single provider.
+
+### Automatic rate limit fallback
+
+The dispatch daemon supports a **fallback chain** — an ordered list of provider executables configured in workspace settings. When the primary provider is rate-limited:
+
+1. Daemon detects the rate limit from the provider session
+2. Parses the reset time and tracks it in memory
+3. Tries the next provider in the fallback chain
+4. If all providers are rate-limited, the daemon auto-pauses and resumes at the soonest reset time
+
+Configure the fallback chain in **Settings > Workspace > Agent Defaults** in the dashboard.
+
+### Task-type matching
+
+Register workers with providers suited to different task types. The dispatch daemon assigns any ready task to any available worker, but you can use agent pools and priorities to influence which worker gets which type of task.
+
+```bash
+# Complex architecture work → capable model
+sf agent register e-worker-1 --role worker --provider claude-code
+
+# Routine implementation → fast model
+sf agent register e-worker-2 --role worker --provider opencode
+sf agent register e-worker-3 --role worker --provider opencode
+```
+
+## Mixing providers in the same orchestration
+
+All providers work together seamlessly within the same orchestration. The dispatch daemon doesn't care which provider an agent uses — it assigns tasks based on availability and priority, not provider type.
+
+```
+Director (claude-code) ── creates plan ──▶ Task Pool
+                                              │
+                              ┌───────────────┼────────────────┐
+                              ▼               ▼                ▼
+                        ┌───────────┐   ┌───────────┐    ┌───────────┐
+                        │ Worker 1  │   │ Worker 2  │    │ Worker 3  │
+                        │ claude    │   │ opencode  │    │ codex     │
+                        └───────────┘   └───────────┘    └───────────┘
+                              │               │                │
+                              └───────────────┼────────────────┘
+                                              ▼
+                                       ┌──────────────┐
+                                       │   Steward    │
+                                       │  (claude)    │
+                                       └──────────────┘
+```
+
+Agents communicate through Stoneforge's inbox system regardless of provider. A Claude Code Director can send messages to an OpenCode Worker, and the Worker's responses flow back through the same channels.
+
+## Agent pools with providers
+
+Pool agent type configurations can include `provider` and `model` fields to create provider-specific concurrency limits:
+
+```bash
+sf pool create multi-model --size 6 \
+  -t worker:ephemeral:100:3:claude-code:claude-sonnet-4-20250514 \
+  -t worker:ephemeral:80:3:opencode
+```
+
+This creates a pool of 6 slots — 3 reserved for Claude Code workers on Sonnet, 3 for OpenCode workers. Each provider group stays within its own `maxSlots` limit.
+
+<LinkCard title="Agent Pools" description="Full guide to pool configuration and strategy patterns" href="/guides/agent-pools/" />
+
+## Limitations and considerations
+
+- **Provider features vary** — not all providers support the same capabilities. Claude Code and OpenCode have different tool-use models and context window sizes.
+- **Prompt compatibility** — Stoneforge's built-in prompts are tested with Claude Code. Other providers should work but may behave differently with the same prompts. Consider [custom prompts](/guides/custom-prompts/) if you need provider-specific tuning.
+- **Authentication is per-provider** — each provider manages its own API keys and authentication. Stoneforge passes through to the provider CLI.
+- **No hot-swapping** — a provider is set at agent registration. To change a worker's provider, register a new agent with the desired provider.
+
+## Next steps
+
+<LinkCard title="Agent Roles" description="Understand the agents that use these providers" href="/guides/agent-roles/" />
+<LinkCard title="Custom Prompts" description="Tune agent behavior with prompt overrides" href="/guides/custom-prompts/" />

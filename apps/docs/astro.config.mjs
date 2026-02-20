@@ -6,6 +6,7 @@ export default defineConfig({
   integrations: [
     starlight({
       title: 'stoneforge',
+      favicon: '/favicon.ico',
       logo: {
         src: './public/logo.svg',
       },
@@ -53,6 +54,8 @@ export default defineConfig({
             { label: 'Task Planning', slug: 'guides/task-planning' },
             { label: 'Auto-Dispatch', slug: 'guides/auto-dispatch' },
             { label: 'Auto-Merge', slug: 'guides/auto-merge' },
+            { label: 'Agent Pools', slug: 'guides/agent-pools' },
+            { label: 'Workflows & Playbooks', slug: 'guides/workflows-and-playbooks' },
             { label: 'Multi-Provider Support', slug: 'guides/multi-provider' },
             { label: 'Custom Prompts', slug: 'guides/custom-prompts' },
           ],
@@ -85,7 +88,7 @@ export default defineConfig({
           items: [
             { label: 'Contributing', slug: 'community/contributing' },
             { label: 'Changelog', slug: 'community/changelog' },
-            { label: 'Roadmap', slug: 'community/roadmap' },
+            { label: 'Resources', slug: 'community/roadmap' },
           ],
         },
       ],

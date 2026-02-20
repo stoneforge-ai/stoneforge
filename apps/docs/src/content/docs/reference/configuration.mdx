@@ -1,6 +1,272 @@
 ---
 title: Configuration
-description: All configuration options for Stoneforge projects.
+description: All configuration options for Stoneforge projects — config files, environment variables, and programmatic access.
 ---
 
-Complete reference for `.stoneforge/config.json` and environment variables. Coming soon.
+import { Tabs, TabItem, Aside, LinkCard } from '@astrojs/starlight/components';
+import ParamTable from '../../../components/custom/ParamTable.astro';
+
+Stoneforge uses a layered configuration system. Settings can be defined in a config file, environment variables, or CLI flags, with a clear precedence order.
+
+## Precedence
+
+Configuration is resolved in this order (highest wins):
+
+1. **CLI flags** — `--actor`, `--db`, etc.
+2. **Environment variables** — `STONEFORGE_*`
+3. **Config file** — `.stoneforge/config.yaml`
+4. **Built-in defaults**
+
+## Config file
+
+The `.stoneforge/config.yaml` file is created by `sf init` and controls project-level settings.
+
+```yaml title=".stoneforge/config.yaml"
+actor: default-agent
+
+database: stoneforge.db
+
+sync:
+  auto_export: true
+  export_debounce: 300000    # 5 minutes in ms
+  elements_file: elements.jsonl
+  dependencies_file: dependencies.jsonl
+
+playbooks:
+  paths:
+    - .stoneforge/playbooks
+    - ~/.stoneforge/playbooks
+
+tombstone:
+  ttl: 2592000000           # 30 days in ms
+  min_ttl: 604800000         # 7 days in ms
+
+identity:
+  mode: soft
+  time_tolerance: 300000     # 5 minutes in ms
+
+plugins:
+  packages: []
+```
+
+## All options
+
+<ParamTable title="General" params={[
+  { name: 'actor', type: 'string', description: 'Default actor name for operations. Can be an entity name or ID.' },
+  { name: 'database', type: 'string', default: 'stoneforge.db', description: 'SQLite database filename, relative to .stoneforge/.' },
+]} />
+
+<ParamTable title="Sync" params={[
+  { name: 'sync.auto_export', type: 'boolean', default: 'true', description: 'Automatically export mutations to JSONL files.' },
+  { name: 'sync.export_debounce', type: 'number', default: '300000', description: 'Debounce interval in ms for batching exports (5 minutes).' },
+  { name: 'sync.elements_file', type: 'string', default: 'elements.jsonl', description: 'JSONL filename for exported elements.' },
+  { name: 'sync.dependencies_file', type: 'string', default: 'dependencies.jsonl', description: 'JSONL filename for exported dependencies.' },
+]} />
+
+<ParamTable title="Identity" params={[
+  { name: 'identity.mode', type: 'string', default: 'soft', description: 'Identity verification mode: soft (name-based), cryptographic (Ed25519 signatures), or hybrid (accepts both).' },
+  { name: 'identity.time_tolerance', type: 'number', default: '300000', description: 'Time tolerance in ms for signature expiry in cryptographic mode (5 minutes).' },
+]} />
+
+<ParamTable title="Playbooks" params={[
+  { name: 'playbooks.paths', type: 'string[]', default: '[".stoneforge/playbooks", "~/.stoneforge/playbooks"]', description: 'Search paths for playbook definitions.' },
+]} />
+
+<ParamTable title="Tombstone" params={[
+  { name: 'tombstone.ttl', type: 'number', default: '2592000000', description: 'Time-to-live in ms for soft-deleted records before permanent removal (30 days).' },
+  { name: 'tombstone.min_ttl', type: 'number', default: '604800000', description: 'Minimum TTL in ms for tombstones (7 days).' },
+]} />
+
+<ParamTable title="Plugins" params={[
+  { name: 'plugins.packages', type: 'string[]', default: '[]', description: 'NPM package names that export CLI plugins. First-party packages like @stoneforge/smithy are auto-discovered.' },
+]} />
+
+## Runtime settings
+
+In addition to `config.yaml`, Stoneforge has **runtime settings** managed by the SettingsService. These are stored in SQLite and managed via the dashboard or API — they don't appear in `config.yaml`.
+
+| Setting | Description | Managed in |
+|---------|-------------|------------|
+| Default provider | Pre-selected provider for new agents | Settings > Workspace > Agent Defaults |
+| Default models | Per-provider default model ID | Settings > Workspace > Agent Defaults |
+| Executable paths | Custom paths to provider CLI binaries | Settings > Workspace > Agent Defaults |
+| Fallback chain | Ordered list of provider executables for rate limit fallback | Settings > Workspace > Agent Defaults |
+
+<Aside>
+  Runtime settings are workspace-scoped and take effect immediately. They complement `config.yaml` (which handles project-level settings like sync and identity) by providing a separate layer for agent orchestration preferences.
+</Aside>
+
+## Environment variables
+
+| Variable | Config path | Example |
+| --- | --- | --- |
+| `STONEFORGE_ACTOR` | `actor` | `agent-1` |
+| `STONEFORGE_DB` | `database` | `stoneforge.db` |
+| `STONEFORGE_SYNC_AUTO_EXPORT` | `sync.autoExport` | `true` |
+| `STONEFORGE_IDENTITY_MODE` | `identity.mode` | `cryptographic` |
+| `STONEFORGE_JSON` | — | `true` (JSON output mode) |
+| `STONEFORGE_VERBOSE` | — | `true` (verbose/debug mode) |
+| `STONEFORGE_CONFIG` | — | `/path/to/config.yaml` |
+| `STONEFORGE_SIGN_KEY` | — | Base64 PKCS8 private key |
+| `STONEFORGE_SIGN_KEY_FILE` | — | Path to private key file |
+
+## Duration strings
+
+Time values in config support human-readable duration strings:
+
+```typescript
+parseDuration('30s');   // 30000 (30 seconds)
+parseDuration('5m');    // 300000 (5 minutes)
+parseDuration('1h');    // 3600000 (1 hour)
+parseDuration('7d');    // 604800000 (7 days)
+parseDuration('100ms'); // 100 (100 milliseconds)
+```
+
+Supported units: `ms`, `s`, `m`, `h`, `d`.
+
+## CLI commands
+
+```bash
+# Show all configuration
+sf config show
+
+# Show a specific value
+sf config show actor
+sf config show sync.autoExport
+
+# Set a value (updates config file)
+sf config set actor my-agent
+sf config set sync.autoExport false
+sf config set identity.mode cryptographic
+
+# Remove a value (falls back to default)
+sf config unset actor
+
+# Open config in your editor
+sf config edit
+```
+
+## Programmatic access
+
+### Loading configuration
+
+```typescript
+import { loadConfig, getConfig, reloadConfig } from '@stoneforge/quarry';
+
+// Load with all sources (file + env + defaults)
+const config = loadConfig();
+
+// Load with options
+const config = loadConfig({
+  configPath: '/custom/config.yaml',
+  cliOverrides: { actor: 'cli-agent' },
+  skipEnv: false,
+  skipFile: false,
+});
+
+// Get cached config (loads if not cached)
+const config = getConfig();
+
+// Force reload
+const config = reloadConfig();
+```
+
+### Reading values
+
+```typescript
+import { getValue, getValueWithSource, getValueSource } from '@stoneforge/quarry';
+
+// Get a value
+const actor = getValue('actor');
+const autoExport = getValue('sync.autoExport');
+const mode = getValue('identity.mode');
+
+// Get value with its source
+const { value, source } = getValueWithSource('actor');
+// source: 'default' | 'file' | 'environment' | 'cli'
+```
+
+Available config paths:
+
+```
+actor, database,
+sync.autoExport, sync.exportDebounce, sync.elementsFile, sync.dependenciesFile,
+playbooks.paths,
+tombstone.ttl, tombstone.minTtl,
+identity.mode, identity.timeTolerance,
+plugins.packages
+```
+
+### Writing values
+
+```typescript
+import { setValue, unsetValue, saveConfig } from '@stoneforge/quarry';
+
+// Set value (updates config file)
+setValue('actor', 'new-agent');
+setValue('sync.autoExport', false);
+
+// Remove value (falls back to default)
+unsetValue('actor');
+
+// Save entire config object
+saveConfig(config, '/path/to/config.yaml');
+```
+
+### Source tracking
+
+Track where each configuration value came from:
+
+```typescript
+import { getTrackedConfig } from '@stoneforge/quarry';
+
+const tracked = getTrackedConfig();
+
+tracked.actor;
+// { value: 'agent-1', source: 'cli' }
+
+tracked.sync.autoExport;
+// { value: true, source: 'default' }
+```
+
+### Config file utilities
+
+```typescript
+import {
+  getConfigPath,
+  configFileExists,
+  discoverConfigFile,
+} from '@stoneforge/quarry';
+
+const path = getConfigPath();
+const exists = configFileExists();
+const discovery = discoverConfigFile('/project');
+// { exists: boolean, path?: string }
+```
+
+### Validation
+
+```typescript
+import {
+  validateConfiguration,
+  validatePartialConfiguration,
+} from '@stoneforge/quarry';
+
+// Full validation (throws on error)
+validateConfiguration(config);
+
+// Partial validation (for merging)
+validatePartialConfiguration(partialConfig);
+```
+
+### Defaults
+
+```typescript
+import { DEFAULT_CONFIG, getDefaultConfig } from '@stoneforge/quarry';
+
+// Static reference
+DEFAULT_CONFIG.sync.autoExport;  // true
+
+// Fresh copy
+const defaults = getDefaultConfig();
+```

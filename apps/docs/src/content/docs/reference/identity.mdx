@@ -1,6 +1,322 @@
 ---
 title: Identity
-description: How Stoneforge generates and manages unique identifiers for elements and events.
+description: Authentication and signature verification for multi-agent systems — modes, key management, and the Ed25519 signing pipeline.
 ---
 
-Reference for the identity generation system — compact, sortable, collision-resistant IDs. Coming soon.
+import { Tabs, TabItem, Steps, Aside, LinkCard } from '@astrojs/starlight/components';
+import ParamTable from '../../../components/custom/ParamTable.astro';
+import TerminalBlock from '../../../components/custom/TerminalBlock.astro';
+
+The identity system controls how Stoneforge verifies who performed each operation. It supports three modes — from zero-friction development to production-grade cryptographic verification.
+
+## Modes
+
+| Mode | Verification | Best for |
+| --- | --- | --- |
+| **`soft`** | None — name-based identity | Development, single-agent setups |
+| **`cryptographic`** | Ed25519 signature verification | Production, multi-agent |
+| **`hybrid`** | Optional — accepts both | Migration, mixed environments |
+
+```typescript
+import { IdentityMode } from '@stoneforge/quarry';
+
+IdentityMode.SOFT           // 'soft' (default)
+IdentityMode.CRYPTOGRAPHIC  // 'cryptographic'
+IdentityMode.HYBRID         // 'hybrid'
+```
+
+Set the mode via CLI or config:
+
+```bash
+sf identity mode cryptographic
+# or
+sf config set identity.mode cryptographic
+```
+
+## Configuration
+
+```typescript
+import {
+  createIdentityConfig,
+  DEFAULT_IDENTITY_SYSTEM_CONFIG,
+  IdentityMode,
+} from '@stoneforge/quarry';
+
+// Defaults
+DEFAULT_IDENTITY_SYSTEM_CONFIG;
+// {
+//   mode: 'soft',
+//   timeTolerance: 300000,        // 5 minutes
+//   allowUnregisteredActors: true,
+// }
+
+// Custom
+const config = createIdentityConfig({
+  mode: IdentityMode.CRYPTOGRAPHIC,
+  timeTolerance: 60000,             // 1 minute
+  allowUnregisteredActors: false,
+});
+```
+
+<ParamTable params={[
+  { name: 'mode', type: 'IdentityMode', default: 'soft', description: 'Identity verification mode.' },
+  { name: 'timeTolerance', type: 'number', default: '300000', description: 'Maximum age in ms for valid signatures (5 minutes).' },
+  { name: 'allowUnregisteredActors', type: 'boolean', default: 'true', description: 'Whether to accept operations from actors without registered entities.' },
+]} />
+
+## Key management
+
+### Generate a keypair
+
+<Tabs>
+  <TabItem label="CLI">
+    ```bash
+    sf identity keygen
+    ```
+  </TabItem>
+  <TabItem label="TypeScript">
+    ```typescript
+    import { generateEd25519Keypair } from '@stoneforge/quarry';
+
+    const { publicKey, privateKey } = await generateEd25519Keypair();
+    // publicKey: 44-character base64 (32 bytes)
+    // privateKey: PKCS8 base64 (for signing)
+    ```
+  </TabItem>
+</Tabs>
+
+### Key formats
+
+| Key | Format | Length |
+| --- | --- | --- |
+| Public key | Base64 | 44 characters (32 bytes) |
+| Private key | PKCS8 Base64 | Variable |
+| Signature | Base64 | 88 characters (64 bytes) |
+
+### Register an agent with a public key
+
+```bash
+sf entity register secure-agent --type agent --public-key "base64key..."
+```
+
+Or programmatically:
+
+```typescript
+const agent = await api.create({
+  type: 'entity',
+  createdBy: adminId,
+  name: 'secure-agent',
+  entityType: 'agent',
+  publicKey: publicKey,
+});
+```
+
+## Signing requests
+
+### Signature format
+
+The signed data format is: `actor|signedAt|requestHash`
+
+```typescript
+import { constructSignedData, parseSignedData } from '@stoneforge/quarry';
+
+const signedData = constructSignedData({
+  actor: 'agent-name',
+  signedAt: '2024-01-15T10:30:00.000Z',
+  requestHash: 'a1b2c3...',   // SHA256 hex (64 chars)
+});
+// 'agent-name|2024-01-15T10:30:00.000Z|a1b2c3...'
+```
+
+### Create a signed request
+
+```typescript
+import { createSignedRequest, hashRequestBody } from '@stoneforge/quarry';
+
+// 1. Hash the request body
+const requestHash = await hashRequestBody({ action: 'create', data: { /* ... */ } });
+
+// 2. Create signed request
+const signedRequest = await createSignedRequest(
+  { actor: 'agent-name', requestHash },
+  privateKey,
+);
+
+// Result: { signature, signedAt, actor }
+```
+
+### Sign with the CLI
+
+```bash
+# Sign data
+sf identity sign --data "hello world" --sign-key <key> --actor alice
+
+# Sign from file
+sf identity sign --file request.json --sign-key-file ~/.stoneforge/private.key
+
+# Sign a pre-computed hash
+sf identity sign --hash abc123... --actor alice
+```
+
+Private key resolution order:
+1. `--sign-key <key>` flag
+2. `--sign-key-file <path>` flag
+3. `STONEFORGE_SIGN_KEY` env var
+4. `STONEFORGE_SIGN_KEY_FILE` env var
+
+## Verification
+
+### Full verification pipeline
+
+```typescript
+import { verifySignature, type EntityLookup } from '@stoneforge/quarry';
+
+const lookupEntity: EntityLookup = async (actor) => {
+  const entity = await api.lookupEntityByName(actor);
+  return entity ? { publicKey: entity.publicKey } : null;
+};
+
+const result = await verifySignature({
+  signedRequest: { signature, signedAt, actor },
+  requestHash,
+  lookupEntity,
+  config: { mode: IdentityMode.CRYPTOGRAPHIC },
+});
+
+if (result.allowed) {
+  console.log(`Verified: ${result.actor}`);
+} else {
+  console.error(`Failed: ${result.error}`);
+}
+```
+
+### Verification statuses
+
+| Status | Description |
+| --- | --- |
+| `valid` | Signature is valid |
+| `invalid` | Signature doesn't match |
+| `expired` | Outside time tolerance |
+| `actor_not_found` | Entity not found |
+| `no_public_key` | Entity has no public key |
+| `not_signed` | No signature provided |
+
+### Time tolerance
+
+```typescript
+import { checkTimeTolerance, DEFAULT_TIME_TOLERANCE } from '@stoneforge/quarry';
+
+// Default: 5 minutes (300000ms)
+const result = checkTimeTolerance(signedAt, DEFAULT_TIME_TOLERANCE);
+// { valid: boolean, ageMs: number, expiredBy?: number }
+
+// Custom tolerance
+const result = checkTimeTolerance(signedAt, 60000); // 1 minute
+```
+
+### Verify with the CLI
+
+```bash
+sf identity verify \
+  --signature <sig> \
+  --public-key <key> \
+  --signed-at 2024-01-01T00:00:00Z \
+  --data "hello" \
+  --actor alice
+```
+
+## Actor resolution
+
+When an operation is performed, the actor is resolved from multiple sources in priority order:
+
+| Priority | Source | Description |
+| --- | --- | --- |
+| 1 (highest) | `explicit` | Provided in operation |
+| 2 | `cli_flag` | From `--actor` flag |
+| 3 | `config` | From configuration file |
+| 4 | `element` | From element's `createdBy` |
+| — | `system` | System-generated |
+
+## Validation functions
+
+```typescript
+import {
+  isValidPublicKey,      // 44-char base64
+  isValidSignature,      // 88-char base64
+  isValidRequestHash,    // 64-char hex
+  isValidIdentityMode,
+  validatePublicKey,     // Throws on invalid
+  validateSignature,
+  validateRequestHash,
+  validateIdentityMode,
+} from '@stoneforge/quarry';
+```
+
+## CLI commands
+
+```bash
+# Show current identity
+sf identity whoami
+
+# Generate keypair
+sf identity keygen
+
+# Show/set mode
+sf identity mode
+sf identity mode cryptographic
+
+# Compute hash
+sf identity hash --data "data to hash"
+```
+
+## Full setup example
+
+<Steps>
+1. **Generate a keypair**
+
+   ```bash
+   sf identity keygen
+   # Save the public key and private key
+   ```
+
+2. **Register the agent with the public key**
+
+   ```bash
+   sf entity register secure-agent --type agent --public-key "<public-key>"
+   ```
+
+3. **Enable cryptographic mode**
+
+   ```bash
+   sf identity mode cryptographic
+   ```
+
+4. **Sign requests with the private key**
+
+   ```typescript
+   import { createSignedRequest, hashRequestBody } from '@stoneforge/quarry';
+
+   const requestHash = await hashRequestBody(requestBody);
+   const signedRequest = await createSignedRequest(
+     { actor: 'secure-agent', requestHash },
+     privateKey,
+   );
+   ```
+
+5. **Verify on the receiving end**
+
+   ```typescript
+   import { verifySignature } from '@stoneforge/quarry';
+
+   const result = await verifySignature({
+     signedRequest,
+     requestHash,
+     lookupEntity: (actor) => api.lookupEntityByName(actor),
+     config: { mode: IdentityMode.CRYPTOGRAPHIC },
+   });
+   ```
+</Steps>
+
+<Aside type="tip">
+  In **soft** mode (the default), none of this is needed — Stoneforge trusts the actor name passed with each operation. Cryptographic mode is for production environments where you need to verify that operations genuinely came from the claimed agent.
+</Aside>

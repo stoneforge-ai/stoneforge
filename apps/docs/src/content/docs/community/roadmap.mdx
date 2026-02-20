@@ -1,6 +1,133 @@
 ---
-title: Roadmap
-description: What's planned for Stoneforge's future development.
+title: Resources
+description: Community links, support channels, and useful resources for Stoneforge users and contributors.
 ---
 
-See what's coming next for Stoneforge. Coming soon.
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+import FeatureCard from '../../../components/custom/FeatureCard.astro';
+
+## Community
+
+Stoneforge is open source and community-driven. Here's where to find us:
+
+<div class="card-grid" data-sf-stagger>
+  <FeatureCard title="Discord">
+    The fastest way to get help, share what you're building, and chat with other users and contributors. Join the conversation in #general, #help, #showcase, and #feature-requests.
+
+[Join Discord &rarr;](https://discord.gg/NBCaUUv8Vm)
+  </FeatureCard>
+  <FeatureCard title="GitHub">
+    Star the repo, file issues, submit pull requests, and follow development. All code, documentation, and project planning happens here.
+
+[stoneforge-ai/stoneforge &rarr;](https://github.com/stoneforge-ai/stoneforge)
+  </FeatureCard>
+  <FeatureCard title="X (Twitter)">
+    Follow for release announcements, demos, tips, and behind-the-scenes updates on development.
+
+[@stoneforge_ai &rarr;](https://x.com/stoneforge_ai)
+  </FeatureCard>
+</div>
+
+## Getting help
+
+**Before asking**, check these resources — your answer may already be there:
+
+1. **This documentation** — the [Guides](/guides/first-multi-agent-project/) section covers most common workflows
+2. **`sf doctor`** — run this CLI command to diagnose common setup issues
+3. **[GitHub Issues](https://github.com/stoneforge-ai/stoneforge/issues)** — search existing issues for your error message or symptom
+
+**If you're still stuck:**
+
+| Channel | Best for | Response time |
+|---------|----------|---------------|
+| [Discord #help](https://discord.gg/NBCaUUv8Vm) | Quick questions, debugging help, setup issues | Minutes to hours |
+| [GitHub Issues](https://github.com/stoneforge-ai/stoneforge/issues) | Bug reports, feature requests, reproducible problems | Days |
+| [GitHub Discussions](https://github.com/stoneforge-ai/stoneforge/discussions) | Architecture questions, design proposals, general discussion | Days |
+
+<Aside type="tip">
+  When reporting a bug, include your Stoneforge version (`sf --version`), Node.js version, OS, and the full error output. The more context you provide, the faster we can help.
+</Aside>
+
+## Reporting bugs
+
+Good bug reports make fixes happen fast. Include:
+
+```markdown
+## Environment
+- Stoneforge version: (sf --version)
+- Node.js version: (node --version)
+- OS: (macOS / Linux / WSL)
+- Provider: (Claude Code / OpenCode / Codex)
+
+## What happened
+A clear description of the bug.
+
+## Steps to reproduce
+1. Run `sf serve`
+2. Register a worker with `sf agent register ...`
+3. ...
+
+## Expected behavior
+What you expected to happen.
+
+## Actual behavior
+What actually happened. Include full error output.
+```
+
+## Feature requests
+
+We welcome feature requests! The best way to propose a feature:
+
+1. **Check [existing issues](https://github.com/stoneforge-ai/stoneforge/issues)** to see if it's already been requested
+2. **Open a new issue** with the `enhancement` label
+3. **Describe the problem** you're trying to solve, not just the solution you want — this helps us find the best approach
+
+<Aside>
+  Stoneforge is in active early development. The project direction is shaped by community feedback — your feature requests directly influence what gets built next.
+</Aside>
+
+## Feedback
+
+Stoneforge is built to be shaped by its users. If something could work better, if a workflow feels clunky, if you have an idea for how the tool should evolve — we want to hear it. No feedback is too small.
+
+- **Something not working for your workflow?** Tell us in [Discord #feature-requests](https://discord.gg/NBCaUUv8Vm) or [open an issue](https://github.com/stoneforge-ai/stoneforge/issues/new)
+- **Hit a rough edge?** Even if it's not a bug, share it — these reports drive the most impactful improvements
+- **Have an opinion on how something should work?** Start a [GitHub Discussion](https://github.com/stoneforge-ai/stoneforge/discussions) — design conversations happen in the open
+
+The goal is simple: Stoneforge should be the best-performing tool for orchestrating AI coding agents. The community decides what "best" means. Every piece of feedback — a one-line Discord message, a detailed issue, a PR — helps steer the project in the right direction.
+
+<Aside type="caution" title="Early stage = high influence">
+  Stoneforge is in active early development. Feedback shared now has an outsized impact on the direction of the project. If there's something you want to see, now is the time to speak up.
+</Aside>
+
+## Project status
+
+Stoneforge is **actively maintained** and under rapid development. The project is usable today for orchestrating multi-agent workflows with Claude Code, OpenCode, and OpenAI Codex.
+
+Current focus areas:
+
+- **Stability** — hardening rate limit handling, recovery flows, and edge cases in merge automation
+- **Developer experience** — improving the CLI, dashboard UX, and documentation
+- **Provider support** — expanding and improving support for all three agent providers
+
+See the [Changelog](/community/changelog/) for a detailed history of what's shipped.
+
+## License
+
+Stoneforge is licensed under **Apache 2.0**. You can use it freely in personal and commercial projects. See the full [LICENSE](https://github.com/stoneforge-ai/stoneforge/blob/master/LICENSE) on GitHub.
+
+## Acknowledgments
+
+Stoneforge is built by [Adam King](https://github.com/notadamking), creator of [TensorTrade](https://github.com/tensortrade-org/tensortrade). Built with TypeScript, React 19, SQLite, Hono, and a lot of help from AI coding agents.
+
+<style>{`
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.card-grid > * {
+  margin-top: 0 !important;
+}
+`}</style>

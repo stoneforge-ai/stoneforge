@@ -1,6 +1,260 @@
 ---
 title: Dependency System
-description: How element dependencies are tracked and resolved to maximize parallelism.
+description: How Stoneforge's dependency graph controls task ordering, blocked status computation, and auto-transitions.
 ---
 
-Explore the dependency graph that determines execution order and maximizes concurrent work. Coming soon.
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+
+Dependencies form a **directed graph** that controls when work can proceed and how elements relate to each other. Every dependency connects two elements with a typed relationship — some block progress, others just capture knowledge.
+
+## The dependency model
+
+Each dependency is defined by three fields that together form a composite key:
+
+| Field | Description |
+| --- | --- |
+| `blockedId` | The element that is waiting (or the "from" side of the relationship) |
+| `blockerId` | The element that must complete first (or the "to" side) |
+| `type` | The nature of the relationship |
+
+The composite key `(blockedId, blockerId, type)` allows multiple relationship types between the same pair of elements. For example, Task A might both `block` and `relate-to` Task B.
+
+```
+blockedId ──────── type ────────▶ blockerId
+
+"el-3a8f"  ─── blocks ──────────▶ "el-7b2c"
+(waiting)                          (must complete first)
+```
+
+The naming convention comes from the most common use case: blocking dependencies. The "blocked" element waits for the "blocker" to finish. For non-blocking types like `relates-to` or `references`, the names still apply but the semantics are softer.
+
+## Dependency categories
+
+### Blocking dependencies
+
+These dependencies affect whether work can proceed. When a blocking dependency is unresolved (the blocker hasn't closed), the blocked element is automatically marked as `blocked`.
+
+| Type | blockedId is... | blockerId is... | Use case |
+| --- | --- | --- | --- |
+| `blocks` | The waiting task | The task that must complete first | Task sequencing |
+| `parent-child` | The child element | The parent container | Plan-task hierarchy |
+| `awaits` | The waiting task | A gate element | Approval gates, timers |
+
+Direction arrows showing the relationship semantics:
+
+```
+blocks:       blockedId (waiting task) ◀── blockerId (must complete first)
+              "Fix login" waits for "Set up auth"
+
+parent-child: blockedId (child task) ──▶ blockerId (parent plan)
+              "Add tests" belongs to "Sprint 12 Plan"
+
+awaits:       blockedId (waiting task) ──▶ blockerId (gate)
+              "Deploy to prod" awaits "Security approval"
+```
+
+### Associative dependencies
+
+Non-blocking connections that build a knowledge graph between elements:
+
+| Type | Meaning | Directionality |
+| --- | --- | --- |
+| `relates-to` | Semantic link between related elements | Bidirectional |
+| `references` | Citation — one element references another | Unidirectional |
+| `supersedes` | Version chain — new replaces old | Unidirectional |
+| `duplicates` | Deduplication marker | Bidirectional |
+| `caused-by` | Audit trail — this was caused by that | Unidirectional |
+| `validates` | Test verification — this test validates that feature | Unidirectional |
+| `mentions` | @mention reference | Unidirectional |
+
+These never block progress. They exist to help agents and humans understand how elements connect.
+
+### Attribution dependencies
+
+Link elements to entities (people, agents, teams):
+
+| Type | Meaning |
+| --- | --- |
+| `authored-by` | Creator attribution |
+| `assigned-to` | Responsibility assignment |
+| `approved-by` | Sign-off approval |
+
+### Threading dependencies
+
+For message conversations:
+
+| Type | Meaning |
+| --- | --- |
+| `replies-to` | Thread parent reference — this message replies to that one |
+
+## The computed `blocked` status
+
+The `blocked` status is a key architectural concept: **it is never set directly**. You never write `status: 'blocked'` — instead, the system computes it automatically from unresolved blocking dependencies.
+
+An element is blocked when:
+1. It has an unresolved `blocks` dependency (the blocker hasn't closed)
+2. It has an unresolved `awaits` dependency (the gate isn't satisfied)
+
+### BlockedCacheService
+
+Computing blocked status by scanning the dependency graph on every read would be expensive. Instead, Stoneforge maintains a **materialized cache** in the `blocked_cache` table, updated whenever dependencies change. This gives O(1) lookup:
+
+```
+┌─────────────────┐     dependency     ┌─────────────────┐
+│  Task "Fix bug"  │──── blocks ───────▶│ Task "Set up DB" │
+│  status: blocked │                    │ status: open     │
+└─────────────────┘                    └─────────────────┘
+         │
+         │ O(1) lookup
+         ▼
+┌─────────────────┐
+│  blocked_cache   │
+│  "Fix bug" → true│
+└─────────────────┘
+```
+
+When "Set up DB" closes, the cache updates and "Fix bug" is automatically unblocked.
+
+## Auto-transitions
+
+When a blocker resolves (closes), the blocked element doesn't just sit there — the system automatically transitions it back to its previous status. This is how the orchestration loop stays moving without manual intervention.
+
+The flow:
+1. Blocker element closes
+2. BlockedCacheService recalculates the blocked element's dependencies
+3. If no more unresolved blockers remain, the element is unblocked
+4. An `auto_unblocked` event is emitted with actor `system:blocked-cache`
+5. The element's status returns to `open` (or its pre-blocked status)
+
+Conversely, when a new blocking dependency is added:
+1. BlockedCacheService detects the new blocker
+2. If the blocker is unresolved, the element is blocked
+3. An `auto_blocked` event is emitted with actor `system:blocked-cache`
+4. The element's status changes to `blocked`
+
+<Aside type="tip">
+  Auto-transitions are how the orchestration loop knows when work is ready. When a blocker completes, the blocked task automatically becomes `open`, making it eligible for the dispatch daemon to assign to a worker.
+</Aside>
+
+## Gate dependencies
+
+The `awaits` dependency type supports three kinds of gates for more complex workflow control:
+
+### Timer gates
+
+Block a task until a specific time:
+
+```
+Task: "Deploy to production"
+  awaits → Gate: "Wait until Monday 9 AM"
+           metadata: {
+             gateType: "timer",
+             waitUntil: "2024-01-22T09:00:00.000Z"
+           }
+```
+
+The gate is satisfied when the current time passes `waitUntil`.
+
+### Approval gates
+
+Block a task until one or more approvers sign off:
+
+```
+Task: "Merge security patch"
+  awaits → Gate: "Security team approval"
+           metadata: {
+             gateType: "approval",
+             requiredApprovers: ["security-lead", "ops-lead"],
+             requiredCount: 1,
+             currentApprovers: []
+           }
+```
+
+The gate is satisfied when `currentApprovers.length >= requiredCount`.
+
+### External gates
+
+Block a task until an external system signals completion:
+
+```
+Task: "Deploy after CI"
+  awaits → Gate: "CI pipeline"
+           metadata: {
+             gateType: "external",
+             externalSystem: "ci",
+             externalId: "build-123",
+             satisfied: false
+           }
+```
+
+The gate is satisfied when `satisfied` is set to `true` by an external webhook or manual update.
+
+## Cycle detection
+
+Cycles in blocking dependencies create deadlocks — Task A blocks Task B, Task B blocks Task A, and neither can ever proceed. Stoneforge includes cycle detection to prevent this:
+
+```
+     Task A ─── blocks ───▶ Task B
+       ▲                      │
+       │                      │
+       └──── blocks ──────────┘
+       ✗ CYCLE — deadlock!
+```
+
+Detection uses a **depth-limited graph traversal** (maximum depth: 100 levels) starting from the proposed new dependency. If the traversal reaches the source element, a cycle exists. Self-references (an element blocking itself) are rejected immediately.
+
+<Aside type="tip">
+  The `addDependency()` method in `DependencyService` automatically checks for cycles when adding blocking dependency types (`blocks`, `awaits`, `parent-child`). If a cycle is detected, the operation throws an error. Non-blocking types like `relates-to` skip the check since they cannot cause deadlocks.
+</Aside>
+
+## Bidirectional `relates-to`
+
+The `relates-to` dependency type is bidirectional — if A relates to B, then B relates to A. But storage is directional (every dependency has a `blockedId` and `blockerId`), so Stoneforge normalizes by always placing the **smaller ID** as `blockedId`:
+
+```
+relates-to("el-7b2c", "el-3a8f")
+  → stored as: blockedId="el-3a8f", blockerId="el-7b2c"
+
+relates-to("el-3a8f", "el-7b2c")
+  → stored as: blockedId="el-3a8f", blockerId="el-7b2c"
+  (same result — deduplicated)
+```
+
+Because of this normalization, you need to query **both directions** to find all related elements. The `getDependencies()` call returns outgoing relationships (where your element is `blockedId`), and `getDependents()` returns incoming ones (where your element is `blockerId`).
+
+## Common gotchas
+
+1. **`blocked` is computed** — Never set `status: 'blocked'` directly. The system computes it from dependencies. Setting it manually will be overwritten.
+
+2. **Direction matters** — For `blocks`, `blockedId` is the waiting task and `blockerId` is what must complete first. Getting this backwards creates the opposite dependency.
+
+3. **`relates-to` is normalized** — Always query both `getDependencies()` and `getDependents()` to find all related elements.
+
+4. **Parent-child doesn't block parents** — Plans don't become "blocked" based on their children's status. Use `blocks` dependencies for sequencing.
+
+5. **Cascade delete** — Deleting an element removes all dependencies where it is the `blockedId`. Dependencies where it is the `blockerId` are not automatically removed.
+
+6. **No transitive blocking** — If A blocks B and B blocks C, closing A unblocks B but does **not** unblock C. C is only unblocked when B closes. Each blocking relationship is independent.
+
+## Next steps
+
+<LinkCard
+  title="Orchestration Loop"
+  description="How the dispatch daemon uses dependencies to determine task readiness"
+  href="/architecture/orchestration-loop/"
+/>
+<LinkCard
+  title="Event Sourcing"
+  description="How auto_blocked and auto_unblocked events are recorded in the event stream"
+  href="/architecture/event-sourcing/"
+/>
+<LinkCard
+  title="Task Planning"
+  description="Guide to creating plans with task dependencies"
+  href="/guides/task-planning/"
+/>
+<LinkCard
+  title="Services Reference"
+  description="API reference for DependencyService and BlockedCacheService"
+  href="/reference/services/"
+/>
