@@ -1,5 +1,18 @@
 # @stoneforge/quarry-server
 
+## 1.10.0
+
+### Patch Changes
+
+- Updated dependencies [c089311]
+- Updated dependencies [8a17c01]
+- Updated dependencies [490b026]
+- Updated dependencies [69ab9e2]
+  - @stoneforge/quarry@1.10.0
+  - @stoneforge/core@1.10.0
+  - @stoneforge/shared-routes@1.10.0
+  - @stoneforge/storage@1.10.0
+
 ## 1.9.0
 
 ### Patch Changes

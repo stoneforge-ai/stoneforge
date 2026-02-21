@@ -1,6 +1,6 @@
 {
   "name": "@stoneforge/storage",
-  "version": "1.9.0",
+  "version": "1.10.0",
   "type": "module",
   "description": "SQLite storage layer for Stoneforge with multi-runtime support",
   "main": "dist/index.js",

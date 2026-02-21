@@ -1,6 +1,6 @@
 {
   "name": "@stoneforge/core",
-  "version": "1.9.0",
+  "version": "1.10.0",
   "type": "module",
   "description": "Core types, errors, ID generation, and utilities for Stoneforge",
   "main": "dist/index.js",

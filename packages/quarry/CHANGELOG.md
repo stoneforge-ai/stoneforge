@@ -1,5 +1,26 @@
 # @stoneforge/quarry
 
+## 1.10.0
+
+### Minor Changes
+
+- c089311: Add optional `baseBranch` configuration field for explicitly setting the merge target branch. Supports config file (`base_branch`), environment variable (`STONEFORGE_BASE_BRANCH`), and CLI override. When unset, existing auto-detection behavior is preserved.
+
+### Patch Changes
+
+- 8a17c01: Fix CLI parser to accept kebab-case flags for camelCase options (e.g., --reply-to, --root-only, --doc-version). Both kebab-case and camelCase forms are now accepted, with kebab-case being the preferred convention.
+- 490b026: Fix `sf install skills` failing to find skills in NPM installs by correcting package resolution from `@stoneforge/orchestrator-sdk` to `@stoneforge/smithy` in all four discovery paths.
+- Updated dependencies [86032d2]
+- Updated dependencies [f7df3bc]
+- Updated dependencies [1828e64]
+- Updated dependencies [69ab9e2]
+- Updated dependencies [490b026]
+- Updated dependencies [f4c7855]
+  - @stoneforge/smithy@1.10.0
+  - @stoneforge/core@1.10.0
+  - @stoneforge/shared-routes@1.10.0
+  - @stoneforge/storage@1.10.0
+
 ## 1.9.0
 
 ### Minor Changes

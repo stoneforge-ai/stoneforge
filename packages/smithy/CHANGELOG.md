@@ -1,5 +1,26 @@
 # @stoneforge/smithy
 
+## 1.10.0
+
+### Minor Changes
+
+- 86032d2: Add asset upload and serving API (POST /api/assets/upload, GET /api/assets/:filename) for uploading images to .stoneforge/assets/ and serving them with immutable cache headers
+- f7df3bc: Centralize branch detection into a single canonical `detectTargetBranch()` function in `git/merge.ts`. All 5 consumers (worktree-manager, merge-steward-service, docs-steward-service, CLI merge command) now delegate to the canonical function with a unified fallback order: config baseBranch → symref → remote show → origin/main → origin/master → local main → local master → "main". Fixes inverted master/main fallback in the CLI merge command.
+- f4c7855: Replace hardcoded "master" references in steward prompt files with `{{baseBranch}}` template variable. Add `renderPromptTemplate()` function for variable substitution. Steward prompts now dynamically use the detected/configured branch name instead of assuming "master".
+
+### Patch Changes
+
+- 1828e64: Fix registerSteward in orchestrator-api silently dropping playbook and playbookId fields from input
+- 490b026: Add skills directory to build output (`cp -r src/skills dist/skills`) and add `./skills` entry to package exports map so skills are discoverable in published packages.
+- Updated dependencies [c089311]
+- Updated dependencies [8a17c01]
+- Updated dependencies [490b026]
+- Updated dependencies [69ab9e2]
+  - @stoneforge/quarry@1.10.0
+  - @stoneforge/core@1.10.0
+  - @stoneforge/shared-routes@1.10.0
+  - @stoneforge/storage@1.10.0
+
 ## 1.9.0
 
 ### Patch Changes

@@ -1,5 +1,15 @@
 # @stoneforge/smithy-web
 
+## 1.10.0
+
+### Minor Changes
+
+- 69ff886: Add image drag-and-drop and clipboard paste support to EditableDescription and ReopenDialog via a reusable useImageDrop hook
+
+### Patch Changes
+
+- @stoneforge/ui@1.10.0
+
 ## 1.9.0
 
 ### Patch Changes

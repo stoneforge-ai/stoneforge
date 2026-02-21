@@ -1,5 +1,12 @@
 # @stoneforge/storage
 
+## 1.10.0
+
+### Patch Changes
+
+- Updated dependencies [69ab9e2]
+  - @stoneforge/core@1.10.0
+
 ## 1.9.0
 
 ### Patch Changes
