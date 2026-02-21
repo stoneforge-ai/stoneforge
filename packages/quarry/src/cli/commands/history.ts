@@ -175,7 +175,7 @@ Arguments:
   id    Element identifier (e.g., el-abc123)
 
 Options:
-  -n, --limit <n>       Maximum events to show (default: 50)
+  -l, --limit <n>       Maximum events to show (default: 50)
   -t, --type <type>     Filter by event type
   -a, --actor <actor>   Filter by actor
       --after <time>    Show events after this time (ISO 8601)
