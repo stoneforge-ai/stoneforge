@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { setSystemTime } from 'bun:test';
 import { createAssetRoutes } from './assets.js';
 
 // Mock dependencies
@@ -34,10 +35,10 @@ vi.mock('../../utils/logger.js', () => ({
 
 import { writeFile, readFile, mkdir, stat } from 'node:fs/promises';
 
-const mockedWriteFile = vi.mocked(writeFile);
-const mockedReadFile = vi.mocked(readFile);
-const mockedMkdir = vi.mocked(mkdir);
-const mockedStat = vi.mocked(stat);
+const mockedWriteFile = writeFile as unknown as ReturnType<typeof vi.fn>;
+const mockedReadFile = readFile as unknown as ReturnType<typeof vi.fn>;
+const mockedMkdir = mkdir as unknown as ReturnType<typeof vi.fn>;
+const mockedStat = stat as unknown as ReturnType<typeof vi.fn>;
 
 // ============================================================================
 // Test Helpers
@@ -64,13 +65,12 @@ describe('POST /api/assets/upload', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-01-15T12:00:00Z'));
+    setSystemTime(new Date('2026-01-15T12:00:00Z'));
     app = createAssetRoutes();
   });
 
   afterEach(() => {
-    vi.useRealTimers();
+    setSystemTime();
   });
 
   it('uploads a valid PNG image', async () => {
