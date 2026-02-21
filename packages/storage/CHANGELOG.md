@@ -1,5 +1,11 @@
 # @stoneforge/storage
 
+## 1.10.2
+
+### Patch Changes
+
+- @stoneforge/core@1.10.2
+
 ## 1.10.1
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 {
   "name": "@stoneforge/smithy-server",
-  "version": "1.10.1",
+  "version": "1.10.2",
   "private": true,
   "type": "module",
   "description": "Stoneforge Smithy server - AI agent orchestration platform",

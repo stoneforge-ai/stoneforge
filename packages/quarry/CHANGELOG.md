@@ -1,5 +1,15 @@
 # @stoneforge/quarry
 
+## 1.10.2
+
+### Patch Changes
+
+- fd1ae79: Fix history command help text: correct short flag from `-n` to `-l` for `--limit` option
+  - @stoneforge/smithy@1.10.2
+  - @stoneforge/core@1.10.2
+  - @stoneforge/storage@1.10.2
+  - @stoneforge/shared-routes@1.10.2
+
 ## 1.10.1
 
 ### Patch Changes
