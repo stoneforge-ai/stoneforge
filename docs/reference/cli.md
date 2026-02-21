@@ -2135,7 +2135,7 @@ sf pool refresh
 
 | Option                  | Description                                             |
 | ----------------------- | ------------------------------------------------------- |
-| `-s, --server <url>`    | Orchestrator server URL (default: http://localhost:3456) |
+| `-s, --server <url>`    | Orchestrator server URL (default: http://localhost:3457) |
 | `-f, --force`           | Skip confirmation (for stop)                            |
 | `-u, --until <time>`    | Sleep until a specific time (for sleep)                 |
 | `-d, --duration <secs>` | Sleep for a duration in seconds (for sleep)             |
