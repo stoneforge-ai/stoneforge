@@ -158,9 +158,9 @@ const path = getConfigPath();
 // Check existence
 const exists = configFileExists();
 
-// Discover config file
-const discovery = discoverConfigFile('/project');
-// { exists: boolean, path?: string }
+// Discover config file (walks up from startDir to find .stoneforge/)
+const discovery = discoverConfigFile(undefined, '/project');
+// { exists: boolean, path?: string, stoneforgeDir?: string }
 ```
 
 ## Environment Variables
