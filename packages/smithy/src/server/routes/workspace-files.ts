@@ -27,6 +27,7 @@ const IGNORED_DIRECTORIES = [
   '.vscode',
   '.idea',
   '.DS_Store',
+  '.stoneforge',
   '.stoneforge-worktrees',
 ];
 

@@ -91,7 +91,17 @@ function getLanguageLabel(filename: string): string | null {
 // Flatten file tree for search
 // ============================================================================
 
+/**
+ * Maximum recursion depth for flattenFileTree.
+ * Prevents stack overflow if the server returns an unexpectedly deep tree.
+ */
+const MAX_FLATTEN_DEPTH = 20;
+
 function flattenFileTree(entries: FileEntry[], depth = 0): FlattenedFile[] {
+  if (depth >= MAX_FLATTEN_DEPTH) {
+    return [];
+  }
+
   const result: FlattenedFile[] = [];
 
   for (const entry of entries) {
