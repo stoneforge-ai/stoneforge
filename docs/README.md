@@ -196,6 +196,8 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for full architecture details.
 | `apps/quarry-web/` | `src/main.tsx` | `src/components/`, `src/routes/`, `src/api/hooks/` |
 | `apps/smithy-server/` | `src/index.ts` | `src/routes/` (route modules), `src/config.ts`, `src/services.ts` |
 | `apps/smithy-web/` | `src/main.tsx` | `src/components/`, `src/routes/`, `src/lib/keyboard.ts`, `src/hooks/useKeyboardShortcuts.ts` |
+| `apps/docs/` | `astro.config.mjs` | `src/content/docs/` (MDX pages), `src/components/`, `src/styles/` |
+| `apps/website/` | `astro.config.mjs` | `src/pages/`, `src/components/`, `src/layouts/`, `src/styles/` |
 
 ## Critical Gotchas
 

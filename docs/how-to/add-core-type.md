@@ -264,7 +264,7 @@ export type ElementType =
 
 ### 3. Add Tests
 
-Create `packages/core/src/types/feature.test.ts`:
+Create `packages/core/src/types/feature.bun.test.ts`:
 
 ```typescript
 import { describe, it, expect } from 'bun:test';
