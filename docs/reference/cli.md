@@ -555,7 +555,7 @@ List tasks with optional filtering.
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | `-s, --status <status>` | Filter by status                                                                                                             |
 | `--ready`               | Show only dispatch-ready tasks (accounts for blocked cache, draft plans, scheduled-for-future, ephemeral workflows, and plan-level blocking). Mutually exclusive with `--status`. |
-| `-t, --type <type>`     | Filter by task type (bug, feature, task, chore). When used with `--ready`, validated against task types.                      |
+| `-t, --type <type>`     | Filter by task type (bug, feature, task, chore). Only effective with `--ready`; in standard list mode, the type is implicitly `task`. |
 | `-p, --priority <1-5>`  | Filter by priority                                                                                                           |
 | `-a, --assignee <id>`   | Filter by assignee                                                                                                           |
 | `--tag <tag>`           | Filter by tag (can be repeated for AND logic)                                                                                |

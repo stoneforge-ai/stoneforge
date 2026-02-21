@@ -198,10 +198,10 @@ base_branch: master  # optional, auto-detected from git if omitted
 database: stoneforge.db
 
 sync:
-  autoExport: true
-  exportDebounce: 300000  # 5 minutes in ms
-  elementsFile: elements.jsonl
-  dependenciesFile: dependencies.jsonl
+  auto_export: true
+  export_debounce: 300000  # 5 minutes in ms
+  elements_file: elements.jsonl
+  dependencies_file: dependencies.jsonl
 
 playbooks:
   paths:
@@ -210,11 +210,11 @@ playbooks:
 
 tombstone:
   ttl: 2592000000  # 30 days in ms
-  minTtl: 604800000 # 7 days in ms
+  min_ttl: 604800000 # 7 days in ms
 
 identity:
   mode: soft
-  timeTolerance: 300000  # 5 minutes in ms
+  time_tolerance: 300000  # 5 minutes in ms
 ```
 
 ## Duration Strings

@@ -232,7 +232,7 @@ inboxService.addToInbox({
   recipientId,
   messageId,
   channelId,
-  sourceType: 'direct' | 'mention',
+  sourceType: 'direct' | 'mention' | 'thread_reply',
 });
 
 // Delete (for cascade deletion)

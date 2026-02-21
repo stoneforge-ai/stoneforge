@@ -364,7 +364,7 @@ const result = await api.sendDirectMessage(senderEntityId, {
 });
 // result.channel   — the direct Channel used
 // result.message   — the created Message
-// result.created   — whether the channel was newly created
+// result.channelCreated — whether the channel was newly created
 ```
 
 ---

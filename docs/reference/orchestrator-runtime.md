@@ -373,8 +373,10 @@ const event = mapSDKMessageToEvent(sdkMessage);
 
 | SDK Message Type | Stoneforge EventType |
 |------------------|---------------------|
-| `assistant` | `assistant` |
-| `tool_use` | `tool_use` |
-| `tool_result` | `tool_result` |
+| `assistant` | `assistant` (or `tool_use` if tool_use content blocks present) |
+| `user` | `user` |
 | `system` | `system` |
+| `result` | `result` |
 | `error` | `error` |
+
+**Note:** `tool_use` events are extracted from `assistant` messages that contain tool_use content blocks. `tool_result` events are mapped separately via `mapToolResultToEvent()`.
