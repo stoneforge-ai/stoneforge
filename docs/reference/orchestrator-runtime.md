@@ -380,3 +380,179 @@ const event = mapSDKMessageToEvent(sdkMessage);
 | `error` | `error` |
 
 **Note:** `tool_use` events are extracted from `assistant` messages that contain tool_use content blocks. `tool_result` events are mapped separately via `mapToolResultToEvent()`.
+
+A batch variant is also available:
+
+```typescript
+import { mapSDKMessagesToEvents } from '@stoneforge/smithy';
+
+// Convert multiple SDK messages at once
+const events = mapSDKMessagesToEvents(sdkMessages);
+```
+
+---
+
+## Provider Abstraction Layer
+
+**Files:** `providers/registry.ts`, `providers/types.ts`, `providers/index.ts`
+
+The provider abstraction layer enables drop-in replacement of the underlying agent CLI/SDK without changing orchestration logic. Three providers are built in: Claude Code (default), OpenCode, and Codex.
+
+```typescript
+import {
+  AgentProviderRegistry,
+  getProviderRegistry,
+  ClaudeAgentProvider,
+  OpenCodeAgentProvider,
+  CodexAgentProvider,
+  ProviderError,
+} from '@stoneforge/smithy';
+```
+
+### AgentProviderRegistry
+
+The registry manages provider registration and lookup. Claude, OpenCode, and Codex providers are registered automatically.
+
+```typescript
+// Get the singleton registry
+const registry = getProviderRegistry();
+
+// List registered providers
+registry.list();  // ['claude-code', 'opencode', 'codex']
+
+// Get a provider by name
+const provider = registry.get('claude-code');
+
+// Get the default provider (Claude)
+const defaultProvider = registry.getDefault();
+
+// Change the default provider
+registry.setDefault('opencode');
+
+// Get a provider with availability check (throws if unavailable)
+const provider = await registry.getOrThrow('opencode');
+```
+
+### AgentProvider Interface
+
+Each provider implements both headless (SDK) and interactive (PTY) session modes:
+
+```typescript
+interface AgentProvider {
+  readonly name: string;
+  readonly headless: HeadlessProvider;
+  readonly interactive: InteractiveProvider;
+
+  /** Check if provider CLI/SDK is installed */
+  isAvailable(): Promise<boolean>;
+
+  /** Installation instructions shown when unavailable */
+  getInstallInstructions(): string;
+
+  /** List models available from this provider */
+  listModels(): Promise<ModelInfo[]>;
+}
+```
+
+### Session Types
+
+**Headless sessions** (SDK-based, used by automated agents):
+
+```typescript
+interface HeadlessSpawnOptions {
+  readonly workingDirectory: string;
+  readonly initialPrompt?: string;
+  readonly resumeSessionId?: ProviderSessionId;
+  readonly environmentVariables?: Record<string, string>;
+  readonly stoneforgeRoot?: string;
+  readonly timeout?: number;
+  readonly model?: string;  // e.g., 'claude-sonnet-4-20250514'
+}
+
+// Spawn a headless session
+const session = await provider.headless.spawn(options);
+
+// Iterate over messages
+for await (const message of session) {
+  console.log(message.type, message.content);
+}
+
+// Send follow-up messages
+session.sendMessage('continue');
+
+// Interrupt or close
+await session.interrupt();
+session.close();
+```
+
+**Interactive sessions** (PTY-based, used by terminal UIs):
+
+```typescript
+interface InteractiveSpawnOptions {
+  readonly workingDirectory: string;
+  readonly initialPrompt?: string;
+  readonly resumeSessionId?: ProviderSessionId;
+  readonly environmentVariables?: Record<string, string>;
+  readonly stoneforgeRoot?: string;
+  readonly cols?: number;
+  readonly rows?: number;
+  readonly model?: string;
+}
+
+// Spawn an interactive session
+const session = await provider.interactive.spawn(options);
+
+// Handle PTY data
+session.onData((data) => process.stdout.write(data));
+session.onExit((code) => console.log('Exited:', code));
+
+// Write to PTY
+session.write('hello\n');
+
+// Resize terminal
+session.resize(120, 40);
+```
+
+### Built-in Providers
+
+| Provider | Name | Class |
+|----------|------|-------|
+| Claude Code | `'claude-code'` | `ClaudeAgentProvider` |
+| OpenCode | `'opencode'` | `OpenCodeAgentProvider` |
+| Codex | `'codex'` | `CodexAgentProvider` |
+
+### Registering a Custom Provider
+
+```typescript
+import { getProviderRegistry } from '@stoneforge/smithy';
+import type { AgentProvider } from '@stoneforge/smithy';
+
+class MyProvider implements AgentProvider {
+  readonly name = 'my-agent';
+  readonly headless = new MyHeadlessProvider();
+  readonly interactive = new MyInteractiveProvider();
+
+  async isAvailable() { return true; }
+  getInstallInstructions() { return 'Install my-agent CLI'; }
+  async listModels() { return []; }
+}
+
+const registry = getProviderRegistry();
+registry.register(new MyProvider());
+```
+
+### ProviderError
+
+Thrown when a provider operation fails (SDK crash, auth failure, etc.). Route handlers can catch this to return 503 instead of 500:
+
+```typescript
+import { ProviderError } from '@stoneforge/smithy';
+
+try {
+  const session = await provider.headless.spawn(options);
+} catch (err) {
+  if (err instanceof ProviderError) {
+    console.error(`Provider '${err.providerName}' failed: ${err.message}`);
+  }
+}
+```

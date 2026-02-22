@@ -518,7 +518,13 @@ call `api.reindexAllDocumentsFTS()` to rebuild the search index.
 
 ```typescript
 const stats = await api.stats();
+
+// Rebuild the blocked cache (useful after import or for recovery)
+const result = api.rebuildBlockedCache();
+// { elementsChecked: number, elementsBlocked: number, durationMs: number }
 ```
+
+**`rebuildBlockedCache()`** — Rebuilds the in-memory blocked cache by re-evaluating all dependency relationships. Use after bulk imports, or as a recovery step if the cache becomes inconsistent.
 
 ---
 

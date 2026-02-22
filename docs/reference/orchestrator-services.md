@@ -1096,3 +1096,83 @@ POOL_DEFAULTS.maxSize        // Default max size: 5
 POOL_DEFAULTS.enabled        // Default enabled: true
 POOL_DEFAULTS.defaultPriority // Default priority: 0
 ```
+
+---
+
+## MergeRequestProvider
+
+**File:** `services/merge-request-provider.ts`
+
+Abstracts merge request creation so the orchestrator can work with different hosting backends (GitHub, local-only, etc.) or no remote at all.
+
+```typescript
+import { createLocalMergeProvider, createGitHubMergeProvider } from '@stoneforge/smithy';
+```
+
+### Interface
+
+```typescript
+interface MergeRequestProvider {
+  readonly name: string;
+  createMergeRequest(task: Task, options: CreateMergeRequestOptions): Promise<MergeRequestResult>;
+}
+
+interface CreateMergeRequestOptions {
+  readonly title: string;
+  readonly body: string;
+  readonly sourceBranch: string;
+  readonly targetBranch: string;
+}
+
+interface MergeRequestResult {
+  readonly url?: string;       // PR/MR URL (if remote created)
+  readonly id?: number;        // PR/MR number (if remote created)
+  readonly provider: string;   // Provider name ('local' or 'github')
+}
+```
+
+### Built-in Providers
+
+| Provider | Factory | Description |
+|----------|---------|-------------|
+| `LocalMergeProvider` | `createLocalMergeProvider()` | No-op provider for offline/local-only workflows. Returns `{ provider: 'local' }` without creating any remote merge request. |
+| `GitHubMergeProvider` | `createGitHubMergeProvider()` | Creates GitHub pull requests using the `gh` CLI tool. Requires `gh` to be installed and authenticated. |
+
+### Usage
+
+```typescript
+// Local-only (no remote merge requests)
+const provider = createLocalMergeProvider();
+
+// GitHub pull requests via `gh` CLI
+const provider = createGitHubMergeProvider();
+
+// Use with TaskAssignmentService
+const taskAssignment = createTaskAssignmentService({
+  api,
+  orchestratorApi,
+  mergeRequestProvider: provider,
+  // ...
+});
+```
+
+### Creating a Custom Provider
+
+Implement the `MergeRequestProvider` interface to support other platforms (GitLab, Bitbucket, etc.):
+
+```typescript
+class GitLabMergeProvider implements MergeRequestProvider {
+  readonly name = 'gitlab';
+
+  async createMergeRequest(task: Task, options: CreateMergeRequestOptions): Promise<MergeRequestResult> {
+    // Create GitLab merge request via API
+    const mr = await gitlabApi.createMergeRequest({
+      title: options.title,
+      source_branch: options.sourceBranch,
+      target_branch: options.targetBranch,
+      description: options.body,
+    });
+    return { url: mr.web_url, id: mr.iid, provider: this.name };
+  }
+}
+```
