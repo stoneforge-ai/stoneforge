@@ -197,7 +197,7 @@ Common pitfalls and their solutions, organized by severity and category.
 - Config precedence: CLI > Environment > File > Defaults
 - Environment variables use `STONEFORGE_` prefix
 - Config file is `.stoneforge/config.yaml`
-- `STONEFORGE_CONFIG_PATH` overrides config file location
+- `STONEFORGE_CONFIG` overrides config file location
 - Duration strings supported: `5m`, `1h`, `7d`
 - Config cache invalidated on `setValue()` or `unsetValue()`
 
