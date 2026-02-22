@@ -256,7 +256,7 @@ API call (get/list/query)
 - **Exports:** `OrchestratorAPI`, agent services, runtime, prompts
 - **Responsibilities:** Agent lifecycle, task assignment, process spawning
 - **Services:** AgentRegistry, RoleDefinition, Dispatch, Assignment
-- **Runtime:** Spawner, SessionManager, Handoff, SDKAdapter
+- **Runtime:** Spawner, SessionManager, Handoff, PredecessorQuery, MessageMapper
 
 ## Configuration Precedence
 

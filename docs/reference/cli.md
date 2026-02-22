@@ -404,6 +404,19 @@ sf install skills --force
 | `sf task undefer <id>`           | Remove deferral                    |
 | `sf task describe <id>`          | Set or show task description       |
 
+**Top-level convenience commands:** Common task operations are also available as top-level commands (without the `task` prefix):
+
+| Top-level Command           | Equivalent                   |
+| --------------------------- | ---------------------------- |
+| `sf ready`                  | `sf task ready`              |
+| `sf blocked`                | `sf task blocked`            |
+| `sf backlog`                | `sf task backlog`            |
+| `sf close <id>`             | `sf task close <id>`         |
+| `sf reopen <id>`            | `sf task reopen <id>`        |
+| `sf assign <task> <entity>` | `sf task assign <task> <entity>` |
+| `sf defer <id>`             | `sf task defer <id>`         |
+| `sf undefer <id>`           | `sf task undefer <id>`       |
+
 ```bash
 # List ready tasks
 sf task ready
