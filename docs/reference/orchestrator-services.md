@@ -1148,12 +1148,7 @@ const provider = createLocalMergeProvider();
 const provider = createGitHubMergeProvider();
 
 // Use with TaskAssignmentService
-const taskAssignment = createTaskAssignmentService({
-  api,
-  orchestratorApi,
-  mergeRequestProvider: provider,
-  // ...
-});
+const taskAssignment = createTaskAssignmentService(api, provider);
 ```
 
 ### Creating a Custom Provider
