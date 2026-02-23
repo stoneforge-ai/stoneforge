@@ -9,6 +9,7 @@
 </p>
 
 <p align="center">
+  <a href="#before-you-start">Before You Start</a> &nbsp;&middot;&nbsp;
   <a href="#why-stoneforge">Why Stoneforge?</a> &nbsp;&middot;&nbsp;
   <a href="#quick-start">Quick Start</a> &nbsp;&middot;&nbsp;
   <a href="#how-it-works">How It Works</a> &nbsp;&middot;&nbsp;
@@ -24,6 +25,22 @@
   <img src="https://img.shields.io/badge/TypeScript-5.0+-blue.svg" alt="TypeScript: 5.0+">
   <img src="https://img.shields.io/badge/React-19-61dafb.svg" alt="React: 19">
 </p>
+
+---
+
+## Before You Start
+
+Stoneforge is **early-stage, experimental software** under active development. Expect sharp edges.
+
+This tool is built for developers who are **already running 3–5 AI coding agents in parallel** and need a better system for coordinating them. If that doesn't describe you, Stoneforge is probably not what you're looking for right now.
+
+What you should know before going further:
+
+- **Token consumption is high.** Stoneforge dispatches work to multiple agents continuously. A typical session can burn through several Claude MAX/Pro or Codex subscriptions worth of tokens per week. This is by design — it's the cost of running a parallel team.
+- **Agents run autonomously.** Stoneforge spawns agents with permissions bypassed — there are no human approval gates before agents take actions. This is intentional; approval prompts would bottleneck a parallel pipeline. But it means agents will read, write, execute, and push code without asking. Use this at your own risk.
+- **Things move fast.** Stoneforge is under active development. New capabilities ship weekly, defaults may change, and documentation sometimes lags behind the code. We [build in the open](https://x.com/notadamking) and iterate quickly.
+
+If a single coding agent handles your workload today, you probably don't need this yet. It'll be here once you start running multiple agents in parallel.
 
 ---
 
