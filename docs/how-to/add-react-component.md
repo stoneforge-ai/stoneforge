@@ -12,18 +12,18 @@ Step-by-step guide for adding React components to the web apps.
 
 | Type | Location | Purpose |
 |------|----------|---------|
-| UI Primitive | `components/ui/` | Reusable buttons, inputs, etc. |
-| Feature Component | `components/{feature}/` | Feature-specific (TaskCard, etc.) |
-| Layout Component | `components/layout/` | App shell, sidebar, etc. |
-| Shared Component | `components/shared/` | Cross-feature utilities |
+| UI Primitive | `packages/ui/src/components/` | Reusable buttons, inputs, badges, etc. (shared `@stoneforge/ui` package) |
+| Domain Component | `packages/ui/src/domain/` | Domain-specific cards (TaskCard, EntityCard, etc.) in shared package |
+| App Feature Component | `apps/quarry-web/src/components/{feature}/` | App-specific feature components (filters, panels, etc.) |
+| Layout Component | `apps/quarry-web/src/components/layout/` | App shell, sidebar, etc. |
 
 ## Steps
 
 ### 1. Create the Component File
 
-**UI Primitive:**
+**UI Primitive** (in `packages/ui/`)**:**
 ```typescript
-// apps/quarry-web/src/components/ui/Badge.tsx
+// packages/ui/src/components/Badge.tsx
 import { cn } from '@/lib/utils';
 
 interface BadgeProps {
@@ -54,11 +54,11 @@ export function Badge({ variant = 'default', children, className }: BadgeProps) 
 }
 ```
 
-**Feature Component:**
+**Domain Component** (in `packages/ui/`)**:**
 ```typescript
-// apps/quarry-web/src/components/task/TaskCard.tsx
+// packages/ui/src/domain/TaskCard.tsx
 import { Task } from '@stoneforge/core';
-import { Badge } from '@/components/ui/Badge';
+import { Badge } from '../components/Badge';
 import { cn } from '@/lib/utils';
 
 interface TaskCardProps {
@@ -103,8 +103,10 @@ function getStatusVariant(status: string) {
 
 ### 2. Add Data Fetching Hook (if needed)
 
+> **Note:** Existing hooks live in `apps/quarry-web/src/api/hooks/` (e.g., `useAllElements.ts`, `useTaskMutations.ts`). Below is the pattern for creating a new hook.
+
 ```typescript
-// apps/quarry-web/src/api/hooks/useTaskDetails.ts
+// apps/quarry-web/src/api/hooks/useMyFeatureDetails.ts  (new file)
 import { useQuery } from '@tanstack/react-query';
 import { Task } from '@stoneforge/core';
 
@@ -216,7 +218,7 @@ export function useCloseTask() {
 ### 6. Create a Page (if needed)
 
 ```typescript
-// apps/quarry-web/src/routes/tasks.tsx
+// apps/quarry-web/src/routes/tasks/index.tsx
 import { TaskCard } from '@/components/task/TaskCard';
 import { useAllTasks } from '@/api/hooks/useAllElements';
 import { useState } from 'react';
@@ -261,7 +263,7 @@ export default function TasksPage() {
 
 ```typescript
 // apps/quarry-web/src/router.tsx
-import TasksPage from './routes/tasks';
+import TasksPage from './routes/tasks/index';
 
 const router = createBrowserRouter([
   {
@@ -326,20 +328,22 @@ import { cn } from '@/lib/utils';
 
 ## Testing
 
+Domain component tests live alongside the components in `packages/ui/src/domain/`. For example, see `packages/ui/src/domain/domain.test.tsx` for the existing domain component test suite.
+
 ```typescript
-// apps/quarry-web/src/components/task/TaskCard.test.tsx
+// packages/ui/src/domain/domain.test.tsx  (existing test suite)
 import { describe, it, expect } from 'bun:test';
-import { TaskCard } from './TaskCard';
+import { TaskCard } from './index';
 
 describe('TaskCard', () => {
   it('exports TaskCard component', async () => {
-    const mod = await import('./TaskCard');
+    const mod = await import('./index');
     expect(mod.TaskCard).toBeDefined();
     expect(typeof mod.TaskCard).toBe('function');
   });
 
   it('has correct display name', async () => {
-    const { TaskCard } = await import('./TaskCard');
+    const { TaskCard } = await import('./index');
     expect(TaskCard.name).toBe('TaskCard');
   });
 });
