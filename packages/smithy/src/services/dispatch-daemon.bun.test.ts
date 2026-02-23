@@ -594,6 +594,74 @@ describe('recoverOrphanedAssignments', () => {
     expect(updatedMeta?.sessionId).not.toBe('stale-session-789');
   });
 
+  test('does not increment resumeCount when recoverOrphanedTask throws', async () => {
+    const worker = await createTestWorker('fail-recovery-worker');
+    const workerId = worker.id as unknown as EntityId;
+    const task = await createAssignedTask('Task with failed recovery', workerId, {
+      sessionId: 'prev-session-fail',
+      worktree: '/worktrees/fail-recovery-worker/task',
+      branch: 'agent/fail-recovery-worker/task-branch',
+    });
+
+    // Set initial resumeCount to 1 so we can verify it stays at 1
+    await api.update(task.id, {
+      metadata: updateOrchestratorTaskMeta(
+        task.metadata as Record<string, unknown> | undefined,
+        { resumeCount: 1 }
+      ),
+    });
+
+    // Mock recoverOrphanedTask to throw (simulates session spawn failure)
+    const impl = daemon as DispatchDaemonImpl;
+    (impl as any).recoverOrphanedTask = mock(async () => {
+      throw new Error('Session spawn failed');
+    });
+
+    const result = await daemon.recoverOrphanedAssignments();
+
+    expect(result.errors).toBe(1);
+    expect(result.processed).toBe(0);
+
+    // resumeCount should NOT have been incremented — still 1
+    const updatedTask = await api.get<Task>(task.id);
+    const meta = getOrchestratorTaskMeta(updatedTask!.metadata as Record<string, unknown>);
+    expect(meta?.resumeCount).toBe(1);
+  });
+
+  test('increments resumeCount after recoverOrphanedTask succeeds', async () => {
+    const worker = await createTestWorker('success-recovery-worker');
+    const workerId = worker.id as unknown as EntityId;
+    const task = await createAssignedTask('Task with successful recovery', workerId, {
+      sessionId: 'prev-session-ok',
+      worktree: '/worktrees/success-recovery-worker/task',
+      branch: 'agent/success-recovery-worker/task-branch',
+    });
+
+    // Set initial resumeCount to 1
+    await api.update(task.id, {
+      metadata: updateOrchestratorTaskMeta(
+        task.metadata as Record<string, unknown> | undefined,
+        { resumeCount: 1 }
+      ),
+    });
+
+    // Mock recoverOrphanedTask to succeed
+    const impl = daemon as DispatchDaemonImpl;
+    (impl as any).recoverOrphanedTask = mock(async () => {
+      // Recovery succeeds — no error thrown
+    });
+
+    const result = await daemon.recoverOrphanedAssignments();
+
+    expect(result.processed).toBe(1);
+    expect(result.errors).toBe(0);
+
+    // resumeCount should have been incremented to 2
+    const updatedTask = await api.get<Task>(task.id);
+    const meta = getOrchestratorTaskMeta(updatedTask!.metadata as Record<string, unknown>);
+    expect(meta?.resumeCount).toBe(2);
+  });
+
   test('does not recover tasks in REVIEW status', async () => {
     const worker = await createTestWorker('review-frank');
     const workerId = worker.id as unknown as EntityId;

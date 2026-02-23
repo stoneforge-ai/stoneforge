@@ -1094,16 +1094,19 @@ export class DispatchDaemonImpl implements DispatchDaemon {
             logger.error(`Error spawning recovery steward for worker ${worker.name}:`, error);
           }
         } else {
-          // Normal recovery: increment resume count and re-spawn the worker
+          // Normal recovery: re-spawn the worker, then increment resume count on success
           try {
-            // Increment resumeCount before recovering so the counter is persisted
+            await this.recoverOrphanedTask(worker, taskAssignment.task, taskAssignment.orchestratorMeta);
+            // Only increment resumeCount after successful recovery — if recovery fails,
+            // the count stays the same so the task isn't prematurely flagged as stuck.
+            // Re-read task metadata since recoverOrphanedTask may have updated it (e.g., new sessionId).
+            const freshTask = await this.api.get<Task>(taskAssignment.task.id);
             await this.api.update<Task>(taskAssignment.task.id, {
               metadata: updateOrchestratorTaskMeta(
-                taskAssignment.task.metadata as Record<string, unknown> | undefined,
+                freshTask?.metadata as Record<string, unknown> | undefined,
                 { resumeCount: resumeCount + 1 }
               ),
             });
-            await this.recoverOrphanedTask(worker, taskAssignment.task, taskAssignment.orchestratorMeta);
             processed++;
           } catch (error) {
             errors++;
