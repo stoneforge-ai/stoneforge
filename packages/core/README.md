@@ -3,7 +3,7 @@
 Shared type definitions, branded IDs, error hierarchy, and utilities for the Stoneforge platform.
 
 [![npm](https://img.shields.io/npm/v/@stoneforge/core)](https://www.npmjs.com/package/@stoneforge/core)
-[![license](https://img.shields.io/npm/l/@stoneforge/core)](https://github.com/stoneforge-ai/stoneforge/blob/main/LICENSE)
+[![license](https://img.shields.io/npm/l/@stoneforge/core)](https://github.com/stoneforge-ai/stoneforge/blob/master/LICENSE)
 [![node](https://img.shields.io/node/v/@stoneforge/core)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org)
 

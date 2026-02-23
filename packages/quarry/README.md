@@ -7,7 +7,7 @@
 Core SDK for Stoneforge — event-sourced element management, dependency tracking, full-text search, JSONL sync, and the `sf` CLI.
 
 [![npm](https://img.shields.io/npm/v/@stoneforge/quarry)](https://www.npmjs.com/package/@stoneforge/quarry)
-[![license](https://img.shields.io/npm/l/@stoneforge/quarry)](https://github.com/stoneforge-ai/stoneforge/blob/main/LICENSE)
+[![license](https://img.shields.io/npm/l/@stoneforge/quarry)](https://github.com/stoneforge-ai/stoneforge/blob/master/LICENSE)
 [![node](https://img.shields.io/node/v/@stoneforge/quarry)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org)
 

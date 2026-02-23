@@ -3,7 +3,7 @@
 Hono route factories for building Stoneforge-compatible HTTP servers.
 
 [![npm](https://img.shields.io/npm/v/@stoneforge/shared-routes)](https://www.npmjs.com/package/@stoneforge/shared-routes)
-[![license](https://img.shields.io/npm/l/@stoneforge/shared-routes)](https://github.com/stoneforge-ai/stoneforge/blob/main/LICENSE)
+[![license](https://img.shields.io/npm/l/@stoneforge/shared-routes)](https://github.com/stoneforge-ai/stoneforge/blob/master/LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org)
 
 ## Overview

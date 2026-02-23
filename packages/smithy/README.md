@@ -7,7 +7,7 @@
 Multi-agent orchestration for Stoneforge — directors, workers, and stewards with provider-agnostic session management.
 
 [![npm](https://img.shields.io/npm/v/@stoneforge/smithy)](https://www.npmjs.com/package/@stoneforge/smithy)
-[![license](https://img.shields.io/npm/l/@stoneforge/smithy)](https://github.com/stoneforge-ai/stoneforge/blob/main/LICENSE)
+[![license](https://img.shields.io/npm/l/@stoneforge/smithy)](https://github.com/stoneforge-ai/stoneforge/blob/master/LICENSE)
 [![node](https://img.shields.io/node/v/@stoneforge/smithy)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org)
 
