@@ -54,6 +54,27 @@ const execAsync = promisify(exec);
 // ============================================================================
 
 /**
+ * Error thrown when an optimistic locking conflict is detected during
+ * a merge status transition. This indicates another steward instance
+ * has already claimed the task.
+ */
+export class MergeStatusConflictError extends Error {
+  readonly expectedStatus: MergeStatus;
+  readonly actualStatus: MergeStatus | undefined;
+  readonly taskId: string;
+
+  constructor(taskId: string, expectedStatus: MergeStatus, actualStatus: MergeStatus | undefined) {
+    super(
+      `Merge status conflict on task ${taskId}: expected '${expectedStatus}' but found '${actualStatus ?? 'undefined'}'`
+    );
+    this.name = 'MergeStatusConflictError';
+    this.taskId = taskId;
+    this.expectedStatus = expectedStatus;
+    this.actualStatus = actualStatus;
+  }
+}
+
+/**
  * Merge strategy for combining branches
  */
 export type MergeStrategy = 'squash' | 'merge';
@@ -104,8 +125,8 @@ export interface ProcessTaskOptions {
 export interface MergeProcessResult {
   /** The task ID */
   taskId: ElementId;
-  /** The final merge status */
-  status: MergeStatus;
+  /** The final merge status. 'skipped' indicates another steward already claimed the task. */
+  status: MergeStatus | 'skipped';
   /** Whether the task was successfully merged */
   merged: boolean;
   /** Test result if tests were run */
@@ -294,15 +315,24 @@ export interface MergeStewardService {
   /**
    * Updates the merge status of a task.
    *
+   * When `expectedCurrentStatus` is provided, the method performs an optimistic
+   * locking check: it reads the current mergeStatus and throws a
+   * `MergeStatusConflictError` if it doesn't match the expected value. This
+   * prevents concurrent steward instances from racing through the same
+   * status transition.
+   *
    * @param taskId - The task to update
    * @param status - The new merge status
    * @param details - Optional details (e.g., failure reason)
+   * @param expectedCurrentStatus - If provided, the current mergeStatus must match this value
    * @returns The updated task
+   * @throws {MergeStatusConflictError} If expectedCurrentStatus doesn't match actual status
    */
   updateMergeStatus(
     taskId: ElementId,
     status: MergeStatus,
-    details?: { failureReason?: string; testResult?: TestResult }
+    details?: { failureReason?: string; testResult?: TestResult },
+    expectedCurrentStatus?: MergeStatus
   ): Promise<Task>;
 }
 
@@ -436,7 +466,24 @@ export class MergeStewardServiceImpl implements MergeStewardService {
       // 2. Run tests (unless skipped)
       let testResult: TestResult | undefined;
       if (!options.skipTests) {
-        await this.updateMergeStatus(taskId, 'testing');
+        // Optimistic lock: only transition pending → testing if still pending.
+        // If another steward already claimed this task, skip it.
+        try {
+          await this.updateMergeStatus(taskId, 'testing', undefined, 'pending');
+        } catch (error) {
+          if (error instanceof MergeStatusConflictError) {
+            logger.info(
+              `Task ${taskId} skipped: another steward already claimed it (expected 'pending', found '${error.actualStatus}')`
+            );
+            return {
+              taskId,
+              status: 'skipped',
+              merged: false,
+              processedAt,
+            };
+          }
+          throw error;
+        }
         const testRunResult = await this.runTests(taskId);
         testResult = testRunResult.testResult;
 
@@ -474,7 +521,28 @@ export class MergeStewardServiceImpl implements MergeStewardService {
         };
       }
 
-      await this.updateMergeStatus(taskId, 'merging');
+      // When tests were skipped, use optimistic lock for pending → merging
+      // to prevent two stewards from racing into the merge phase.
+      if (options.skipTests) {
+        try {
+          await this.updateMergeStatus(taskId, 'merging', undefined, 'pending');
+        } catch (error) {
+          if (error instanceof MergeStatusConflictError) {
+            logger.info(
+              `Task ${taskId} skipped: another steward already claimed it for merging (expected 'pending', found '${error.actualStatus}')`
+            );
+            return {
+              taskId,
+              status: 'skipped',
+              merged: false,
+              processedAt,
+            };
+          }
+          throw error;
+        }
+      } else {
+        await this.updateMergeStatus(taskId, 'merging');
+      }
       const mergeResult = await this.attemptMerge(taskId, options.mergeCommitMessage);
 
       // Handle already-merged result from mergeBranch() — secondary safety net
@@ -605,6 +673,9 @@ export class MergeStewardServiceImpl implements MergeStewardService {
           break;
         case 'failed':
           errorCount++;
+          break;
+        case 'skipped':
+          // Another steward already claimed this task — not an error
           break;
       }
     }
@@ -912,11 +983,24 @@ export class MergeStewardServiceImpl implements MergeStewardService {
   async updateMergeStatus(
     taskId: ElementId,
     status: MergeStatus,
-    details?: { failureReason?: string; testResult?: TestResult }
+    details?: { failureReason?: string; testResult?: TestResult },
+    expectedCurrentStatus?: MergeStatus
   ): Promise<Task> {
     const task = await this.api.get<Task>(taskId);
     if (!task) {
       throw new Error(`Task not found: ${taskId}`);
+    }
+
+    // Optimistic locking: if expectedCurrentStatus is provided, verify the
+    // task's current mergeStatus matches before proceeding with the update.
+    if (expectedCurrentStatus !== undefined) {
+      const currentMeta = getOrchestratorTaskMeta(
+        task.metadata as Record<string, unknown>
+      );
+      const currentStatus = currentMeta?.mergeStatus;
+      if (currentStatus !== expectedCurrentStatus) {
+        throw new MergeStatusConflictError(taskId, expectedCurrentStatus, currentStatus);
+      }
     }
 
     const updates: Partial<OrchestratorTaskMeta> = {

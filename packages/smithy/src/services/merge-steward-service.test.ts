@@ -21,6 +21,7 @@ import type { AgentRegistry } from './agent-registry.js';
 
 import {
   MergeStewardServiceImpl,
+  MergeStatusConflictError,
   createMergeStewardService,
   type MergeStewardService,
   type MergeStewardConfig,
@@ -547,6 +548,126 @@ describe('MergeStewardService', () => {
       expect('assignee' in updateCall).toBe(true);
     });
 
+    it('should throw MergeStatusConflictError when expectedCurrentStatus does not match', async () => {
+      const mockTask = createMockTask({
+        metadata: {
+          orchestrator: {
+            branch: 'agent/worker/task-branch',
+            mergeStatus: 'testing', // actual status
+          },
+        },
+      });
+      (api.get as MockInstance).mockResolvedValue(mockTask);
+
+      await expect(
+        service.updateMergeStatus(mockTask.id, 'merging', undefined, 'pending')
+      ).rejects.toThrow(MergeStatusConflictError);
+
+      // Should not have called api.update since the status didn't match
+      expect(api.update).not.toHaveBeenCalled();
+    });
+
+    it('should include expected and actual status in MergeStatusConflictError', async () => {
+      const mockTask = createMockTask({
+        metadata: {
+          orchestrator: {
+            branch: 'agent/worker/task-branch',
+            mergeStatus: 'testing',
+          },
+        },
+      });
+      (api.get as MockInstance).mockResolvedValue(mockTask);
+
+      try {
+        await service.updateMergeStatus(mockTask.id, 'merging', undefined, 'pending');
+        // Should not reach here
+        expect(true).toBe(false);
+      } catch (error) {
+        expect(error).toBeInstanceOf(MergeStatusConflictError);
+        const conflictError = error as MergeStatusConflictError;
+        expect(conflictError.expectedStatus).toBe('pending');
+        expect(conflictError.actualStatus).toBe('testing');
+        expect(conflictError.taskId).toBe(mockTask.id);
+      }
+    });
+
+    it('should succeed when expectedCurrentStatus matches actual status', async () => {
+      const mockTask = createMockTask({
+        metadata: {
+          orchestrator: {
+            branch: 'agent/worker/task-branch',
+            mergeStatus: 'pending',
+          },
+        },
+      });
+      (api.get as MockInstance).mockResolvedValue(mockTask);
+      (api.update as MockInstance).mockImplementation((_id, updates) =>
+        Promise.resolve({ ...mockTask, ...updates } as Task)
+      );
+
+      // Should not throw — expectedCurrentStatus matches
+      await service.updateMergeStatus(mockTask.id, 'testing', undefined, 'pending');
+
+      expect(api.update).toHaveBeenCalledWith(
+        mockTask.id,
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            orchestrator: expect.objectContaining({
+              mergeStatus: 'testing',
+            }),
+          }),
+        })
+      );
+    });
+
+    it('should proceed normally when expectedCurrentStatus is not provided', async () => {
+      const mockTask = createMockTask({
+        metadata: {
+          orchestrator: {
+            branch: 'agent/worker/task-branch',
+            mergeStatus: 'testing',
+          },
+        },
+      });
+      (api.get as MockInstance).mockResolvedValue(mockTask);
+      (api.update as MockInstance).mockImplementation((_id, updates) =>
+        Promise.resolve({ ...mockTask, ...updates } as Task)
+      );
+
+      // Should not throw — no expectedCurrentStatus check
+      await service.updateMergeStatus(mockTask.id, 'merging');
+
+      expect(api.update).toHaveBeenCalledWith(
+        mockTask.id,
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            orchestrator: expect.objectContaining({
+              mergeStatus: 'merging',
+            }),
+          }),
+        })
+      );
+    });
+
+    it('should throw MergeStatusConflictError when mergeStatus is undefined and expectedCurrentStatus is set', async () => {
+      // Task with no mergeStatus at all
+      const mockTask = createMockTask({
+        metadata: {
+          orchestrator: {
+            branch: 'agent/worker/task-branch',
+            // No mergeStatus
+          },
+        },
+      });
+      (api.get as MockInstance).mockResolvedValue(mockTask);
+
+      await expect(
+        service.updateMergeStatus(mockTask.id, 'testing', undefined, 'pending')
+      ).rejects.toThrow(MergeStatusConflictError);
+
+      expect(api.update).not.toHaveBeenCalled();
+    });
+
     it('should not close task for non-terminal statuses', async () => {
       const mockTask = createMockTask({ status: TaskStatus.REVIEW });
       (api.get as MockInstance).mockResolvedValue(mockTask);
@@ -991,6 +1112,223 @@ describe('MergeStewardService', () => {
         })
       );
     });
+
+    it('should return skipped when another steward already claimed the task (concurrent processTask)', async () => {
+      // Simulate two stewards racing: the first call to api.get returns pending,
+      // but by the time the second steward calls updateMergeStatus, the status
+      // has already been changed to 'testing' by the first steward.
+      const mockTask = createMockTask({
+        status: TaskStatus.REVIEW,
+        metadata: {
+          orchestrator: {
+            branch: 'agent/worker/task-branch',
+            assignedAgent: 'agent-worker-001',
+            mergeStatus: 'pending',
+          },
+        },
+      });
+
+      const taskAlreadyClaimed = createMockTask({
+        ...mockTask,
+        metadata: {
+          orchestrator: {
+            branch: 'agent/worker/task-branch',
+            assignedAgent: 'agent-worker-001',
+            mergeStatus: 'testing', // Another steward already transitioned
+          },
+        },
+      });
+
+      // processTask's first api.get returns the task (for validation).
+      // The branchHasCommitsAhead check follows, then updateMergeStatus
+      // calls api.get again — by this time the status has changed.
+      let getCallCount = 0;
+      (api.get as MockInstance).mockImplementation(() => {
+        getCallCount++;
+        // First call: processTask reads the task (mergeStatus: pending)
+        // Second call: branchHasCommitsAhead (if git commands are mocked)
+        // The call inside updateMergeStatus sees the claimed version
+        if (getCallCount <= 1) {
+          return Promise.resolve(mockTask);
+        }
+        return Promise.resolve(taskAlreadyClaimed);
+      });
+
+      // Mock exec for branchHasCommitsAhead to return >0 commits
+      if (!isBunRuntime) {
+        const cp = await import('node:child_process');
+        (cp.exec as unknown as MockInstance).mockImplementation(
+          (cmd: string, _opts: unknown, cb?: Function) => {
+            const callback = typeof _opts === 'function' ? (_opts as unknown as Function) : cb;
+            if (callback) {
+              if ((cmd as string).includes('rev-list --count')) {
+                callback(null, { stdout: '3\n', stderr: '' });
+              } else if ((cmd as string).includes('remote get-url')) {
+                callback(new Error('no remote'), { stdout: '', stderr: '' });
+              } else {
+                callback(null, { stdout: '', stderr: '' });
+              }
+            }
+          }
+        );
+      }
+
+      const result = await service.processTask(mockTask.id);
+
+      expect(result.status).toBe('skipped');
+      expect(result.merged).toBe(false);
+      // api.update should NOT have been called since the conflict was detected
+      // before any write occurred
+      expect(api.update).not.toHaveBeenCalled();
+    });
+
+    it('should allow only one of two concurrent processTask calls to succeed', async () => {
+      // This test simulates the race condition: two steward instances call
+      // processTask() concurrently on the same task. We use a gate/latch
+      // pattern to ensure deterministic ordering: the first call writes its
+      // status update before the second call reads the status.
+      //
+      // With synchronous mocks, Promise.all microtask interleaving causes
+      // both reads to happen before either write. The gate ensures the
+      // second call starts only after the first call has claimed the task.
+      let currentMergeStatus = 'pending';
+      let firstUpdateResolve: () => void;
+      const firstUpdateGate = new Promise<void>((resolve) => {
+        firstUpdateResolve = resolve;
+      });
+      let isFirstUpdate = true;
+
+      (api.get as MockInstance).mockImplementation(() => {
+        return Promise.resolve(
+          createMockTask({
+            status: TaskStatus.REVIEW,
+            metadata: {
+              orchestrator: {
+                branch: 'agent/worker/task-branch',
+                assignedAgent: 'agent-worker-001',
+                mergeStatus: currentMergeStatus,
+              },
+            },
+          })
+        );
+      });
+
+      (api.update as MockInstance).mockImplementation((_id, updates) => {
+        const meta = (updates as Record<string, unknown>).metadata as Record<string, unknown> | undefined;
+        const orchestrator = meta?.orchestrator as Record<string, unknown> | undefined;
+        if (orchestrator?.mergeStatus) {
+          currentMergeStatus = orchestrator.mergeStatus as string;
+        }
+        if (isFirstUpdate) {
+          isFirstUpdate = false;
+          firstUpdateResolve();
+        }
+        return Promise.resolve(
+          createMockTask({ metadata: { orchestrator: { mergeStatus: currentMergeStatus } } })
+        );
+      });
+
+      // Mock exec for branchHasCommitsAhead
+      if (!isBunRuntime) {
+        const cp = await import('node:child_process');
+        (cp.exec as unknown as MockInstance).mockImplementation(
+          (cmd: string, _opts: unknown, cb?: Function) => {
+            const callback = typeof _opts === 'function' ? (_opts as unknown as Function) : cb;
+            if (callback) {
+              if ((cmd as string).includes('rev-list --count')) {
+                callback(null, { stdout: '3\n', stderr: '' });
+              } else if ((cmd as string).includes('remote get-url')) {
+                callback(new Error('no remote'), { stdout: '', stderr: '' });
+              } else {
+                callback(null, { stdout: '', stderr: '' });
+              }
+            }
+          }
+        );
+      }
+
+      const taskId = 'task-001' as ElementId;
+
+      // Start the first call (with skipTests to simplify the flow)
+      const result1Promise = service.processTask(taskId, { skipTests: true });
+      // Wait for the first call to write its status update (pending → merging)
+      await firstUpdateGate;
+      // Now start the second call — it will see 'merging' instead of 'pending'
+      const result2Promise = service.processTask(taskId, { skipTests: true });
+
+      const [result1, result2] = await Promise.all([result1Promise, result2Promise]);
+
+      const statuses = [result1.status, result2.status];
+
+      // Exactly one should be 'skipped', the other should proceed
+      // (it may end as 'merged', 'failed', etc. depending on downstream
+      // behavior, but it should NOT be 'skipped')
+      const skippedCount = statuses.filter((s) => s === 'skipped').length;
+      const nonSkippedCount = statuses.filter((s) => s !== 'skipped').length;
+
+      expect(skippedCount).toBe(1);
+      expect(nonSkippedCount).toBe(1);
+    });
+
+    it('should return skipped when tests are skipped and another steward claims pending → merging', async () => {
+      // When skipTests is true, processTask tries pending → merging directly.
+      // If another steward already changed the status, it should return 'skipped'.
+      const mockTask = createMockTask({
+        status: TaskStatus.REVIEW,
+        metadata: {
+          orchestrator: {
+            branch: 'agent/worker/task-branch',
+            assignedAgent: 'agent-worker-001',
+            mergeStatus: 'pending',
+          },
+        },
+      });
+
+      const taskAlreadyClaimed = createMockTask({
+        ...mockTask,
+        metadata: {
+          orchestrator: {
+            branch: 'agent/worker/task-branch',
+            assignedAgent: 'agent-worker-001',
+            mergeStatus: 'merging', // Another steward already transitioned
+          },
+        },
+      });
+
+      let getCallCount = 0;
+      (api.get as MockInstance).mockImplementation(() => {
+        getCallCount++;
+        if (getCallCount <= 1) {
+          return Promise.resolve(mockTask);
+        }
+        return Promise.resolve(taskAlreadyClaimed);
+      });
+
+      // Mock exec for branchHasCommitsAhead
+      if (!isBunRuntime) {
+        const cp = await import('node:child_process');
+        (cp.exec as unknown as MockInstance).mockImplementation(
+          (cmd: string, _opts: unknown, cb?: Function) => {
+            const callback = typeof _opts === 'function' ? (_opts as unknown as Function) : cb;
+            if (callback) {
+              if ((cmd as string).includes('rev-list --count')) {
+                callback(null, { stdout: '3\n', stderr: '' });
+              } else if ((cmd as string).includes('remote get-url')) {
+                callback(new Error('no remote'), { stdout: '', stderr: '' });
+              } else {
+                callback(null, { stdout: '', stderr: '' });
+              }
+            }
+          }
+        );
+      }
+
+      const result = await service.processTask(mockTask.id, { skipTests: true });
+
+      expect(result.status).toBe('skipped');
+      expect(result.merged).toBe(false);
+      expect(api.update).not.toHaveBeenCalled();
+    });
   });
 
   // ----------------------------------------
@@ -1408,6 +1746,80 @@ describe('MergeStewardService', () => {
       expect(result.totalProcessed).toBe(1);
       expect(result.errorCount).toBe(1);
       expect(result.mergedCount).toBe(0);
+    });
+
+    it('should not count skipped tasks as errors', async () => {
+      // Simulate a task that another steward already claimed
+      const mockTask = createMockTask({
+        id: 'task-001' as ElementId,
+        status: TaskStatus.REVIEW,
+        metadata: {
+          orchestrator: {
+            branch: 'agent/worker/task-branch',
+            assignedAgent: 'agent-worker-001',
+            mergeStatus: 'testing', // Already claimed by another steward
+          },
+        },
+      });
+      const assignments = [createMockTaskAssignment(mockTask)];
+
+      (taskAssignment.getTasksAwaitingMerge as MockInstance).mockResolvedValue(assignments);
+      (api.get as MockInstance).mockResolvedValue(mockTask);
+
+      // Mock exec for branchHasCommitsAhead
+      if (!isBunRuntime) {
+        const cp = await import('node:child_process');
+        (cp.exec as unknown as MockInstance).mockImplementation(
+          (cmd: string, _opts: unknown, cb?: Function) => {
+            const callback = typeof _opts === 'function' ? (_opts as unknown as Function) : cb;
+            if (callback) {
+              if ((cmd as string).includes('rev-list --count')) {
+                callback(null, { stdout: '3\n', stderr: '' });
+              } else if ((cmd as string).includes('remote get-url')) {
+                callback(new Error('no remote'), { stdout: '', stderr: '' });
+              } else {
+                callback(null, { stdout: '', stderr: '' });
+              }
+            }
+          }
+        );
+      }
+
+      const result = await service.processAllPending();
+
+      expect(result.totalProcessed).toBe(1);
+      expect(result.errorCount).toBe(0);
+      expect(result.mergedCount).toBe(0);
+      expect(result.testFailedCount).toBe(0);
+      expect(result.conflictCount).toBe(0);
+      expect(result.results[0].status).toBe('skipped');
+    });
+  });
+
+  // ----------------------------------------
+  // MergeStatusConflictError
+  // ----------------------------------------
+
+  describe('MergeStatusConflictError', () => {
+    it('should have correct name, message, and properties', () => {
+      const error = new MergeStatusConflictError('task-001', 'pending', 'testing');
+
+      expect(error).toBeInstanceOf(Error);
+      expect(error).toBeInstanceOf(MergeStatusConflictError);
+      expect(error.name).toBe('MergeStatusConflictError');
+      expect(error.taskId).toBe('task-001');
+      expect(error.expectedStatus).toBe('pending');
+      expect(error.actualStatus).toBe('testing');
+      expect(error.message).toContain('task-001');
+      expect(error.message).toContain('pending');
+      expect(error.message).toContain('testing');
+    });
+
+    it('should handle undefined actual status', () => {
+      const error = new MergeStatusConflictError('task-002', 'pending', undefined);
+
+      expect(error.actualStatus).toBeUndefined();
+      expect(error.message).toContain('undefined');
     });
   });
 });

@@ -111,6 +111,8 @@ export {
   type CreateFixTaskOptions,
   type BatchProcessResult,
   type MergeStewardService,
+  // Errors
+  MergeStatusConflictError,
   // Implementation
   MergeStewardServiceImpl,
   // Factory
