@@ -649,41 +649,6 @@ export const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XT
     }
   }, [apiUrl]);
 
-  // Image upload function - uses asset API for persistent git-tracked storage
-  const uploadImageFile = useCallback(async (file: File): Promise<string | null> => {
-    try {
-      const arrayBuffer = await file.arrayBuffer();
-      const base64 = btoa(
-        new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
-      );
-
-      const response = await fetch(`${apiUrl}/api/assets/upload`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          filename: file.name,
-          data: base64,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error?.message || `Upload failed: ${response.status}`);
-      }
-
-      const data = await response.json() as { path: string; filename: string; size: number; url: string };
-      return data.path;
-    } catch (error) {
-      console.error('[XTerminal] Image upload failed:', error);
-      terminalRef.current?.writeln(
-        `\x1b[31m  Image upload failed: ${error instanceof Error ? error.message : 'Unknown error'}\x1b[0m`
-      );
-      return null;
-    }
-  }, [apiUrl]);
-
   // Check if drag event contains files (not internal pane drag)
   const isFileDrag = useCallback((e: React.DragEvent<HTMLDivElement>): boolean => {
     const types = Array.from(e.dataTransfer.types);
@@ -721,10 +686,10 @@ export const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XT
     const messages: string[] = [];
     for (const file of files) {
       if (file.type.startsWith('image/')) {
-        // Image files go to asset API for persistent git-tracked storage
-        const path = await uploadImageFile(file);
+        // Image files use terminal upload - session images are ephemeral
+        const path = await uploadFile(file);
         if (path) {
-          messages.push(`[Image uploaded: ${path}]`);
+          messages.push(path);
         }
       } else {
         // Non-image files use the terminal upload endpoint
@@ -747,7 +712,7 @@ export const XTerminal = forwardRef<XTerminalHandle, XTerminalProps>(function XT
         `\x1b[32m  ${messages.length} file(s) uploaded and path(s) inserted\x1b[0m`
       );
     }
-  }, [fileDropEnabled, interactive, uploadFile, uploadImageFile, sendToServer, isFileDrag]);
+  }, [fileDropEnabled, interactive, uploadFile, sendToServer, isFileDrag]);
 
   // Handle drag over
   const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
