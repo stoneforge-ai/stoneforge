@@ -38,7 +38,7 @@ What you should know before going further:
 
 - **Token consumption is high.** Stoneforge dispatches work to multiple agents continuously. A typical session can burn through several Claude MAX/Pro or Codex subscriptions worth of tokens per week. This is by design — it's the cost of running a parallel team.
 - **Agents run autonomously.** Stoneforge spawns agents with permissions bypassed — there are no human approval gates before agents take actions. This is intentional; approval prompts would bottleneck a parallel pipeline. But it means agents will read, write, execute, and push code without asking. Use this at your own risk.
-- **Things move fast.** Stoneforge is under active development. New capabilities ship weekly, defaults may change, and documentation sometimes lags behind the code. We [build in the open](https://x.com/notadamking) and iterate quickly.
+- **Things move fast.** Stoneforge is under active development. New capabilities ship weekly, defaults may change, and documentation sometimes lags behind the code. Published packages follow [semver](https://semver.org/) with changelogs, so breaking changes are always signaled. We [build in the open](https://x.com/notadamking) and iterate quickly.
 
 If a single coding agent handles your workload today, you probably don't need this yet. It'll be here once you start running multiple agents in parallel.
 
