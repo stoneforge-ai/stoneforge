@@ -76,6 +76,30 @@ export const DISPATCH_DAEMON_MIN_POLL_INTERVAL_MS = 1000;
  */
 export const DISPATCH_DAEMON_MAX_POLL_INTERVAL_MS = 60000;
 
+/**
+ * Minimum floor for rate limit reset times (15 minutes).
+ * The rate limit parser can produce reset times that are too short due to
+ * timezone issues or rounding. Clamping to this floor prevents premature
+ * tracker entry expiry, which would cause orphan recovery to proceed and
+ * burn through the resume budget.
+ */
+export const RATE_LIMIT_MINIMUM_FLOOR_MS = 15 * 60 * 1000;
+
+/**
+ * Conservative fallback reset time for suspected silent rate limits (1 hour).
+ * Applied when a recovered worker session exits rapidly (~10 seconds) without
+ * producing any assistant events, which strongly suggests a rate limit (e.g.,
+ * HTTP 429 before any stream output).
+ */
+export const RAPID_EXIT_FALLBACK_RESET_MS = 60 * 60 * 1000;
+
+/**
+ * Maximum session duration (in milliseconds) to be considered a "rapid exit".
+ * Sessions that terminate within this window without emitting assistant events
+ * are treated as suspected silent rate limits.
+ */
+export const RAPID_EXIT_THRESHOLD_MS = 10_000;
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -616,9 +640,24 @@ export class DispatchDaemonImpl implements DispatchDaemon {
   // ----------------------------------------
 
   handleRateLimitDetected(executable: string, resetsAt: Date): void {
-    this.rateLimitTracker.markLimited(executable, resetsAt);
+    // Clamp reset time to at least RATE_LIMIT_MINIMUM_FLOOR_MS from now.
+    // The rate limit parser can produce reset times that are too short due to
+    // timezone issues or rounding. Premature expiry causes orphan recovery to
+    // proceed and burn through the resume budget.
+    const minimumResetsAt = new Date(Date.now() + RATE_LIMIT_MINIMUM_FLOOR_MS);
+    const effectiveResetsAt = resetsAt.getTime() < minimumResetsAt.getTime()
+      ? minimumResetsAt
+      : resetsAt;
+
+    if (effectiveResetsAt !== resetsAt) {
+      logger.warn(
+        `Rate limit reset time for '${executable}' was too short (${resetsAt.toISOString()}), clamped to minimum floor (${effectiveResetsAt.toISOString()})`
+      );
+    }
+
+    this.rateLimitTracker.markLimited(executable, effectiveResetsAt);
     logger.info(
-      `Rate limit detected for executable '${executable}', resets at ${resetsAt.toISOString()}`
+      `Rate limit detected for executable '${executable}', resets at ${effectiveResetsAt.toISOString()}`
     );
   }
 
@@ -1888,6 +1927,11 @@ export class DispatchDaemonImpl implements DispatchDaemon {
           this.config.onSessionStarted(session, events, workerId, `[resumed session for task ${task.id}]`);
         }
 
+        // Attach rapid-exit detector to catch silent rate limits
+        if (events) {
+          this.attachRapidExitDetector(events, task, worker);
+        }
+
         this.emitter.emit('agent:spawned', workerId, worktreePath);
         logger.info(`Resumed session for orphaned task ${task.id} on worker ${worker.name}`);
         return;
@@ -1951,8 +1995,95 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       this.config.onSessionStarted(session, events, workerId, initialPrompt);
     }
 
+    // Attach rapid-exit detector to catch silent rate limits
+    if (events) {
+      this.attachRapidExitDetector(events, task, worker);
+    }
+
     this.emitter.emit('agent:spawned', workerId, worktreePath);
     logger.info(`Spawned fresh session for orphaned task ${task.id} on worker ${worker.name}`);
+  }
+
+  /**
+   * Attaches a rapid-exit detector to a recovered session's event emitter.
+   *
+   * When a recovered worker session exits within RAPID_EXIT_THRESHOLD_MS without
+   * producing any assistant events, it is likely a silent rate limit (e.g., HTTP 429
+   * before any stream output). In that case:
+   * - The resumeCount is rolled back (decremented)
+   * - A warning is logged
+   * - A conservative fallback reset time is applied to the rate limit tracker
+   *
+   * This prevents the resume budget from being burned by sessions that never
+   * actually ran.
+   */
+  private attachRapidExitDetector(
+    events: import('events').EventEmitter,
+    task: Task,
+    worker: AgentEntity
+  ): void {
+    const startTime = Date.now();
+    let hasAssistantEvent = false;
+
+    const onEvent = (event: { type: string }) => {
+      if (event.type === 'assistant') {
+        hasAssistantEvent = true;
+      }
+    };
+
+    const onExit = async () => {
+      events.off('event', onEvent);
+      events.off('exit', onExit);
+
+      const sessionDuration = Date.now() - startTime;
+      if (sessionDuration < RAPID_EXIT_THRESHOLD_MS && !hasAssistantEvent) {
+        logger.warn(
+          `Session exited rapidly without output — suspected rate limit (task=${task.id}, worker=${worker.name}, duration=${sessionDuration}ms)`
+        );
+
+        // Roll back the resumeCount that was incremented before recovery
+        try {
+          const currentTask = await this.api.get<Task>(task.id);
+          if (currentTask) {
+            const currentMeta = getOrchestratorTaskMeta(currentTask.metadata as Record<string, unknown>);
+            const currentResumeCount = currentMeta?.resumeCount ?? 0;
+            if (currentResumeCount > 0) {
+              await this.api.update<Task>(task.id, {
+                metadata: updateOrchestratorTaskMeta(
+                  currentTask.metadata as Record<string, unknown> | undefined,
+                  { resumeCount: currentResumeCount - 1 }
+                ),
+              });
+              logger.info(
+                `Rolled back resumeCount for task ${task.id} from ${currentResumeCount} to ${currentResumeCount - 1}`
+              );
+            }
+          }
+        } catch (error) {
+          logger.warn(`Failed to roll back resumeCount for task ${task.id}:`, error);
+        }
+
+        // Apply a conservative fallback rate limit to all executables in the fallback chain
+        const fallbackChain = this.settingsService?.getAgentDefaults().fallbackChain ?? [];
+        const fallbackResetTime = new Date(Date.now() + RAPID_EXIT_FALLBACK_RESET_MS);
+
+        if (fallbackChain.length > 0) {
+          for (const executable of fallbackChain) {
+            this.handleRateLimitDetected(executable, fallbackResetTime);
+          }
+        } else {
+          // No fallback chain — apply to the default provider
+          this.handleRateLimitDetected('claude', fallbackResetTime);
+        }
+
+        logger.info(
+          `Applied conservative fallback rate limit (1 hour) for suspected silent rate limit on task ${task.id}`
+        );
+      }
+    };
+
+    events.on('event', onEvent);
+    events.on('exit', onExit);
   }
 
   /**
