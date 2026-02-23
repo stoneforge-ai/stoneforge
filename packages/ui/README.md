@@ -3,7 +3,7 @@
 React 19 component library, design tokens, real-time hooks, and API clients for the Stoneforge platform.
 
 [![npm](https://img.shields.io/npm/v/@stoneforge/ui)](https://www.npmjs.com/package/@stoneforge/ui)
-[![license](https://img.shields.io/npm/l/@stoneforge/ui)](https://github.com/stoneforge-ai/stoneforge/blob/main/LICENSE)
+[![license](https://img.shields.io/npm/l/@stoneforge/ui)](https://github.com/stoneforge-ai/stoneforge/blob/master/LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org)
 [![React](https://img.shields.io/badge/React-19-61dafb.svg)](https://react.dev)
 

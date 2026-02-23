@@ -3,7 +3,7 @@
 Multi-runtime SQLite storage layer for the Stoneforge platform — Bun native, Node.js via better-sqlite3, and browser via sql.js.
 
 [![npm](https://img.shields.io/npm/v/@stoneforge/storage)](https://www.npmjs.com/package/@stoneforge/storage)
-[![license](https://img.shields.io/npm/l/@stoneforge/storage)](https://github.com/stoneforge-ai/stoneforge/blob/main/LICENSE)
+[![license](https://img.shields.io/npm/l/@stoneforge/storage)](https://github.com/stoneforge-ai/stoneforge/blob/master/LICENSE)
 [![node](https://img.shields.io/node/v/@stoneforge/storage)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org)
 
