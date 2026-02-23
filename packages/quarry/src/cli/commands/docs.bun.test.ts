@@ -4,6 +4,7 @@
  * Tests for the docs CLI commands:
  * - docs init: Bootstrap Documentation library and directory
  * - docs add: Add document(s) to the Documentation library
+ * - docs dir: Show the Documentation Directory document
  */
 
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
@@ -428,6 +429,101 @@ describe('docs add command', () => {
 });
 
 // ============================================================================
+// Docs Dir Command Tests
+// ============================================================================
+
+describe('docs dir command', () => {
+  const initSubCmd = docsCommand.subcommands!['init'];
+  const dirSubCmd = docsCommand.subcommands!['dir'];
+
+  test('returns ID and title when directory exists', async () => {
+    // First init to create the directory
+    await initSubCmd.handler([], createTestOptions());
+
+    const options = createTestOptions();
+    const result = await dirSubCmd.handler([], options);
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    expect(result.data).toBeDefined();
+
+    const data = result.data as { id: string; title: string };
+    expect(data.id).toMatch(/^el-/);
+    expect(data.title).toBe('Documentation Directory');
+    expect(result.message).toContain(data.id);
+    expect(result.message).toContain('Documentation Directory');
+  });
+
+  test('returns full content when --content flag is used', async () => {
+    await initSubCmd.handler([], createTestOptions());
+
+    const options = createTestOptions({ content: true });
+    const result = await dirSubCmd.handler([], options);
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    expect(result.data).toBeDefined();
+
+    const data = result.data as { id: string; title: string; content: string };
+    expect(data.id).toMatch(/^el-/);
+    expect(data.title).toBe('Documentation Directory');
+    expect(data.content).toContain('Documentation Directory');
+    expect(data.content).toContain('## Specs');
+    expect(result.message).toContain(data.content);
+  });
+
+  test('errors when no directory exists (not yet initialized)', async () => {
+    // Create a document to ensure the database exists, but don't init docs
+    await createTestDocument('Unrelated', 'Some content');
+
+    const options = createTestOptions();
+    const result = await dirSubCmd.handler([], options);
+
+    expect(result.exitCode).toBe(ExitCode.NOT_FOUND);
+    expect(result.error).toContain('Documentation Directory not found');
+    expect(result.error).toContain('sf docs init');
+  });
+
+  test('works with --json mode', async () => {
+    await initSubCmd.handler([], createTestOptions());
+
+    const options = createTestOptions({ json: true });
+    const result = await dirSubCmd.handler([], options);
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    expect(result.message).toBeUndefined();
+
+    const data = result.data as { id: string; title: string };
+    expect(data.id).toMatch(/^el-/);
+    expect(data.title).toBe('Documentation Directory');
+  });
+
+  test('works with --json and --content mode', async () => {
+    await initSubCmd.handler([], createTestOptions());
+
+    const options = createTestOptions({ json: true, content: true });
+    const result = await dirSubCmd.handler([], options);
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    expect(result.message).toBeUndefined();
+
+    const data = result.data as { id: string; title: string; content: string };
+    expect(data.id).toMatch(/^el-/);
+    expect(data.title).toBe('Documentation Directory');
+    expect(data.content).toContain('Documentation Directory');
+  });
+
+  test('works with --quiet mode', async () => {
+    await initSubCmd.handler([], createTestOptions());
+
+    const options = createTestOptions({ quiet: true });
+    const result = await dirSubCmd.handler([], options);
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    // In quiet mode, data should be just the ID string
+    expect(result.data).toMatch(/^el-/);
+  });
+});
+
+// ============================================================================
 // Docs Default Handler Tests
 // ============================================================================
 
@@ -439,6 +535,7 @@ describe('docs default handler', () => {
     expect(result.exitCode).toBe(ExitCode.SUCCESS);
     expect(result.message).toContain('init');
     expect(result.message).toContain('add');
+    expect(result.message).toContain('dir');
   });
 
   test('shows error for unknown subcommand', async () => {

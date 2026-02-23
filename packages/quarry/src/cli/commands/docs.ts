@@ -4,6 +4,7 @@
  * Provides CLI commands for documentation workflow:
  * - docs init: Bootstrap Documentation library and Documentation Directory
  * - docs add: Add document(s) to the Documentation library
+ * - docs dir: Show the Documentation Directory document
  */
 
 import type { Command, GlobalOptions, CommandResult } from '../types.js';
@@ -380,6 +381,103 @@ Examples:
 };
 
 // ============================================================================
+// Docs Dir Command
+// ============================================================================
+
+async function docsDirectoryHandler(
+  _args: string[],
+  options: GlobalOptions
+): Promise<CommandResult> {
+  const { api, error } = createAPI(options);
+  if (error) {
+    return failure(error, ExitCode.GENERAL_ERROR);
+  }
+
+  try {
+    const mode = getOutputMode(options);
+
+    const directoryDoc = await findDocumentByMetadataPurpose(
+      api,
+      DOCUMENTATION_DIRECTORY_PURPOSE
+    );
+
+    if (!directoryDoc) {
+      return failure(
+        'Documentation Directory not found. Run "sf docs init" first.',
+        ExitCode.NOT_FOUND
+      );
+    }
+
+    const includeContent = Boolean(options.content);
+
+    if (mode === 'quiet') {
+      return success(directoryDoc.id);
+    }
+
+    if (mode === 'json') {
+      const data: Record<string, unknown> = {
+        id: directoryDoc.id,
+        title: directoryDoc.title,
+      };
+      if (includeContent) {
+        data.content = directoryDoc.content;
+      }
+      return success(data);
+    }
+
+    // Human-readable output
+    let output = `${directoryDoc.id}  ${directoryDoc.title}`;
+    if (includeContent) {
+      output += `\n\n${directoryDoc.content}`;
+    }
+
+    const data: Record<string, unknown> = {
+      id: directoryDoc.id,
+      title: directoryDoc.title,
+    };
+    if (includeContent) {
+      data.content = directoryDoc.content;
+    }
+
+    return success(data, output);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return failure(
+      `Failed to find Documentation Directory: ${message}`,
+      ExitCode.GENERAL_ERROR
+    );
+  }
+}
+
+const docsDirectoryCommand: Command = {
+  name: 'dir',
+  description: 'Show the Documentation Directory document',
+  usage: 'sf docs dir [--content]',
+  options: [
+    {
+      name: 'content',
+      description: 'Include the full document content in output',
+    },
+  ],
+  help: `Find and display the Documentation Directory document.
+
+Shows the ID and title of the Documentation Directory. Use --content
+to also display the full markdown content.
+
+The Documentation Directory must exist (run "sf docs init" first).
+
+Options:
+  --content   Include the full document content in output
+
+Examples:
+  sf docs dir
+  sf docs dir --content
+  sf docs dir --json
+  sf docs dir --quiet`,
+  handler: docsDirectoryHandler as Command['handler'],
+};
+
+// ============================================================================
 // Docs Root Command
 // ============================================================================
 
@@ -395,15 +493,19 @@ library and Documentation Directory.
 Subcommands:
   init    Bootstrap Documentation library and directory
   add     Add document(s) to the Documentation library
+  dir     Show the Documentation Directory document
 
 Examples:
   sf docs init
   sf docs init --json
   sf docs add el-doc123
-  sf docs add el-doc123 el-doc456`,
+  sf docs add el-doc123 el-doc456
+  sf docs dir
+  sf docs dir --content`,
   subcommands: {
     init: docsInitCommand,
     add: docsAddCommand,
+    dir: docsDirectoryCommand,
   },
   handler: async (args, options): Promise<CommandResult> => {
     // Default handler: show help
@@ -415,6 +517,7 @@ Usage: sf docs <subcommand> [options]
 Subcommands:
   init    Bootstrap Documentation library and directory
   add     Add document(s) to the Documentation library
+  dir     Show the Documentation Directory document
 
 Run "sf docs --help" for more details.`;
       return success(null, helpText);
