@@ -7,6 +7,7 @@
  * - Agent performance and workload distribution
  * - Plan progress tracking
  * - Queue health and merge pipeline status
+ * - Provider and model analytics (token usage, error rates, cost)
  *
  * Uses shared visualization components from @stoneforge/ui/visualizations
  */
@@ -25,6 +26,10 @@ import {
   Zap,
   Target,
   ChevronDown,
+  Cpu,
+  DollarSign,
+  Hash,
+  Layers,
 } from 'lucide-react';
 import {
   StatusPieChart,
@@ -38,6 +43,7 @@ import { useTasksByStatus } from '../../api/hooks/useTasks';
 import { useAgents, useAgentsByRole } from '../../api/hooks/useAgents';
 import { useAllPlans } from '../../api/hooks/useAllElements';
 import { useMergeRequestCounts } from '../../api/hooks/useMergeRequests';
+import { useProviderMetrics } from '../../api/hooks/useProviderMetrics';
 import { useState, useMemo, useRef, useEffect } from 'react';
 import type { Task } from '../../api/types';
 
@@ -71,6 +77,20 @@ const TIME_RANGES = [
 ] as const;
 
 type TimeRange = (typeof TIME_RANGES)[number];
+
+const PROVIDER_COLORS: string[] = [
+  '#3b82f6', // blue
+  '#8b5cf6', // purple
+  '#ec4899', // pink
+  '#f97316', // orange
+  '#22c55e', // green
+  '#06b6d4', // cyan
+  '#eab308', // yellow
+  '#ef4444', // red
+];
+
+/** Rough cost estimate per 1M tokens (input/output blended) */
+const ESTIMATED_COST_PER_MILLION_TOKENS = 5.0;
 
 // ============================================================================
 // Helper Functions
@@ -122,6 +142,20 @@ function computeAvgCompletionTime(closed: Task[]): string {
   }, 0);
 
   return formatDuration(totalMs / tasksWithTimes.length);
+}
+
+function formatTokenCount(count: number): string {
+  if (count >= 1_000_000_000) return `${(count / 1_000_000_000).toFixed(1)}B`;
+  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
+  if (count >= 1_000) return `${(count / 1_000).toFixed(1)}K`;
+  return String(count);
+}
+
+function formatCost(amount: number): string {
+  if (amount >= 1000) return `$${(amount / 1000).toFixed(1)}K`;
+  if (amount >= 1) return `$${amount.toFixed(2)}`;
+  if (amount > 0) return `$${amount.toFixed(4)}`;
+  return '$0.00';
 }
 
 // ============================================================================
@@ -558,8 +592,33 @@ export function MetricsPage() {
 
   const { counts: mergeCounts, isLoading: mergeLoading } = useMergeRequestCounts();
 
+  // Provider metrics — fetch both provider-grouped aggregates and time series
+  const {
+    data: providerMetricsData,
+    isLoading: providerMetricsLoading,
+    error: providerMetricsError,
+  } = useProviderMetrics({
+    days: timeRange.days,
+    groupBy: 'provider',
+    includeSeries: true,
+  });
+
+  // Also fetch model-grouped aggregates for the token trend chart
+  const {
+    data: modelMetricsData,
+    isLoading: modelMetricsLoading,
+    error: modelMetricsError,
+  } = useProviderMetrics({
+    days: timeRange.days,
+    groupBy: 'model',
+    includeSeries: true,
+  });
+
   const isLoading = tasksLoading || agentsLoading;
   const isError = !!(tasksError || agentsError);
+
+  const isProviderMetricsLoading = providerMetricsLoading || modelMetricsLoading;
+  const isProviderMetricsError = !!(providerMetricsError || modelMetricsError);
 
   // ========================================================================
   // Computed metrics
@@ -772,6 +831,72 @@ export function MetricsPage() {
   }, [allTasks]);
 
   // ========================================================================
+  // Provider & Model Analytics — computed data
+  // ========================================================================
+
+  const providerMetrics = providerMetricsData?.metrics ?? [];
+
+  // Summary totals across all providers
+  const providerSummary = useMemo(() => {
+    const totalInputTokens = providerMetrics.reduce((s, m) => s + m.totalInputTokens, 0);
+    const totalOutputTokens = providerMetrics.reduce((s, m) => s + m.totalOutputTokens, 0);
+    const totalTokens = totalInputTokens + totalOutputTokens;
+    const totalSessions = providerMetrics.reduce((s, m) => s + m.sessionCount, 0);
+    const estimatedCost = (totalTokens / 1_000_000) * ESTIMATED_COST_PER_MILLION_TOKENS;
+    return { totalInputTokens, totalOutputTokens, totalTokens, totalSessions, estimatedCost };
+  }, [providerMetrics]);
+
+  // Token usage trend line chart — aggregate time series across all models
+  const tokenTrendData = useMemo((): LineChartDataPoint[] => {
+    const series = modelMetricsData?.timeSeries ?? providerMetricsData?.timeSeries ?? [];
+    if (series.length === 0) return [];
+
+    // Aggregate tokens by bucket across all groups
+    const bucketMap = new Map<string, number>();
+    for (const point of series) {
+      const existing = bucketMap.get(point.bucket) ?? 0;
+      bucketMap.set(point.bucket, existing + point.totalInputTokens + point.totalOutputTokens);
+    }
+
+    return Array.from(bucketMap.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([bucket, totalTokens]) => {
+        const date = new Date(bucket);
+        const label =
+          timeRange.days <= 7
+            ? date.toLocaleDateString('en-US', { weekday: 'short' })
+            : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        return { label, value: totalTokens, date: bucket };
+      });
+  }, [modelMetricsData?.timeSeries, providerMetricsData?.timeSeries, timeRange.days]);
+
+  // Provider distribution pie chart — sessions by provider
+  const providerDistributionData = useMemo((): PieChartDataPoint[] => {
+    return providerMetrics
+      .filter(m => m.sessionCount > 0)
+      .map((m, i) => ({
+        name: m.group,
+        value: m.sessionCount,
+        key: m.group,
+        color: PROVIDER_COLORS[i % PROVIDER_COLORS.length],
+      }))
+      .sort((a, b) => b.value - a.value);
+  }, [providerMetrics]);
+
+  // Error rate by provider (horizontal bar chart)
+  const errorRateByProviderData = useMemo((): BarChartDataPoint[] => {
+    return providerMetrics
+      .filter(m => m.sessionCount > 0)
+      .map(m => ({
+        name: m.group,
+        value: Math.round(m.errorRate * 1000) / 10, // Convert to percentage with 1 decimal
+        id: m.group,
+        percentage: Math.round(m.errorRate * 100),
+      }))
+      .sort((a, b) => b.value - a.value);
+  }, [providerMetrics]);
+
+  // ========================================================================
   // Render
   // ========================================================================
 
@@ -979,6 +1104,94 @@ export function MetricsPage() {
             errorMessage="Failed to load priority data"
             emptyMessage="No open tasks"
             height={220}
+          />
+        </div>
+      </div>
+
+      {/* ================================================================ */}
+      {/* Provider and Model Analytics */}
+      {/* ================================================================ */}
+      <div>
+        <SectionHeader title="Provider and Model Analytics" icon={Cpu} />
+
+        {/* Summary cards row */}
+        <div
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4"
+          data-testid="provider-stats-cards"
+        >
+          <StatCard
+            label="Total Tokens"
+            value={formatTokenCount(providerSummary.totalTokens)}
+            subtitle={`${formatTokenCount(providerSummary.totalInputTokens)} in / ${formatTokenCount(providerSummary.totalOutputTokens)} out`}
+            icon={Hash}
+            iconColor="bg-[color-mix(in_srgb,var(--color-primary)_15%,transparent)] text-[var(--color-primary)]"
+            testId="stat-total-tokens"
+          />
+          <StatCard
+            label="Input Tokens"
+            value={formatTokenCount(providerSummary.totalInputTokens)}
+            subtitle={`${timeRange.label}`}
+            icon={Layers}
+            iconColor="bg-[color-mix(in_srgb,#8b5cf6_15%,transparent)] text-[#8b5cf6]"
+            testId="stat-input-tokens"
+          />
+          <StatCard
+            label="Total Sessions"
+            value={providerSummary.totalSessions}
+            subtitle={`across ${providerMetrics.length} provider${providerMetrics.length !== 1 ? 's' : ''}`}
+            icon={Activity}
+            iconColor="bg-[color-mix(in_srgb,#22c55e_15%,transparent)] text-[#22c55e]"
+            testId="stat-total-sessions"
+          />
+          <StatCard
+            label="Estimated Cost"
+            value={formatCost(providerSummary.estimatedCost)}
+            subtitle={`~$${ESTIMATED_COST_PER_MILLION_TOKENS}/M tokens`}
+            icon={DollarSign}
+            iconColor="bg-[color-mix(in_srgb,#eab308_15%,transparent)] text-[#eab308]"
+            testId="stat-estimated-cost"
+          />
+        </div>
+
+        {/* Charts row */}
+        <div
+          className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4"
+          data-testid="charts-grid-provider"
+        >
+          <TrendLineChart
+            data={tokenTrendData}
+            title={`Token Usage (${timeRange.label})`}
+            testId="token-usage-trend-chart"
+            isLoading={isProviderMetricsLoading}
+            isError={isProviderMetricsError}
+            errorMessage="Failed to load token usage data"
+            emptyMessage="No token usage recorded"
+            total={providerSummary.totalTokens}
+            height={220}
+          />
+
+          <StatusPieChart
+            data={providerDistributionData}
+            title="Sessions by Provider"
+            testId="provider-distribution-chart"
+            isLoading={isProviderMetricsLoading}
+            isError={isProviderMetricsError}
+            errorMessage="Failed to load provider data"
+            emptyMessage="No provider data available"
+            height={220}
+          />
+
+          <HorizontalBarChart
+            data={errorRateByProviderData}
+            title="Error Rate by Provider (%)"
+            testId="error-rate-by-provider-chart"
+            isLoading={isProviderMetricsLoading}
+            isError={isProviderMetricsError}
+            errorMessage="Failed to load error rate data"
+            emptyMessage="No error data available"
+            barColor="#ef4444"
+            height={220}
+            maxBars={8}
           />
         </div>
       </div>

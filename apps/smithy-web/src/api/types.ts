@@ -586,3 +586,59 @@ export interface PlaybookFilter {
   name?: string;
   limit?: number;
 }
+
+// ============================================================================
+// Provider Metrics Types
+// ============================================================================
+
+/**
+ * Aggregated metrics for a single provider or model group
+ */
+export interface AggregatedProviderMetrics {
+  /** Group key (provider name or model name) */
+  group: string;
+  /** Total input tokens */
+  totalInputTokens: number;
+  /** Total output tokens */
+  totalOutputTokens: number;
+  /** Total tokens (input + output) */
+  totalTokens: number;
+  /** Number of sessions */
+  sessionCount: number;
+  /** Average duration in milliseconds */
+  avgDurationMs: number;
+  /** Error rate (0-1) */
+  errorRate: number;
+  /** Number of failed sessions */
+  failedCount: number;
+  /** Number of rate-limited sessions */
+  rateLimitedCount: number;
+}
+
+/**
+ * A single time-series data point for provider metrics
+ */
+export interface ProviderTimeSeriesPoint {
+  /** Time bucket (ISO 8601 date string) */
+  bucket: string;
+  /** Group key (provider or model name) */
+  group: string;
+  /** Total input tokens in this bucket */
+  totalInputTokens: number;
+  /** Total output tokens in this bucket */
+  totalOutputTokens: number;
+  /** Number of sessions in this bucket */
+  sessionCount: number;
+  /** Average duration in milliseconds for this bucket */
+  avgDurationMs: number;
+}
+
+/**
+ * Response from GET /api/provider-metrics
+ */
+export interface ProviderMetricsResponse {
+  timeRange: { days: number; label: string };
+  groupBy: string;
+  metrics: AggregatedProviderMetrics[];
+  timeSeries?: ProviderTimeSeriesPoint[];
+}
