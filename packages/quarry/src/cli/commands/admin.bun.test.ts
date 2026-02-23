@@ -531,6 +531,199 @@ describe('migrate command structure', () => {
 });
 
 // ============================================================================
+// Doctor --fix Tests
+// ============================================================================
+
+describe('doctor --fix', () => {
+  test('fixes orphaned blocked_cache entries', async () => {
+    const backend = createStorage({ path: DB_PATH, create: true });
+    initializeSchema(backend);
+
+    // Create an element, add it to blocked_cache, then delete element with FK off
+    const taskId = 'el-orphan-fix';
+    backend.run(
+      `INSERT INTO elements (id, type, data, created_at, updated_at, created_by)
+       VALUES (?, 'task', ?, datetime('now'), datetime('now'), 'test')`,
+      [taskId, JSON.stringify({ title: 'Test', status: 'open', priority: 2 })]
+    );
+    backend.run(
+      `INSERT INTO blocked_cache (element_id, blocked_by, reason) VALUES (?, ?, ?)`,
+      [taskId, 'el-parent', 'Blocked by parent']
+    );
+
+    // Delete element with FK off to create orphan
+    backend.run('PRAGMA foreign_keys = OFF');
+    backend.run('DELETE FROM elements WHERE id = ?', [taskId]);
+    backend.run('PRAGMA foreign_keys = ON');
+
+    // Verify orphan exists
+    const fkBefore = backend.query('PRAGMA foreign_key_check(blocked_cache)');
+    expect(fkBefore.length).toBe(1);
+
+    // Run doctor --fix
+    const result = await doctorCommand.handler([], createTestOptions({ fix: true }));
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    expect(result.data.repairsApplied).toBeDefined();
+    expect(result.data.repairsApplied.length).toBeGreaterThan(0);
+
+    // Verify fix was applied
+    const fkAfter = backend.query('PRAGMA foreign_key_check(blocked_cache)');
+    expect(fkAfter.length).toBe(0);
+  });
+
+  test('fixes orphaned comment entries', async () => {
+    const backend = createStorage({ path: DB_PATH, create: true });
+    initializeSchema(backend);
+
+    // Create a document element
+    const docId = 'el-doc1';
+    backend.run(
+      `INSERT INTO elements (id, type, data, created_at, updated_at, created_by)
+       VALUES (?, 'document', ?, datetime('now'), datetime('now'), 'test')`,
+      [docId, JSON.stringify({ title: 'Test doc', status: 'active' })]
+    );
+
+    // Create an author element, then delete it
+    const authorId = 'el-author1';
+    backend.run(
+      `INSERT INTO elements (id, type, data, created_at, updated_at, created_by)
+       VALUES (?, 'entity', ?, datetime('now'), datetime('now'), 'test')`,
+      [authorId, JSON.stringify({ name: 'Author' })]
+    );
+
+    // Create a comment referencing both
+    backend.run(
+      `INSERT INTO comments (id, document_id, author_id, content, anchor, created_at, updated_at)
+       VALUES (?, ?, ?, 'Test comment', 'test anchor', datetime('now'), datetime('now'))`,
+      ['cmt-test1', docId, authorId]
+    );
+
+    // Delete author with FK off to create orphan
+    backend.run('PRAGMA foreign_keys = OFF');
+    backend.run('DELETE FROM elements WHERE id = ?', [authorId]);
+    backend.run('PRAGMA foreign_keys = ON');
+
+    // Verify FK violation exists
+    const fkBefore = backend.query('PRAGMA foreign_key_check(comments)');
+    expect(fkBefore.length).toBe(1);
+
+    // Run doctor --fix
+    const result = await doctorCommand.handler([], createTestOptions({ fix: true }));
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    expect(result.data.repairsApplied).toBeDefined();
+
+    // Verify fix
+    const fkAfter = backend.query('PRAGMA foreign_key_check(comments)');
+    expect(fkAfter.length).toBe(0);
+  });
+
+  test('rebuilds blocked cache after fix', async () => {
+    const backend = createStorage({ path: DB_PATH, create: true });
+    initializeSchema(backend);
+
+    // Create a blocker and blocked task with a dependency
+    const blockerId = 'el-blocker2';
+    const blockedId = 'el-blocked2';
+
+    backend.run(
+      `INSERT INTO elements (id, type, data, created_at, updated_at, created_by)
+       VALUES (?, 'task', ?, datetime('now'), datetime('now'), 'test')`,
+      [blockerId, JSON.stringify({ title: 'Blocker', status: 'open', priority: 2 })]
+    );
+    backend.run(
+      `INSERT INTO elements (id, type, data, created_at, updated_at, created_by)
+       VALUES (?, 'task', ?, datetime('now'), datetime('now'), 'test')`,
+      [blockedId, JSON.stringify({ title: 'Blocked', status: 'open', priority: 2 })]
+    );
+
+    // Add blocks dependency
+    backend.run(
+      `INSERT INTO dependencies (blocked_id, blocker_id, type, created_at, created_by)
+       VALUES (?, ?, 'blocks', datetime('now'), 'test')`,
+      [blockedId, blockerId]
+    );
+
+    // Run doctor --fix (should rebuild cache and find the blocked task)
+    const result = await doctorCommand.handler([], createTestOptions({ fix: true }));
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    const rebuildRepair = result.data.repairsApplied?.find(
+      (r: { name: string }) => r.name === 'rebuild_blocked_cache'
+    );
+    expect(rebuildRepair).toBeDefined();
+    expect(rebuildRepair.rowsAffected).toBeGreaterThanOrEqual(1);
+
+    // Verify the blocked task is now in the cache
+    const cacheEntries = backend.query<{ element_id: string }>(
+      'SELECT element_id FROM blocked_cache WHERE element_id = ?',
+      [blockedId]
+    );
+    expect(cacheEntries.length).toBe(1);
+  });
+
+  test('reports no repairs when database is clean', async () => {
+    const backend = createStorage({ path: DB_PATH, create: true });
+    initializeSchema(backend);
+
+    const result = await doctorCommand.handler([], createTestOptions({ fix: true }));
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    // repairsApplied should contain the cache rebuild (which processes 0 elements)
+    // but no FK fixes since there are no violations
+    const fkRepairs = result.data.repairsApplied?.filter(
+      (r: { name: string }) => r.name.startsWith('fix_fk_')
+    ) ?? [];
+    expect(fkRepairs.length).toBe(0);
+  });
+
+  test('updates diagnostics after fix', async () => {
+    const backend = createStorage({ path: DB_PATH, create: true });
+    initializeSchema(backend);
+
+    // Create orphaned blocked_cache entry
+    const taskId = 'el-diag-update';
+    backend.run(
+      `INSERT INTO elements (id, type, data, created_at, updated_at, created_by)
+       VALUES (?, 'task', ?, datetime('now'), datetime('now'), 'test')`,
+      [taskId, JSON.stringify({ title: 'Test', status: 'open', priority: 2 })]
+    );
+    backend.run(
+      `INSERT INTO blocked_cache (element_id, blocked_by, reason) VALUES (?, ?, ?)`,
+      [taskId, 'el-parent2', 'Blocked']
+    );
+    backend.run('PRAGMA foreign_keys = OFF');
+    backend.run('DELETE FROM elements WHERE id = ?', [taskId]);
+    backend.run('PRAGMA foreign_keys = ON');
+
+    const result = await doctorCommand.handler([], createTestOptions({ fix: true }));
+
+    // After fix, the FK diagnostic should show ok
+    const fkDiag = result.data.diagnostics.find(
+      (d: { name: string }) => d.name === 'foreign_keys'
+    );
+    expect(fkDiag).toBeDefined();
+    expect(fkDiag.status).toBe('ok');
+    expect(fkDiag.message).toContain('fixed');
+
+    // After fix, the blocked cache diagnostic should show ok
+    const cacheDiag = result.data.diagnostics.find(
+      (d: { name: string }) => d.name === 'blocked_cache'
+    );
+    expect(cacheDiag).toBeDefined();
+    expect(cacheDiag.status).toBe('ok');
+  });
+
+  test('has --fix option defined', () => {
+    expect(doctorCommand.options).toBeDefined();
+    const fixOption = doctorCommand.options!.find((o) => o.name === 'fix');
+    expect(fixOption).toBeDefined();
+    expect(fixOption!.hasValue).toBe(false);
+  });
+});
+
+// ============================================================================
 // Integration Tests
 // ============================================================================
 

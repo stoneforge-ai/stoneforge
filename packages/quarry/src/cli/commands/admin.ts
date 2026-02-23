@@ -21,6 +21,7 @@ import {
   MIGRATIONS,
 } from '@stoneforge/storage';
 import { resolveDatabasePath, STONEFORGE_DIR, DEFAULT_DB_NAME } from '../db.js';
+import { createBlockedCacheService } from '../../services/blocked-cache.js';
 
 // ============================================================================
 // Doctor Command
@@ -43,11 +44,22 @@ interface DoctorResult {
   };
 }
 
+interface RepairAction {
+  name: string;
+  description: string;
+  rowsAffected: number;
+}
+
+interface DoctorFixResult extends DoctorResult {
+  repairsApplied?: RepairAction[];
+}
+
 async function doctorHandler(
   _args: string[],
-  options: GlobalOptions
+  options: GlobalOptions & { fix?: boolean }
 ): Promise<CommandResult> {
   const diagnostics: DiagnosticResult[] = [];
+  const shouldFix = !!options.fix;
 
   // 1. Check workspace exists
   const stoneforgeDir = join(process.cwd(), STONEFORGE_DIR);
@@ -327,7 +339,143 @@ async function doctorHandler(
     });
   }
 
-  return buildDoctorResult(diagnostics, options);
+  // 10. Apply fixes if --fix flag is set
+  const repairs: RepairAction[] = [];
+
+  if (shouldFix) {
+    // Fix foreign key violations by deleting orphaned rows from each table
+    const tablesWithForeignKeys = [
+      'comments',
+      'blocked_cache',
+      'dependencies',
+      'tags',
+      'events',
+      'inbox_items',
+      'document_embeddings',
+    ];
+
+    for (const table of tablesWithForeignKeys) {
+      try {
+        const fkViolations = backend.query<{
+          table: string;
+          rowid: number;
+          parent: string;
+          fkid: number;
+        }>(`PRAGMA foreign_key_check(${table})`);
+
+        if (fkViolations.length > 0) {
+          // Collect all rowids that violate FK constraints
+          const rowids = fkViolations.map((v) => v.rowid);
+          // Delete in batches to avoid overly long SQL
+          const batchSize = 500;
+          let totalDeleted = 0;
+
+          for (let i = 0; i < rowids.length; i += batchSize) {
+            const batch = rowids.slice(i, i + batchSize);
+            const placeholders = batch.map(() => '?').join(',');
+            const result = backend.run(
+              `DELETE FROM ${table} WHERE rowid IN (${placeholders})`,
+              batch
+            );
+            totalDeleted += result.changes;
+          }
+
+          if (totalDeleted > 0) {
+            repairs.push({
+              name: `fix_fk_${table}`,
+              description: `Deleted ${totalDeleted} orphaned rows from ${table}`,
+              rowsAffected: totalDeleted,
+            });
+          }
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        diagnostics.push({
+          name: `fix_fk_${table}`,
+          status: 'error',
+          message: `Failed to fix FK violations in ${table}: ${message}`,
+        });
+      }
+    }
+
+    // Rebuild blocked cache from dependency graph
+    try {
+      const blockedCacheService = createBlockedCacheService(backend);
+      const rebuildResult = blockedCacheService.rebuild();
+      repairs.push({
+        name: 'rebuild_blocked_cache',
+        description: `Rebuilt blocked cache: ${rebuildResult.elementsChecked} checked, ${rebuildResult.elementsBlocked} blocked (${rebuildResult.durationMs}ms)`,
+        rowsAffected: rebuildResult.elementsBlocked,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      diagnostics.push({
+        name: 'rebuild_blocked_cache',
+        status: 'error',
+        message: `Failed to rebuild blocked cache: ${message}`,
+      });
+    }
+
+    // Re-run diagnostics after fixes to show updated state
+    if (repairs.length > 0) {
+      // Re-check foreign keys
+      try {
+        const fkResult = backend.query<{
+          table: string;
+          rowid: number;
+          parent: string;
+          fkid: number;
+        }>('PRAGMA foreign_key_check');
+
+        // Update the existing FK diagnostic
+        const fkDiag = diagnostics.find((d) => d.name === 'foreign_keys');
+        if (fkDiag) {
+          if (fkResult.length === 0) {
+            fkDiag.status = 'ok';
+            fkDiag.message = 'Foreign key constraints satisfied (fixed)';
+            fkDiag.details = undefined;
+          } else {
+            fkDiag.message = `${fkResult.length} foreign key violations remaining after fix`;
+          }
+        }
+      } catch {
+        // Keep existing diagnostic
+      }
+
+      // Re-check blocked cache
+      try {
+        const orphanedCache = backend.query<{ count: number }>(`
+          SELECT COUNT(*) as count
+          FROM blocked_cache bc
+          LEFT JOIN elements e ON bc.element_id = e.id
+          WHERE e.id IS NULL
+        `);
+        const tasksWithBlockedStatusMissingCache = backend.query<{ count: number }>(`
+          SELECT COUNT(*) as count
+          FROM elements e
+          WHERE e.deleted_at IS NULL
+            AND e.type = 'task'
+            AND json_extract(e.data, '$.status') = 'blocked'
+            AND e.id NOT IN (SELECT element_id FROM blocked_cache)
+        `);
+
+        const blockedCacheDiag = diagnostics.find((d) => d.name === 'blocked_cache');
+        if (blockedCacheDiag) {
+          if (orphanedCache[0].count === 0 && tasksWithBlockedStatusMissingCache[0].count === 0) {
+            blockedCacheDiag.status = 'ok';
+            blockedCacheDiag.message = 'Blocked cache is consistent (rebuilt)';
+            blockedCacheDiag.details = undefined;
+          } else {
+            blockedCacheDiag.message = `Blocked cache still inconsistent after rebuild: ${orphanedCache[0].count} orphaned, ${tasksWithBlockedStatusMissingCache[0].count} missing`;
+          }
+        }
+      } catch {
+        // Keep existing diagnostic
+      }
+    }
+  }
+
+  return buildDoctorResult(diagnostics, options, repairs);
 }
 
 /**
@@ -346,7 +494,8 @@ function formatBytes(bytes: number): string {
  */
 function buildDoctorResult(
   diagnostics: DiagnosticResult[],
-  options: GlobalOptions
+  options: GlobalOptions,
+  repairs: RepairAction[] = []
 ): CommandResult {
   const summary = {
     ok: diagnostics.filter((d) => d.status === 'ok').length,
@@ -356,11 +505,15 @@ function buildDoctorResult(
 
   const healthy = summary.error === 0;
 
-  const result: DoctorResult = {
+  const result: DoctorFixResult = {
     healthy,
     diagnostics,
     summary,
   };
+
+  if (repairs.length > 0) {
+    result.repairsApplied = repairs;
+  }
 
   // Build human-readable output
   const lines: string[] = [];
@@ -381,12 +534,26 @@ function buildDoctorResult(
   lines.push('');
   lines.push(`Summary: ${summary.ok} ok, ${summary.warning} warnings, ${summary.error} errors`);
 
+  if (repairs.length > 0) {
+    lines.push('');
+    lines.push('Repairs applied:');
+    for (const repair of repairs) {
+      lines.push(`  [FIXED] ${repair.description}`);
+    }
+  }
+
   if (healthy) {
     lines.push('');
     lines.push('System is healthy.');
   } else {
     lines.push('');
     lines.push('Issues detected. Run "sf migrate" to fix schema issues.');
+  }
+
+  const hasWarnings = summary.warning > 0 && repairs.length === 0;
+  if (hasWarnings) {
+    lines.push('');
+    lines.push('Run "sf doctor --fix" to attempt automatic repair of warnings.');
   }
 
   return {
@@ -526,7 +693,7 @@ async function migrateHandler(
 export const doctorCommand: Command = {
   name: 'doctor',
   description: 'Check system health and diagnose issues',
-  usage: 'sf doctor',
+  usage: 'sf doctor [--fix]',
   help: `Check system health and diagnose issues.
 
 Performs the following checks:
@@ -540,11 +707,22 @@ Performs the following checks:
 - Storage statistics
 
 Use --verbose to see detailed diagnostic information.
+Use --fix to automatically repair detected issues:
+- Deletes orphaned rows that violate foreign key constraints
+- Rebuilds the blocked cache from the dependency graph
 
 Examples:
   sf doctor              Run all diagnostics
   sf doctor --verbose    Show detailed information
+  sf doctor --fix        Diagnose and fix issues
   sf doctor --json       Output as JSON`,
+  options: [
+    {
+      name: 'fix',
+      description: 'Automatically repair detected issues (FK violations, blocked cache)',
+      hasValue: false,
+    },
+  ],
   handler: doctorHandler,
 };
 
