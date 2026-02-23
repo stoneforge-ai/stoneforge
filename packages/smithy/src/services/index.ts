@@ -226,6 +226,8 @@ export {
   // Types
   type RateLimitEntry,
   type RateLimitTracker,
+  // Constants
+  RATE_LIMITS_SETTING_KEY,
   // Factory
   createRateLimitTracker,
 } from './rate-limit-tracker.js';

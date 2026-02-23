@@ -1,11 +1,15 @@
 /**
  * Rate Limit Tracker Service Unit Tests
  *
- * Tests for the in-memory RateLimitTracker service.
+ * Tests for the RateLimitTracker service, including in-memory behavior
+ * and optional SQLite persistence via SettingsService.
  */
 
-import { describe, test, expect, beforeEach } from 'bun:test';
-import { createRateLimitTracker, type RateLimitTracker } from './rate-limit-tracker.js';
+import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
+import * as fs from 'fs';
+import { createStorage, initializeSchema } from '@stoneforge/storage';
+import { createSettingsService, type SettingsService } from './settings-service.js';
+import { createRateLimitTracker, RATE_LIMITS_SETTING_KEY, type RateLimitTracker } from './rate-limit-tracker.js';
 
 describe('RateLimitTracker', () => {
   let tracker: RateLimitTracker;
@@ -232,5 +236,196 @@ describe('RateLimitTracker', () => {
       expect(tracker.getAllLimits()).toEqual([]);
       expect(tracker.getSoonestResetTime()).toBeUndefined();
     });
+  });
+});
+
+// ============================================================================
+// Persistence Tests (with real SQLite via SettingsService)
+// ============================================================================
+
+describe('RateLimitTracker persistence', () => {
+  let settingsService: SettingsService;
+  let testDbPath: string;
+
+  beforeEach(() => {
+    testDbPath = `/tmp/rate-limit-tracker-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`;
+    const storage = createStorage({ path: testDbPath });
+    initializeSchema(storage);
+    settingsService = createSettingsService(storage);
+  });
+
+  afterEach(() => {
+    if (fs.existsSync(testDbPath)) {
+      fs.unlinkSync(testDbPath);
+    }
+  });
+
+  test('markLimited persists state to settings', () => {
+    const tracker = createRateLimitTracker(settingsService);
+    const futureDate = new Date(Date.now() + 60_000);
+
+    tracker.markLimited('claude', futureDate);
+
+    // Verify the setting was written
+    const setting = settingsService.getSetting(RATE_LIMITS_SETTING_KEY);
+    expect(setting).toBeDefined();
+    expect(setting!.value).toBeDefined();
+
+    const persisted = setting!.value as Record<string, { resetsAt: string; recordedAt: string }>;
+    expect(persisted['claude']).toBeDefined();
+    expect(persisted['claude']!.resetsAt).toBe(futureDate.toISOString());
+    expect(persisted['claude']!.recordedAt).toBeDefined();
+  });
+
+  test('new tracker hydrates persisted state (simulates restart)', () => {
+    const futureDate = new Date(Date.now() + 60_000);
+
+    // First tracker: mark limited and let it persist
+    const tracker1 = createRateLimitTracker(settingsService);
+    tracker1.markLimited('claude', futureDate);
+    tracker1.markLimited('gpt-4', futureDate);
+
+    expect(tracker1.isLimited('claude')).toBe(true);
+    expect(tracker1.isLimited('gpt-4')).toBe(true);
+
+    // Second tracker: simulates a restart — hydrates from same settings
+    const tracker2 = createRateLimitTracker(settingsService);
+
+    expect(tracker2.isLimited('claude')).toBe(true);
+    expect(tracker2.isLimited('gpt-4')).toBe(true);
+    expect(tracker2.getAllLimits()).toHaveLength(2);
+  });
+
+  test('hydration skips entries whose resetsAt is in the past', () => {
+    const pastDate = new Date(Date.now() - 5_000); // 5 seconds ago
+    const futureDate = new Date(Date.now() + 60_000);
+
+    // Manually write persisted state with one expired entry
+    settingsService.setSetting(RATE_LIMITS_SETTING_KEY, {
+      'expired-exec': {
+        resetsAt: pastDate.toISOString(),
+        recordedAt: new Date().toISOString(),
+      },
+      'active-exec': {
+        resetsAt: futureDate.toISOString(),
+        recordedAt: new Date().toISOString(),
+      },
+    });
+
+    // New tracker should only hydrate the active entry
+    const tracker = createRateLimitTracker(settingsService);
+
+    expect(tracker.isLimited('expired-exec')).toBe(false);
+    expect(tracker.isLimited('active-exec')).toBe(true);
+    expect(tracker.getAllLimits()).toHaveLength(1);
+    expect(tracker.getAllLimits()[0]!.executable).toBe('active-exec');
+  });
+
+  test('clear removes persisted state', () => {
+    const futureDate = new Date(Date.now() + 60_000);
+
+    const tracker = createRateLimitTracker(settingsService);
+    tracker.markLimited('claude', futureDate);
+
+    // Verify it's persisted
+    expect(settingsService.getSetting(RATE_LIMITS_SETTING_KEY)).toBeDefined();
+
+    tracker.clear();
+
+    // Verify the setting was cleared (written as empty object)
+    const setting = settingsService.getSetting(RATE_LIMITS_SETTING_KEY);
+    expect(setting).toBeDefined();
+    expect(setting!.value).toEqual({});
+
+    // New tracker should see no limits
+    const tracker2 = createRateLimitTracker(settingsService);
+    expect(tracker2.getAllLimits()).toEqual([]);
+  });
+
+  test('persisted resetsAt and recordedAt are accurate ISO dates', () => {
+    const futureDate = new Date(Date.now() + 60_000);
+    const beforeMark = new Date();
+
+    const tracker = createRateLimitTracker(settingsService);
+    tracker.markLimited('claude', futureDate);
+
+    // Read back from settings
+    const setting = settingsService.getSetting(RATE_LIMITS_SETTING_KEY);
+    const persisted = setting!.value as Record<string, { resetsAt: string; recordedAt: string }>;
+
+    expect(new Date(persisted['claude']!.resetsAt).toISOString()).toBe(futureDate.toISOString());
+    const recordedAt = new Date(persisted['claude']!.recordedAt);
+    expect(recordedAt.getTime()).toBeGreaterThanOrEqual(beforeMark.getTime());
+    expect(recordedAt.getTime()).toBeLessThanOrEqual(Date.now());
+  });
+
+  test('multiple markLimited calls update persisted state', () => {
+    const future1 = new Date(Date.now() + 60_000);
+    const future2 = new Date(Date.now() + 120_000);
+
+    const tracker = createRateLimitTracker(settingsService);
+    tracker.markLimited('claude', future1);
+    tracker.markLimited('gpt-4', future2);
+
+    // Both should be persisted
+    const setting = settingsService.getSetting(RATE_LIMITS_SETTING_KEY);
+    const persisted = setting!.value as Record<string, { resetsAt: string; recordedAt: string }>;
+    expect(Object.keys(persisted)).toHaveLength(2);
+    expect(persisted['claude']).toBeDefined();
+    expect(persisted['gpt-4']).toBeDefined();
+  });
+
+  test('tracker works without settingsService (backward-compatible)', () => {
+    // No settingsService — purely in-memory, no errors
+    const tracker = createRateLimitTracker();
+    const futureDate = new Date(Date.now() + 60_000);
+
+    tracker.markLimited('claude', futureDate);
+    expect(tracker.isLimited('claude')).toBe(true);
+    tracker.clear();
+    expect(tracker.isLimited('claude')).toBe(false);
+
+    // No setting written
+    expect(settingsService.getSetting(RATE_LIMITS_SETTING_KEY)).toBeUndefined();
+  });
+
+  test('hydration handles malformed persisted data gracefully', () => {
+    // Write junk data
+    settingsService.setSetting(RATE_LIMITS_SETTING_KEY, {
+      'bad-entry': { resetsAt: 'not-a-date', recordedAt: 'also-bad' },
+      'missing-fields': {},
+      'null-entry': null,
+    });
+
+    // Should not throw, just skip bad entries
+    const tracker = createRateLimitTracker(settingsService);
+    expect(tracker.getAllLimits()).toEqual([]);
+  });
+
+  test('hydration handles non-object setting value gracefully', () => {
+    // Write a non-object value
+    settingsService.setSetting(RATE_LIMITS_SETTING_KEY, 'just-a-string');
+
+    // Should not throw
+    const tracker = createRateLimitTracker(settingsService);
+    expect(tracker.getAllLimits()).toEqual([]);
+  });
+
+  test('persisted state does not include expired entries from markLimited with past date', () => {
+    const pastDate = new Date(Date.now() - 1_000);
+    const futureDate = new Date(Date.now() + 60_000);
+
+    const tracker = createRateLimitTracker(settingsService);
+    tracker.markLimited('claude', futureDate);
+    tracker.markLimited('expired', pastDate);
+
+    // The persist call expires stale entries before writing
+    const setting = settingsService.getSetting(RATE_LIMITS_SETTING_KEY);
+    const persisted = setting!.value as Record<string, { resetsAt: string; recordedAt: string }>;
+
+    // Only 'claude' should be persisted (expired entry cleaned up)
+    expect(Object.keys(persisted)).toHaveLength(1);
+    expect(persisted['claude']).toBeDefined();
+    expect(persisted['expired']).toBeUndefined();
   });
 });

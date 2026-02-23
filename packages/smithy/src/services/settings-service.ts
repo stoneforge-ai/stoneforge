@@ -41,6 +41,7 @@ export interface ServerAgentDefaults {
  */
 export const SETTING_KEYS = {
   AGENT_DEFAULTS: 'agentDefaults',
+  RATE_LIMITS: 'rateLimits',
 } as const;
 
 // ============================================================================

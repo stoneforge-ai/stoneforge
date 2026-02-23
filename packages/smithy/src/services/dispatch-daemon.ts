@@ -498,7 +498,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
     this.inboxService = inboxService;
     this.poolService = poolService;
     this.settingsService = settingsService;
-    this.rateLimitTracker = createRateLimitTracker();
+    this.rateLimitTracker = createRateLimitTracker(settingsService);
     this.emitter = new EventEmitter();
     this.config = this.normalizeConfig(config);
   }

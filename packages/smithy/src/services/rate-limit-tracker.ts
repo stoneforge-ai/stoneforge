@@ -1,19 +1,25 @@
 /**
  * Rate Limit Tracker Service
  *
- * An in-memory service that tracks which executables are rate-limited
- * and when their limits reset. Used by the dispatch system to avoid
- * spawning sessions against rate-limited executables and to select
- * fallback executables when the primary is throttled.
+ * A service that tracks which executables are rate-limited and when their
+ * limits reset. Used by the dispatch system to avoid spawning sessions
+ * against rate-limited executables and to select fallback executables
+ * when the primary is throttled.
  *
  * Key features:
  * - Track rate-limited executables with reset timestamps
  * - Auto-expire stale entries (past reset times)
  * - Walk fallback chains to find available executables
  * - Query soonest reset time for scheduling retries
+ * - Optional persistence to SQLite via SettingsService (survives restarts)
  *
  * @module
  */
+
+import type { SettingsService } from './settings-service.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('rate-limit-tracker');
 
 // ============================================================================
 // Types
@@ -81,6 +87,28 @@ export interface RateLimitTracker {
 }
 
 // ============================================================================
+// Constants
+// ============================================================================
+
+/**
+ * Settings key used to persist rate limit state.
+ */
+export const RATE_LIMITS_SETTING_KEY = 'rateLimits';
+
+/**
+ * Shape of a persisted rate limit entry.
+ */
+interface PersistedEntry {
+  resetsAt: string; // ISO 8601
+  recordedAt: string; // ISO 8601
+}
+
+/**
+ * Shape of the persisted rate limits value in the settings table.
+ */
+type PersistedRateLimits = Record<string, PersistedEntry>;
+
+// ============================================================================
 // Internal Types
 // ============================================================================
 
@@ -94,13 +122,25 @@ interface InternalEntry {
 // ============================================================================
 
 /**
- * In-memory implementation of the RateLimitTracker.
+ * In-memory implementation of the RateLimitTracker with optional SQLite persistence.
  *
  * Uses a Map keyed by executable name. Stale entries (resetsAt in the past)
  * are lazily cleaned up during read operations.
+ *
+ * When a SettingsService is provided, the tracker:
+ * - Hydrates from persisted state on creation (skipping expired entries)
+ * - Persists the current limits map on every markLimited() and clear() call
  */
 class RateLimitTrackerImpl implements RateLimitTracker {
   private readonly limits: Map<string, InternalEntry> = new Map();
+  private readonly settingsService: SettingsService | undefined;
+
+  constructor(settingsService?: SettingsService) {
+    this.settingsService = settingsService;
+    if (settingsService) {
+      this.hydrate();
+    }
+  }
 
   markLimited(executable: string, resetsAt: Date): void {
     const existing = this.limits.get(executable);
@@ -112,6 +152,7 @@ class RateLimitTrackerImpl implements RateLimitTracker {
       resetsAt,
       recordedAt: new Date(),
     });
+    this.persist();
   }
 
   isLimited(executable: string): boolean {
@@ -169,6 +210,7 @@ class RateLimitTrackerImpl implements RateLimitTracker {
 
   clear(): void {
     this.limits.clear();
+    this.persist();
   }
 
   // ----------------------------------------
@@ -186,6 +228,82 @@ class RateLimitTrackerImpl implements RateLimitTracker {
       }
     }
   }
+
+  /**
+   * Hydrate the in-memory map from persisted settings.
+   * Skips entries whose resetsAt is already in the past.
+   */
+  private hydrate(): void {
+    if (!this.settingsService) return;
+
+    try {
+      const setting = this.settingsService.getSetting(RATE_LIMITS_SETTING_KEY);
+      if (!setting || !setting.value || typeof setting.value !== 'object') {
+        return;
+      }
+
+      const persisted = setting.value as PersistedRateLimits;
+      const now = Date.now();
+      let hydratedCount = 0;
+      let skippedCount = 0;
+
+      for (const [executable, entry] of Object.entries(persisted)) {
+        if (!entry || typeof entry.resetsAt !== 'string' || typeof entry.recordedAt !== 'string') {
+          skippedCount++;
+          continue;
+        }
+
+        const resetsAt = new Date(entry.resetsAt);
+        const recordedAt = new Date(entry.recordedAt);
+
+        // Skip entries whose resetsAt is already in the past
+        if (resetsAt.getTime() <= now) {
+          skippedCount++;
+          continue;
+        }
+
+        // Validate dates are valid
+        if (isNaN(resetsAt.getTime()) || isNaN(recordedAt.getTime())) {
+          skippedCount++;
+          continue;
+        }
+
+        this.limits.set(executable, { resetsAt, recordedAt });
+        hydratedCount++;
+      }
+
+      if (hydratedCount > 0 || skippedCount > 0) {
+        logger.info(`Hydrated ${hydratedCount} rate limits from settings (skipped ${skippedCount} expired/invalid)`);
+      }
+    } catch (err) {
+      logger.warn('Failed to hydrate rate limits from settings:', err);
+    }
+  }
+
+  /**
+   * Persist the current in-memory limits map to settings.
+   * Only active (non-expired) entries are persisted.
+   */
+  private persist(): void {
+    if (!this.settingsService) return;
+
+    try {
+      // Expire stale entries before persisting so we don't write dead data
+      this.expireStale();
+
+      const persisted: PersistedRateLimits = {};
+      for (const [executable, entry] of this.limits) {
+        persisted[executable] = {
+          resetsAt: entry.resetsAt.toISOString(),
+          recordedAt: entry.recordedAt.toISOString(),
+        };
+      }
+
+      this.settingsService.setSetting(RATE_LIMITS_SETTING_KEY, persisted);
+    } catch (err) {
+      logger.warn('Failed to persist rate limits to settings:', err);
+    }
+  }
 }
 
 // ============================================================================
@@ -195,9 +313,10 @@ class RateLimitTrackerImpl implements RateLimitTracker {
 /**
  * Creates a RateLimitTracker instance.
  *
- * No constructor arguments — this is purely in-memory with no DB or
- * service dependencies.
+ * When a SettingsService is provided, the tracker persists its state to SQLite
+ * (key: `rateLimits`) and hydrates from it on creation — surviving server restarts.
+ * Without a SettingsService, the tracker is purely in-memory.
  */
-export function createRateLimitTracker(): RateLimitTracker {
-  return new RateLimitTrackerImpl();
+export function createRateLimitTracker(settingsService?: SettingsService): RateLimitTracker {
+  return new RateLimitTrackerImpl(settingsService);
 }
