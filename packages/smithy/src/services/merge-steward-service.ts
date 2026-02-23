@@ -43,6 +43,7 @@ import type { WorktreeManager } from '../git/worktree-manager.js';
 import { mergeBranch, syncLocalBranch, hasRemote, detectTargetBranch } from '../git/merge.js';
 import type { AgentRegistry } from './agent-registry.js';
 import { createLogger } from '../utils/logger.js';
+import type { OperationLogService } from './operation-log-service.js';
 
 const logger = createLogger('merge-steward');
 
@@ -333,6 +334,7 @@ export class MergeStewardServiceImpl implements MergeStewardService {
   private readonly dispatchService: DispatchService;
   private readonly worktreeManager: WorktreeManager | undefined;
   private readonly agentRegistry: AgentRegistry;
+  private readonly operationLog: OperationLogService | undefined;
   private targetBranch: string | undefined;
 
   constructor(
@@ -341,13 +343,15 @@ export class MergeStewardServiceImpl implements MergeStewardService {
     dispatchService: DispatchService,
     agentRegistry: AgentRegistry,
     config: MergeStewardConfig,
-    worktreeManager?: WorktreeManager
+    worktreeManager?: WorktreeManager,
+    operationLog?: OperationLogService
   ) {
     this.api = api;
     this.taskAssignment = taskAssignment;
     this.dispatchService = dispatchService;
     this.agentRegistry = agentRegistry;
     this.worktreeManager = worktreeManager;
+    this.operationLog = operationLog;
     this.config = {
       ...DEFAULT_CONFIG,
       ...config,
@@ -438,6 +442,7 @@ export class MergeStewardServiceImpl implements MergeStewardService {
 
         if (!testRunResult.passed) {
           // Tests failed - create fix task
+          this.operationLog?.write('warn', 'merge', `Tests failed for task ${taskId}`, { taskId, exitCode: testRunResult.exitCode, durationMs: testRunResult.durationMs });
           await this.updateMergeStatus(taskId, 'test_failed', { testResult });
 
           const fixTaskId = await this.createFixTask(taskId, {
@@ -489,6 +494,7 @@ export class MergeStewardServiceImpl implements MergeStewardService {
       if (!mergeResult.success) {
         if (mergeResult.hasConflict) {
           // Merge conflict - create fix task
+          this.operationLog?.write('warn', 'merge', `Merge conflict for task ${taskId}`, { taskId, conflictFiles: mergeResult.conflictFiles });
           await this.updateMergeStatus(taskId, 'conflict', {
             failureReason: `Merge conflict in: ${mergeResult.conflictFiles?.join(', ') ?? 'unknown files'}`,
           });
@@ -510,6 +516,7 @@ export class MergeStewardServiceImpl implements MergeStewardService {
           };
         } else {
           // Other merge failure
+          this.operationLog?.write('error', 'merge', `Merge failed for task ${taskId}: ${mergeResult.error}`, { taskId });
           await this.updateMergeStatus(taskId, 'failed', {
             failureReason: mergeResult.error,
           });
@@ -526,6 +533,7 @@ export class MergeStewardServiceImpl implements MergeStewardService {
       }
 
       // 4. Merge succeeded - update status and cleanup
+      this.operationLog?.write('info', 'merge', `Task ${taskId} merged successfully`, { taskId, commitHash: mergeResult.commitHash });
       await this.updateMergeStatus(taskId, 'merged', { testResult });
 
       // 5. Cleanup worktree if auto-cleanup enabled
@@ -554,6 +562,7 @@ export class MergeStewardServiceImpl implements MergeStewardService {
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
+      this.operationLog?.write('error', 'merge', `Merge processing error for task ${taskId}: ${errorMessage}`, { taskId });
       await this.updateMergeStatus(taskId, 'failed', {
         failureReason: errorMessage,
       });
@@ -1045,7 +1054,8 @@ export function createMergeStewardService(
   dispatchService: DispatchService,
   agentRegistry: AgentRegistry,
   config: MergeStewardConfig,
-  worktreeManager?: WorktreeManager
+  worktreeManager?: WorktreeManager,
+  operationLog?: OperationLogService
 ): MergeStewardService {
   return new MergeStewardServiceImpl(
     api,
@@ -1053,6 +1063,7 @@ export function createMergeStewardService(
     dispatchService,
     agentRegistry,
     config,
-    worktreeManager
+    worktreeManager,
+    operationLog
   );
 }

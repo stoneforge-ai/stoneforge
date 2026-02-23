@@ -35,6 +35,7 @@ import { ClaudeAgentProvider } from '../providers/claude/index.js';
 import { OpenCodeAgentProvider } from '../providers/opencode/index.js';
 import { CodexAgentProvider } from '../providers/codex/index.js';
 import type { SettingsService } from '../services/settings-service.js';
+import type { OperationLogService } from '../services/operation-log-service.js';
 import { trackListeners } from './event-utils.js';
 
 // ============================================================================
@@ -457,6 +458,12 @@ export interface SessionManager {
    * @returns Summary of reconciliation results
    */
   reconcileOnStartup(): Promise<{ reconciled: number; errors: string[] }>;
+
+  /**
+   * Sets the operation log service for persistent event logging.
+   * Called after construction to avoid circular dependency issues.
+   */
+  setOperationLog(log: OperationLogService): void;
 }
 
 // ============================================================================
@@ -488,6 +495,8 @@ export class SessionManagerImpl implements SessionManager {
   private readonly sessionHistory: Map<EntityId, SessionHistoryEntry[]> = new Map();
   private readonly sessionCleanupFns: Map<string, () => void> = new Map(); // sessionId -> cleanup function
 
+  private operationLog: OperationLogService | undefined;
+
   constructor(
     private readonly spawner: SpawnerService,
     private readonly api: QuarryAPI, // Used for message operations in messageSession
@@ -503,6 +512,14 @@ export class SessionManagerImpl implements SessionManager {
    */
   getApi(): QuarryAPI {
     return this.api;
+  }
+
+  /**
+   * Sets the operation log service for persistent event logging.
+   * Called after construction to avoid circular dependency issues.
+   */
+  setOperationLog(log: OperationLogService): void {
+    this.operationLog = log;
   }
 
   // ----------------------------------------
@@ -584,6 +601,9 @@ export class SessionManagerImpl implements SessionManager {
 
     // Persist session state
     await this.persistSession(sessionState.id);
+
+    // Log session spawn
+    this.operationLog?.write('info', 'session', `Session started for agent ${agentId} (${meta.agentRole})`, { agentId, sessionId: sessionState.id });
 
     return {
       session: this.toPublicSession(sessionState),
@@ -748,6 +768,9 @@ export class SessionManagerImpl implements SessionManager {
 
     // Emit status change
     session.events.emit('status', 'terminated');
+
+    // Log session termination
+    this.operationLog?.write('info', 'session', `Session terminated for agent ${session.agentId}${options?.reason ? `: ${options.reason}` : ''}`, { agentId: session.agentId, sessionId });
   }
 
   async interruptSession(sessionId: string): Promise<void> {
@@ -1443,6 +1466,13 @@ export class SessionManagerImpl implements SessionManager {
       const currentSession = this.sessions.get(session.id);
       if (currentSession && currentSession.status !== 'terminated' && currentSession.status !== 'suspended') {
         console.log(`[session-manager] Cleaning up ${currentSession.status} session ${session.id} for agent ${session.agentId}`);
+
+        // Log unexpected session exits (non-zero exit code or signal)
+        if (code !== null && code !== 0) {
+          this.operationLog?.write('error', 'session', `Session ${session.id} exited with code ${code}`, { agentId: session.agentId, sessionId: session.id, exitCode: code });
+        } else if (signal) {
+          this.operationLog?.write('warn', 'session', `Session ${session.id} killed by signal ${signal}`, { agentId: session.agentId, sessionId: session.id, signal });
+        }
 
         const updatedSession: InternalSessionState = {
           ...currentSession,

@@ -812,6 +812,10 @@ export function createMockSessionManager(
     async reconcileOnStartup(): Promise<{ reconciled: number; errors: string[] }> {
       return { reconciled: 0, errors: [] };
     },
+
+    setOperationLog(): void {
+      // No-op for mock
+    },
   };
 
   return manager;

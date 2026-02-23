@@ -244,6 +244,19 @@ export {
   createSettingsService,
 } from './settings-service.js';
 
+// Operation log service
+export {
+  // Types
+  type OperationLogEntry,
+  type OperationLogFilter,
+  type OperationLogService,
+  // Constants
+  OperationLogLevel,
+  OperationLogCategory,
+  // Factory
+  createOperationLogService,
+} from './operation-log-service.js';
+
 // Metrics service
 export {
   // Types

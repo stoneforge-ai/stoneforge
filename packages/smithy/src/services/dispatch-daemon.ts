@@ -54,6 +54,7 @@ import {
   appendTaskSessionHistory,
   type TaskSessionHistoryEntry,
 } from '../types/task-meta.js';
+import type { OperationLogService } from './operation-log-service.js';
 
 const logger = createLogger('dispatch-daemon');
 
@@ -464,6 +465,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
   private readonly inboxService: InboxService;
   private readonly poolService: AgentPoolService | undefined;
   private readonly settingsService: SettingsService | undefined;
+  private readonly operationLog: OperationLogService | undefined;
   private readonly rateLimitTracker: RateLimitTracker;
   private readonly emitter: EventEmitter;
 
@@ -513,7 +515,8 @@ export class DispatchDaemonImpl implements DispatchDaemon {
     inboxService: InboxService,
     config?: DispatchDaemonConfig,
     poolService?: AgentPoolService,
-    settingsService?: SettingsService
+    settingsService?: SettingsService,
+    operationLog?: OperationLogService
   ) {
     this.api = api;
     this.agentRegistry = agentRegistry;
@@ -525,6 +528,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
     this.inboxService = inboxService;
     this.poolService = poolService;
     this.settingsService = settingsService;
+    this.operationLog = operationLog;
     this.rateLimitTracker = createRateLimitTracker(settingsService);
     this.emitter = new EventEmitter();
     this.config = this.normalizeConfig(config);
@@ -662,6 +666,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
     logger.info(
       `Rate limit detected for executable '${executable}', resets at ${effectiveResetsAt.toISOString()}`
     );
+    this.operationLog?.write('warn', 'rate-limit', `Rate limit detected for '${executable}', resets at ${resetsAt.toISOString()}`, { executable, resetsAt: resetsAt.toISOString() });
   }
 
   getRateLimitStatus(): {
@@ -784,6 +789,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
           const errorMessage = error instanceof Error ? error.message : String(error);
           errorMessages.push(`Worker ${worker.name}: ${errorMessage}`);
           logger.error(`Error assigning task to worker ${worker.name}:`, error);
+          this.operationLog?.write('error', 'dispatch', `Error assigning task to worker ${worker.name}: ${errorMessage}`, { agentId: worker.id });
         }
       }
     } catch (error) {
@@ -791,6 +797,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       const errorMessage = error instanceof Error ? error.message : String(error);
       errorMessages.push(errorMessage);
       logger.error('Error in pollWorkerAvailability:', error);
+      this.operationLog?.write('error', 'dispatch', `Poll worker availability failed: ${errorMessage}`);
     }
 
     const result: PollResult = {
@@ -1129,11 +1136,13 @@ export class DispatchDaemonImpl implements DispatchDaemon {
             logger.info(
               `[dispatch-daemon] Spawning recovery steward for stuck task ${taskAssignment.task.id} after ${resumeCount} resume attempts`
             );
+            this.operationLog?.write('warn', 'recovery', `Spawning recovery steward for stuck task ${taskAssignment.task.id} after ${resumeCount} resume attempts`, { taskId: taskAssignment.task.id, agentId: worker.id, resumeCount });
           } catch (error) {
             errors++;
             const errorMessage = error instanceof Error ? error.message : String(error);
             errorMessages.push(`Recovery steward for ${worker.name}: ${errorMessage}`);
             logger.error(`Error spawning recovery steward for worker ${worker.name}:`, error);
+            this.operationLog?.write('error', 'recovery', `Failed to spawn recovery steward for worker ${worker.name}: ${errorMessage}`, { agentId: worker.id, taskId: taskAssignment.task.id });
           }
         } else {
           // Normal recovery: re-spawn the worker, then increment resume count on success
@@ -1155,6 +1164,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
             const errorMessage = error instanceof Error ? error.message : String(error);
             errorMessages.push(`Worker ${worker.name}: ${errorMessage}`);
             logger.error(`Error recovering orphaned task for worker ${worker.name}:`, error);
+            this.operationLog?.write('error', 'recovery', `Failed to recover orphaned task for worker ${worker.name}: ${errorMessage}`, { agentId: worker.id });
           }
         }
       }
@@ -1241,12 +1251,14 @@ export class DispatchDaemonImpl implements DispatchDaemon {
 
       if (processed > 0) {
         logger.info(`Recovered ${processed} orphaned task assignment(s)`);
+        this.operationLog?.write('info', 'recovery', `Recovered ${processed} orphaned task assignment(s)`);
       }
     } catch (error) {
       errors++;
       const errorMessage = error instanceof Error ? error.message : String(error);
       errorMessages.push(errorMessage);
       logger.error('Error in recoverOrphanedAssignments:', error);
+      this.operationLog?.write('error', 'recovery', `Orphan recovery failed: ${errorMessage}`);
     }
 
     const result: PollResult = {
@@ -3513,7 +3525,8 @@ export function createDispatchDaemon(
   inboxService: InboxService,
   config?: DispatchDaemonConfig,
   poolService?: AgentPoolService,
-  settingsService?: SettingsService
+  settingsService?: SettingsService,
+  operationLog?: OperationLogService
 ): DispatchDaemon {
   return new DispatchDaemonImpl(
     api,
@@ -3526,6 +3539,7 @@ export function createDispatchDaemon(
     inboxService,
     config,
     poolService,
-    settingsService
+    settingsService,
+    operationLog
   );
 }
