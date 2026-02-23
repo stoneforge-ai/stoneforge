@@ -28,13 +28,15 @@ Configuration precedence (highest to lowest):
 ## Configuration Structure
 
 ```typescript
+type Duration = number;  // Milliseconds; config files also accept duration strings like '5m', '500ms', '7d'
+
 interface Configuration {
   actor?: string;                    // Default actor for operations
   baseBranch?: string;               // Base branch for merge targets (default: auto-detect)
   database: string;                  // Database path (default: 'stoneforge.db')
   sync: {
     autoExport: boolean;             // Auto-export on mutation (default: true)
-    exportDebounce: number;          // Debounce ms (default: 300000 / 5 minutes)
+    exportDebounce: Duration;        // Debounce interval (default: 300000 / 5 minutes)
     elementsFile: string;            // JSONL path (default: 'elements.jsonl')
     dependenciesFile: string;        // Dependencies path
   };
@@ -42,12 +44,12 @@ interface Configuration {
     paths: string[];                 // Playbook search paths
   };
   tombstone: {
-    ttl: number;                     // Tombstone TTL ms (default: 30 days)
-    minTtl: number;                  // Minimum TTL ms
+    ttl: Duration;                   // Tombstone TTL (default: 30 days)
+    minTtl: Duration;                // Minimum TTL (default: 7 days)
   };
   identity: {
     mode: IdentityMode;              // 'soft' | 'cryptographic' | 'hybrid'
-    timeTolerance: number;           // Signature tolerance ms (default: 5 min)
+    timeTolerance: Duration;         // Signature tolerance (default: 5 min)
   };
   plugins: {
     packages: string[];              // CLI plugin package names

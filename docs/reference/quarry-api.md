@@ -520,11 +520,13 @@ call `api.reindexAllDocumentsFTS()` to rebuild the search index.
 const stats = await api.stats();
 
 // Rebuild the blocked cache (useful after import or for recovery)
+// Note: rebuildBlockedCache() is on the QuarryAPIImpl class, not the QuarryAPI interface.
+// It is available at runtime from createQuarryAPI() but not visible through the interface type.
 const result = api.rebuildBlockedCache();
 // { elementsChecked: number, elementsBlocked: number, durationMs: number }
 ```
 
-**`rebuildBlockedCache()`** — Rebuilds the in-memory blocked cache by re-evaluating all dependency relationships. Use after bulk imports, or as a recovery step if the cache becomes inconsistent.
+**`rebuildBlockedCache()`** — Rebuilds the in-memory blocked cache by re-evaluating all dependency relationships. Use after bulk imports, or as a recovery step if the cache becomes inconsistent. Note: this method is on the `QuarryAPIImpl` class, not the `QuarryAPI` interface — it is available at runtime via `createQuarryAPI()` but will not appear in interface-typed references.
 
 ---
 

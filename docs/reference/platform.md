@@ -383,6 +383,12 @@ Hono-based API server for agent orchestration. Modular architecture with routes 
 | `routes/plugins.ts` | `/api/plugins` | Plugin execution |
 | `routes/events.ts` | `/api/events` | Activity/events, SSE streaming |
 | `routes/upload.ts` | `/api/terminal/upload` | Terminal file upload |
+| `routes/daemon.ts` | `/api/daemon` | Dispatch daemon lifecycle |
+| `routes/workflows.ts` | `/api/workflows`, `/api/playbooks` | Workflow and playbook management |
+| `routes/pools.ts` | `/api/pools` | Agent pool management |
+| `routes/lsp.ts` | `/api/lsp` | LSP status and configuration |
+| `routes/workspace-files.ts` | `/api/workspace` | Workspace file browsing, reading, writing |
+| `routes/extensions.ts` | `/api/extensions` | OpenVSX marketplace proxy |
 
 ### Key Routes
 

@@ -404,10 +404,11 @@ import {
   getProviderRegistry,
   ClaudeAgentProvider,
   OpenCodeAgentProvider,
-  CodexAgentProvider,
   ProviderError,
 } from '@stoneforge/smithy';
 ```
+
+> **Note:** `CodexAgentProvider` is registered automatically in the provider registry at runtime but is not re-exported from the public `@stoneforge/smithy` API. Access it via `registry.get('codex')` instead of direct import.
 
 ### AgentProviderRegistry
 
