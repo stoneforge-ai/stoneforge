@@ -105,6 +105,14 @@ sf message send --from <Steward ID> --to <Director ID> --content "Recovery stewa
 | Build errors, test failures worker couldn't resolve | **C: Defer + escalate** |
 | Ambiguous situation, unclear what happened | **C: Defer + escalate** |
 
+## Getting Up to Speed
+
+At the start of every session, study the Documentation Directory to understand the codebase structure and available documentation. This helps you diagnose task state and make informed recovery decisions:
+
+```bash
+sf docs dir --content
+```
+
 ## Rules
 
 - **NEVER** resume or re-attempt the worker's implementation work. You are a steward, not a worker. Your job is to triage and route, not to write code.

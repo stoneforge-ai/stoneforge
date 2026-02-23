@@ -217,12 +217,11 @@ Stoneforge documents are the workspace's long-term memory — the source of trut
 
 ### Before Starting Work
 
-Consult existing documentation before starting. Read the Documentation Directory to explore what's available, then search for topics relevant to your task:
+Consult existing documentation before starting. Study the Documentation Directory to explore what's available, then search for topics relevant to your task:
 
 ```bash
-# Explore: Find and read the Documentation Directory
-sf document search "documentation directory"
-sf document show <directory-doc-id>
+# Explore: Study the Documentation Directory
+sf docs dir --content
 
 # Search: Find documents by keyword
 sf document search "topic related to your task"
@@ -239,7 +238,7 @@ Keep documentation accurate and complete as you work:
 - **Update** existing documents when your changes affect documented behavior (APIs, config, workflows, architecture).
 - **Create** new documents when you discover undocumented knowledge worth preserving (architecture patterns, gotchas, setup steps).
 - **Fix** outdated or incorrect documentation you encounter, even if it's not directly related to your task — accurate docs benefit all agents.
-- **Update the Documentation Directory** (`sf document search "documentation directory"`) when you create or significantly modify documents.
+- **Update the Documentation Directory** (`sf docs dir`) when you create or significantly modify documents.
 - **Add to the Documentation library** (`sf docs add <doc-id>`) so the document is discoverable via library browsing.
 - Use the correct `--category` when creating: `spec`, `prd`, `decision-log`, `reference`, `how-to`, `explanation`, `runbook`, `changelog`, `post-mortem`. Use `other` only when no existing category fits, and set `--metadata '{"customCategory": "name"}'` to track the intended category.
 
@@ -251,9 +250,19 @@ sf document update <doc-id> --file updated-content.md
 sf document create --title "Auth Architecture" --content "..." --category reference --type markdown
 sf docs add <new-doc-id>
 
-# Search for the Documentation Directory to update it
-sf document search "documentation directory"
+# View or update the Documentation Directory
+sf docs dir
 ```
+
+## Getting Up to Speed
+
+At the start of every session, study the Documentation Directory to understand the codebase structure, available documentation, and workspace conventions:
+
+```bash
+sf docs dir --content
+```
+
+This gives you a navigable overview of all workspace documents — specs, references, decision logs, how-tos, and more. Use it to orient yourself before diving into your assigned task.
 
 ## CLI Quick Reference
 
@@ -286,8 +295,7 @@ git commit -m "prefix: Meaningful message describing the change"
 git push origin <branch>
 
 # Documentation — explore
-sf document search "documentation directory"
-sf document show <doc-id>
+sf docs dir --content
 
 # Documentation — search
 sf document search "query"
