@@ -163,6 +163,14 @@ export interface WorkerTaskService {
    * 3. Spawns the worker session in the worktree
    * 4. Sends task context to the worker
    *
+   * **IMPORTANT: Rate Limit Check Required**
+   * This method does NOT check rate limits internally. The dispatch daemon
+   * checks `resolveExecutableWithFallback()` before calling this method,
+   * but direct callers (e.g., manual API, HTTP routes) MUST verify that
+   * executables are not rate-limited before calling. Use
+   * `dispatchDaemon.getRateLimitStatus().isPaused` to check. Spawning a
+   * session against a rate-limited executable will fail or waste resources.
+   *
    * @param taskId - The task to start
    * @param agentId - The worker agent
    * @param options - Options for starting
@@ -276,6 +284,10 @@ export class WorkerTaskServiceImpl implements WorkerTaskService {
   // Task Lifecycle
   // ----------------------------------------
 
+  // NOTE: This method does NOT check rate limits internally.
+  // Callers MUST verify executables are not rate-limited before calling.
+  // The dispatch daemon checks before calling this, but direct API callers
+  // should use dispatchDaemon.getRateLimitStatus().isPaused to verify.
   async startWorkerOnTask(
     taskId: ElementId,
     agentId: EntityId,

@@ -3055,6 +3055,16 @@ export class DispatchDaemonImpl implements DispatchDaemon {
   ): Promise<void> {
     const agentId = asEntityId(agent.id);
 
+    // Rate limit guard: skip triage when all executables are rate-limited.
+    // Items stay unread and retry next cycle when limits expire.
+    const executableCheck = this.resolveExecutableWithFallback(agent);
+    if (executableCheck === 'all_limited') {
+      logger.debug(
+        `All executables rate-limited, skipping triage session for ${agent.name}`
+      );
+      return;
+    }
+
     // Create a read-only worktree (detached HEAD on default branch).
     // The path is deterministic ({agentName}-triage), so a stale worktree
     // from a previous crash would cause WORKTREE_EXISTS. Handle by removing

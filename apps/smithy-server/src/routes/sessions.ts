@@ -208,7 +208,7 @@ export function createSessionRoutes(
   services: Services,
   notifyClientsOfNewSession: NotifyClientsCallback
 ) {
-  const { api, orchestratorApi, agentRegistry, sessionManager, spawnerService, sessionInitialPrompts, sessionMessageService } = services;
+  const { api, orchestratorApi, agentRegistry, sessionManager, spawnerService, sessionInitialPrompts, sessionMessageService, dispatchDaemon } = services;
   const app = new Hono();
 
   // POST /api/agents/:id/start
@@ -240,6 +240,28 @@ export function createSessionRoutes(
           },
           409
         );
+      }
+
+      // Rate limit guard: reject when all executables are rate-limited.
+      // Returns 429 with Retry-After header set to the soonest reset time.
+      if (dispatchDaemon) {
+        const rateLimitStatus = dispatchDaemon.getRateLimitStatus();
+        if (rateLimitStatus.isPaused) {
+          const retryAfterSeconds = rateLimitStatus.soonestReset
+            ? Math.max(1, Math.ceil((new Date(rateLimitStatus.soonestReset).getTime() - Date.now()) / 1000))
+            : 60; // Default to 60 seconds if no reset time available
+          return c.json(
+            {
+              error: {
+                code: 'RATE_LIMITED',
+                message: 'All executables are currently rate-limited',
+                retryAfter: retryAfterSeconds,
+                soonestReset: rateLimitStatus.soonestReset,
+              },
+            },
+            { status: 429, headers: { 'Retry-After': String(retryAfterSeconds) } }
+          );
+        }
       }
 
       // Get agent metadata to determine role
@@ -538,6 +560,28 @@ Please begin working on this task. Use \`sf task get ${taskResult.id}\` to see f
           },
           409
         );
+      }
+
+      // Rate limit guard: reject when all executables are rate-limited.
+      // Returns 429 with Retry-After header set to the soonest reset time.
+      if (dispatchDaemon) {
+        const rateLimitStatus = dispatchDaemon.getRateLimitStatus();
+        if (rateLimitStatus.isPaused) {
+          const retryAfterSeconds = rateLimitStatus.soonestReset
+            ? Math.max(1, Math.ceil((new Date(rateLimitStatus.soonestReset).getTime() - Date.now()) / 1000))
+            : 60; // Default to 60 seconds if no reset time available
+          return c.json(
+            {
+              error: {
+                code: 'RATE_LIMITED',
+                message: 'All executables are currently rate-limited',
+                retryAfter: retryAfterSeconds,
+                soonestReset: rateLimitStatus.soonestReset,
+              },
+            },
+            { status: 429, headers: { 'Retry-After': String(retryAfterSeconds) } }
+          );
+        }
       }
 
       let providerSessionId = body.providerSessionId;

@@ -3111,3 +3111,178 @@ describe('runPollCycle - allLimited with empty fallback chain', () => {
     expect(status.isPaused).toBe(false);
   });
 });
+
+// ============================================================================
+// Triage Session Rate Limit Guard Tests
+// ============================================================================
+
+describe('spawnTriageSession - rate limit guard', () => {
+  let api: QuarryAPI;
+  let inboxService: InboxService;
+  let agentRegistry: AgentRegistry;
+  let taskAssignment: TaskAssignmentService;
+  let dispatchService: DispatchService;
+  let sessionManager: SessionManager;
+  let worktreeManager: WorktreeManager;
+  let stewardScheduler: StewardScheduler;
+  let settingsService: SettingsService;
+  let daemon: DispatchDaemon;
+  let testDbPath: string;
+  let systemEntity: EntityId;
+
+  beforeEach(async () => {
+    testDbPath = `/tmp/dispatch-daemon-triage-ratelimit-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`;
+    const storage = createStorage({ path: testDbPath, create: true });
+    initializeSchema(storage);
+
+    api = createQuarryAPI(storage);
+    inboxService = createInboxService(storage);
+    agentRegistry = createAgentRegistry(api);
+    taskAssignment = createTaskAssignmentService(api);
+    dispatchService = createDispatchService(api, taskAssignment, agentRegistry);
+    sessionManager = createMockSessionManager();
+    worktreeManager = createMockWorktreeManager();
+    stewardScheduler = createMockStewardScheduler();
+    settingsService = createMockSettingsService({
+      fallbackChain: ['claude2', 'claude'],
+    });
+
+    const { createEntity, EntityTypeValue } = await import('@stoneforge/core');
+    const entity = await createEntity({
+      name: 'test-system-triage-ratelimit',
+      entityType: EntityTypeValue.SYSTEM,
+      createdBy: 'system:test' as EntityId,
+    });
+    const saved = await api.create(entity as unknown as Record<string, unknown> & { createdBy: EntityId });
+    systemEntity = saved.id as unknown as EntityId;
+
+    const config: DispatchDaemonConfig = {
+      pollIntervalMs: 100,
+      workerAvailabilityPollEnabled: false,
+      inboxPollEnabled: true,
+      stewardTriggerPollEnabled: false,
+      workflowTaskPollEnabled: false,
+    };
+
+    daemon = new DispatchDaemonImpl(
+      api,
+      agentRegistry,
+      sessionManager,
+      dispatchService,
+      worktreeManager,
+      taskAssignment,
+      stewardScheduler,
+      inboxService,
+      config,
+      undefined, // poolService
+      settingsService
+    );
+  });
+
+  afterEach(async () => {
+    await daemon.stop();
+    if (fs.existsSync(testDbPath)) {
+      fs.unlinkSync(testDbPath);
+    }
+  });
+
+  /**
+   * Helper to create a channel, message, document, and inbox item for testing triage.
+   */
+  async function createTestMessageAndInboxItem(
+    workerId: EntityId,
+    suffix: string
+  ): Promise<void> {
+    const { createMessage, createDocument, createGroupChannel, InboxSourceType, ContentType: CT } = await import('@stoneforge/core');
+
+    // Create a group channel
+    const channel = await createGroupChannel({
+      name: `triage-chan-${suffix}`,
+      createdBy: systemEntity,
+      members: [systemEntity, workerId],
+    });
+    const savedChannel = await api.create(channel as unknown as Record<string, unknown> & { createdBy: EntityId });
+    const channelId = savedChannel.id as unknown as import('@stoneforge/core').ChannelId;
+
+    // Create a document for the message content
+    const doc = await createDocument({
+      title: `msg-content-${suffix}`,
+      content: 'Hello, please triage this',
+      contentType: CT.TEXT,
+      createdBy: systemEntity,
+    });
+    const savedDoc = await api.create(doc as unknown as Record<string, unknown> & { createdBy: EntityId });
+
+    // Create a message in the channel
+    const msg = await createMessage({
+      channelId,
+      sender: systemEntity,
+      contentRef: savedDoc.id as unknown as import('@stoneforge/core').DocumentId,
+    });
+    const savedMsg = await api.create(msg as unknown as Record<string, unknown> & { createdBy: EntityId });
+
+    // Add inbox item for this worker
+    inboxService.addToInbox({
+      recipientId: workerId,
+      messageId: savedMsg.id as unknown as import('@stoneforge/core').MessageId,
+      channelId,
+      sourceType: InboxSourceType.DIRECT,
+      createdBy: systemEntity,
+    });
+  }
+
+  test('skips triage session spawn when all executables are rate-limited', async () => {
+    // Register an ephemeral worker
+    const worker = await agentRegistry.registerWorker({
+      name: 'triage-worker',
+      workerMode: 'ephemeral',
+      createdBy: systemEntity,
+      maxConcurrentTasks: 1,
+    });
+    const workerId = worker.id as unknown as EntityId;
+
+    await createTestMessageAndInboxItem(workerId, 'rl');
+
+    // Mark ALL executables as rate-limited
+    daemon.handleRateLimitDetected('claude2', new Date(Date.now() + 60_000));
+    daemon.handleRateLimitDetected('claude', new Date(Date.now() + 60_000));
+
+    // Verify startSession was not called before polling
+    const startSessionMock = sessionManager.startSession as ReturnType<typeof mock>;
+    const callCountBefore = startSessionMock.mock.calls.length;
+
+    // Poll inboxes — should defer the item for triage but skip spawn due to rate limits
+    await daemon.pollInboxes();
+
+    // startSession should NOT have been called (triage was skipped)
+    expect(startSessionMock.mock.calls.length).toBe(callCountBefore);
+
+    // Verify the inbox item is still unread (items stay unread for retry)
+    const unreadItems = inboxService.getInbox(workerId, { status: 'unread' as unknown as import('@stoneforge/core').InboxStatus });
+    expect(unreadItems.length).toBe(1);
+  });
+
+  test('spawns triage session when executables are not rate-limited', async () => {
+    // Register an ephemeral worker
+    const worker = await agentRegistry.registerWorker({
+      name: 'triage-worker-ok',
+      workerMode: 'ephemeral',
+      createdBy: systemEntity,
+      maxConcurrentTasks: 1,
+    });
+    const workerId = worker.id as unknown as EntityId;
+
+    await createTestMessageAndInboxItem(workerId, 'ok');
+
+    // Do NOT rate-limit executables
+
+    const startSessionMock = sessionManager.startSession as ReturnType<typeof mock>;
+    const callCountBefore = startSessionMock.mock.calls.length;
+
+    // Poll inboxes — should spawn triage session since no rate limits
+    await daemon.pollInboxes();
+
+    // startSession SHOULD have been called (triage was spawned)
+    expect(startSessionMock.mock.calls.length).toBeGreaterThan(callCountBefore);
+  });
+});
