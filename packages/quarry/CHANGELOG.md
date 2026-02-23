@@ -1,5 +1,23 @@
 # @stoneforge/quarry
 
+## 1.11.0
+
+### Minor Changes
+
+- c943c00: Add `sf docs dir` subcommand to quickly find the Documentation Directory document. Supports `--content` flag to include full markdown content, and standard `--json`/`--quiet` output modes.
+
+### Patch Changes
+
+- Updated dependencies [49631b0]
+- Updated dependencies [b5bf6a3]
+- Updated dependencies [09cec84]
+- Updated dependencies [01631d3]
+- Updated dependencies [bf942ee]
+  - @stoneforge/storage@1.11.0
+  - @stoneforge/smithy@1.11.0
+  - @stoneforge/shared-routes@1.11.0
+  - @stoneforge/core@1.11.0
+
 ## 1.10.2
 
 ### Patch Changes

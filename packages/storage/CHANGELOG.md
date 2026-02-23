@@ -1,5 +1,15 @@
 # @stoneforge/storage
 
+## 1.11.0
+
+### Minor Changes
+
+- 49631b0: Add migration v10 with `operation_log` and `provider_metrics` tables for system observability and LLM usage tracking.
+
+### Patch Changes
+
+- @stoneforge/core@1.11.0
+
 ## 1.10.2
 
 ### Patch Changes
