@@ -1,5 +1,15 @@
 # @stoneforge/smithy-web
 
+## 1.12.0
+
+### Minor Changes
+
+- 10e8201: Add Provider and Model Analytics section to metrics page with summary cards (tokens, sessions, cost), token usage trend chart, provider distribution pie chart, and error rate by provider bar chart.
+
+### Patch Changes
+
+- @stoneforge/ui@1.12.0
+
 ## 1.11.0
 
 ### Patch Changes

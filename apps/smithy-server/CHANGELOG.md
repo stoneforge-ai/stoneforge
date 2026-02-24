@@ -1,5 +1,28 @@
 # @stoneforge/smithy-server
 
+## 1.12.0
+
+### Patch Changes
+
+- 3ebbf94: Add rate limit checks with HTTP 429 responses to agent start and resume routes
+- Updated dependencies [0ebed52]
+- Updated dependencies [0c48e64]
+- Updated dependencies [beab0ba]
+- Updated dependencies [beab0ba]
+- Updated dependencies [1abb89d]
+- Updated dependencies [3ebbf94]
+- Updated dependencies [3a034ee]
+- Updated dependencies [3a034ee]
+- Updated dependencies [1abb89d]
+- Updated dependencies [1301012]
+- Updated dependencies [72977d9]
+- Updated dependencies [133ef38]
+  - @stoneforge/quarry@1.12.0
+  - @stoneforge/smithy@1.12.0
+  - @stoneforge/core@1.12.0
+  - @stoneforge/storage@1.12.0
+  - @stoneforge/shared-routes@1.12.0
+
 ## 1.11.0
 
 ### Patch Changes
