@@ -66,3 +66,10 @@ export type {
   UpdateIssueInput,
   RateLimitInfo,
 } from './providers/github/index.js';
+
+// Linear provider
+export {
+  createLinearProvider,
+  createLinearPlaceholderProvider,
+} from './providers/linear/index.js';
+export type { CreateLinearProviderOptions } from './providers/linear/index.js';

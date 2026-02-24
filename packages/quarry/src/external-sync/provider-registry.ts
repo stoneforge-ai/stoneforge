@@ -24,6 +24,7 @@ import type {
   MessageSyncAdapter,
 } from '@stoneforge/core';
 import { createGitHubPlaceholderProvider } from './providers/github/index.js';
+import { createLinearPlaceholderProvider } from './providers/linear/index.js';
 
 // ============================================================================
 // Types
@@ -176,13 +177,14 @@ export function createProviderRegistry(): ProviderRegistry {
 /**
  * Create a ProviderRegistry with default providers registered.
  *
- * Registers the GitHub placeholder provider by default.
- * The actual GitHub provider implementation will replace this in a later task.
+ * Registers placeholder providers for GitHub and Linear by default.
+ * The actual provider implementations replace these when configured with API keys.
  *
  * @returns A ProviderRegistry with default providers
  */
 export function createDefaultProviderRegistry(): ProviderRegistry {
   const registry = new ProviderRegistry();
   registry.register(createGitHubPlaceholderProvider());
+  registry.register(createLinearPlaceholderProvider());
   return registry;
 }
