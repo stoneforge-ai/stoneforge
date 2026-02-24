@@ -178,6 +178,7 @@ Creates a QuarryAPI instance. Requires a `StorageBackend` from `@stoneforge/stor
 | `leaveChannel(channelId, actor)` | Leave a group channel |
 | `searchChannels(query, filter?)` | Search channels by name with optional filtering |
 | `mergeChannels(sourceId, targetId, options?)` | Merge two group channels |
+| `sendDirectMessage(senderEntityId, options)` | Find or create a direct channel and send a message in one call |
 
 ### Teams
 
@@ -198,6 +199,7 @@ Creates a QuarryAPI instance. Requires a `StorageBackend` from `@stoneforge/stor
 | `clearEntityManager(entityId, actor)` | Clear an entity's manager |
 | `getDirectReports(managerId)` | Get entities reporting to a manager |
 | `getManagementChain(entityId)` | Get the chain from entity up to root |
+| `getOrgChart(rootEntityId?)` | Get organizational chart tree as `OrgChartNode[]` |
 
 ### Workflows
 
