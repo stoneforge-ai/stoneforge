@@ -268,6 +268,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<neve
   } = await import('./commands/task.js');
   const { depCommand } = await import('./commands/dep.js');
   const { syncCommand, exportCommand, importCommand, statusCommand } = await import('./commands/sync.js');
+  const { externalSyncCommand } = await import('./commands/external-sync.js');
   const { identityCommand, whoamiCommand } = await import('./commands/identity.js');
   const { entityCommand } = await import('./commands/entity.js');
   const { statsCommand } = await import('./commands/stats.js');
@@ -322,6 +323,9 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<neve
   registerCommand(exportCommand);
   registerCommand(importCommand);
   registerCommand(statusCommand);
+
+  // External sync commands
+  registerCommand(externalSyncCommand);
 
   // Identity commands
   registerCommand(identityCommand);
