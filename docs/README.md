@@ -73,7 +73,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for full architecture details.
 | `packages/quarry/` | Core API, services, sync, CLI | `QuarryAPI`, `createQuarryAPI`, `SyncService`, `InboxService` |
 | `packages/ui/` | Shared React UI components, layout, domain, visualizations, hooks, API clients, design tokens; domain modules: documents, messages, plans, workflows, settings | `Button`, `Card`, `Dialog`, `Badge`, `Input`, `Select`, `Skeleton`, `TagInput`, `Tooltip`, `ThemeToggle`, `AppShell`, `Sidebar`, `MobileDrawer`, `TaskCard`, `EntityCard`, `ChannelHeader`, `UserSelector`, `TaskStatusBadge`, `StatusPieChart`, `TrendLineChart`, `HorizontalBarChart`, `MessageRichComposer`, `CreatePlanModal`, `PlanDetailPanel`, `WorkflowDetailPanel`, `useTheme`, `useIsMobile`, `useWebSocket`, `useSSEStream`, `useRealtimeEvents`, `useKeyboardShortcut`, `usePlanApi`, `useWorkflowApi`, `WebSocketClient`, `SSEClient`, `ApiClient` |
 | `packages/shared-routes/` | Shared route factories for server apps | `createElementsRoutes`, `createEntityRoutes`, `createChannelRoutes`, `createMessageRoutes`, `createLibraryRoutes`, `createDocumentRoutes`, `createInboxRoutes`, `createPlanRoutes`, `createTaskRoutes` |
-| `packages/smithy/` | Agent orchestration: services, runtime, providers (Claude/Codex/OpenCode), server, prompts | `OrchestratorAPI`, `AgentRole`, `SpawnerService`, `SessionManager`, `DispatchService`, `AgentPoolService`, `ProviderRegistry`, `MetricsService` |
+| `packages/smithy/` | Agent orchestration: services, runtime, providers (Claude/Codex/OpenCode), server, prompts | `OrchestratorAPI`, `AgentRole`, `SpawnerService`, `SessionManager`, `DispatchService`, `AgentPoolService`, `AgentProviderRegistry`, `MetricsService` |
 
 ## File Map (@stoneforge/core)
 
