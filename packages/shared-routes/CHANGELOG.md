@@ -1,5 +1,12 @@
 # @stoneforge/shared-routes
 
+## 1.12.0
+
+### Patch Changes
+
+- @stoneforge/core@1.12.0
+- @stoneforge/storage@1.12.0
+
 ## 1.11.0
 
 ### Patch Changes

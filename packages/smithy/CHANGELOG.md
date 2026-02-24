@@ -1,5 +1,29 @@
 # @stoneforge/smithy
 
+## 1.12.0
+
+### Minor Changes
+
+- 0c48e64: Add merge concurrency guard with optimistic locking to prevent race conditions when multiple merge steward instances process the same task simultaneously
+- beab0ba: Add MetricsService for provider usage tracking, GET /api/provider-metrics endpoint, and wire metrics recording into session lifecycle.
+- 1abb89d: Add OperationLogService for persistent operation logging with write/query API, wired into dispatch-daemon, session-manager, and merge-steward-service
+- 3a034ee: Add GET /api/health/diagnostics endpoint that returns runtime health diagnostics including rate limit status, stuck tasks, merge queue health, error rates, and agent pool utilization.
+- 72977d9: Add minimum duration floor and rapid-exit detection for rate limits. handleRateLimitDetected() now clamps reset times to a 15-minute minimum to prevent premature tracker expiry. Recovered sessions that exit within 10 seconds without output are treated as suspected silent rate limits — resumeCount is rolled back and a 1-hour fallback rate limit is applied.
+
+### Patch Changes
+
+- 3ebbf94: Add rate limit checks to spawnTriageSession in dispatch daemon and document rate limit requirements in worker-task-service
+- 1301012: Fix TOCTOU race condition in startup orphan recovery. Replace boolean `startupRecoveryInFlight` flag with a promise-based latch (`startupRecoveryDone`) that `runPollCycle()` awaits before running its own orphan recovery, preventing concurrent recovery on the same tasks.
+- 133ef38: Update merge steward prompt to systematically verify task acceptance criteria before approving merges. The steward now reads the task description, cross-references each acceptance criterion against the diff, and blocks merging if any criterion is not met.
+- Updated dependencies [0ebed52]
+- Updated dependencies [beab0ba]
+- Updated dependencies [3a034ee]
+- Updated dependencies [1abb89d]
+  - @stoneforge/quarry@1.12.0
+  - @stoneforge/core@1.12.0
+  - @stoneforge/storage@1.12.0
+  - @stoneforge/shared-routes@1.12.0
+
 ## 1.11.0
 
 ### Minor Changes

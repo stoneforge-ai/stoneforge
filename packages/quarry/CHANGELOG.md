@@ -1,5 +1,29 @@
 # @stoneforge/quarry
 
+## 1.12.0
+
+### Minor Changes
+
+- 0ebed52: Add --fix flag to sf doctor command for automated database repair. When used, it deletes orphaned rows violating foreign key constraints and rebuilds the blocked cache from the dependency graph.
+- beab0ba: Add `sf metrics` CLI command for viewing provider usage statistics with filtering by time range, provider, and model.
+- 3a034ee: Extend sf doctor to query smithy-server runtime diagnostics after existing DB health checks. Displays rate limits, stuck tasks, merge queue health, error rates, and agent pool utilization with pass/warn/fail status. Gracefully skips if smithy-server is unavailable.
+- 1abb89d: Add sf log CLI command for querying operation log entries with level, category, since, task, agent, and limit filters
+
+### Patch Changes
+
+- Updated dependencies [0c48e64]
+- Updated dependencies [beab0ba]
+- Updated dependencies [1abb89d]
+- Updated dependencies [3ebbf94]
+- Updated dependencies [3a034ee]
+- Updated dependencies [1301012]
+- Updated dependencies [72977d9]
+- Updated dependencies [133ef38]
+  - @stoneforge/smithy@1.12.0
+  - @stoneforge/core@1.12.0
+  - @stoneforge/storage@1.12.0
+  - @stoneforge/shared-routes@1.12.0
+
 ## 1.11.0
 
 ### Minor Changes
