@@ -1,5 +1,23 @@
 # @stoneforge/smithy
 
+## 1.11.0
+
+### Minor Changes
+
+- 09cec84: Persist rate limit tracker state to SQLite via SettingsService. Rate limit entries now survive server restarts, preventing the dispatch daemon from immediately re-hitting rate-limited executables after a restart.
+
+### Patch Changes
+
+- b5bf6a3: Fix premature resumeCount increment in orphan recovery. The counter is now only incremented after successful recovery, preventing workers from being incorrectly flagged as stuck when recovery fails.
+- 01631d3: Add rate limit checks to steward-scheduler spawn paths for docs and custom stewards
+- bf942ee: Update built-in role definition prompts to use `sf docs dir` command instead of the two-step `sf document search` + `sf document show` pattern. Add "Getting Up to Speed" sections to worker, persistent-worker, and steward prompts.
+- Updated dependencies [c943c00]
+- Updated dependencies [49631b0]
+  - @stoneforge/quarry@1.11.0
+  - @stoneforge/storage@1.11.0
+  - @stoneforge/shared-routes@1.11.0
+  - @stoneforge/core@1.11.0
+
 ## 1.10.2
 
 ### Patch Changes
