@@ -1,5 +1,12 @@
 # @stoneforge/smithy-web
 
+## 1.11.0
+
+### Patch Changes
+
+- 7064d80: Revert session image uploads to use terminal upload endpoint instead of asset API. Session images in XTerminal and StreamViewer are ephemeral and now upload to `/tmp/stoneforge-terminal-uploads/` via `/api/terminal/upload`. Task description images remain unchanged.
+  - @stoneforge/ui@1.11.0
+
 ## 1.10.2
 
 ### Patch Changes
