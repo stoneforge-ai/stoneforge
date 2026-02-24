@@ -11,7 +11,7 @@ Guide for managing relationships between elements.
 | `awaits` | Yes | Blocked (waiter) → blocker (gate) | Approval gates, timers |
 | `relates-to` | No | Bidirectional | Semantic links |
 | `references` | No | Blocked → Blocker | Citations |
-| `reply-to` | No | Blocked → Blocker | Message threading |
+| `replies-to` | No | Blocked → Blocker | Message threading |
 | `mentions` | No | Blocked → Blocker | @mention reference |
 
 ## Adding Dependencies

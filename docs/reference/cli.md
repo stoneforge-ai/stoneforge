@@ -1697,7 +1697,9 @@ Check system health and diagnose issues.
 sf doctor [options]
 ```
 
-Performs 9 diagnostic checks:
+Performs diagnostic checks in two categories:
+
+**Database health:**
 
 | Check            | Description                                               |
 | ---------------- | --------------------------------------------------------- |
@@ -1711,9 +1713,24 @@ Performs 9 diagnostic checks:
 | blocked_cache    | Checks blocked cache consistency (orphaned entries, missing cache entries) |
 | storage          | Reports database file size                                |
 
+**Runtime health** (via smithy-server, skipped if unavailable):
+
+| Check            | Description                                               |
+| ---------------- | --------------------------------------------------------- |
+| rate_limits      | Which executables are rate-limited, when they reset       |
+| stuck_tasks      | Tasks with high resumeCount and no active session         |
+| merge_queue      | Tasks stuck in testing/merging                            |
+| error_rate       | Recent errors from operation log                          |
+| agent_pool       | Pool utilization and active sessions                      |
+
 Each check reports a status: `[OK]`, `[WARN]`, or `[ERROR]`. The command exits with a non-zero exit code if any errors are found.
 
+| Option    | Description                                                     |
+| --------- | --------------------------------------------------------------- |
+| `--fix`   | Automatically repair detected issues (FK violations, blocked cache) |
+
 Use `--verbose` to see detailed diagnostic information for each check.
+Use `--fix` to automatically repair detected issues: deletes orphaned rows that violate foreign key constraints and rebuilds the blocked cache from the dependency graph.
 
 ```bash
 # Run all diagnostics
@@ -1721,6 +1738,9 @@ sf doctor
 
 # Show detailed information
 sf doctor --verbose
+
+# Diagnose and fix issues
+sf doctor --fix
 
 # Output as JSON
 sf doctor --json
@@ -2364,6 +2384,79 @@ sf task sync el-abc123 --json
 ```
 
 When conflicts are detected, the `conflicts` array lists the affected files and `success` is `false`.
+
+### Log Command
+
+Show persistent operation log entries for system observability.
+
+```bash
+sf log [options]
+```
+
+The operation log captures key events from the orchestration system including dispatch, session, merge, rate-limit, steward, and recovery events.
+
+| Option                   | Description                                                              |
+| ------------------------ | ------------------------------------------------------------------------ |
+| `--level <level>`        | Filter by level: `info`, `warn`, `error`                                 |
+| `-c, --category <cat>`   | Filter by category: `dispatch`, `merge`, `session`, `rate-limit`, `steward`, `recovery` |
+| `-s, --since <time>`     | Show entries since time — relative (e.g., `2h`, `30m`, `1d`, `1w`) or ISO 8601 timestamp |
+| `-t, --task <id>`        | Filter by task ID                                                        |
+| `-a, --agent <id>`       | Filter by agent ID                                                       |
+| `-l, --limit <n>`        | Maximum entries to show (default: 20)                                    |
+
+```bash
+# Show last 20 entries
+sf log
+
+# Show only errors
+sf log --level error
+
+# Show session events
+sf log --category session
+
+# Show entries from last 2 hours
+sf log --since 2h
+
+# Filter by task
+sf log --task el-xxxx
+
+# Combine filters
+sf log --level error --since 1d
+
+# Output as JSON
+sf log --json
+```
+
+### Metrics Command
+
+Show LLM provider usage metrics including token counts, estimated costs, session counts, average duration, and error rates.
+
+```bash
+sf metrics [options]
+```
+
+| Option                    | Description                                    |
+| ------------------------- | ---------------------------------------------- |
+| `-r, --range <range>`     | Time range (e.g., `7d`, `14d`, `30d`). Default: `7d` |
+| `-p, --provider <name>`   | Filter by provider name (e.g., `claude-code`)  |
+| `-g, --group-by <group>`  | Group by: `provider` (default) or `model`      |
+
+```bash
+# Show metrics for last 7 days
+sf metrics
+
+# Show metrics for last 30 days
+sf metrics --range 30d
+
+# Filter by provider
+sf metrics --provider claude-code
+
+# Group by model
+sf metrics --group-by model
+
+# Output as JSON
+sf metrics --json
+```
 
 ## Short IDs
 
