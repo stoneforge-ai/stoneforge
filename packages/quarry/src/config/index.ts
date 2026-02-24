@@ -33,6 +33,9 @@ export type {
   TombstoneConfig,
   IdentityConfigSection,
   PluginsConfig,
+  ExternalSyncConfig,
+  ExternalSyncConflictStrategy,
+  SyncDirection,
   Configuration,
   PartialConfiguration,
   ConfigSource,
@@ -47,7 +50,14 @@ export type {
   EnvVar,
 } from './types.js';
 
-export { EnvVars, ConfigSource as ConfigSourceEnum, VALID_CONFIG_PATHS, isValidConfigPath } from './types.js';
+export {
+  EnvVars,
+  ConfigSource as ConfigSourceEnum,
+  VALID_CONFIG_PATHS,
+  VALID_CONFLICT_STRATEGIES,
+  VALID_SYNC_DIRECTIONS,
+  isValidConfigPath,
+} from './types.js';
 
 // Defaults
 export {
@@ -57,6 +67,7 @@ export {
   DEFAULT_TOMBSTONE_CONFIG,
   DEFAULT_IDENTITY_CONFIG,
   DEFAULT_PLUGINS_CONFIG,
+  DEFAULT_EXTERNAL_SYNC_CONFIG,
   getDefaultConfig,
   ONE_SECOND,
   ONE_MINUTE,
@@ -67,6 +78,8 @@ export {
   MIN_TIME_TOLERANCE,
   MAX_TIME_TOLERANCE,
   MAX_TTL,
+  MIN_POLL_INTERVAL,
+  MAX_POLL_INTERVAL,
 } from './defaults.js';
 
 // Duration utilities

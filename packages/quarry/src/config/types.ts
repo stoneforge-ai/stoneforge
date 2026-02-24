@@ -79,6 +79,49 @@ export interface IdentityConfigSection {
 }
 
 /**
+ * Conflict resolution strategy for external sync
+ */
+export type ExternalSyncConflictStrategy = 'last_write_wins' | 'local_wins' | 'remote_wins' | 'manual';
+
+/**
+ * Sync direction for external sync
+ */
+export type SyncDirection = 'push' | 'pull' | 'bidirectional';
+
+/**
+ * External sync configuration
+ */
+export interface ExternalSyncConfig {
+  /** Whether external sync is enabled (default: false) */
+  enabled: boolean;
+  /** Polling interval in ms (default: 60000) */
+  pollInterval: Duration;
+  /** Conflict resolution strategy (default: 'last_write_wins') */
+  conflictStrategy: ExternalSyncConflictStrategy;
+  /** Default sync direction (default: 'bidirectional') */
+  defaultDirection: SyncDirection;
+}
+
+/**
+ * Valid conflict strategy values
+ */
+export const VALID_CONFLICT_STRATEGIES: readonly ExternalSyncConflictStrategy[] = [
+  'last_write_wins',
+  'local_wins',
+  'remote_wins',
+  'manual',
+] as const;
+
+/**
+ * Valid sync direction values
+ */
+export const VALID_SYNC_DIRECTIONS: readonly SyncDirection[] = [
+  'push',
+  'pull',
+  'bidirectional',
+] as const;
+
+/**
  * Complete Stoneforge configuration
  */
 export interface Configuration {
@@ -98,6 +141,8 @@ export interface Configuration {
   identity: IdentityConfigSection;
   /** CLI plugins settings */
   plugins: PluginsConfig;
+  /** External sync settings */
+  externalSync: ExternalSyncConfig;
 }
 
 /**
@@ -112,6 +157,7 @@ export type PartialConfiguration = {
   tombstone?: Partial<TombstoneConfig>;
   identity?: Partial<IdentityConfigSection>;
   plugins?: Partial<PluginsConfig>;
+  externalSync?: Partial<ExternalSyncConfig>;
 };
 
 // ============================================================================
@@ -171,6 +217,12 @@ export interface TrackedConfiguration {
   plugins: {
     packages: TrackedValue<string[]>;
   };
+  externalSync: {
+    enabled: TrackedValue<boolean>;
+    pollInterval: TrackedValue<Duration>;
+    conflictStrategy: TrackedValue<ExternalSyncConflictStrategy>;
+    defaultDirection: TrackedValue<SyncDirection>;
+  };
 }
 
 // ============================================================================
@@ -204,6 +256,12 @@ export interface YamlConfigFile {
   };
   plugins?: {
     packages?: string[];
+  };
+  external_sync?: {
+    enabled?: boolean;
+    poll_interval?: string | number;
+    conflict_strategy?: string;
+    default_direction?: string;
   };
 }
 
@@ -298,6 +356,10 @@ export const VALID_CONFIG_PATHS = [
   'identity.mode',
   'identity.timeTolerance',
   'plugins.packages',
+  'externalSync.enabled',
+  'externalSync.pollInterval',
+  'externalSync.conflictStrategy',
+  'externalSync.defaultDirection',
 ] as const;
 
 /**
@@ -329,4 +391,8 @@ export interface ConfigPathTypes {
   'identity.mode': IdentityMode;
   'identity.timeTolerance': Duration;
   'plugins.packages': string[];
+  'externalSync.enabled': boolean;
+  'externalSync.pollInterval': Duration;
+  'externalSync.conflictStrategy': ExternalSyncConflictStrategy;
+  'externalSync.defaultDirection': SyncDirection;
 }

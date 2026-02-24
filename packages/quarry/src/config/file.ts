@@ -15,6 +15,12 @@ import type {
   PartialConfiguration,
   YamlConfigFile,
   ConfigFileDiscovery,
+  ExternalSyncConflictStrategy,
+  SyncDirection,
+} from './types.js';
+import {
+  VALID_CONFLICT_STRATEGIES,
+  VALID_SYNC_DIRECTIONS,
 } from './types.js';
 import { parseDurationValue } from './duration.js';
 
@@ -249,6 +255,39 @@ export function convertYamlToConfig(yamlConfig: YamlConfigFile): PartialConfigur
     };
   }
 
+  // External sync section
+  if (yamlConfig.external_sync) {
+    result.externalSync = {};
+    if (yamlConfig.external_sync.enabled !== undefined) {
+      result.externalSync.enabled = yamlConfig.external_sync.enabled;
+    }
+    if (yamlConfig.external_sync.poll_interval !== undefined) {
+      result.externalSync.pollInterval = parseDurationValue(yamlConfig.external_sync.poll_interval);
+    }
+    if (yamlConfig.external_sync.conflict_strategy !== undefined) {
+      const strategy = yamlConfig.external_sync.conflict_strategy;
+      if (!VALID_CONFLICT_STRATEGIES.includes(strategy as ExternalSyncConflictStrategy)) {
+        throw new ValidationError(
+          `Invalid conflict strategy: '${strategy}'. Must be one of: ${VALID_CONFLICT_STRATEGIES.join(', ')}`,
+          ErrorCode.INVALID_INPUT,
+          { field: 'externalSync.conflictStrategy', value: strategy }
+        );
+      }
+      result.externalSync.conflictStrategy = strategy as ExternalSyncConflictStrategy;
+    }
+    if (yamlConfig.external_sync.default_direction !== undefined) {
+      const direction = yamlConfig.external_sync.default_direction;
+      if (!VALID_SYNC_DIRECTIONS.includes(direction as SyncDirection)) {
+        throw new ValidationError(
+          `Invalid sync direction: '${direction}'. Must be one of: ${VALID_SYNC_DIRECTIONS.join(', ')}`,
+          ErrorCode.INVALID_INPUT,
+          { field: 'externalSync.defaultDirection', value: direction }
+        );
+      }
+      result.externalSync.defaultDirection = direction as SyncDirection;
+    }
+  }
+
   return result;
 }
 
@@ -356,6 +395,26 @@ export function convertConfigToYaml(config: Configuration | PartialConfiguration
     };
   }
 
+  // External sync section
+  if (config.externalSync) {
+    const es: NonNullable<YamlConfigFile['external_sync']> = {};
+    if (config.externalSync.enabled !== undefined) {
+      es.enabled = config.externalSync.enabled;
+    }
+    if (config.externalSync.pollInterval !== undefined) {
+      es.poll_interval = config.externalSync.pollInterval;
+    }
+    if (config.externalSync.conflictStrategy !== undefined) {
+      es.conflict_strategy = config.externalSync.conflictStrategy;
+    }
+    if (config.externalSync.defaultDirection !== undefined) {
+      es.default_direction = config.externalSync.defaultDirection;
+    }
+    if (Object.keys(es).length > 0) {
+      result.external_sync = es;
+    }
+  }
+
   return result;
 }
 
@@ -415,6 +474,7 @@ export function updateConfigFile(
     playbooks: updates.playbooks ? { ...existing.playbooks, ...updates.playbooks } : existing.playbooks,
     tombstone: updates.tombstone ? { ...existing.tombstone, ...updates.tombstone } : existing.tombstone,
     identity: updates.identity ? { ...existing.identity, ...updates.identity } : existing.identity,
+    externalSync: updates.externalSync ? { ...existing.externalSync, ...updates.externalSync } : existing.externalSync,
   };
 
   writeConfigFile(filePath, merged);

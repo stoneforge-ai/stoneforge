@@ -37,11 +37,45 @@ export interface ServerAgentDefaults {
 }
 
 /**
+ * Sync direction for external sync
+ */
+export type SyncDirection = 'push' | 'pull' | 'bidirectional';
+
+/**
+ * Provider configuration stored in settings (SQLite, NOT git-tracked)
+ */
+export interface ProviderConfig {
+  /** Provider name (e.g. 'github', 'linear') */
+  provider: string;
+  /** Authentication token */
+  token?: string;
+  /** API base URL (for self-hosted instances) */
+  apiBaseUrl?: string;
+  /** Default project/repo for this provider */
+  defaultProject?: string;
+}
+
+/**
+ * External sync settings stored in SQLite (tokens, cursors, runtime state)
+ */
+export interface ExternalSyncSettings {
+  /** Provider configurations keyed by provider name */
+  providers: Record<string, ProviderConfig>;
+  /** Sync cursors keyed by provider+project+adapterType */
+  syncCursors: Record<string, string>;
+  /** Poll interval in milliseconds */
+  pollIntervalMs: number;
+  /** Default sync direction */
+  defaultDirection: SyncDirection;
+}
+
+/**
  * Well-known setting keys
  */
 export const SETTING_KEYS = {
   AGENT_DEFAULTS: 'agentDefaults',
   RATE_LIMITS: 'rateLimits',
+  EXTERNAL_SYNC: 'externalSync',
 } as const;
 
 // ============================================================================
@@ -74,6 +108,26 @@ export interface SettingsService {
    * Update agent defaults (convenience method)
    */
   setAgentDefaults(defaults: ServerAgentDefaults): ServerAgentDefaults;
+
+  /**
+   * Get external sync settings (convenience method)
+   */
+  getExternalSyncSettings(): ExternalSyncSettings;
+
+  /**
+   * Update external sync settings (convenience method)
+   */
+  setExternalSyncSettings(settings: ExternalSyncSettings): ExternalSyncSettings;
+
+  /**
+   * Get a specific provider's configuration
+   */
+  getProviderConfig(provider: string): ProviderConfig | undefined;
+
+  /**
+   * Set a specific provider's configuration
+   */
+  setProviderConfig(provider: string, config: ProviderConfig): ProviderConfig;
 }
 
 // ============================================================================
@@ -108,6 +162,13 @@ function dbToSetting(row: DbSetting): Setting {
 
 const DEFAULT_AGENT_DEFAULTS: ServerAgentDefaults = {
   defaultExecutablePaths: {},
+};
+
+const DEFAULT_EXTERNAL_SYNC_SETTINGS: ExternalSyncSettings = {
+  providers: {},
+  syncCursors: {},
+  pollIntervalMs: 60000,
+  defaultDirection: 'bidirectional',
 };
 
 export function createSettingsService(storage: StorageBackend): SettingsService {
@@ -195,5 +256,90 @@ export function createSettingsService(storage: StorageBackend): SettingsService 
       this.setSetting(SETTING_KEYS.AGENT_DEFAULTS, validated);
       return validated;
     },
+
+    getExternalSyncSettings(): ExternalSyncSettings {
+      const setting = this.getSetting(SETTING_KEYS.EXTERNAL_SYNC);
+      if (!setting) {
+        return { ...DEFAULT_EXTERNAL_SYNC_SETTINGS, providers: {}, syncCursors: {} };
+      }
+
+      const value = setting.value as Record<string, unknown>;
+
+      // Validate and sanitize providers
+      const rawProviders = value?.providers;
+      const providers: Record<string, ProviderConfig> = {};
+      if (rawProviders && typeof rawProviders === 'object' && !Array.isArray(rawProviders)) {
+        for (const [name, config] of Object.entries(rawProviders as Record<string, unknown>)) {
+          if (config && typeof config === 'object' && !Array.isArray(config)) {
+            const pc = config as Record<string, unknown>;
+            providers[name] = {
+              provider: typeof pc.provider === 'string' ? pc.provider : name,
+              token: typeof pc.token === 'string' ? pc.token : undefined,
+              apiBaseUrl: typeof pc.apiBaseUrl === 'string' ? pc.apiBaseUrl : undefined,
+              defaultProject: typeof pc.defaultProject === 'string' ? pc.defaultProject : undefined,
+            };
+          }
+        }
+      }
+
+      // Validate and sanitize syncCursors
+      const rawCursors = value?.syncCursors;
+      const syncCursors: Record<string, string> = {};
+      if (rawCursors && typeof rawCursors === 'object' && !Array.isArray(rawCursors)) {
+        for (const [key, val] of Object.entries(rawCursors as Record<string, unknown>)) {
+          if (typeof val === 'string') {
+            syncCursors[key] = val;
+          }
+        }
+      }
+
+      return {
+        providers,
+        syncCursors,
+        pollIntervalMs: typeof value?.pollIntervalMs === 'number' ? value.pollIntervalMs : DEFAULT_EXTERNAL_SYNC_SETTINGS.pollIntervalMs,
+        defaultDirection: isValidSyncDirection(value?.defaultDirection) ? value.defaultDirection as SyncDirection : DEFAULT_EXTERNAL_SYNC_SETTINGS.defaultDirection,
+      };
+    },
+
+    setExternalSyncSettings(settings: ExternalSyncSettings): ExternalSyncSettings {
+      const validated: ExternalSyncSettings = {
+        providers: settings.providers ?? {},
+        syncCursors: settings.syncCursors ?? {},
+        pollIntervalMs: typeof settings.pollIntervalMs === 'number' && settings.pollIntervalMs > 0
+          ? settings.pollIntervalMs
+          : DEFAULT_EXTERNAL_SYNC_SETTINGS.pollIntervalMs,
+        defaultDirection: isValidSyncDirection(settings.defaultDirection)
+          ? settings.defaultDirection
+          : DEFAULT_EXTERNAL_SYNC_SETTINGS.defaultDirection,
+      };
+
+      this.setSetting(SETTING_KEYS.EXTERNAL_SYNC, validated);
+      return validated;
+    },
+
+    getProviderConfig(provider: string): ProviderConfig | undefined {
+      const settings = this.getExternalSyncSettings();
+      return settings.providers[provider];
+    },
+
+    setProviderConfig(provider: string, config: ProviderConfig): ProviderConfig {
+      const settings = this.getExternalSyncSettings();
+      const sanitized: ProviderConfig = {
+        provider: typeof config.provider === 'string' ? config.provider : provider,
+        token: typeof config.token === 'string' ? config.token : undefined,
+        apiBaseUrl: typeof config.apiBaseUrl === 'string' ? config.apiBaseUrl : undefined,
+        defaultProject: typeof config.defaultProject === 'string' ? config.defaultProject : undefined,
+      };
+      settings.providers[provider] = sanitized;
+      this.setExternalSyncSettings(settings);
+      return sanitized;
+    },
   };
+}
+
+/**
+ * Type guard for valid sync direction values
+ */
+function isValidSyncDirection(value: unknown): value is SyncDirection {
+  return value === 'push' || value === 'pull' || value === 'bidirectional';
 }

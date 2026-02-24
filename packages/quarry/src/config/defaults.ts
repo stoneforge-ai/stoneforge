@@ -6,7 +6,7 @@
  */
 
 import { IdentityMode } from '../systems/identity.js';
-import type { Configuration, SyncConfig, PlaybookConfig, TombstoneConfig, IdentityConfigSection, PluginsConfig } from './types.js';
+import type { Configuration, SyncConfig, PlaybookConfig, TombstoneConfig, IdentityConfigSection, PluginsConfig, ExternalSyncConfig } from './types.js';
 
 // ============================================================================
 // Time Constants (in milliseconds)
@@ -72,6 +72,16 @@ export const DEFAULT_PLUGINS_CONFIG: PluginsConfig = {
 };
 
 /**
+ * Default external sync configuration
+ */
+export const DEFAULT_EXTERNAL_SYNC_CONFIG: ExternalSyncConfig = {
+  enabled: false,
+  pollInterval: ONE_MINUTE, // 60000ms
+  conflictStrategy: 'last_write_wins',
+  defaultDirection: 'bidirectional',
+};
+
+/**
  * Complete default configuration
  */
 export const DEFAULT_CONFIG: Configuration = {
@@ -83,6 +93,7 @@ export const DEFAULT_CONFIG: Configuration = {
   tombstone: DEFAULT_TOMBSTONE_CONFIG,
   identity: DEFAULT_IDENTITY_CONFIG,
   plugins: DEFAULT_PLUGINS_CONFIG,
+  externalSync: DEFAULT_EXTERNAL_SYNC_CONFIG,
 };
 
 // ============================================================================
@@ -114,6 +125,16 @@ export const MIN_TIME_TOLERANCE = ONE_SECOND;
  */
 export const MAX_TTL = 365 * ONE_DAY;
 
+/**
+ * Minimum allowed poll interval for external sync (5 seconds)
+ */
+export const MIN_POLL_INTERVAL = 5 * ONE_SECOND;
+
+/**
+ * Maximum allowed poll interval for external sync (1 hour)
+ */
+export const MAX_POLL_INTERVAL = ONE_HOUR;
+
 // ============================================================================
 // Deep Clone
 // ============================================================================
@@ -133,5 +154,6 @@ export function getDefaultConfig(): Configuration {
     tombstone: { ...DEFAULT_TOMBSTONE_CONFIG },
     identity: { ...DEFAULT_IDENTITY_CONFIG },
     plugins: { packages: [...DEFAULT_PLUGINS_CONFIG.packages] },
+    externalSync: { ...DEFAULT_EXTERNAL_SYNC_CONFIG },
   };
 }

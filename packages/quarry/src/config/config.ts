@@ -330,6 +330,12 @@ function createTrackedDefaults(): TrackedConfiguration {
     plugins: {
       packages: { value: [...DEFAULT_CONFIG.plugins.packages], source: ConfigSourceEnum.DEFAULT },
     },
+    externalSync: {
+      enabled: { value: DEFAULT_CONFIG.externalSync.enabled, source: ConfigSourceEnum.DEFAULT },
+      pollInterval: { value: DEFAULT_CONFIG.externalSync.pollInterval, source: ConfigSourceEnum.DEFAULT },
+      conflictStrategy: { value: DEFAULT_CONFIG.externalSync.conflictStrategy, source: ConfigSourceEnum.DEFAULT },
+      defaultDirection: { value: DEFAULT_CONFIG.externalSync.defaultDirection, source: ConfigSourceEnum.DEFAULT },
+    },
   };
 }
 
@@ -381,6 +387,18 @@ function mergeTrackedConfig(
   }
   if (partial.plugins?.packages !== undefined) {
     result.plugins = { packages: { value: partial.plugins.packages, source } };
+  }
+  if (partial.externalSync?.enabled !== undefined) {
+    result.externalSync = { ...result.externalSync, enabled: { value: partial.externalSync.enabled, source } };
+  }
+  if (partial.externalSync?.pollInterval !== undefined) {
+    result.externalSync = { ...result.externalSync, pollInterval: { value: partial.externalSync.pollInterval, source } };
+  }
+  if (partial.externalSync?.conflictStrategy !== undefined) {
+    result.externalSync = { ...result.externalSync, conflictStrategy: { value: partial.externalSync.conflictStrategy, source } };
+  }
+  if (partial.externalSync?.defaultDirection !== undefined) {
+    result.externalSync = { ...result.externalSync, defaultDirection: { value: partial.externalSync.defaultDirection, source } };
   }
 
   return result;

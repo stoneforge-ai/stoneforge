@@ -97,6 +97,12 @@ export function mergeConfiguration(
     plugins: {
       packages: partial.plugins?.packages !== undefined ? partial.plugins.packages : [...(base.plugins?.packages ?? [])],
     },
+    externalSync: {
+      enabled: partial.externalSync?.enabled !== undefined ? partial.externalSync.enabled : base.externalSync.enabled,
+      pollInterval: partial.externalSync?.pollInterval !== undefined ? partial.externalSync.pollInterval : base.externalSync.pollInterval,
+      conflictStrategy: partial.externalSync?.conflictStrategy !== undefined ? partial.externalSync.conflictStrategy : base.externalSync.conflictStrategy,
+      defaultDirection: partial.externalSync?.defaultDirection !== undefined ? partial.externalSync.defaultDirection : base.externalSync.defaultDirection,
+    },
   };
   return result;
 }
@@ -165,6 +171,12 @@ export function cloneConfiguration(config: Configuration): Configuration {
     },
     plugins: {
       packages: [...(config.plugins?.packages ?? [])],
+    },
+    externalSync: {
+      enabled: config.externalSync.enabled,
+      pollInterval: config.externalSync.pollInterval,
+      conflictStrategy: config.externalSync.conflictStrategy,
+      defaultDirection: config.externalSync.defaultDirection,
     },
   };
 }
@@ -246,6 +258,24 @@ export function diffConfigurations(
     diff.plugins = { packages: bPackages };
   }
 
+  // ExternalSync diff
+  const externalSyncDiff: Partial<Configuration['externalSync']> = {};
+  if (a.externalSync.enabled !== b.externalSync.enabled) {
+    externalSyncDiff.enabled = b.externalSync.enabled;
+  }
+  if (a.externalSync.pollInterval !== b.externalSync.pollInterval) {
+    externalSyncDiff.pollInterval = b.externalSync.pollInterval;
+  }
+  if (a.externalSync.conflictStrategy !== b.externalSync.conflictStrategy) {
+    externalSyncDiff.conflictStrategy = b.externalSync.conflictStrategy;
+  }
+  if (a.externalSync.defaultDirection !== b.externalSync.defaultDirection) {
+    externalSyncDiff.defaultDirection = b.externalSync.defaultDirection;
+  }
+  if (Object.keys(externalSyncDiff).length > 0) {
+    diff.externalSync = externalSyncDiff;
+  }
+
   return diff;
 }
 
@@ -268,6 +298,10 @@ export function configurationsEqual(a: Configuration, b: Configuration): boolean
     a.tombstone.minTtl === b.tombstone.minTtl &&
     a.identity.mode === b.identity.mode &&
     a.identity.timeTolerance === b.identity.timeTolerance &&
-    JSON.stringify(aPackages) === JSON.stringify(bPackages)
+    JSON.stringify(aPackages) === JSON.stringify(bPackages) &&
+    a.externalSync.enabled === b.externalSync.enabled &&
+    a.externalSync.pollInterval === b.externalSync.pollInterval &&
+    a.externalSync.conflictStrategy === b.externalSync.conflictStrategy &&
+    a.externalSync.defaultDirection === b.externalSync.defaultDirection
   );
 }

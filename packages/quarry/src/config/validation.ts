@@ -17,7 +17,14 @@ import {
   MIN_TIME_TOLERANCE,
   MAX_TIME_TOLERANCE,
   MAX_TTL,
+  MIN_POLL_INTERVAL,
+  MAX_POLL_INTERVAL,
 } from './defaults.js';
+import {
+  VALID_CONFLICT_STRATEGIES,
+  VALID_SYNC_DIRECTIONS,
+} from './types.js';
+// Note: ExternalSyncConflictStrategy and SyncDirection types are validated via the VALID_* arrays
 import { validateDurationRange, formatDuration } from './duration.js';
 
 // ============================================================================
@@ -390,6 +397,45 @@ export function validateConfiguration(config: unknown): Configuration {
   }
   validateDurationRange(identity.timeTolerance, MIN_TIME_TOLERANCE, MAX_TIME_TOLERANCE, 'identity.timeTolerance');
 
+  // Validate externalSync
+  if (typeof obj.externalSync !== 'object' || obj.externalSync === null) {
+    throw new ValidationError(
+      'Configuration must include externalSync object',
+      ErrorCode.MISSING_REQUIRED_FIELD,
+      { field: 'externalSync' }
+    );
+  }
+  const externalSync = obj.externalSync as Record<string, unknown>;
+  if (typeof externalSync.enabled !== 'boolean') {
+    throw new ValidationError(
+      'externalSync.enabled must be a boolean',
+      ErrorCode.INVALID_INPUT,
+      { field: 'externalSync.enabled', value: externalSync.enabled, expected: 'boolean' }
+    );
+  }
+  if (typeof externalSync.pollInterval !== 'number') {
+    throw new ValidationError(
+      'externalSync.pollInterval must be a number',
+      ErrorCode.INVALID_INPUT,
+      { field: 'externalSync.pollInterval', value: externalSync.pollInterval, expected: 'number' }
+    );
+  }
+  validateDurationRange(externalSync.pollInterval, MIN_POLL_INTERVAL, MAX_POLL_INTERVAL, 'externalSync.pollInterval');
+  if (!VALID_CONFLICT_STRATEGIES.includes(externalSync.conflictStrategy as string as never)) {
+    throw new ValidationError(
+      `externalSync.conflictStrategy must be one of: ${VALID_CONFLICT_STRATEGIES.join(', ')}`,
+      ErrorCode.INVALID_INPUT,
+      { field: 'externalSync.conflictStrategy', value: externalSync.conflictStrategy, expected: VALID_CONFLICT_STRATEGIES }
+    );
+  }
+  if (!VALID_SYNC_DIRECTIONS.includes(externalSync.defaultDirection as string as never)) {
+    throw new ValidationError(
+      `externalSync.defaultDirection must be one of: ${VALID_SYNC_DIRECTIONS.join(', ')}`,
+      ErrorCode.INVALID_INPUT,
+      { field: 'externalSync.defaultDirection', value: externalSync.defaultDirection, expected: VALID_SYNC_DIRECTIONS }
+    );
+  }
+
   return config as Configuration;
 }
 
@@ -465,6 +511,33 @@ export function validatePartialConfiguration(config: PartialConfiguration): void
         `tombstone.ttl (${formatDuration(config.tombstone.ttl)}) must be >= tombstone.minTtl (${formatDuration(config.tombstone.minTtl)})`,
         ErrorCode.INVALID_INPUT,
         { field: 'tombstone.ttl', value: config.tombstone.ttl, expected: `>= ${config.tombstone.minTtl}` }
+      );
+    }
+  }
+  // Validate externalSync fields
+  if (config.externalSync?.pollInterval !== undefined) {
+    validateDurationRange(
+      config.externalSync.pollInterval,
+      MIN_POLL_INTERVAL,
+      MAX_POLL_INTERVAL,
+      'externalSync.pollInterval'
+    );
+  }
+  if (config.externalSync?.conflictStrategy !== undefined) {
+    if (!VALID_CONFLICT_STRATEGIES.includes(config.externalSync.conflictStrategy as never)) {
+      throw new ValidationError(
+        `externalSync.conflictStrategy must be one of: ${VALID_CONFLICT_STRATEGIES.join(', ')}`,
+        ErrorCode.INVALID_INPUT,
+        { field: 'externalSync.conflictStrategy', value: config.externalSync.conflictStrategy, expected: VALID_CONFLICT_STRATEGIES }
+      );
+    }
+  }
+  if (config.externalSync?.defaultDirection !== undefined) {
+    if (!VALID_SYNC_DIRECTIONS.includes(config.externalSync.defaultDirection as never)) {
+      throw new ValidationError(
+        `externalSync.defaultDirection must be one of: ${VALID_SYNC_DIRECTIONS.join(', ')}`,
+        ErrorCode.INVALID_INPUT,
+        { field: 'externalSync.defaultDirection', value: config.externalSync.defaultDirection, expected: VALID_SYNC_DIRECTIONS }
       );
     }
   }

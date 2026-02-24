@@ -109,6 +109,12 @@ function createTestConfig(): Configuration {
     plugins: {
       packages: [],
     },
+    externalSync: {
+      enabled: false,
+      pollInterval: ONE_MINUTE,
+      conflictStrategy: 'last_write_wins',
+      defaultDirection: 'bidirectional',
+    },
   };
 }
 
