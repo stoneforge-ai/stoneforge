@@ -102,6 +102,19 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for full architecture details.
 | Error factories | `errors/factories.ts` | - |
 | Mention parsing utils | `utils/mentions.ts` | - |
 
+## File Map (@stoneforge/storage)
+
+| Concept | Source | Tests |
+|---------|--------|-------|
+| Storage backend interface | `backend.ts` | - |
+| Bun SQLite backend | `bun-backend.ts` | - |
+| Node.js SQLite backend | `node-backend.ts` | - |
+| Browser SQLite backend (WASM) | `browser-backend.ts` | - |
+| Storage factory (runtime detection) | `create-backend.ts` | - |
+| Schema management & migrations | `schema.ts` | `schema.bun.test.ts` |
+| Storage error mapping | `errors.ts` | `errors.bun.test.ts` |
+| Storage types | `types.ts` | `types.bun.test.ts` |
+
 ## File Map (@stoneforge/quarry)
 
 | Concept | Source | Tests |
@@ -144,7 +157,12 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for full architecture details.
 | CLI completion | `cli/completion.ts` | - |
 | CLI commands | `cli/commands/*.ts` | `cli/commands/*.bun.test.ts` |
 | CLI embeddings commands | `cli/commands/embeddings.ts` | - |
+| CLI database helpers | `cli/db.ts` | - |
+| CLI command suggest | `cli/suggest.ts` | - |
+| CLI types | `cli/types.ts` | - |
 | CLI entry point | `bin/sf.ts` | - |
+| WebSocket broadcaster | `server/ws/broadcaster.ts` | - |
+| WebSocket handler | `server/ws/handler.ts` | - |
 
 ## File Map (@stoneforge/ui)
 
@@ -163,6 +181,8 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for full architecture details.
 | Tooltip | `components/Tooltip.tsx` | `components/*.test.tsx` |
 | **Layout** | | |
 | Layout components | `layout/*.tsx` | `layout/layout.test.tsx` |
+| Header | `layout/Header.tsx` | - |
+| ResponsiveModal | `layout/ResponsiveModal.tsx` | - |
 | **Domain Cards** | | |
 | Domain types | `domain/types.ts` | `domain/domain.test.tsx` |
 | TaskCard | `domain/TaskCard.tsx` | `domain/domain.test.tsx` |
@@ -171,6 +191,8 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for full architecture details.
 | WorkflowCard | `domain/WorkflowCard.tsx` | `domain/domain.test.tsx` |
 | TeamCard | `domain/TeamCard.tsx` | `domain/domain.test.tsx` |
 | Task badges | `domain/TaskBadges.tsx` | `domain/domain.test.tsx` |
+| EntityLink | `domain/EntityLink.tsx` | `domain/domain.test.tsx` |
+| MobileEntityCard | `domain/MobileEntityCard.tsx` | `domain/domain.test.tsx` |
 | UserSelector | `domain/UserSelector.tsx` | `domain/domain.test.tsx` |
 | ChannelHeader | `domain/ChannelHeader.tsx` | `domain/domain.test.tsx` |
 | **Visualizations** | | |
@@ -213,6 +235,10 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for full architecture details.
 | PlanTaskList | `plans/components/PlanTaskList.tsx` | - |
 | RoadmapView | `plans/components/RoadmapView.tsx` | - |
 | TaskPickerModal | `plans/components/TaskPickerModal.tsx` | - |
+| StatusBadge | `plans/components/StatusBadge.tsx` | - |
+| StatusFilter | `plans/components/StatusFilter.tsx` | - |
+| TaskStatusSummary | `plans/components/TaskStatusSummary.tsx` | - |
+| ViewToggle | `plans/components/ViewToggle.tsx` | - |
 | MobilePlanCard | `plans/components/MobilePlanCard.tsx` | - |
 | **Workflows Module** | | |
 | Workflow types | `workflows/types.ts` | - |
@@ -227,6 +253,10 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for full architecture details.
 | WorkflowEditorModal | `workflows/components/WorkflowEditorModal.tsx` | - |
 | WorkflowProgressDashboard | `workflows/components/WorkflowProgressDashboard.tsx` | - |
 | PlaybookCard | `workflows/components/PlaybookCard.tsx` | - |
+| ProgressBar | `workflows/components/ProgressBar.tsx` | - |
+| StatusBadge (workflow) | `workflows/components/StatusBadge.tsx` | - |
+| StatusFilter (workflow) | `workflows/components/StatusFilter.tsx` | - |
+| TaskStatusSummary (workflow) | `workflows/components/TaskStatusSummary.tsx` | - |
 | MobileWorkflowCard | `workflows/components/MobileWorkflowCard.tsx` | - |
 | **Settings Module** | | |
 | ShortcutsSection | `settings/shortcuts/ShortcutsSection.tsx` | - |
@@ -348,6 +378,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for full architecture details.
 | Route: extensions | `server/routes/extensions.ts` | - |
 | Route: workspace-files | `server/routes/workspace-files.ts` | - |
 | Route: diagnostics | `server/routes/diagnostics.ts` | - |
+| Route: metrics | `server/routes/metrics.ts` | - |
 | LSP manager service | `server/services/lsp-manager.ts` | - |
 | Session messages service | `server/services/session-messages.ts` | - |
 | **Prompts** | | |
@@ -378,6 +409,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for full architecture details.
 | **Utils** | | |
 | Logger | `utils/logger.ts` | - |
 | Rate limit parser | `utils/rate-limit-parser.ts` | - |
+| CLI entry point | `bin/sf.ts` | - |
 
 ## File Map (Platform)
 

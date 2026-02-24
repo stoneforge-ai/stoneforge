@@ -43,6 +43,9 @@ const roleDef = await roleDefService.getRoleDefinition(roleDefId);
 // Get system prompt text
 const promptText = await roleDefService.getSystemPrompt(roleDefId);
 
+// Get system prompt text directly from a document reference
+const promptText = await roleDefService.getSystemPromptFromRef(documentId);
+
 // Get default for role type
 const defaultDirector = await roleDefService.getDefaultRoleDefinition('director');
 
@@ -152,6 +155,15 @@ const task = await assignmentService.handoffTask(taskId, {
 ```
 
 Handoff appends `[AGENT HANDOFF NOTE]: {message}` to the task's description Document and records the handoff in `handoffHistory`. The task is unassigned and returns to the pool for reassignment.
+
+### Session Management
+
+```typescript
+// Update session ID for a task (e.g., when agent respawns or resumes work)
+const task = await assignmentService.updateSessionId(taskId, 'session-789');
+```
+
+Used to associate a new Claude Code session with an already-assigned task, such as when a worker is respawned or resumes work. Updates the `sessionId` in the task's orchestrator metadata.
 
 ### Workload Queries
 
