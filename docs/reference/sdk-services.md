@@ -50,6 +50,10 @@ depService.removeAllDependents(blockerId);
 
 // Count without fetching
 const count = depService.countDependencies(blockedId, type?);
+const depCount = depService.countDependents(blockerId, type?);
+
+// Get bidirectional relates-to dependencies for an element
+const related = depService.getRelatedTo(elementId);
 
 // Cycle detection (returns CycleDetectionResult, not boolean)
 const result = depService.detectCycle(blockedId, blockerId, type);
@@ -214,6 +218,12 @@ const items = inboxService.getInbox(recipientId, filter?);
 const paginated = inboxService.getInboxPaginated(recipientId, filter?);
 // paginated.items - array of inbox items
 // paginated.total - total count (ignoring limit/offset)
+
+// Get single item by ID
+const item = inboxService.getInboxItem(id);  // Returns InboxItem | null
+
+// Get items for a specific channel
+const channelItems = inboxService.getInboxByChannel(recipientId, channelId);
 
 // Count
 const count = inboxService.getUnreadCount(recipientId);

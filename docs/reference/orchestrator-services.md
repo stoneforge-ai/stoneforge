@@ -280,7 +280,8 @@ const daemon = createDispatchDaemon(
     pollIntervalMs: 5000,
   },
   poolService,      // optional
-  settingsService   // optional
+  settingsService,  // optional
+  operationLog      // optional
 );
 ```
 
@@ -521,6 +522,8 @@ const executor = createStewardExecutor({
   sessionManager,
   projectRoot: '/project',
   resolvePlaybookContent?,       // Optional callback for resolving playbook templates
+  rateLimitTracker?,             // Optional: skip session spawns if all executables are rate-limited
+  settingsService?,              // Optional: resolve executable fallback chain for rate limit checks
   stewardSessionIdleTimeoutMs?,  // Idle timeout for sessions (default: 120000)
   stewardSessionMaxDurationMs?,  // Max session duration (default: 1800000)
 });
@@ -805,7 +808,8 @@ const mergeSteward = createMergeStewardService(
     autoCleanup: true,        // Remove task worktree after merge (default: true)
     deleteBranchAfterMerge: true, // Delete branch after merge (default: true)
   },
-  worktreeManager  // Optional
+  worktreeManager,  // optional
+  operationLog      // optional
 );
 ```
 
@@ -851,6 +855,10 @@ The `attemptMerge()` method delegates to the shared `mergeBranch()` utility (`gi
 ### Methods
 
 ```typescript
+// Get all tasks awaiting merge (mergeStatus 'pending')
+const tasks = await mergeSteward.getTasksAwaitingMerge();
+// Returns TaskAssignment[]
+
 // Process a single task for merge
 const result = await mergeSteward.processTask(taskId, {
   skipTests: false,

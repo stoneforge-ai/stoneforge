@@ -421,7 +421,8 @@ const results = await embeddingService.searchSemantic(query, limit);
 
 // Hybrid search (combines FTS5 BM25 ranking with vector similarity via RRF)
 const ftsDocIds = ftsResults.map(r => r.id);
-const results = await embeddingService.searchHybrid(query, ftsDocIds, limit);
+const results = await embeddingService.searchHybrid(query, ftsDocIds, limit, k?);
+// k: RRF smoothing constant (default: 60)
 // results: Array<{ documentId: string, score: number }>
 
 // Reindex all document embeddings (e.g., after import or model change)
