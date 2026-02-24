@@ -14,6 +14,22 @@ export {
 } from './provider-registry.js';
 export type { ProviderAdapterEntry } from './provider-registry.js';
 
+// Conflict resolver
+export {
+  detectConflict,
+  resolveConflict,
+  resolveManualConflict,
+  applyManualConflict,
+  toExternalSyncConflict,
+  computeExternalItemHash,
+  SYNC_CONFLICT_TAG,
+} from './conflict-resolver.js';
+export type {
+  ConflictInfo,
+  ResolvedChanges,
+  DetectConflictOptions,
+} from './conflict-resolver.js';
+
 // Sync engine
 export { SyncEngine, createSyncEngine } from './sync-engine.js';
 export type {
