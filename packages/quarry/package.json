@@ -58,6 +58,12 @@
       "import": "./dist/server/index.js",
       "default": "./dist/server/index.js"
     },
+    "./external-sync": {
+      "types": "./src/external-sync/index.ts",
+      "bun": "./src/external-sync/index.ts",
+      "import": "./dist/external-sync/index.js",
+      "default": "./dist/external-sync/index.js"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

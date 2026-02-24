@@ -201,5 +201,8 @@ export {
   createIdentityConfig,
 } from './systems/index.js';
 
+// External Sync - Provider registry and sync providers
+export * from './external-sync/index.js';
+
 // CLI Constants - Default operator entity for CLI and web apps
 export { OPERATOR_ENTITY_ID, OPERATOR_ENTITY_NAME } from './cli/commands/init.js';
