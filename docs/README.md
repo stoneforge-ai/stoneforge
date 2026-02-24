@@ -71,9 +71,9 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for full architecture details.
 | `packages/core/` | Shared types, errors, ID generation | `ElementType`, `Task`, `Entity`, `Document`, `ErrorCode`, `generateId` |
 | `packages/storage/` | SQLite storage backends | `createStorage`, `initializeSchema`, `StorageBackend` |
 | `packages/quarry/` | Core API, services, sync, CLI | `QuarryAPI`, `createQuarryAPI`, `SyncService`, `InboxService` |
-| `packages/ui/` | Shared React UI components, layout, domain, visualizations, hooks, API clients, design tokens | `Button`, `Card`, `Dialog`, `AppShell`, `Sidebar`, `MobileDrawer`, `TaskCard`, `EntityCard`, `ChannelHeader`, `UserSelector`, `TaskStatusBadge`, `StatusPieChart`, `TrendLineChart`, `HorizontalBarChart`, `useTheme`, `useIsMobile`, `useWebSocket`, `useSSEStream`, `useRealtimeEvents`, `useKeyboardShortcut`, `WebSocketClient`, `SSEClient`, `ApiClient` |
+| `packages/ui/` | Shared React UI components, layout, domain, visualizations, hooks, API clients, design tokens; domain modules: documents, messages, plans, workflows, settings | `Button`, `Card`, `Dialog`, `Badge`, `Input`, `Select`, `Skeleton`, `TagInput`, `Tooltip`, `ThemeToggle`, `AppShell`, `Sidebar`, `MobileDrawer`, `TaskCard`, `EntityCard`, `ChannelHeader`, `UserSelector`, `TaskStatusBadge`, `StatusPieChart`, `TrendLineChart`, `HorizontalBarChart`, `MessageRichComposer`, `CreatePlanModal`, `PlanDetailPanel`, `WorkflowDetailPanel`, `useTheme`, `useIsMobile`, `useWebSocket`, `useSSEStream`, `useRealtimeEvents`, `useKeyboardShortcut`, `usePlanApi`, `useWorkflowApi`, `WebSocketClient`, `SSEClient`, `ApiClient` |
 | `packages/shared-routes/` | Shared route factories for server apps | `createElementsRoutes`, `createEntityRoutes`, `createChannelRoutes`, `createMessageRoutes`, `createLibraryRoutes`, `createDocumentRoutes`, `createInboxRoutes`, `createPlanRoutes`, `createTaskRoutes` |
-| `packages/smithy/` | Agent orchestration | `OrchestratorAPI`, `AgentRole`, `SpawnerService`, `SessionManager` |
+| `packages/smithy/` | Agent orchestration: services, runtime, providers (Claude/Codex/OpenCode), server, prompts | `OrchestratorAPI`, `AgentRole`, `SpawnerService`, `SessionManager`, `DispatchService`, `AgentPoolService`, `ProviderRegistry`, `MetricsService` |
 
 ## File Map (@stoneforge/core)
 
@@ -98,12 +98,16 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for full architecture details.
 | Workflow operations | `types/workflow-ops.ts` | - |
 | ID generator | `id/generator.ts` | `id/generator.bun.test.ts` |
 | Error codes | `errors/codes.ts` | `errors/codes.bun.test.ts` |
+| Error base class | `errors/error.ts` | - |
+| Error factories | `errors/factories.ts` | - |
+| Mention parsing utils | `utils/mentions.ts` | - |
 
 ## File Map (@stoneforge/quarry)
 
 | Concept | Source | Tests |
 |---------|--------|-------|
 | QuarryAPI | `api/quarry-api.ts` | `api/*.integration.bun.test.ts` |
+| API types | `api/types.ts` | - |
 | Dependency service | `services/dependency.ts` | `services/dependency.bun.test.ts` |
 | Blocked cache | `services/blocked-cache.ts` | `services/blocked-cache.bun.test.ts` |
 | Inbox service | `services/inbox.ts` | `services/inbox.bun.test.ts` |
@@ -117,17 +121,49 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for full architecture details.
 | Sync service | `sync/service.ts` | `sync/service.bun.test.ts` |
 | Sync merge | `sync/merge.ts` | - |
 | Sync hash | `sync/hash.ts` | - |
+| Sync serialization | `sync/serialization.ts` | - |
+| Sync types | `sync/types.ts` | - |
+| Sync auto-export | `sync/auto-export.ts` | - |
 | Config loader | `config/config.ts` | `config/config.bun.test.ts` |
+| Config defaults | `config/defaults.ts` | - |
+| Config types | `config/types.ts` | - |
+| Config validation | `config/validation.ts` | - |
+| Config file loader | `config/file.ts` | - |
+| Config env vars | `config/env.ts` | - |
+| Config merge | `config/merge.ts` | - |
+| Duration parser | `config/duration.ts` | - |
 | Identity system | `systems/identity.ts` | `systems/identity.bun.test.ts` |
+| HTTP sync handlers | `http/sync-handlers.ts` | - |
+| Quarry server | `server/index.ts`, `server/static.ts` | - |
+| CLI runner | `cli/runner.ts` | - |
+| CLI parser | `cli/parser.ts` | - |
+| CLI plugin loader | `cli/plugin-loader.ts` | - |
+| CLI plugin registry | `cli/plugin-registry.ts` | - |
+| CLI plugin types | `cli/plugin-types.ts` | - |
+| CLI formatter | `cli/formatter.ts` | - |
+| CLI completion | `cli/completion.ts` | - |
 | CLI commands | `cli/commands/*.ts` | `cli/commands/*.bun.test.ts` |
 | CLI embeddings commands | `cli/commands/embeddings.ts` | - |
+| CLI entry point | `bin/sf.ts` | - |
 
 ## File Map (@stoneforge/ui)
 
 | Concept | Source | Tests |
 |---------|--------|-------|
-| Core components | `components/*.tsx` | `components/*.test.tsx` |
+| **Core Components** | | |
+| Button | `components/Button.tsx` | `components/*.test.tsx` |
+| Card | `components/Card.tsx` | `components/*.test.tsx` |
+| Dialog | `components/Dialog.tsx` | `components/*.test.tsx` |
+| Badge | `components/Badge.tsx` | `components/*.test.tsx` |
+| Input | `components/Input.tsx` | `components/*.test.tsx` |
+| Select | `components/Select.tsx` | `components/*.test.tsx` |
+| Skeleton | `components/Skeleton.tsx` | `components/*.test.tsx` |
+| TagInput | `components/TagInput.tsx` | `components/*.test.tsx` |
+| ThemeToggle | `components/ThemeToggle.tsx` | `components/*.test.tsx` |
+| Tooltip | `components/Tooltip.tsx` | `components/*.test.tsx` |
+| **Layout** | | |
 | Layout components | `layout/*.tsx` | `layout/layout.test.tsx` |
+| **Domain Cards** | | |
 | Domain types | `domain/types.ts` | `domain/domain.test.tsx` |
 | TaskCard | `domain/TaskCard.tsx` | `domain/domain.test.tsx` |
 | EntityCard | `domain/EntityCard.tsx` | `domain/domain.test.tsx` |
@@ -137,19 +173,78 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for full architecture details.
 | Task badges | `domain/TaskBadges.tsx` | `domain/domain.test.tsx` |
 | UserSelector | `domain/UserSelector.tsx` | `domain/domain.test.tsx` |
 | ChannelHeader | `domain/ChannelHeader.tsx` | `domain/domain.test.tsx` |
+| **Visualizations** | | |
 | Visualization types | `visualizations/types.ts` | `visualizations/visualizations.test.tsx` |
 | StatusPieChart | `visualizations/StatusPieChart.tsx` | `visualizations/visualizations.test.tsx` |
 | TrendLineChart | `visualizations/TrendLineChart.tsx` | `visualizations/visualizations.test.tsx` |
 | HorizontalBarChart | `visualizations/HorizontalBarChart.tsx` | `visualizations/visualizations.test.tsx` |
+| **Documents Module** | | |
+| Document types | `documents/types.ts` | - |
+| Document constants | `documents/constants.tsx` | - |
+| Document utils | `documents/utils.ts` | - |
+| DeleteLibraryModal | `documents/components/DeleteLibraryModal.tsx` | - |
+| DocumentFilterBar | `documents/components/DocumentFilterBar.tsx` | - |
+| DocumentSortDropdown | `documents/components/DocumentSortDropdown.tsx` | - |
+| DocumentTagInput | `documents/components/DocumentTagInput.tsx` | - |
+| MobileDocumentFilter | `documents/components/MobileDocumentFilter.tsx` | - |
+| **Message Module** | | |
+| Message types | `message/entity-types.ts` | - |
+| Markdown rendering | `message/markdown.ts` | - |
+| MessageRichComposer | `message/MessageRichComposer.tsx` | - |
+| MessageEmbedCard | `message/MessageEmbedCard.tsx` | - |
+| MessageImageAttachment | `message/MessageImageAttachment.tsx` | - |
+| MessageSlashCommands | `message/MessageSlashCommands.tsx` | - |
+| MentionAutocomplete | `message/MentionAutocomplete.tsx` | - |
+| HashAutocomplete | `message/HashAutocomplete.tsx` | - |
+| CreateChannelModal | `message/CreateChannelModal.tsx` | - |
+| ChannelMembersPanel | `message/ChannelMembersPanel.tsx` | - |
+| EntityLink | `message/EntityLink.tsx` | - |
+| LinkPopover | `message/LinkPopover.tsx` | - |
+| useDeleteChannel | `message/useDeleteChannel.ts` | - |
+| **Plans Module** | | |
+| Plan types | `plans/types.ts` | - |
+| Plan constants | `plans/constants.tsx` | - |
+| Plan utils | `plans/utils.ts` | - |
+| Plan API hook | `plans/hooks/usePlanApi.ts` | - |
+| CreatePlanModal | `plans/components/CreatePlanModal.tsx` | - |
+| PlanDetailPanel | `plans/components/PlanDetailPanel.tsx` | - |
+| PlanListItem | `plans/components/PlanListItem.tsx` | - |
+| PlanSearchBar | `plans/components/PlanSearchBar.tsx` | - |
+| PlanTaskList | `plans/components/PlanTaskList.tsx` | - |
+| RoadmapView | `plans/components/RoadmapView.tsx` | - |
+| TaskPickerModal | `plans/components/TaskPickerModal.tsx` | - |
+| MobilePlanCard | `plans/components/MobilePlanCard.tsx` | - |
+| **Workflows Module** | | |
+| Workflow types | `workflows/types.ts` | - |
+| Workflow constants | `workflows/constants.tsx` | - |
+| Workflow utils | `workflows/utils.ts` | - |
+| Workflow API hook | `workflows/hooks/useWorkflowApi.ts` | - |
+| CreateWorkflowModal | `workflows/components/CreateWorkflowModal.tsx` | - |
+| WorkflowDetailPanel | `workflows/components/WorkflowDetailPanel.tsx` | - |
+| WorkflowListItem | `workflows/components/WorkflowListItem.tsx` | - |
+| WorkflowCard | `workflows/components/WorkflowCard.tsx` | - |
+| WorkflowTaskList | `workflows/components/WorkflowTaskList.tsx` | - |
+| WorkflowEditorModal | `workflows/components/WorkflowEditorModal.tsx` | - |
+| WorkflowProgressDashboard | `workflows/components/WorkflowProgressDashboard.tsx` | - |
+| PlaybookCard | `workflows/components/PlaybookCard.tsx` | - |
+| MobileWorkflowCard | `workflows/components/MobileWorkflowCard.tsx` | - |
+| **Settings Module** | | |
+| ShortcutsSection | `settings/shortcuts/ShortcutsSection.tsx` | - |
+| Shortcuts utils | `settings/shortcuts/utils.ts` | - |
+| **Contexts** | | |
+| CurrentUserContext | `contexts/CurrentUserContext.tsx` | - |
+| **Hooks** | | |
 | Theme hook | `hooks/useTheme.ts` | `hooks/useTheme.test.ts` |
 | Breakpoint hooks | `hooks/useBreakpoint.ts` | `hooks/useBreakpoint.test.ts` |
 | WebSocket hook | `hooks/useWebSocket.ts` | - |
 | SSE stream hook | `hooks/useSSEStream.ts` | - |
 | Real-time events hook | `hooks/useRealtimeEvents.ts` | - |
 | Keyboard shortcuts | `hooks/useKeyboardShortcuts.ts` | `hooks/useKeyboardShortcuts.test.ts` |
+| **API Clients** | | |
 | WebSocket client | `api/websocket.ts` | `api/websocket.test.ts` |
 | SSE client | `api/sse-client.ts` | `api/sse-client.test.ts` |
 | API client | `api/api-client.ts` | `api/api-client.test.ts` |
+| **Styles** | | |
 | Design tokens | `styles/tokens.css` | - |
 
 ## File Map (@stoneforge/shared-routes)
@@ -174,7 +269,15 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for full architecture details.
 
 | Concept | Source | Tests |
 |---------|--------|-------|
+| **API** | | |
 | OrchestratorAPI | `api/orchestrator-api.ts` | `api/*.integration.bun.test.ts` |
+| **Types** | | |
+| Agent types | `types/agent.ts` | - |
+| Agent pool types | `types/agent-pool.ts` | - |
+| Role definition types | `types/role-definition.ts` | - |
+| Message types | `types/message-types.ts` | - |
+| Task metadata types | `types/task-meta.ts` | - |
+| **Services** | | |
 | Agent registry | `services/agent-registry.ts` | `services/agent-registry.bun.test.ts` |
 | Role definition service | `services/role-definition-service.ts` | `services/role-definition-service.bun.test.ts` |
 | Task assignment service | `services/task-assignment-service.ts` | `services/task-assignment-service.bun.test.ts` |
@@ -187,20 +290,94 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for full architecture details.
 | Merge request provider | `services/merge-request-provider.ts` | - |
 | Steward scheduler | `services/steward-scheduler.ts` | `services/steward-scheduler.test.ts` |
 | Plugin executor | `services/plugin-executor.ts` | `services/plugin-executor.bun.test.ts` |
+| Settings service | `services/settings-service.ts` | `services/settings-service.bun.test.ts` |
+| Metrics service | `services/metrics-service.ts` | `services/metrics-service.bun.test.ts` |
+| Operation log service | `services/operation-log-service.ts` | `services/operation-log-service.bun.test.ts` |
+| Rate limit tracker | `services/rate-limit-tracker.ts` | `services/rate-limit-tracker.bun.test.ts` |
+| **Runtime** | | |
 | Spawner service | `runtime/spawner.ts` | `runtime/spawner.bun.test.ts` |
 | Session manager | `runtime/session-manager.ts` | `runtime/session-manager.bun.test.ts` |
 | Handoff service | `runtime/handoff.ts` | `runtime/handoff.bun.test.ts` |
 | Message mapper | `runtime/message-mapper.ts` | - |
 | Predecessor query service | `runtime/predecessor-query.ts` | `runtime/predecessor-query.bun.test.ts` |
 | Runtime event utils | `runtime/event-utils.ts` | - |
-| Settings service | `services/settings-service.ts` | `services/settings-service.bun.test.ts` |
-| Rate limit tracker | `services/rate-limit-tracker.ts` | `services/rate-limit-tracker.bun.test.ts` |
-| Prompts | `prompts/index.ts` | `prompts/index.bun.test.ts` |
+| **Providers** | | |
+| Provider registry | `providers/registry.ts` | - |
+| Provider types | `providers/types.ts` | - |
+| Claude headless provider | `providers/claude/headless.ts` | - |
+| Claude interactive provider | `providers/claude/interactive.ts` | - |
+| Codex headless provider | `providers/codex/headless.ts` | - |
+| Codex interactive provider | `providers/codex/interactive.ts` | - |
+| Codex server manager | `providers/codex/server-manager.ts` | - |
+| Codex event mapper | `providers/codex/event-mapper.ts` | - |
+| Codex JSON-RPC client | `providers/codex/jsonrpc-client.ts` | - |
+| OpenCode headless provider | `providers/opencode/headless.ts` | - |
+| OpenCode interactive provider | `providers/opencode/interactive.ts` | - |
+| OpenCode server manager | `providers/opencode/server-manager.ts` | - |
+| OpenCode event mapper | `providers/opencode/event-mapper.ts` | - |
+| OpenCode async queue | `providers/opencode/async-queue.ts` | - |
+| **Git** | | |
+| Worktree manager | `git/worktree-manager.ts` | `git/worktree-manager.bun.test.ts` |
+| Git merge | `git/merge.ts` | - |
+| **Server** | | |
+| Server entry | `server/server.ts` | - |
+| Server config | `server/config.ts` | - |
+| Server services | `server/services.ts` | - |
+| Server formatters | `server/formatters.ts` | - |
+| Server types | `server/types.ts` | - |
+| Daemon state | `server/daemon-state.ts` | - |
+| WebSocket handler | `server/websocket.ts` | - |
+| Events WebSocket | `server/events-websocket.ts` | - |
+| LSP WebSocket | `server/lsp-websocket.ts` | - |
+| Server static files | `server/static.ts` | - |
+| Route: agents | `server/routes/agents.ts` | - |
+| Route: daemon | `server/routes/daemon.ts` | - |
+| Route: events | `server/routes/events.ts` | - |
+| Route: health | `server/routes/health.ts` | - |
+| Route: pools | `server/routes/pools.ts` | - |
+| Route: sessions | `server/routes/sessions.ts` | - |
+| Route: tasks | `server/routes/tasks.ts` | - |
+| Route: upload | `server/routes/upload.ts` | - |
+| Route: assets | `server/routes/assets.ts` | - |
+| Route: settings | `server/routes/settings.ts` | - |
+| Route: worktrees | `server/routes/worktrees.ts` | - |
+| Route: workflows | `server/routes/workflows.ts` | - |
+| Route: scheduler | `server/routes/scheduler.ts` | - |
+| Route: plugins | `server/routes/plugins.ts` | - |
+| Route: lsp | `server/routes/lsp.ts` | - |
+| Route: extensions | `server/routes/extensions.ts` | - |
+| Route: workspace-files | `server/routes/workspace-files.ts` | - |
+| Route: diagnostics | `server/routes/diagnostics.ts` | - |
+| LSP manager service | `server/services/lsp-manager.ts` | - |
+| Session messages service | `server/services/session-messages.ts` | - |
+| **Prompts** | | |
+| Prompts loader | `prompts/index.ts` | `prompts/index.bun.test.ts` |
+| Director prompt | `prompts/director.md` | - |
+| Worker prompt | `prompts/worker.md` | - |
 | Persistent worker prompt | `prompts/persistent-worker.md` | - |
 | Message triage prompt | `prompts/message-triage.md` | - |
-| Docs steward prompt | `prompts/steward-docs.md` | - |
+| Steward base prompt | `prompts/steward-base.md` | - |
+| Steward docs prompt | `prompts/steward-docs.md` | - |
+| Steward merge prompt | `prompts/steward-merge.md` | - |
+| Steward recovery prompt | `prompts/steward-recovery.md` | - |
+| **CLI** | | |
+| CLI plugin entry | `cli/plugin.ts` | - |
 | Merge CLI command | `cli/commands/merge.ts` | `cli/commands/merge.bun.test.ts` |
-| Worktree manager | `git/worktree-manager.ts` | `git/worktree-manager.bun.test.ts` |
+| Agent CLI commands | `cli/commands/agent.ts` | - |
+| Daemon CLI commands | `cli/commands/daemon.ts` | - |
+| Dispatch CLI command | `cli/commands/dispatch.ts` | - |
+| Pool CLI commands | `cli/commands/pool.ts` | - |
+| Serve CLI command | `cli/commands/serve.ts` | - |
+| Task CLI commands | `cli/commands/task.ts` | - |
+| Test orchestration CLI | `cli/commands/test-orchestration.ts` | - |
+| **Testing** | | |
+| Orchestration test runner | `testing/orchestration-tests.ts` | - |
+| Test context | `testing/test-context.ts` | - |
+| Test prompts | `testing/test-prompts.ts` | - |
+| Test utils | `testing/test-utils.ts` | - |
+| **Utils** | | |
+| Logger | `utils/logger.ts` | - |
+| Rate limit parser | `utils/rate-limit-parser.ts` | - |
 
 ## File Map (Platform)
 
