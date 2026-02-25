@@ -389,11 +389,13 @@ Hono-based API server for agent orchestration. Modular architecture with routes 
 | `routes/lsp.ts` | `/api/lsp` | LSP status and configuration |
 | `routes/workspace-files.ts` | `/api/workspace` | Workspace file browsing, reading, writing |
 | `routes/extensions.ts` | `/api/extensions` | OpenVSX marketplace proxy |
-| `routes/settings.ts` | `/api/settings` | Settings management |
-| `routes/assets.ts` | `/api/assets` | Asset serving |
-| `routes/metrics.ts` | `/api/metrics` | Provider metrics |
-| `routes/diagnostics.ts` | `/api/diagnostics` | System diagnostics |
-| `routes/external-sync.ts` | `/api/external-sync` | External sync endpoints |
+| `routes/settings.ts`* | `/api/settings` | Settings management |
+| `routes/assets.ts`* | `/api/assets` | Asset serving |
+| `routes/metrics.ts`* | `/api/metrics` | Provider metrics |
+| `routes/diagnostics.ts`* | `/api/diagnostics` | System diagnostics |
+| `routes/external-sync.ts`* | `/api/external-sync` | External sync endpoints |
+
+> \* These routes are defined in `packages/smithy/src/server/routes/`, not `apps/smithy-server/src/routes/`. The smithy-server app is a thin wrapper (`startSmithyServer`) that mounts routes from both locations.
 
 ### Key Routes
 
