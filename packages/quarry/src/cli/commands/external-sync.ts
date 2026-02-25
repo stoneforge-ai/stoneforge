@@ -4,6 +4,7 @@
  * Provides CLI commands for external service synchronization:
  * - config: Show/set provider configuration (tokens, projects)
  * - link: Link a task to an external issue
+ * - link-all: Bulk-link all unlinked tasks to external issues
  * - unlink: Remove external link from a task
  * - push: Push linked tasks to external service
  * - pull: Pull changes from external for linked tasks
@@ -18,7 +19,7 @@ import { getOutputMode } from '../formatter.js';
 import { createAPI, resolveDatabasePath } from '../db.js';
 import { createStorage, initializeSchema } from '@stoneforge/storage';
 import { getValue, setValue, VALID_AUTO_LINK_PROVIDERS } from '../../config/index.js';
-import type { Task, ElementId } from '@stoneforge/core';
+import type { Task, ElementId, ExternalProvider, ExternalSyncState, SyncDirection } from '@stoneforge/core';
 
 // ============================================================================
 // Settings Service Helper
@@ -1118,6 +1119,431 @@ async function resolveHandler(
 }
 
 // ============================================================================
+// Link-All Command
+// ============================================================================
+
+interface LinkAllOptions {
+  provider?: string;
+  project?: string;
+  status?: string | string[];
+  'dry-run'?: boolean;
+  'batch-size'?: string;
+  /** @internal Dependency injection for testing — overrides createProviderFromSettings */
+  _providerFactory?: (
+    providerName: string,
+    projectOverride: string | undefined,
+    options: GlobalOptions
+  ) => Promise<{
+    provider?: ExternalProvider;
+    project?: string;
+    direction?: SyncDirection;
+    error?: string;
+  }>;
+}
+
+const linkAllOptions: CommandOption[] = [
+  {
+    name: 'provider',
+    short: 'p',
+    description: 'Provider to link to (required)',
+    hasValue: true,
+    required: true,
+  },
+  {
+    name: 'project',
+    description: 'Override the default project',
+    hasValue: true,
+  },
+  {
+    name: 'status',
+    short: 's',
+    description: 'Only link tasks with this status (can be repeated)',
+    hasValue: true,
+    array: true,
+  },
+  {
+    name: 'dry-run',
+    short: 'n',
+    description: 'List tasks that would be linked without creating external issues',
+  },
+  {
+    name: 'batch-size',
+    short: 'b',
+    description: 'How many tasks to process concurrently (default: 10)',
+    hasValue: true,
+    defaultValue: '10',
+  },
+];
+
+/**
+ * Helper to detect rate limit errors from GitHub or Linear providers.
+ * Returns the reset timestamp (epoch seconds) if available, or undefined.
+ */
+function isRateLimitError(err: unknown): { isRateLimit: boolean; resetAt?: number } {
+  // Try GitHub error shape
+  if (
+    err &&
+    typeof err === 'object' &&
+    'isRateLimited' in err &&
+    (err as { isRateLimited: boolean }).isRateLimited
+  ) {
+    const rateLimit = (err as { rateLimit?: { reset?: number } | null }).rateLimit;
+    return { isRateLimit: true, resetAt: rateLimit?.reset };
+  }
+  // Also check error message for rate limit keywords
+  if (err instanceof Error && /rate.limit/i.test(err.message)) {
+    return { isRateLimit: true };
+  }
+  return { isRateLimit: false };
+}
+
+/**
+ * Creates an ExternalProvider instance from settings for the given provider name.
+ * Returns the provider, project, and direction, or an error message.
+ */
+async function createProviderFromSettings(
+  providerName: string,
+  projectOverride: string | undefined,
+  options: GlobalOptions
+): Promise<{
+  provider?: ExternalProvider;
+  project?: string;
+  direction?: SyncDirection;
+  error?: string;
+}> {
+  const dbPath = resolveDatabasePath(options);
+  if (!dbPath) {
+    return { error: 'No database found. Run "sf init" to initialize a workspace, or specify --db path' };
+  }
+
+  try {
+    const backend = createStorage({ path: dbPath, create: true });
+    initializeSchema(backend);
+
+    // Dynamic import to handle optional peer dependency
+    const { createSettingsService } = await import('@stoneforge/smithy/services');
+    const settingsService = createSettingsService(backend) as {
+      getProviderConfig(provider: string): { provider: string; token?: string; apiBaseUrl?: string; defaultProject?: string } | undefined;
+    };
+
+    const providerConfig = settingsService.getProviderConfig(providerName);
+    if (!providerConfig?.token) {
+      return { error: `Provider "${providerName}" has no token configured. Run "sf external-sync config set-token ${providerName} <token>" first.` };
+    }
+
+    const project = projectOverride ?? providerConfig.defaultProject;
+    if (!project) {
+      return { error: `No project specified and provider "${providerName}" has no default project configured. Use --project or run "sf external-sync config set-project ${providerName} <project>" first.` };
+    }
+
+    let provider: ExternalProvider;
+
+    if (providerName === 'github') {
+      const { createGitHubProvider } = await import('../../external-sync/providers/github/index.js');
+      provider = createGitHubProvider({
+        provider: 'github',
+        token: providerConfig.token,
+        apiBaseUrl: providerConfig.apiBaseUrl,
+        defaultProject: project,
+      });
+    } else if (providerName === 'linear') {
+      const { createLinearProvider } = await import('../../external-sync/providers/linear/index.js');
+      provider = createLinearProvider({
+        apiKey: providerConfig.token,
+      });
+    } else {
+      return { error: `Unsupported provider: "${providerName}". Supported providers: github, linear` };
+    }
+
+    const direction = (getValue('externalSync.defaultDirection') ?? 'bidirectional') as SyncDirection;
+
+    return { provider, project, direction };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message.includes('Cannot find') || message.includes('MODULE_NOT_FOUND')) {
+      return { error: 'External sync requires @stoneforge/smithy package. Ensure it is installed.' };
+    }
+    return { error: `Failed to initialize provider: ${message}` };
+  }
+}
+
+/**
+ * Process a batch of tasks: create external issues and link them.
+ */
+async function processBatch(
+  tasks: Task[],
+  adapter: { createIssue(project: string, issue: { title: string; body?: string; labels?: string[] }): Promise<{ externalId: string; url: string }> },
+  api: ReturnType<typeof createAPI>['api'],
+  providerName: string,
+  project: string,
+  direction: SyncDirection,
+  progressLines: string[]
+): Promise<{ succeeded: number; failed: number; rateLimited: boolean; resetAt?: number }> {
+  let succeeded = 0;
+  let failed = 0;
+  let rateLimited = false;
+  let resetAt: number | undefined;
+
+  for (const task of tasks) {
+    try {
+      // Create the external issue
+      const externalTask = await adapter.createIssue(project, {
+        title: task.title,
+        body: task.descriptionRef ? `Stoneforge task: ${task.id}` : undefined,
+        labels: task.tags ? [...task.tags] : undefined,
+      });
+
+      // Build the ExternalSyncState metadata
+      const syncState: ExternalSyncState = {
+        provider: providerName,
+        project,
+        externalId: externalTask.externalId,
+        url: externalTask.url,
+        direction,
+        adapterType: 'task',
+      };
+
+      // Update the task with externalRef and _externalSync metadata
+      const existingMetadata = (task.metadata ?? {}) as Record<string, unknown>;
+      await api!.update<Task>(task.id as unknown as ElementId, {
+        externalRef: externalTask.url,
+        metadata: {
+          ...existingMetadata,
+          _externalSync: syncState,
+        },
+      } as Partial<Task>);
+
+      progressLines.push(`Linked ${task.id} → ${externalTask.url}`);
+      succeeded++;
+    } catch (err) {
+      // Check for rate limit errors
+      const rlCheck = isRateLimitError(err);
+      if (rlCheck.isRateLimit) {
+        rateLimited = true;
+        resetAt = rlCheck.resetAt;
+        const message = err instanceof Error ? err.message : String(err);
+        progressLines.push(`Rate limit hit while linking ${task.id}: ${message}`);
+        // Stop processing further tasks in this batch
+        break;
+      }
+
+      // Log warning and continue with next task
+      const message = err instanceof Error ? err.message : String(err);
+      progressLines.push(`Failed to link ${task.id}: ${message}`);
+      failed++;
+    }
+  }
+
+  return { succeeded, failed, rateLimited, resetAt };
+}
+
+async function linkAllHandler(
+  _args: string[],
+  options: GlobalOptions & LinkAllOptions
+): Promise<CommandResult> {
+  const providerName = options.provider;
+  if (!providerName) {
+    return failure(
+      'The --provider flag is required. Usage: sf external-sync link-all --provider <provider>',
+      ExitCode.INVALID_ARGUMENTS
+    );
+  }
+
+  const isDryRun = options['dry-run'] ?? false;
+  const batchSize = parseInt(options['batch-size'] ?? '10', 10);
+  if (isNaN(batchSize) || batchSize < 1) {
+    return failure('--batch-size must be a positive integer', ExitCode.INVALID_ARGUMENTS);
+  }
+
+  // Parse status filters
+  const statusFilters: string[] = [];
+  if (options.status) {
+    if (Array.isArray(options.status)) {
+      statusFilters.push(...options.status);
+    } else {
+      statusFilters.push(options.status);
+    }
+  }
+
+  // Get API for querying/updating tasks
+  const { api, error: apiError } = createAPI(options);
+  if (apiError) {
+    return failure(apiError, ExitCode.GENERAL_ERROR);
+  }
+
+  // Query all tasks
+  let allTasks: Task[];
+  try {
+    const results = await api!.list({ type: 'task' });
+    allTasks = results as Task[];
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return failure(`Failed to list tasks: ${message}`, ExitCode.GENERAL_ERROR);
+  }
+
+  // Filter to unlinked tasks (no _externalSync metadata)
+  let unlinkedTasks = allTasks.filter((task) => {
+    const metadata = (task.metadata ?? {}) as Record<string, unknown>;
+    return !metadata._externalSync;
+  });
+
+  // Apply status filter if specified
+  if (statusFilters.length > 0) {
+    unlinkedTasks = unlinkedTasks.filter((task) => statusFilters.includes(task.status));
+  }
+
+  // Skip tombstone tasks by default (soft-deleted)
+  unlinkedTasks = unlinkedTasks.filter((task) => task.status !== 'tombstone');
+
+  const mode = getOutputMode(options);
+
+  if (unlinkedTasks.length === 0) {
+    const result = { linked: 0, failed: 0, skipped: 0, total: 0, dryRun: isDryRun };
+    if (mode === 'json') {
+      return success(result);
+    }
+    return success(result, 'No unlinked tasks found matching the specified criteria.');
+  }
+
+  // Dry run — just list tasks that would be linked
+  if (isDryRun) {
+    const taskList = unlinkedTasks.map((t) => ({
+      id: t.id,
+      title: t.title,
+      status: t.status,
+    }));
+
+    if (mode === 'json') {
+      return success({
+        dryRun: true,
+        provider: providerName,
+        total: unlinkedTasks.length,
+        tasks: taskList,
+      });
+    }
+
+    if (mode === 'quiet') {
+      return success(String(unlinkedTasks.length));
+    }
+
+    const lines: string[] = [
+      `Dry run: ${unlinkedTasks.length} task(s) would be linked to ${providerName}`,
+      '',
+    ];
+
+    for (const task of unlinkedTasks) {
+      lines.push(`  ${task.id}  ${task.status.padEnd(12)} ${task.title}`);
+    }
+
+    return success({ dryRun: true, provider: providerName, total: unlinkedTasks.length, tasks: taskList }, lines.join('\n'));
+  }
+
+  // Create provider for actual linking (supports DI for testing)
+  const providerFactory = options._providerFactory ?? createProviderFromSettings;
+  const {
+    provider: externalProvider,
+    project,
+    direction,
+    error: providerError,
+  } = await providerFactory(providerName, options.project, options);
+
+  if (providerError) {
+    return failure(providerError, ExitCode.GENERAL_ERROR);
+  }
+
+  // Get the task adapter
+  const adapter = externalProvider!.getTaskAdapter?.();
+  if (!adapter) {
+    return failure(
+      `Provider "${providerName}" does not support task sync`,
+      ExitCode.GENERAL_ERROR
+    );
+  }
+
+  // Process tasks in batches
+  const progressLines: string[] = [];
+  let totalSucceeded = 0;
+  let totalFailed = 0;
+  let rateLimited = false;
+  let rateLimitResetAt: number | undefined;
+
+  for (let i = 0; i < unlinkedTasks.length; i += batchSize) {
+    const batch = unlinkedTasks.slice(i, i + batchSize);
+
+    const batchResult = await processBatch(
+      batch,
+      adapter,
+      api!,
+      providerName,
+      project!,
+      direction!,
+      progressLines
+    );
+
+    totalSucceeded += batchResult.succeeded;
+    totalFailed += batchResult.failed;
+
+    if (batchResult.rateLimited) {
+      rateLimited = true;
+      rateLimitResetAt = batchResult.resetAt;
+      break;
+    }
+
+    // Small delay between batches to be gentle on the API
+    if (i + batchSize < unlinkedTasks.length) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+
+  const skipped = unlinkedTasks.length - totalSucceeded - totalFailed;
+
+  // Build result
+  const result = {
+    provider: providerName,
+    project,
+    linked: totalSucceeded,
+    failed: totalFailed,
+    skipped,
+    total: unlinkedTasks.length,
+    rateLimited,
+    rateLimitResetAt: rateLimitResetAt ? new Date(rateLimitResetAt * 1000).toISOString() : undefined,
+  };
+
+  if (mode === 'json') {
+    return success(result);
+  }
+
+  if (mode === 'quiet') {
+    return success(String(totalSucceeded));
+  }
+
+  // Human-readable output
+  const lines: string[] = [...progressLines, ''];
+
+  // Summary
+  const summaryParts = [`Linked ${totalSucceeded} tasks to ${providerName}`];
+  if (totalFailed > 0) {
+    summaryParts.push(`(${totalFailed} failed)`);
+  }
+  if (skipped > 0) {
+    summaryParts.push(`(${skipped} skipped)`);
+  }
+  lines.push(summaryParts.join(' '));
+
+  if (rateLimited) {
+    lines.push('');
+    if (rateLimitResetAt) {
+      const resetDate = new Date(rateLimitResetAt * 1000);
+      lines.push(`Rate limit reached. Resets at ${resetDate.toISOString()}. Re-run this command after the reset to link remaining tasks.`);
+    } else {
+      lines.push('Rate limit reached. Re-run this command later to link remaining tasks.');
+    }
+  }
+
+  return success(result, lines.join('\n'));
+}
+
+// ============================================================================
 // Config Parent Command (for subcommand structure)
 // ============================================================================
 
@@ -1248,6 +1674,41 @@ Examples:
   sf external-sync link el-abc123 42 --provider github`,
   options: linkOptions,
   handler: linkHandler as Command['handler'],
+};
+
+// ============================================================================
+// Link-All Command
+// ============================================================================
+
+const linkAllCommand: Command = {
+  name: 'link-all',
+  description: 'Bulk-link all unlinked tasks to external issues',
+  usage: 'sf external-sync link-all --provider <provider> [--project <project>] [--status <status>] [--dry-run] [--batch-size <n>]',
+  help: `Create external issues for all unlinked tasks and link them in bulk.
+
+Finds all tasks that do NOT have external sync metadata and creates
+a corresponding external issue for each one, then links them.
+
+Options:
+  -p, --provider <name>    Provider to link to (required)
+      --project <project>  Override the default project
+  -s, --status <status>    Only link tasks with this status (can be repeated)
+  -n, --dry-run            List tasks that would be linked without creating issues
+  -b, --batch-size <n>     Tasks to process concurrently (default: 10)
+
+Rate Limits:
+  If a rate limit is hit, the command stops gracefully and reports how
+  many tasks were linked. Re-run the command to continue linking.
+
+Examples:
+  sf external-sync link-all --provider github
+  sf external-sync link-all --provider github --status open
+  sf external-sync link-all --provider github --status open --status in_progress
+  sf external-sync link-all --provider github --dry-run
+  sf external-sync link-all --provider github --project my-org/my-repo
+  sf external-sync link-all --provider linear --batch-size 5`,
+  options: linkAllOptions,
+  handler: linkAllHandler as Command['handler'],
 };
 
 // ============================================================================
@@ -1409,6 +1870,7 @@ Commands:
   config set-auto-link <provider>     Enable auto-link with a provider
   config disable-auto-link            Disable auto-link
   link <taskId> <url-or-issue-number> Link task to external issue
+  link-all --provider <name>          Bulk-link all unlinked tasks
   unlink <taskId>                     Remove external link
   push [taskId...]                    Push linked task(s) to external
   pull                                Pull changes from external
@@ -1423,6 +1885,8 @@ Examples:
   sf external-sync config set-auto-link github
   sf external-sync config disable-auto-link
   sf external-sync link el-abc123 42
+  sf external-sync link-all --provider github
+  sf external-sync link-all --provider github --dry-run
   sf external-sync push --all
   sf external-sync pull
   sf external-sync sync --dry-run
@@ -1431,6 +1895,7 @@ Examples:
   subcommands: {
     config: configParentCommand,
     link: linkCommand,
+    'link-all': linkAllCommand,
     unlink: unlinkCommand,
     push: pushCommand,
     pull: pullCommand,
@@ -1442,11 +1907,11 @@ Examples:
     const mode = getOutputMode(options);
     if (mode === 'json') {
       return success({
-        commands: ['config', 'link', 'unlink', 'push', 'pull', 'sync', 'status', 'resolve'],
+        commands: ['config', 'link', 'link-all', 'unlink', 'push', 'pull', 'sync', 'status', 'resolve'],
       });
     }
     return failure(
-      'Usage: sf external-sync <command>\n\nCommands: config, link, unlink, push, pull, sync, status, resolve\n\nRun "sf external-sync --help" for more information.',
+      'Usage: sf external-sync <command>\n\nCommands: config, link, link-all, unlink, push, pull, sync, status, resolve\n\nRun "sf external-sync --help" for more information.',
       ExitCode.INVALID_ARGUMENTS
     );
   },
