@@ -23,11 +23,19 @@ import {
   type EntityId,
   type Task,
   type Dependency,
+  type ExternalProvider,
+  type SyncDirection,
   createWorkflowFromPlaybook,
   getTaskIdsInWorkflow,
   getDependenciesInWorkflow,
   DependencyType,
 } from '@stoneforge/core';
+import {
+  autoLinkTask,
+  createGitHubProvider,
+  createLinearProvider,
+  getValue,
+} from '@stoneforge/quarry';
 
 // ============================================================================
 // Type Definitions
@@ -89,6 +97,43 @@ function formatPlaybookResponse(playbook: Playbook): Playbook {
     createdAt: playbook.createdAt,
     updatedAt: playbook.updatedAt,
   };
+}
+
+// ============================================================================
+// Auto-Link Helper
+// ============================================================================
+
+/**
+ * Create an ExternalProvider instance for auto-linking.
+ *
+ * Uses the settingsService from Services to read provider token and config.
+ * Returns the provider instance or undefined if the provider cannot be created.
+ */
+function createAutoLinkProvider(
+  providerName: string,
+  services: Services
+): ExternalProvider | undefined {
+  const providerConfig = services.settingsService.getProviderConfig(providerName);
+  if (!providerConfig?.token) {
+    logger.warn(`Auto-link: provider "${providerName}" has no token configured`);
+    return undefined;
+  }
+
+  if (providerName === 'github') {
+    return createGitHubProvider({
+      provider: 'github',
+      token: providerConfig.token,
+      apiBaseUrl: providerConfig.apiBaseUrl,
+      defaultProject: providerConfig.defaultProject,
+    });
+  } else if (providerName === 'linear') {
+    return createLinearProvider({
+      apiKey: providerConfig.token,
+    });
+  }
+
+  logger.warn(`Auto-link: unsupported provider "${providerName}"`);
+  return undefined;
 }
 
 // ============================================================================
@@ -669,6 +714,53 @@ export function createWorkflowRoutes(services: Services) {
       logger.info(
         `Instantiated playbook ${playbook.name}: workflow=${savedWorkflow.id}, tasks=${savedTasks.length}, dependencies=${allDependencies.length}, skipped=${createResult.skippedSteps.length}`
       );
+
+      // Auto-link each created task to external provider if configured
+      const autoLink = getValue('externalSync.autoLink') as boolean;
+      const autoLinkProvider = getValue('externalSync.autoLinkProvider') as string | undefined;
+
+      if (autoLink && autoLinkProvider && savedTasks.length > 0) {
+        try {
+          const provider = createAutoLinkProvider(autoLinkProvider, services);
+          if (provider) {
+            const providerConfig = services.settingsService.getProviderConfig(autoLinkProvider);
+            const project = providerConfig?.defaultProject;
+            const direction = (getValue('externalSync.defaultDirection') ?? 'bidirectional') as SyncDirection;
+
+            if (project) {
+              let linked = 0;
+              for (const savedTask of savedTasks) {
+                const linkResult = await autoLinkTask({
+                  task: savedTask,
+                  api,
+                  provider,
+                  project,
+                  direction,
+                });
+                if (linkResult.success) {
+                  linked++;
+                } else {
+                  logger.warn(
+                    `Auto-link failed for workflow task ${savedTask.id}: ${linkResult.error}`
+                  );
+                }
+              }
+              if (linked > 0) {
+                logger.info(
+                  `Auto-linked ${linked}/${savedTasks.length} workflow tasks to ${autoLinkProvider}`
+                );
+              }
+            } else {
+              logger.warn(
+                `Auto-link skipped: provider "${autoLinkProvider}" has no default project configured`
+              );
+            }
+          }
+        } catch (autoLinkErr) {
+          // Auto-link failures must never break workflow instantiation
+          logger.warn('Auto-link error during workflow instantiation:', autoLinkErr);
+        }
+      }
 
       const response: WorkflowResponse = {
         workflow: formatWorkflowResponse(savedWorkflow),

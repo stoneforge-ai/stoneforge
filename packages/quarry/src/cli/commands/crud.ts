@@ -11,12 +11,15 @@ import type { Command, GlobalOptions, CommandResult, CommandOption } from '../ty
 import { success, failure, ExitCode } from '../types.js';
 import { getFormatter, getOutputMode, getStatusIcon, formatEventsTable, type EventData } from '../formatter.js';
 import { createTask, createDocument, ContentType, TaskStatus, TaskTypeValue, PlanStatus, type CreateTaskInput, type Priority, type Complexity, type Plan, type DocumentId, type HydratedMessage } from '@stoneforge/core';
-import type { Element, ElementId, EntityId } from '@stoneforge/core';
+import type { Element, ElementId, EntityId, Task, SyncDirection } from '@stoneforge/core';
 import type { QuarryAPI, TaskFilter } from '../../api/types.js';
 import type { PlanProgress } from '@stoneforge/core';
 import type { StorageBackend } from '@stoneforge/storage';
 import { createInboxService } from '../../services/inbox.js';
 import { resolveDatabasePath, resolveActor, createAPI } from '../db.js';
+import { getValue } from '../../config/index.js';
+import { autoLinkTask } from '../../external-sync/auto-link.js';
+import { tryCreateProviderForAutoLink } from './auto-link-helper.js';
 
 // ============================================================================
 // Create Command
@@ -32,6 +35,7 @@ interface CreateOptions {
   tag?: string[];
   plan?: string;
   description?: string;
+  'no-auto-link'?: boolean;
 }
 
 export const createOptions: CommandOption[] = [
@@ -86,6 +90,10 @@ export const createOptions: CommandOption[] = [
     short: 'd',
     description: 'Task description (creates a linked document)',
     hasValue: true,
+  },
+  {
+    name: 'no-auto-link',
+    description: 'Skip auto-linking to external provider even when configured',
   },
 ];
 
@@ -226,10 +234,40 @@ export async function createHandler(
       }
     }
 
-    const message = planWarning
-      ? `Created task ${created.id}\n${planWarning}`
-      : `Created task ${created.id}`;
-    return success(created, message);
+    // Auto-link to external provider if configured and not suppressed
+    let autoLinkMessage: string | undefined;
+    if (!options['no-auto-link']) {
+      const autoLink = getValue('externalSync.autoLink');
+      const autoLinkProvider = getValue('externalSync.autoLinkProvider');
+
+      if (autoLink && autoLinkProvider) {
+        const providerResult = await tryCreateProviderForAutoLink(autoLinkProvider, options);
+
+        if (providerResult.provider && providerResult.project) {
+          const direction = getValue('externalSync.defaultDirection') as SyncDirection;
+          const linkResult = await autoLinkTask({
+            task: created as unknown as Task,
+            api,
+            provider: providerResult.provider,
+            project: providerResult.project,
+            direction,
+          });
+
+          if (linkResult.success && linkResult.syncState) {
+            autoLinkMessage = `Linked to ${autoLinkProvider}: ${linkResult.syncState.url}`;
+          } else if (!linkResult.success) {
+            autoLinkMessage = `Warning: Auto-link failed: ${linkResult.error}`;
+          }
+        } else if (providerResult.error) {
+          autoLinkMessage = `Warning: Auto-link failed: ${providerResult.error}`;
+        }
+      }
+    }
+
+    const messageParts = [`Created task ${created.id}`];
+    if (planWarning) messageParts.push(planWarning);
+    if (autoLinkMessage) messageParts.push(autoLinkMessage);
+    return success(created, messageParts.join('\n'));
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return failure(`Failed to create task: ${message}`, ExitCode.GENERAL_ERROR);
@@ -254,13 +292,15 @@ Task options:
   -a, --assignee <id>     Assignee entity ID
       --tag <tag>         Add a tag (can be repeated)
       --plan <id|name>    Plan ID or name to attach this task to
+      --no-auto-link      Skip auto-linking to external provider
 
 Examples:
   sf create task --title "Fix login bug" --priority 1 --type bug
   sf create task -t "Add dark mode" --tag ui --tag feature
   sf create task -t "Implement feature X" --plan el-plan123
   sf create task -t "Implement feature X" --plan "My Plan Name"
-  sf create task -t "New feature" -d "Detailed description here"`,
+  sf create task -t "New feature" -d "Detailed description here"
+  sf create task -t "Internal task" --no-auto-link`,
   options: createOptions,
   handler: createHandler as Command['handler'],
 };
