@@ -59,6 +59,8 @@ interface Configuration {
     pollInterval: Duration;          // Polling interval in ms (default: 60000 / 1 minute)
     conflictStrategy: ExternalSyncConflictStrategy;  // 'last_write_wins' | 'local_wins' | 'remote_wins' | 'manual'
     defaultDirection: SyncDirection;  // 'push' | 'pull' | 'bidirectional'
+    autoLink: boolean;               // Auto-link new tasks to external provider (default: false)
+    autoLinkProvider?: string;       // Provider name for auto-linking (e.g., 'github')
   };
 }
 ```
@@ -135,7 +137,9 @@ type ConfigPath =
   | 'externalSync.enabled'
   | 'externalSync.pollInterval'
   | 'externalSync.conflictStrategy'
-  | 'externalSync.defaultDirection';
+  | 'externalSync.defaultDirection'
+  | 'externalSync.autoLink'
+  | 'externalSync.autoLinkProvider';
 ```
 
 ## Modifying Configuration
@@ -233,6 +237,8 @@ external_sync:
   poll_interval: 60000     # 1 minute in ms
   conflict_strategy: last_write_wins
   default_direction: bidirectional
+  auto_link: false
+  auto_link_provider: github  # Provider for auto-linking (when auto_link is true)
 ```
 
 ## Duration Strings

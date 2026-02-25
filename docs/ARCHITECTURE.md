@@ -16,7 +16,9 @@ stoneforge/
 │   ├── quarry-server/  # Hono API server (port 3456)
 │   ├── quarry-web/     # React SPA (Vite, port 5173)
 │   ├── smithy-server/  # Orchestrator API server (port 3457)
-│   └── smithy-web/     # Orchestrator React SPA (port 5174)
+│   ├── smithy-web/     # Orchestrator React SPA (port 5174)
+│   ├── docs/           # Documentation site
+│   └── website/        # Marketing website
 │
 └── .stoneforge/         # Project data directory
     ├── stoneforge.db   # SQLite database (cache)

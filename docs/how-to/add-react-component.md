@@ -24,8 +24,6 @@ Step-by-step guide for adding React components to the web apps.
 **UI Primitive** (in `packages/ui/`)**:**
 ```typescript
 // packages/ui/src/components/Badge.tsx
-import { cn } from '@/lib/utils';
-
 interface BadgeProps {
   variant?: 'default' | 'success' | 'warning' | 'error';
   children: React.ReactNode;
@@ -39,14 +37,14 @@ const variants = {
   error: 'bg-red-100 text-red-800',
 };
 
-export function Badge({ variant = 'default', children, className }: BadgeProps) {
+export function Badge({ variant = 'default', children, className = '' }: BadgeProps) {
   return (
     <span
-      className={cn(
+      className={[
         'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium',
         variants[variant],
-        className
-      )}
+        className,
+      ].filter(Boolean).join(' ')}
     >
       {children}
     </span>
@@ -59,7 +57,6 @@ export function Badge({ variant = 'default', children, className }: BadgeProps) 
 // packages/ui/src/domain/TaskCard.tsx
 import { Task } from '@stoneforge/core';
 import { Badge } from '../components/Badge';
-import { cn } from '@/lib/utils';
 
 interface TaskCardProps {
   task: Task;
@@ -67,13 +64,13 @@ interface TaskCardProps {
   className?: string;
 }
 
-export function TaskCard({ task, onClick, className }: TaskCardProps) {
+export function TaskCard({ task, onClick, className = '' }: TaskCardProps) {
   return (
     <div
-      className={cn(
+      className={[
         'p-4 rounded-lg border bg-white hover:shadow-md transition-shadow cursor-pointer',
-        className
-      )}
+        className,
+      ].filter(Boolean).join(' ')}
       onClick={onClick}
     >
       <div className="flex items-center justify-between">
@@ -292,14 +289,12 @@ const navItems = [
 ### Conditional Classes
 
 ```typescript
-import { cn } from '@/lib/utils';
-
-<div className={cn(
+<div className={[
   'base-classes',
   isActive && 'active-classes',
   isDisabled && 'opacity-50 cursor-not-allowed',
-  className
-)} />
+  className,
+].filter(Boolean).join(' ')} />
 ```
 
 ### Responsive Design
@@ -353,7 +348,7 @@ describe('TaskCard', () => {
 
 - [ ] Component file created with TypeScript types
 - [ ] Props interface defined
-- [ ] Styling with Tailwind + cn() utility
+- [ ] Styling with Tailwind + array-based class composition
 - [ ] Data fetching hook added (if needed)
 - [ ] Mutations added (if needed)
 - [ ] Real-time updates handled (if needed)

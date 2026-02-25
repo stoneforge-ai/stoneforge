@@ -153,13 +153,13 @@ export function isFeature(value: unknown): value is Feature {
 // Factory Functions
 // ============================================================================
 
-import { createElementId } from '../id/generator.js';
+import { generateId } from '../id/generator.js';
 import { ValidationError, ErrorCode } from '../errors/index.js';
 
 /**
  * Creates a new Feature element
  */
-export function createFeature(input: CreateFeatureInput): Feature {
+export async function createFeature(input: CreateFeatureInput): Promise<Feature> {
   // Validate required fields
   if (!input.title || typeof input.title !== 'string') {
     throw new ValidationError('Title is required', ErrorCode.MISSING_REQUIRED_FIELD, { field: 'title' });
@@ -172,7 +172,7 @@ export function createFeature(input: CreateFeatureInput): Feature {
   const now = new Date().toISOString() as Timestamp;
 
   const feature: Feature = {
-    id: createElementId({ type: 'feature', title: input.title, createdAt: now }) as FeatureId,
+    id: await generateId({ type: 'feature', title: input.title, createdAt: now }) as FeatureId,
     type: 'feature',
     title: input.title.trim(),
     status: input.status ?? FeatureStatus.PROPOSED,

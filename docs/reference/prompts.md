@@ -338,4 +338,15 @@ buildAgentPrompt(
 loadTriagePrompt(
   options?: LoadPromptOptions
 ): RolePromptResult | undefined
+
+// Render template variables in prompt content (e.g., {{baseBranch}})
+renderPromptTemplate(
+  content: string,
+  vars: PromptTemplateVars
+): string
+
+// Template variable types
+interface PromptTemplateVars {
+  baseBranch?: string;
+}
 ```

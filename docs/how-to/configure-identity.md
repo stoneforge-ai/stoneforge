@@ -15,9 +15,10 @@ Guide for setting up identity verification in multi-agent systems.
 Soft mode requires no setup. Actors are identified by name only.
 
 ```typescript
-import { createQuarryAPI } from '@stoneforge/quarry';
+import { createQuarryAPI, createStorage } from '@stoneforge/quarry';
 
-const api = await createQuarryAPI();
+const backend = createStorage({ path: '.stoneforge/stoneforge.db' });
+const api = createQuarryAPI(backend);
 
 // Create with actor name (no verification)
 await api.create({
@@ -136,10 +137,8 @@ const signedRequest = await createSignedRequest(
 ### Using Middleware
 
 ```typescript
-import {
-  createVerificationMiddleware,
-  IdentityMode,
-} from '@stoneforge/quarry';
+import { IdentityMode } from '@stoneforge/quarry';
+import { createVerificationMiddleware } from '@stoneforge/quarry/systems/identity';
 
 const middleware = createVerificationMiddleware({
   lookupEntity: async (actor) => {

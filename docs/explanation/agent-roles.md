@@ -149,6 +149,7 @@ Stewards handle maintenance and automated tasks. There are specialized Steward t
 |-------|---------------|
 | `merge` | Review and process pull requests from completed tasks |
 | `docs` | Scan and fix documentation issues, auto-merge fixes |
+| `recovery` | Monitor and recover from failures, orphan processes, etc. |
 
 ### Example Prompt (Merge Steward)
 
@@ -219,9 +220,11 @@ prompts/
 ├── director.md           # Director role
 ├── worker.md             # Ephemeral worker role
 ├── persistent-worker.md  # Persistent worker role
+├── message-triage.md     # Message triage prompt
 ├── steward-base.md       # Base steward (all focuses)
 ├── steward-merge.md      # Merge focus addendum
-└── steward-docs.md       # Docs focus addendum
+├── steward-docs.md       # Docs focus addendum
+└── steward-recovery.md   # Recovery focus addendum
 ```
 
 ### Project Overrides
@@ -322,19 +325,28 @@ const unassigned = await assignmentService.getUnassignedTasks();
 
 ## Communication
 
-Agents communicate through the inbox system:
+Agents communicate through the inbox system using `sendDirectMessage()`. Messages require a `Document` for their content (referenced by `contentRef`):
 
 ```typescript
-// Director sends to Worker
-await api.sendMessage({
-  senderId: directorId,
-  recipientId: workerId,
-  subject: 'New assignment',
+// Create message content as a Document
+const doc = await api.create({
+  type: 'document',
+  title: 'New assignment',
   content: 'Please start on task-123',
+  createdBy: directorId,
 });
 
-// Worker checks inbox
-const messages = await api.inbox.list(workerId);
+// Director sends to Worker
+await api.sendDirectMessage({
+  senderId: directorId,
+  recipientId: workerId,
+  contentRef: doc.id,
+});
+
+// Worker checks inbox using InboxService
+import { createInboxService } from '@stoneforge/quarry';
+const inboxService = createInboxService(storage);
+const messages = inboxService.getInbox(workerId);
 ```
 
 Each agent has a dedicated channel for receiving messages. The Dispatch Daemon routes incoming messages by agent role.

@@ -19,9 +19,10 @@ Guide for managing relationships between elements.
 ### Using the API
 
 ```typescript
-import { createQuarryAPI } from '@stoneforge/quarry';
+import { createQuarryAPI, createStorage } from '@stoneforge/quarry';
 
-const api = await createQuarryAPI();
+const backend = createStorage({ path: '.stoneforge/stoneforge.db' });
+const api = createQuarryAPI(backend);
 
 // Add blocking dependency
 // "taskA is blocked BY taskB" (taskB must complete first)
@@ -47,7 +48,7 @@ await api.addDependency({
   type: 'awaits',
   createdBy: actorId,
   metadata: {
-    gate: 'approval',
+    gateType: 'approval',
     requiredApprovers: ['manager-1', 'lead-1'],
     requiredCount: 1,
     currentApprovers: [],
@@ -149,11 +150,10 @@ await api.addDependency({
 ### Checking Blocked Status
 
 ```typescript
-// Get all blocked tasks
-const blocked = await api.blocked();
+// Get all blocked tasks via list query
+const blockedTasks = await api.list({ type: 'task', status: 'blocked' });
 
 // Check specific task
-const blockedTasks = await api.blocked();
 const isBlocked = blockedTasks.some(t => t.id === taskId);
 
 // Using BlockedCacheService directly
@@ -191,7 +191,7 @@ await api.addDependency({
   type: 'awaits',
   createdBy: actorId,
   metadata: {
-    gate: 'timer',
+    gateType: 'timer',
     waitUntil: '2024-01-15T10:00:00.000Z',
   },
 });
@@ -208,7 +208,7 @@ await api.addDependency({
   type: 'awaits',
   createdBy: actorId,
   metadata: {
-    gate: 'approval',
+    gateType: 'approval',
     requiredApprovers: ['manager-1', 'lead-1'],
     requiredCount: 1,  // Need 1 of the 2
     currentApprovers: [],
@@ -233,7 +233,7 @@ await api.addDependency({
   type: 'awaits',
   createdBy: actorId,
   metadata: {
-    gate: 'external',
+    gateType: 'external',
     satisfied: false,
   },
 });
@@ -327,7 +327,7 @@ await api.addDependency({
   blockerId: reviewTask.id,
   type: 'awaits',
   metadata: {
-    gate: 'approval',
+    gateType: 'approval',
     requiredApprovers: ['tech-lead', 'product-owner'],
     requiredCount: 2,
     currentApprovers: [],
