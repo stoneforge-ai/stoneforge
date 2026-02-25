@@ -23,7 +23,7 @@ interface Element {
 
 **Key functions:**
 - `isElement(value)` - Type guard
-- `generateId(input)` - Generate hash-based ID
+- `generateId(input)` - Generate hash-based ID (defined in `id/generator.ts`)
 
 ---
 

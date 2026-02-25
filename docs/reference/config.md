@@ -54,6 +54,12 @@ interface Configuration {
   plugins: {
     packages: string[];              // CLI plugin package names
   };
+  externalSync: {
+    enabled: boolean;                // Enable external sync (default: false)
+    pollInterval: Duration;          // Polling interval in ms (default: 60000 / 1 minute)
+    conflictStrategy: ExternalSyncConflictStrategy;  // 'last_write_wins' | 'local_wins' | 'remote_wins' | 'manual'
+    defaultDirection: SyncDirection;  // 'push' | 'pull' | 'bidirectional'
+  };
 }
 ```
 
@@ -125,7 +131,11 @@ type ConfigPath =
   | 'tombstone.minTtl'
   | 'identity.mode'
   | 'identity.timeTolerance'
-  | 'plugins.packages';
+  | 'plugins.packages'
+  | 'externalSync.enabled'
+  | 'externalSync.pollInterval'
+  | 'externalSync.conflictStrategy'
+  | 'externalSync.defaultDirection';
 ```
 
 ## Modifying Configuration
@@ -217,6 +227,12 @@ tombstone:
 identity:
   mode: soft
   time_tolerance: 300000  # 5 minutes in ms
+
+external_sync:
+  enabled: false
+  poll_interval: 60000     # 1 minute in ms
+  conflict_strategy: last_write_wins
+  default_direction: bidirectional
 ```
 
 ## Duration Strings

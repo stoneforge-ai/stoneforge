@@ -139,7 +139,7 @@ Default: `.stoneforge/` directory in project root
 
 ## Schema
 
-Current version: 9
+Current version: 10
 
 ### Key Tables
 
@@ -159,6 +159,8 @@ Current version: 9
 | `documents_fts` | FTS5 virtual table for full-text document search (migration 7) |
 | `document_embeddings` | Vector embeddings for semantic document search (migration 8) |
 | `settings` | Server-side key-value configuration store (migration 9) |
+| `operation_log` | Structured operation logs for dispatch, merge, session, rate-limit, steward, recovery events (migration 10) |
+| `provider_metrics` | Per-request LLM provider metrics including token counts, latency, and outcome (migration 10) |
 
 ### Elements Table
 
