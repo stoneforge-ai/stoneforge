@@ -213,6 +213,21 @@ export {
   createDispatchDaemon,
 } from './dispatch-daemon.js';
 
+// External sync daemon
+export {
+  // Constants
+  EXTERNAL_SYNC_DEFAULT_POLL_INTERVAL_MS,
+  EXTERNAL_SYNC_MIN_POLL_INTERVAL_MS,
+  EXTERNAL_SYNC_MAX_POLL_INTERVAL_MS,
+  // Types
+  type ExternalSyncDaemonConfig,
+  type ExternalSyncDaemon,
+  // Implementation
+  ExternalSyncDaemonImpl,
+  // Factory
+  createExternalSyncDaemon,
+} from './external-sync-daemon.js';
+
 // Agent pool service
 export {
   // Types

@@ -30,6 +30,7 @@ import {
   createSettingsService,
   createMetricsService,
   createRateLimitTracker,
+  createExternalSyncDaemon,
   GitRepositoryNotFoundError,
   type OrchestratorAPI,
   type AgentRegistry,
@@ -50,8 +51,10 @@ import {
   type MetricsService,
   type MetricOutcome,
   type OnSessionStartedCallback,
+  type ExternalSyncDaemon,
   trackListeners,
 } from '../index.js';
+import { createSyncEngine, createDefaultProviderRegistry } from '@stoneforge/quarry';
 import { attachSessionEventSaver } from './routes/sessions.js';
 import { notifySSEClientsOfNewSession } from './routes/events.js';
 import { DB_PATH as DEFAULT_DB_PATH, PROJECT_ROOT as DEFAULT_PROJECT_ROOT, getClaudePath } from './config.js';
@@ -86,6 +89,7 @@ export interface Services {
   mergeStewardService: MergeStewardService;
   docsStewardService: DocsStewardService;
   dispatchDaemon: DispatchDaemon | undefined;
+  externalSyncDaemon: ExternalSyncDaemon | undefined;
   sessionInitialPrompts: Map<string, string>;
   sessionMessageService: SessionMessageService;
   settingsService: SettingsService;
@@ -392,6 +396,33 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
     logger.warn('DispatchDaemon disabled - no git repository');
   }
 
+  // ExternalSyncDaemon — only instantiate when external sync is enabled
+  // AND at least one provider has a configured token.
+  // Zero-overhead guarantee: unconfigured workspaces pay no cost.
+  let externalSyncDaemon: ExternalSyncDaemon | undefined;
+  if (config.externalSync.enabled) {
+    const externalSyncSettings = settingsService.getExternalSyncSettings();
+    const hasConfiguredProvider = Object.values(externalSyncSettings.providers).some(
+      (p) => p.token != null && p.token.length > 0
+    );
+
+    if (hasConfiguredProvider) {
+      const registry = createDefaultProviderRegistry();
+      const syncEngine = createSyncEngine({
+        api,
+        registry,
+        settings: settingsService,
+        providerConfigs: Object.values(externalSyncSettings.providers),
+      });
+      externalSyncDaemon = createExternalSyncDaemon(syncEngine, {
+        pollIntervalMs: externalSyncSettings.pollIntervalMs ?? config.externalSync.pollInterval,
+      });
+      logger.info('External sync daemon created (will start when server starts)');
+    } else {
+      logger.info('External sync enabled but no providers configured with tokens — daemon not created');
+    }
+  }
+
   logger.info(`Connected to database: ${dbPath}`);
 
   return {
@@ -414,6 +445,7 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
     syncService,
     autoExportService,
     dispatchDaemon,
+    externalSyncDaemon,
     sessionInitialPrompts,
     sessionMessageService,
     settingsService,

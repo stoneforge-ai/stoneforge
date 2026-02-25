@@ -222,5 +222,15 @@ export async function startSmithyServer(options: SmithyServerOptions = {}): Prom
     logger.info('Dispatch daemon auto-started');
   }
 
+  // Conditionally start external sync daemon
+  // The daemon is only created when externalSync.enabled AND a provider has a token.
+  // If the daemon object exists, start it.
+  if (services.externalSyncDaemon) {
+    services.externalSyncDaemon.start().catch((err: Error) => {
+      logger.error('Failed to start external sync daemon:', err);
+    });
+    logger.info('External sync daemon auto-started');
+  }
+
   return services;
 }
