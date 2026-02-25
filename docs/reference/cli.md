@@ -1581,6 +1581,7 @@ Manage bidirectional synchronization between Stoneforge and external services (G
 | `sf external-sync config set-auto-link <provider>`             | Enable auto-link with a provider |
 | `sf external-sync config disable-auto-link`                    | Disable auto-link            |
 | `sf external-sync link <taskId> <url-or-issue-number>`         | Link task to external issue  |
+| `sf external-sync link-all --provider <provider> [options]`    | Bulk-link all unlinked tasks |
 | `sf external-sync unlink <taskId>`                             | Remove external link         |
 | `sf external-sync push [taskId...]`                            | Push linked task(s)          |
 | `sf external-sync push --all`                                  | Push all linked tasks        |
@@ -1599,6 +1600,10 @@ sf external-sync config disable-auto-link
 # Link a task to an external issue
 sf external-sync link el-abc123 https://github.com/org/repo/issues/42
 sf external-sync link el-abc123 42
+
+# Bulk-link all unlinked tasks
+sf external-sync link-all --provider github
+sf external-sync link-all --provider github --dry-run
 
 # Push/pull/sync
 sf external-sync push el-abc123
@@ -1686,6 +1691,26 @@ Link a Stoneforge task to an external issue. Sets the task's `externalRef` and `
 sf external-sync link el-abc123 https://github.com/org/repo/issues/42
 sf external-sync link el-abc123 42
 sf external-sync link el-abc123 42 --provider github
+```
+
+#### external-sync link-all
+
+Bulk-link all unlinked tasks to external issues. Finds all tasks that do not have external sync metadata and creates a corresponding external issue for each one, then links them. If a rate limit is hit, the command stops gracefully and reports how many tasks were linked — re-run the command to continue.
+
+| Option                    | Description                                                  |
+| ------------------------- | ------------------------------------------------------------ |
+| `-p, --provider <name>`   | Provider to link to (required)                               |
+| `--project <project>`     | Override the default project                                 |
+| `-s, --status <status>`   | Only link tasks with this status (repeatable)                |
+| `-n, --dry-run`           | List tasks that would be linked without creating issues      |
+| `-b, --batch-size <n>`    | How many tasks to process concurrently (default: `10`)       |
+
+```bash
+sf external-sync link-all --provider github
+sf external-sync link-all --provider github --project my-org/my-repo
+sf external-sync link-all --provider github --status active --status blocked
+sf external-sync link-all --provider github --dry-run
+sf external-sync link-all --provider github --batch-size 5
 ```
 
 #### external-sync unlink
