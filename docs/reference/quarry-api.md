@@ -471,7 +471,7 @@ Documents must use one of the following categories (defaults to `other` if omitt
 
 ```typescript
 const events = await api.getEvents(elementId);
-const allEvents = await api.listEvents({ type: 'created' });
+const allEvents = await api.listEvents({ eventType: 'created' });
 const count = await api.countEvents({ elementId: elementId });
 const version = await api.getDocumentVersion(docId, versionNum);
 const history = await api.getDocumentHistory(docId);

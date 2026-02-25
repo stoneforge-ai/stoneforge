@@ -42,13 +42,13 @@ SQLite storage layer with multiple backend implementations.
 import { createStorage, initializeSchema } from '@stoneforge/storage';
 
 // Auto-detects runtime (Bun, Node, Browser)
-const storage = createStorage({ path: './project/.stoneforge/db.sqlite' });
+const storage = createStorage({ path: './project/.stoneforge/stoneforge.db' });
 
 // Initialize schema
 initializeSchema(storage);
 
 // Async variant (for browser WASM)
-const storage = await createStorageAsync({ path: './db.sqlite' });
+const storage = await createStorageAsync({ path: './stoneforge.db' });
 ```
 
 ## StorageBackend Interface
@@ -365,7 +365,7 @@ const merged = mergeElements(local, remote, options);
 ```typescript
 import { BunStorageBackend } from '@stoneforge/storage/bun';
 
-const backend = new BunStorageBackend('./db.sqlite');
+const backend = new BunStorageBackend('./stoneforge.db');
 ```
 
 ### Node Backend
@@ -373,7 +373,7 @@ const backend = new BunStorageBackend('./db.sqlite');
 ```typescript
 import { NodeStorageBackend } from '@stoneforge/storage/node';
 
-const backend = new NodeStorageBackend('./db.sqlite');
+const backend = new NodeStorageBackend('./stoneforge.db');
 ```
 
 ### Browser Backend
@@ -382,7 +382,7 @@ const backend = new NodeStorageBackend('./db.sqlite');
 import { BrowserStorageBackend } from '@stoneforge/storage/browser';
 
 // Uses OPFS (Origin Private File System)
-const backend = await BrowserStorageBackend.create({ path: './db.sqlite' });
+const backend = await BrowserStorageBackend.create({ path: './stoneforge.db' });
 ```
 
 ---

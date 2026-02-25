@@ -100,12 +100,14 @@ sf create <type> [options]
 | `-a, --assignee <id>`     | Assignee entity ID                            |
 | `--tag <tag>`             | Add a tag (can be repeated)                   |
 | `--plan <id\|name>`       | Plan ID or name to attach this task to        |
+| `--no-auto-link`          | Skip auto-linking to external provider        |
 
 ```bash
 sf create task --title "Fix login bug" --priority 1 --type bug
 sf create task -t "Add dark mode" --tag ui --tag feature
 sf create task -t "New feature" -d "Detailed description here"
 sf create task -t "Implement feature X" --plan "My Plan Name"
+sf create task -t "Internal task" --no-auto-link
 ```
 
 #### list
@@ -1576,6 +1578,8 @@ Manage bidirectional synchronization between Stoneforge and external services (G
 | `sf external-sync config`                                      | Show provider configuration  |
 | `sf external-sync config set-token <provider> <token>`         | Store auth token             |
 | `sf external-sync config set-project <provider> <project>`     | Set default project          |
+| `sf external-sync config set-auto-link <provider>`             | Enable auto-link with a provider |
+| `sf external-sync config disable-auto-link`                    | Disable auto-link            |
 | `sf external-sync link <taskId> <url-or-issue-number>`         | Link task to external issue  |
 | `sf external-sync unlink <taskId>`                             | Remove external link         |
 | `sf external-sync push [taskId...]`                            | Push linked task(s)          |
@@ -1589,6 +1593,8 @@ Manage bidirectional synchronization between Stoneforge and external services (G
 # Configure a provider
 sf external-sync config set-token github ghp_xxxxxxxxxxxx
 sf external-sync config set-project github my-org/my-repo
+sf external-sync config set-auto-link github
+sf external-sync config disable-auto-link
 
 # Link a task to an external issue
 sf external-sync link el-abc123 https://github.com/org/repo/issues/42
@@ -1640,6 +1646,27 @@ Set the default project (e.g., `owner/repo`) for an external sync provider. This
 ```bash
 sf external-sync config set-project github my-org/my-repo
 sf external-sync config set-project linear MY-PROJECT
+```
+
+#### external-sync config set-auto-link
+
+Enable auto-link for new tasks with the specified provider. When auto-link is enabled, newly created Stoneforge tasks will automatically get a corresponding external issue created and linked. Use the `--no-auto-link` flag on `sf create` to skip auto-linking for individual tasks.
+
+| Argument   | Description                              |
+| ---------- | ---------------------------------------- |
+| `provider` | Provider name (`github` or `linear`)     |
+
+```bash
+sf external-sync config set-auto-link github
+sf external-sync config set-auto-link linear
+```
+
+#### external-sync config disable-auto-link
+
+Disable auto-link for new tasks. Clears the auto-link provider and disables automatic external issue creation.
+
+```bash
+sf external-sync config disable-auto-link
 ```
 
 #### external-sync link
