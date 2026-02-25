@@ -1,7 +1,7 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "types": ["bun-types"],
+    "types": ["bun"],
     "paths": {
       "@stoneforge/core": ["../../packages/core/src/index.ts"],
       "@stoneforge/core/*": ["../../packages/core/src/*"],
