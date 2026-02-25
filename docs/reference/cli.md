@@ -1565,6 +1565,190 @@ sf import --input /path/to/sync
 sf import --force
 ```
 
+## External Sync Commands
+
+Manage bidirectional synchronization between Stoneforge and external services (GitHub Issues, Linear, etc.).
+
+**Source:** `packages/quarry/src/cli/commands/external-sync.ts`
+
+| Command                                                        | Description                  |
+| -------------------------------------------------------------- | ---------------------------- |
+| `sf external-sync config`                                      | Show provider configuration  |
+| `sf external-sync config set-token <provider> <token>`         | Store auth token             |
+| `sf external-sync config set-project <provider> <project>`     | Set default project          |
+| `sf external-sync link <taskId> <url-or-issue-number>`         | Link task to external issue  |
+| `sf external-sync unlink <taskId>`                             | Remove external link         |
+| `sf external-sync push [taskId...]`                            | Push linked task(s)          |
+| `sf external-sync push --all`                                  | Push all linked tasks        |
+| `sf external-sync pull`                                        | Pull changes from external   |
+| `sf external-sync sync [--dry-run]`                            | Bidirectional sync           |
+| `sf external-sync status`                                      | Show sync state              |
+| `sf external-sync resolve <taskId> --keep local\|remote`       | Resolve sync conflict        |
+
+```bash
+# Configure a provider
+sf external-sync config set-token github ghp_xxxxxxxxxxxx
+sf external-sync config set-project github my-org/my-repo
+
+# Link a task to an external issue
+sf external-sync link el-abc123 https://github.com/org/repo/issues/42
+sf external-sync link el-abc123 42
+
+# Push/pull/sync
+sf external-sync push el-abc123
+sf external-sync push --all
+sf external-sync pull
+sf external-sync sync --dry-run
+
+# Check status and resolve conflicts
+sf external-sync status
+sf external-sync resolve el-abc123 --keep local
+```
+
+#### external-sync config
+
+Show current external sync provider configuration. Displays enabled status, conflict strategy, default direction, poll interval, and configured providers. Tokens are masked in output for security.
+
+```bash
+sf external-sync config
+sf external-sync config --json
+```
+
+#### external-sync config set-token
+
+Store an authentication token for an external sync provider. The token is stored in the local SQLite database (not git-tracked).
+
+| Argument   | Description                                |
+| ---------- | ------------------------------------------ |
+| `provider` | Provider name (e.g., `github`, `linear`)   |
+| `token`    | Authentication token                       |
+
+```bash
+sf external-sync config set-token github ghp_xxxxxxxxxxxx
+sf external-sync config set-token linear lin_api_xxxxxxxxxxxx
+```
+
+#### external-sync config set-project
+
+Set the default project (e.g., `owner/repo`) for an external sync provider. This is used when linking tasks with bare issue numbers instead of full URLs.
+
+| Argument   | Description                                           |
+| ---------- | ----------------------------------------------------- |
+| `provider` | Provider name (e.g., `github`, `linear`)              |
+| `project`  | Project identifier (e.g., `owner/repo` for GitHub)    |
+
+```bash
+sf external-sync config set-project github my-org/my-repo
+sf external-sync config set-project linear MY-PROJECT
+```
+
+#### external-sync link
+
+Link a Stoneforge task to an external issue. Sets the task's `externalRef` and `_externalSync` metadata. If given a bare issue number, constructs the URL from the provider's default project.
+
+| Argument          | Description                        |
+| ----------------- | ---------------------------------- |
+| `taskId`          | Stoneforge task ID                 |
+| `url-or-number`   | Full URL or bare issue number      |
+
+| Option                  | Description                          |
+| ----------------------- | ------------------------------------ |
+| `-p, --provider <name>` | Provider name (default: `github`)   |
+
+```bash
+sf external-sync link el-abc123 https://github.com/org/repo/issues/42
+sf external-sync link el-abc123 42
+sf external-sync link el-abc123 42 --provider github
+```
+
+#### external-sync unlink
+
+Remove the external link from a Stoneforge task. Clears the task's `externalRef` field and `_externalSync` metadata.
+
+| Argument | Description        |
+| -------- | ------------------ |
+| `taskId` | Stoneforge task ID |
+
+```bash
+sf external-sync unlink el-abc123
+```
+
+#### external-sync push
+
+Push linked tasks to their external service. If specific task IDs are given, pushes only those tasks. With `--all`, pushes every task that has an external link.
+
+| Argument    | Description                                      |
+| ----------- | ------------------------------------------------ |
+| `taskId...` | One or more task IDs to push (optional with `--all`) |
+
+| Option        | Description            |
+| ------------- | ---------------------- |
+| `-a, --all`   | Push all linked tasks  |
+
+```bash
+sf external-sync push el-abc123
+sf external-sync push el-abc123 el-def456
+sf external-sync push --all
+```
+
+**Note:** Push requires a running sync daemon or server to execute the actual sync operations.
+
+#### external-sync pull
+
+Pull changes from external services for all linked tasks. Optionally discover new issues not yet linked to Stoneforge tasks.
+
+| Option                    | Description                                      |
+| ------------------------- | ------------------------------------------------ |
+| `-p, --provider <name>`   | Pull from specific provider (default: all configured) |
+| `-d, --discover`          | Discover new unlinked issues                     |
+
+```bash
+sf external-sync pull
+sf external-sync pull --provider github
+sf external-sync pull --discover
+```
+
+**Note:** Pull requires a running sync daemon or server to execute the actual sync operations.
+
+#### external-sync sync
+
+Run bidirectional sync between Stoneforge and external services. Performs both push and pull operations. In dry-run mode, reports what would change without making any modifications.
+
+| Option          | Description                                      |
+| --------------- | ------------------------------------------------ |
+| `-n, --dry-run` | Show what would change without making changes    |
+
+```bash
+sf external-sync sync
+sf external-sync sync --dry-run
+```
+
+#### external-sync status
+
+Show the current external sync state. Displays linked task count, configured providers, pending conflicts, last sync cursors, and poll interval.
+
+```bash
+sf external-sync status
+sf external-sync status --json
+```
+
+#### external-sync resolve
+
+Resolve a sync conflict by choosing which version to keep. Tasks with sync conflicts are tagged with `sync-conflict`. This command resolves the conflict by keeping either the local or remote version, removes the `sync-conflict` tag, and records the resolution in metadata.
+
+| Argument | Description                     |
+| -------- | ------------------------------- |
+| `taskId` | Task ID with a sync conflict   |
+
+| Option                    | Description                                          |
+| ------------------------- | ---------------------------------------------------- |
+| `-k, --keep <version>`    | Which version to keep: `local` or `remote` (required) |
+
+```bash
+sf external-sync resolve el-abc123 --keep local
+sf external-sync resolve el-abc123 --keep remote
+```
+
 ## Config Commands
 
 | Command                        | Description    |
