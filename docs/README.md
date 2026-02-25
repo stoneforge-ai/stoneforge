@@ -101,6 +101,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for full architecture details.
 | Error base class | `errors/error.ts` | - |
 | Error factories | `errors/factories.ts` | - |
 | Mention parsing utils | `utils/mentions.ts` | - |
+| External sync types | `types/external-sync.ts` | `types/external-sync.bun.test.ts` |
 
 ## File Map (@stoneforge/storage)
 
@@ -163,6 +164,21 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for full architecture details.
 | CLI entry point | `bin/sf.ts` | - |
 | WebSocket broadcaster | `server/ws/broadcaster.ts` | - |
 | WebSocket handler | `server/ws/handler.ts` | - |
+| **External Sync** | | |
+| External sync engine | `external-sync/sync-engine.ts` | `external-sync/sync-engine.bun.test.ts` |
+| Conflict resolver | `external-sync/conflict-resolver.ts` | `external-sync/conflict-resolver.bun.test.ts` |
+| Provider registry | `external-sync/provider-registry.ts` | `external-sync/provider-registry.bun.test.ts` |
+| Task sync adapter | `external-sync/adapters/task-sync-adapter.ts` | `external-sync/adapters/task-sync-adapter.bun.test.ts` |
+| GitHub API client | `external-sync/providers/github/github-api.ts` | `external-sync/providers/github/github-api.bun.test.ts` |
+| GitHub provider | `external-sync/providers/github/github-provider.ts` | - |
+| GitHub task adapter | `external-sync/providers/github/github-task-adapter.ts` | `external-sync/providers/github/github-task-adapter.bun.test.ts` |
+| GitHub field map | `external-sync/providers/github/github-field-map.ts` | - |
+| Linear API client | `external-sync/providers/linear/linear-api.ts` | `external-sync/providers/linear/linear-api.bun.test.ts` |
+| Linear provider | `external-sync/providers/linear/linear-provider.ts` | `external-sync/providers/linear/linear-provider.bun.test.ts` |
+| Linear task adapter | `external-sync/providers/linear/linear-task-adapter.ts` | `external-sync/providers/linear/linear-task-adapter.bun.test.ts` |
+| Linear field map | `external-sync/providers/linear/linear-field-map.ts` | - |
+| Linear types | `external-sync/providers/linear/linear-types.ts` | - |
+| CLI external-sync commands | `cli/commands/external-sync.ts` | - |
 
 ## File Map (@stoneforge/ui)
 
@@ -324,6 +340,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for full architecture details.
 | Metrics service | `services/metrics-service.ts` | `services/metrics-service.bun.test.ts` |
 | Operation log service | `services/operation-log-service.ts` | `services/operation-log-service.bun.test.ts` |
 | Rate limit tracker | `services/rate-limit-tracker.ts` | `services/rate-limit-tracker.bun.test.ts` |
+| External sync daemon | `services/external-sync-daemon.ts` | - |
 | **Runtime** | | |
 | Spawner service | `runtime/spawner.ts` | `runtime/spawner.bun.test.ts` |
 | Session manager | `runtime/session-manager.ts` | `runtime/session-manager.bun.test.ts` |
@@ -379,6 +396,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for full architecture details.
 | Route: workspace-files | `server/routes/workspace-files.ts` | - |
 | Route: diagnostics | `server/routes/diagnostics.ts` | - |
 | Route: metrics | `server/routes/metrics.ts` | - |
+| Route: external-sync | `server/routes/external-sync.ts` | - |
 | LSP manager service | `server/services/lsp-manager.ts` | - |
 | Session messages service | `server/services/session-messages.ts` | - |
 | **Prompts** | | |
