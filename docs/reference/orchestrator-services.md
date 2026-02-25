@@ -406,6 +406,222 @@ The reconciliation poll detects and recovers these stuck tasks:
 
 ---
 
+## ExternalSyncDaemon
+
+**File:** `services/external-sync-daemon.ts`
+
+Background polling daemon that automates bidirectional synchronization between Stoneforge elements and external services (GitHub Issues, Linear, etc.). Follows the same lifecycle pattern as the DispatchDaemon — `setInterval` with configurable poll interval, running flag to prevent concurrent cycles, and clean shutdown with in-flight cycle awaiting.
+
+```typescript
+import { createExternalSyncDaemon } from '@stoneforge/smithy';
+
+const daemon = createExternalSyncDaemon(syncEngine, {
+  pollIntervalMs: 60000,
+});
+```
+
+### Purpose
+
+The ExternalSyncDaemon wraps a `SyncEngine` (from `@stoneforge/quarry`) in a polling loop. Each cycle runs the engine's `sync()` method — push locally-changed linked elements to external services, then pull externally-changed items into Stoneforge. This keeps tasks in sync with GitHub Issues, Linear issues, and other external trackers without manual intervention.
+
+### Configuration
+
+```typescript
+interface ExternalSyncDaemonConfig {
+  pollIntervalMs?: number;  // Poll interval in ms (default: 60000)
+}
+```
+
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `EXTERNAL_SYNC_DEFAULT_POLL_INTERVAL_MS` | `60000` (60s) | Default poll interval |
+| `EXTERNAL_SYNC_MIN_POLL_INTERVAL_MS` | `10000` (10s) | Minimum allowed poll interval |
+| `EXTERNAL_SYNC_MAX_POLL_INTERVAL_MS` | `1800000` (30min) | Maximum allowed poll interval |
+
+The poll interval is clamped to the min/max range during normalization.
+
+### Lifecycle
+
+```typescript
+// Start the polling loop (runs an initial cycle immediately)
+await daemon.start();
+
+// Stop the polling loop (waits up to 30s for in-flight cycle)
+await daemon.stop();
+
+// Check if running
+const running = daemon.isRunning();
+```
+
+**Start behavior:**
+1. Sets running flag
+2. Creates a `setInterval` with the configured poll interval
+3. Unrefs the interval so it doesn't prevent process exit
+4. Runs an initial sync cycle immediately
+
+**Stop behavior:**
+1. Clears the running flag and interval
+2. If a cycle is in-flight, waits up to 30 seconds for it to complete
+3. Times out gracefully if the cycle doesn't finish
+
+### Manual Trigger
+
+```typescript
+// Force an immediate sync cycle (works whether daemon is running or not)
+const result = await daemon.triggerSync();
+```
+
+Returns an `ExternalSyncResult` with push/pull/conflict/error counts.
+
+### Query
+
+```typescript
+// Get the result of the last completed sync cycle (null if none yet)
+const lastResult = daemon.getLastResult();
+```
+
+### ExternalSyncResult
+
+Each sync cycle produces an `ExternalSyncResult`:
+
+```typescript
+interface ExternalSyncResult {
+  success: boolean;
+  provider: string;
+  project: string;
+  adapterType: SyncAdapterType;  // 'task' | 'document' | 'message'
+  pushed: number;                // Elements pushed to external
+  pulled: number;                // Elements pulled from external
+  skipped: number;               // Elements skipped (no changes)
+  conflicts: ExternalSyncConflict[];
+  errors: ExternalSyncError[];
+}
+```
+
+### Sync Cycle Behavior
+
+Each poll cycle:
+
+1. Calls `syncEngine.sync({ all: true })` — pushes locally-changed linked elements, then pulls externally-changed items
+2. Stores the result for `getLastResult()` queries
+3. Logs the cycle outcome:
+   - **Errors**: Warns with per-error details (provider, element ID, message)
+   - **Changes**: Info log with pushed/pulled/conflict/skipped counts
+   - **No changes**: Debug-level log only
+4. If the cycle throws, stores an error result and continues the polling loop
+
+Skips the cycle if a previous cycle is still in-flight (prevents overlapping sync operations).
+
+### Zero-Overhead Guarantee
+
+The daemon is **only instantiated** when both conditions are met:
+
+1. `externalSync.enabled === true` in the quarry config
+2. At least one provider has a configured token in settings
+
+If either condition is false, the daemon field in `Services` is `undefined` — no object, no timers, no polling. This follows the same conditional-start pattern as the DispatchDaemon.
+
+**Service wiring** (in `packages/smithy/src/server/services.ts`):
+
+```typescript
+// Only instantiate when external sync is enabled AND a provider has a token
+let externalSyncDaemon: ExternalSyncDaemon | undefined;
+if (config.externalSync.enabled) {
+  const externalSyncSettings = settingsService.getExternalSyncSettings();
+  const hasConfiguredProvider = Object.values(externalSyncSettings.providers).some(
+    (p) => p.token != null && p.token.length > 0
+  );
+
+  if (hasConfiguredProvider) {
+    const registry = createDefaultProviderRegistry();
+    const syncEngine = createSyncEngine({ api, registry, settings: settingsService, providerConfigs });
+    externalSyncDaemon = createExternalSyncDaemon(syncEngine, {
+      pollIntervalMs: externalSyncSettings.pollIntervalMs ?? config.externalSync.pollInterval,
+    });
+  }
+}
+```
+
+**Server startup** (in `packages/smithy/src/server/index.ts`):
+
+```typescript
+// Auto-start if the daemon was created
+if (services.externalSyncDaemon) {
+  services.externalSyncDaemon.start();
+}
+```
+
+### Integration with DispatchDaemon
+
+The ExternalSyncDaemon operates independently from the DispatchDaemon — they run on separate intervals with separate concerns:
+
+| Aspect | DispatchDaemon | ExternalSyncDaemon |
+|--------|---------------|-------------------|
+| **Purpose** | Assign tasks to agents, deliver messages | Sync elements with external services |
+| **Poll interval** | 5s (default) | 60s (default) |
+| **Dependency** | Requires `WorktreeManager` | Requires `SyncEngine` + configured providers |
+| **Services field** | `services.dispatchDaemon` | `services.externalSyncDaemon` |
+| **Conditional start** | Only if git repo found | Only if enabled + provider tokens configured |
+
+Both daemons are registered on the `Services` interface as `| undefined` and auto-started by the server when their respective conditions are met.
+
+### API Endpoints
+
+**File:** `server/routes/external-sync.ts`
+
+The external sync routes provide HTTP endpoints for manual sync triggers and status reporting. These work independently of the daemon — they create a fresh `SyncEngine` per request to pick up the latest provider configuration.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/external-sync/push` | Push linked tasks to external services. Optional `{ taskIds: string[] }` body to push specific tasks; omit for all. |
+| `POST` | `/api/external-sync/pull` | Pull changes from all configured external providers. |
+| `POST` | `/api/external-sync/sync` | Bidirectional sync (push then pull). Optional `{ dryRun: boolean }` body. |
+| `GET` | `/api/external-sync/status` | Sync status: configured providers, linked task count, last sync timestamp, pending conflicts. |
+| `GET` | `/api/external-sync/providers` | List all registered providers with configuration status, supported adapters, and sync settings. |
+
+**Example responses:**
+
+```typescript
+// POST /api/external-sync/push
+{ success: true, pushed: 3, skipped: 1, errors: [], conflicts: [] }
+
+// GET /api/external-sync/status
+{
+  providers: [{ name: 'github', configured: true, project: 'owner/repo' }],
+  linkedTaskCount: 12,
+  lastSyncAt: '2026-02-24T10:30:00.000Z',
+  pendingConflicts: 0,
+}
+
+// GET /api/external-sync/providers
+{
+  providers: [{
+    name: 'github',
+    displayName: 'GitHub',
+    supportedAdapters: ['task'],
+    configured: true,
+    project: 'owner/repo',
+    apiBaseUrl: null,
+  }],
+  syncSettings: { pollIntervalMs: 60000, defaultDirection: 'bidirectional' },
+}
+```
+
+### Related Source Files
+
+| File | Package | Purpose |
+|------|---------|---------|
+| `services/external-sync-daemon.ts` | `@stoneforge/smithy` | Daemon implementation and factory |
+| `server/routes/external-sync.ts` | `@stoneforge/smithy` | HTTP endpoints for manual triggers |
+| `server/services.ts` | `@stoneforge/smithy` | Service wiring and conditional instantiation |
+| `external-sync/sync-engine.ts` | `@stoneforge/quarry` | Sync engine orchestrating push/pull |
+| `external-sync/provider-registry.ts` | `@stoneforge/quarry` | Provider registration and lookup |
+| `external-sync/conflict-resolver.ts` | `@stoneforge/quarry` | Conflict detection and resolution |
+| `external-sync/providers/github/` | `@stoneforge/quarry` | GitHub provider implementation |
+| `external-sync/providers/linear/` | `@stoneforge/quarry` | Linear provider implementation |
+
+---
+
 ## StewardScheduler
 
 **File:** `services/steward-scheduler.ts`
@@ -1191,3 +1407,4 @@ class GitLabMergeProvider implements MergeRequestProvider {
   }
 }
 ```
+
