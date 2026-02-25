@@ -79,6 +79,8 @@ export const DEFAULT_EXTERNAL_SYNC_CONFIG: ExternalSyncConfig = {
   pollInterval: ONE_MINUTE, // 60000ms
   conflictStrategy: 'last_write_wins',
   defaultDirection: 'bidirectional',
+  autoLink: false,
+  autoLinkProvider: undefined,
 };
 
 /**

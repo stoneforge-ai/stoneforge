@@ -100,6 +100,10 @@ export interface ExternalSyncConfig {
   conflictStrategy: ExternalSyncConflictStrategy;
   /** Default sync direction (default: 'bidirectional') */
   defaultDirection: SyncDirection;
+  /** Whether to auto-create external issues for new tasks (default: false) */
+  autoLink: boolean;
+  /** Which provider to auto-link to (e.g., 'github', 'linear') */
+  autoLinkProvider?: string;
 }
 
 /**
@@ -119,6 +123,14 @@ export const VALID_SYNC_DIRECTIONS: readonly SyncDirection[] = [
   'push',
   'pull',
   'bidirectional',
+] as const;
+
+/**
+ * Valid auto-link provider names
+ */
+export const VALID_AUTO_LINK_PROVIDERS: readonly string[] = [
+  'github',
+  'linear',
 ] as const;
 
 /**
@@ -222,6 +234,8 @@ export interface TrackedConfiguration {
     pollInterval: TrackedValue<Duration>;
     conflictStrategy: TrackedValue<ExternalSyncConflictStrategy>;
     defaultDirection: TrackedValue<SyncDirection>;
+    autoLink: TrackedValue<boolean>;
+    autoLinkProvider?: TrackedValue<string>;
   };
 }
 
@@ -262,6 +276,8 @@ export interface YamlConfigFile {
     poll_interval?: string | number;
     conflict_strategy?: string;
     default_direction?: string;
+    auto_link?: boolean;
+    auto_link_provider?: string;
   };
 }
 
@@ -360,6 +376,8 @@ export const VALID_CONFIG_PATHS = [
   'externalSync.pollInterval',
   'externalSync.conflictStrategy',
   'externalSync.defaultDirection',
+  'externalSync.autoLink',
+  'externalSync.autoLinkProvider',
 ] as const;
 
 /**
@@ -395,4 +413,6 @@ export interface ConfigPathTypes {
   'externalSync.pollInterval': Duration;
   'externalSync.conflictStrategy': ExternalSyncConflictStrategy;
   'externalSync.defaultDirection': SyncDirection;
+  'externalSync.autoLink': boolean;
+  'externalSync.autoLinkProvider': string | undefined;
 }

@@ -76,6 +76,10 @@ import {
   getValue,
   getValueFromConfig,
   EnvVars,
+
+  // Constants
+  VALID_AUTO_LINK_PROVIDERS,
+  VALID_CONFIG_PATHS,
 } from './index.js';
 
 import { IdentityMode } from '../systems/identity.js';
@@ -114,6 +118,8 @@ function createTestConfig(): Configuration {
       pollInterval: ONE_MINUTE,
       conflictStrategy: 'last_write_wins',
       defaultDirection: 'bidirectional',
+      autoLink: false,
+      autoLinkProvider: undefined,
     },
   };
 }
@@ -937,5 +943,250 @@ describe('Validation Constants', () => {
 
   test('default tombstone ttl is greater than minTtl', () => {
     expect(DEFAULT_CONFIG.tombstone.ttl).toBeGreaterThan(DEFAULT_CONFIG.tombstone.minTtl);
+  });
+});
+
+// ============================================================================
+// Auto-Link Configuration Tests
+// ============================================================================
+
+describe('Auto-Link Configuration', () => {
+  describe('defaults', () => {
+    test('autoLink defaults to false', () => {
+      expect(DEFAULT_CONFIG.externalSync.autoLink).toBe(false);
+    });
+
+    test('autoLinkProvider defaults to undefined', () => {
+      expect(DEFAULT_CONFIG.externalSync.autoLinkProvider).toBeUndefined();
+    });
+
+    test('getDefaultConfig includes autoLink fields', () => {
+      const config = getDefaultConfig();
+      expect(config.externalSync.autoLink).toBe(false);
+      expect(config.externalSync.autoLinkProvider).toBeUndefined();
+    });
+  });
+
+  describe('VALID_CONFIG_PATHS', () => {
+    test('includes externalSync.autoLink', () => {
+      expect(VALID_CONFIG_PATHS).toContain('externalSync.autoLink');
+    });
+
+    test('includes externalSync.autoLinkProvider', () => {
+      expect(VALID_CONFIG_PATHS).toContain('externalSync.autoLinkProvider');
+    });
+  });
+
+  describe('VALID_AUTO_LINK_PROVIDERS', () => {
+    test('includes github', () => {
+      expect(VALID_AUTO_LINK_PROVIDERS).toContain('github');
+    });
+
+    test('includes linear', () => {
+      expect(VALID_AUTO_LINK_PROVIDERS).toContain('linear');
+    });
+  });
+
+  describe('validation', () => {
+    test('accepts valid autoLink config', () => {
+      const config = createTestConfig();
+      config.externalSync.autoLink = true;
+      config.externalSync.autoLinkProvider = 'github';
+      expect(() => validateConfiguration(config)).not.toThrow();
+    });
+
+    test('accepts autoLink false without provider', () => {
+      const config = createTestConfig();
+      config.externalSync.autoLink = false;
+      config.externalSync.autoLinkProvider = undefined;
+      expect(() => validateConfiguration(config)).not.toThrow();
+    });
+
+    test('rejects invalid autoLinkProvider', () => {
+      const config = createTestConfig();
+      config.externalSync.autoLink = true;
+      config.externalSync.autoLinkProvider = 'invalid_provider';
+      expect(() => validateConfiguration(config)).toThrow(ValidationError);
+    });
+
+    test('rejects non-boolean autoLink', () => {
+      const config = createTestConfig() as Record<string, unknown>;
+      (config as Record<string, unknown>).externalSync = {
+        ...(config.externalSync as Record<string, unknown>),
+        autoLink: 'yes',
+      };
+      expect(() => validateConfiguration(config)).toThrow(ValidationError);
+    });
+
+    test('partial validation rejects invalid autoLinkProvider', () => {
+      expect(() =>
+        validatePartialConfiguration({
+          externalSync: { autoLinkProvider: 'invalid' },
+        })
+      ).toThrow(ValidationError);
+    });
+
+    test('partial validation accepts valid autoLinkProvider', () => {
+      expect(() =>
+        validatePartialConfiguration({
+          externalSync: { autoLinkProvider: 'github' },
+        })
+      ).not.toThrow();
+    });
+
+    test('partial validation accepts valid autoLinkProvider linear', () => {
+      expect(() =>
+        validatePartialConfiguration({
+          externalSync: { autoLinkProvider: 'linear' },
+        })
+      ).not.toThrow();
+    });
+  });
+
+  describe('merge', () => {
+    test('merges autoLink fields from partial config', () => {
+      const base = getDefaultConfig();
+      const partial: PartialConfiguration = {
+        externalSync: { autoLink: true, autoLinkProvider: 'github' },
+      };
+      const result = mergeConfiguration(base, partial);
+      expect(result.externalSync.autoLink).toBe(true);
+      expect(result.externalSync.autoLinkProvider).toBe('github');
+    });
+
+    test('preserves autoLink fields when not in partial', () => {
+      const base = getDefaultConfig();
+      base.externalSync.autoLink = true;
+      base.externalSync.autoLinkProvider = 'linear';
+      const partial: PartialConfiguration = {
+        externalSync: { enabled: true },
+      };
+      const result = mergeConfiguration(base, partial);
+      expect(result.externalSync.autoLink).toBe(true);
+      expect(result.externalSync.autoLinkProvider).toBe('linear');
+    });
+  });
+
+  describe('clone', () => {
+    test('clones autoLink fields', () => {
+      const config = createTestConfig();
+      config.externalSync.autoLink = true;
+      config.externalSync.autoLinkProvider = 'github';
+      const cloned = cloneConfiguration(config);
+      expect(cloned.externalSync.autoLink).toBe(true);
+      expect(cloned.externalSync.autoLinkProvider).toBe('github');
+    });
+  });
+
+  describe('diff', () => {
+    test('detects autoLink changes', () => {
+      const a = createTestConfig();
+      const b = cloneConfiguration(a);
+      b.externalSync.autoLink = true;
+      b.externalSync.autoLinkProvider = 'github';
+      const diff = diffConfigurations(a, b);
+      expect(diff.externalSync?.autoLink).toBe(true);
+      expect(diff.externalSync?.autoLinkProvider).toBe('github');
+    });
+
+    test('no diff when autoLink unchanged', () => {
+      const a = createTestConfig();
+      const b = cloneConfiguration(a);
+      const diff = diffConfigurations(a, b);
+      expect(diff.externalSync).toBeUndefined();
+    });
+  });
+
+  describe('configurationsEqual', () => {
+    test('returns true when autoLink fields match', () => {
+      const a = createTestConfig();
+      const b = cloneConfiguration(a);
+      expect(configurationsEqual(a, b)).toBe(true);
+    });
+
+    test('returns false when autoLink differs', () => {
+      const a = createTestConfig();
+      const b = cloneConfiguration(a);
+      b.externalSync.autoLink = true;
+      expect(configurationsEqual(a, b)).toBe(false);
+    });
+
+    test('returns false when autoLinkProvider differs', () => {
+      const a = createTestConfig();
+      a.externalSync.autoLink = true;
+      a.externalSync.autoLinkProvider = 'github';
+      const b = cloneConfiguration(a);
+      b.externalSync.autoLinkProvider = 'linear';
+      expect(configurationsEqual(a, b)).toBe(false);
+    });
+  });
+
+  describe('YAML conversion', () => {
+    test('convertYamlToConfig handles auto_link fields', () => {
+      const yaml = {
+        external_sync: {
+          auto_link: true,
+          auto_link_provider: 'github',
+        },
+      };
+      const result = convertYamlToConfig(yaml);
+      expect(result.externalSync?.autoLink).toBe(true);
+      expect(result.externalSync?.autoLinkProvider).toBe('github');
+    });
+
+    test('convertYamlToConfig rejects invalid auto_link_provider', () => {
+      const yaml = {
+        external_sync: {
+          auto_link_provider: 'invalid',
+        },
+      };
+      expect(() => convertYamlToConfig(yaml)).toThrow(ValidationError);
+    });
+
+    test('convertConfigToYaml includes auto_link fields', () => {
+      const config = createTestConfig();
+      config.externalSync.autoLink = true;
+      config.externalSync.autoLinkProvider = 'github';
+      const yaml = convertConfigToYaml(config);
+      expect(yaml.external_sync?.auto_link).toBe(true);
+      expect(yaml.external_sync?.auto_link_provider).toBe('github');
+    });
+
+    test('convertConfigToYaml omits undefined autoLinkProvider', () => {
+      const config = createTestConfig();
+      config.externalSync.autoLink = false;
+      config.externalSync.autoLinkProvider = undefined;
+      const yaml = convertConfigToYaml(config);
+      expect(yaml.external_sync?.auto_link_provider).toBeUndefined();
+    });
+  });
+
+  describe('getValue', () => {
+    beforeEach(() => {
+      clearConfigCache();
+      loadConfig({ skipEnv: true, skipFile: true });
+    });
+
+    test('gets autoLink default value', () => {
+      expect(getValue('externalSync.autoLink')).toBe(false);
+    });
+
+    test('gets autoLinkProvider default value', () => {
+      expect(getValue('externalSync.autoLinkProvider')).toBeUndefined();
+    });
+  });
+
+  describe('getValueFromConfig', () => {
+    test('gets autoLink value from config', () => {
+      const config = createTestConfig();
+      config.externalSync.autoLink = true;
+      expect(getValueFromConfig(config, 'externalSync.autoLink')).toBe(true);
+    });
+
+    test('gets autoLinkProvider value from config', () => {
+      const config = createTestConfig();
+      config.externalSync.autoLinkProvider = 'linear';
+      expect(getValueFromConfig(config, 'externalSync.autoLinkProvider')).toBe('linear');
+    });
   });
 });
