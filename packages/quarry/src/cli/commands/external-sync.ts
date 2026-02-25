@@ -17,7 +17,7 @@ import { success, failure, ExitCode } from '../types.js';
 import { getOutputMode } from '../formatter.js';
 import { createAPI, resolveDatabasePath } from '../db.js';
 import { createStorage, initializeSchema } from '@stoneforge/storage';
-import { getValue } from '../../config/index.js';
+import { getValue, setValue, VALID_AUTO_LINK_PROVIDERS } from '../../config/index.js';
 import type { Task, ElementId } from '@stoneforge/core';
 
 // ============================================================================
@@ -123,12 +123,16 @@ async function configHandler(
   const conflictStrategy = getValue('externalSync.conflictStrategy');
   const defaultDirection = getValue('externalSync.defaultDirection');
   const pollInterval = getValue('externalSync.pollInterval');
+  const autoLink = getValue('externalSync.autoLink');
+  const autoLinkProvider = getValue('externalSync.autoLinkProvider');
 
   const configData = {
     enabled,
     conflictStrategy,
     defaultDirection,
     pollInterval,
+    autoLink,
+    autoLinkProvider,
     providers: Object.fromEntries(
       Object.entries(settings.providers).map(([name, config]) => [
         name,
@@ -157,6 +161,8 @@ async function configHandler(
     `  Conflict strategy:  ${conflictStrategy}`,
     `  Default direction:  ${defaultDirection}`,
     `  Poll interval:      ${pollInterval}ms`,
+    `  Auto-link:          ${autoLink ? 'yes' : 'no'}`,
+    `  Auto-link provider: ${autoLinkProvider ?? '(not set)'}`,
     '',
   ];
 
@@ -257,6 +263,95 @@ async function configSetProjectHandler(
   return success(
     { provider, defaultProject: project },
     `Default project set for provider "${provider}": ${project}`
+  );
+}
+
+// ============================================================================
+// Config Set-Auto-Link Command
+// ============================================================================
+
+async function configSetAutoLinkHandler(
+  args: string[],
+  options: GlobalOptions
+): Promise<CommandResult> {
+  if (args.length < 1) {
+    return failure(
+      'Usage: sf external-sync config set-auto-link <provider>',
+      ExitCode.INVALID_ARGUMENTS
+    );
+  }
+
+  const [provider] = args;
+
+  // Validate provider name
+  if (!VALID_AUTO_LINK_PROVIDERS.includes(provider)) {
+    return failure(
+      `Invalid provider "${provider}". Must be one of: ${VALID_AUTO_LINK_PROVIDERS.join(', ')}`,
+      ExitCode.VALIDATION
+    );
+  }
+
+  // Check if provider has a token configured
+  const { settingsService, error: settingsError } = await createSettingsServiceFromOptions(options);
+  let tokenWarning: string | undefined;
+  if (!settingsError) {
+    const providerConfig = settingsService.getProviderConfig(provider);
+    if (!providerConfig?.token) {
+      tokenWarning = `Warning: Provider "${provider}" has no token configured. Auto-link will not work until a token is set. Run "sf external-sync config set-token ${provider} <token>".`;
+    }
+  }
+
+  // Set both autoLink and autoLinkProvider
+  setValue('externalSync.autoLink', true);
+  setValue('externalSync.autoLinkProvider', provider);
+
+  const mode = getOutputMode(options);
+
+  if (mode === 'json') {
+    return success({ autoLink: true, autoLinkProvider: provider, warning: tokenWarning });
+  }
+
+  if (mode === 'quiet') {
+    return success(provider);
+  }
+
+  const lines = [`Auto-link enabled with provider "${provider}".`];
+  if (tokenWarning) {
+    lines.push('');
+    lines.push(tokenWarning);
+  }
+
+  return success(
+    { autoLink: true, autoLinkProvider: provider },
+    lines.join('\n')
+  );
+}
+
+// ============================================================================
+// Config Disable-Auto-Link Command
+// ============================================================================
+
+async function configDisableAutoLinkHandler(
+  _args: string[],
+  options: GlobalOptions
+): Promise<CommandResult> {
+  // Set autoLink to false and clear autoLinkProvider
+  setValue('externalSync.autoLink', false);
+  setValue('externalSync.autoLinkProvider', undefined);
+
+  const mode = getOutputMode(options);
+
+  if (mode === 'json') {
+    return success({ autoLink: false, autoLinkProvider: null });
+  }
+
+  if (mode === 'quiet') {
+    return success('disabled');
+  }
+
+  return success(
+    { autoLink: false },
+    'Auto-link disabled.'
   );
 }
 
@@ -1064,10 +1159,43 @@ Examples:
   handler: configSetProjectHandler as Command['handler'],
 };
 
+const configSetAutoLinkCommand: Command = {
+  name: 'set-auto-link',
+  description: 'Enable auto-link with a provider',
+  usage: 'sf external-sync config set-auto-link <provider>',
+  help: `Enable auto-link for new tasks with the specified provider.
+
+When auto-link is enabled, newly created Stoneforge tasks will automatically
+get a corresponding external issue created and linked.
+
+Arguments:
+  provider    Provider name (github or linear)
+
+Examples:
+  sf external-sync config set-auto-link github
+  sf external-sync config set-auto-link linear`,
+  options: [],
+  handler: configSetAutoLinkHandler as Command['handler'],
+};
+
+const configDisableAutoLinkCommand: Command = {
+  name: 'disable-auto-link',
+  description: 'Disable auto-link',
+  usage: 'sf external-sync config disable-auto-link',
+  help: `Disable auto-link for new tasks.
+
+Clears the auto-link provider and disables automatic external issue creation.
+
+Examples:
+  sf external-sync config disable-auto-link`,
+  options: [],
+  handler: configDisableAutoLinkHandler as Command['handler'],
+};
+
 const configParentCommand: Command = {
   name: 'config',
   description: 'Show or set provider configuration',
-  usage: 'sf external-sync config [set-token|set-project]',
+  usage: 'sf external-sync config [set-token|set-project|set-auto-link|disable-auto-link]',
   help: `Show current external sync provider configuration.
 
 Tokens are masked in output for security.
@@ -1075,14 +1203,20 @@ Tokens are masked in output for security.
 Subcommands:
   set-token <provider> <token>     Store auth token
   set-project <provider> <project> Set default project
+  set-auto-link <provider>         Enable auto-link with a provider
+  disable-auto-link                Disable auto-link
 
 Examples:
   sf external-sync config
   sf external-sync config set-token github ghp_xxxxxxxxxxxx
-  sf external-sync config set-project github my-org/my-repo`,
+  sf external-sync config set-project github my-org/my-repo
+  sf external-sync config set-auto-link github
+  sf external-sync config disable-auto-link`,
   subcommands: {
     'set-token': configSetTokenCommand,
     'set-project': configSetProjectCommand,
+    'set-auto-link': configSetAutoLinkCommand,
+    'disable-auto-link': configDisableAutoLinkCommand,
   },
   options: [],
   handler: configHandler as Command['handler'],
@@ -1272,6 +1406,8 @@ Commands:
   config                              Show provider configuration
   config set-token <provider> <token> Store auth token
   config set-project <provider> <project> Set default project
+  config set-auto-link <provider>     Enable auto-link with a provider
+  config disable-auto-link            Disable auto-link
   link <taskId> <url-or-issue-number> Link task to external issue
   unlink <taskId>                     Remove external link
   push [taskId...]                    Push linked task(s) to external
@@ -1284,6 +1420,8 @@ Examples:
   sf external-sync config
   sf external-sync config set-token github ghp_xxxxxxxxxxxx
   sf external-sync config set-project github my-org/my-repo
+  sf external-sync config set-auto-link github
+  sf external-sync config disable-auto-link
   sf external-sync link el-abc123 42
   sf external-sync push --all
   sf external-sync pull

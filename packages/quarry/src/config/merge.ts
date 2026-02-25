@@ -102,6 +102,8 @@ export function mergeConfiguration(
       pollInterval: partial.externalSync?.pollInterval !== undefined ? partial.externalSync.pollInterval : base.externalSync.pollInterval,
       conflictStrategy: partial.externalSync?.conflictStrategy !== undefined ? partial.externalSync.conflictStrategy : base.externalSync.conflictStrategy,
       defaultDirection: partial.externalSync?.defaultDirection !== undefined ? partial.externalSync.defaultDirection : base.externalSync.defaultDirection,
+      autoLink: partial.externalSync?.autoLink !== undefined ? partial.externalSync.autoLink : base.externalSync.autoLink,
+      autoLinkProvider: partial.externalSync?.autoLinkProvider !== undefined ? partial.externalSync.autoLinkProvider : base.externalSync.autoLinkProvider,
     },
   };
   return result;
@@ -177,6 +179,8 @@ export function cloneConfiguration(config: Configuration): Configuration {
       pollInterval: config.externalSync.pollInterval,
       conflictStrategy: config.externalSync.conflictStrategy,
       defaultDirection: config.externalSync.defaultDirection,
+      autoLink: config.externalSync.autoLink,
+      autoLinkProvider: config.externalSync.autoLinkProvider,
     },
   };
 }
@@ -272,6 +276,12 @@ export function diffConfigurations(
   if (a.externalSync.defaultDirection !== b.externalSync.defaultDirection) {
     externalSyncDiff.defaultDirection = b.externalSync.defaultDirection;
   }
+  if (a.externalSync.autoLink !== b.externalSync.autoLink) {
+    externalSyncDiff.autoLink = b.externalSync.autoLink;
+  }
+  if (a.externalSync.autoLinkProvider !== b.externalSync.autoLinkProvider) {
+    externalSyncDiff.autoLinkProvider = b.externalSync.autoLinkProvider;
+  }
   if (Object.keys(externalSyncDiff).length > 0) {
     diff.externalSync = externalSyncDiff;
   }
@@ -302,6 +312,8 @@ export function configurationsEqual(a: Configuration, b: Configuration): boolean
     a.externalSync.enabled === b.externalSync.enabled &&
     a.externalSync.pollInterval === b.externalSync.pollInterval &&
     a.externalSync.conflictStrategy === b.externalSync.conflictStrategy &&
-    a.externalSync.defaultDirection === b.externalSync.defaultDirection
+    a.externalSync.defaultDirection === b.externalSync.defaultDirection &&
+    a.externalSync.autoLink === b.externalSync.autoLink &&
+    a.externalSync.autoLinkProvider === b.externalSync.autoLinkProvider
   );
 }

@@ -56,6 +56,7 @@ export {
   VALID_CONFIG_PATHS,
   VALID_CONFLICT_STRATEGIES,
   VALID_SYNC_DIRECTIONS,
+  VALID_AUTO_LINK_PROVIDERS,
   isValidConfigPath,
 } from './types.js';
 

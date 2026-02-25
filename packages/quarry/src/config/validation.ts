@@ -23,6 +23,7 @@ import {
 import {
   VALID_CONFLICT_STRATEGIES,
   VALID_SYNC_DIRECTIONS,
+  VALID_AUTO_LINK_PROVIDERS,
 } from './types.js';
 // Note: ExternalSyncConflictStrategy and SyncDirection types are validated via the VALID_* arrays
 import { validateDurationRange, formatDuration } from './duration.js';
@@ -435,6 +436,29 @@ export function validateConfiguration(config: unknown): Configuration {
       { field: 'externalSync.defaultDirection', value: externalSync.defaultDirection, expected: VALID_SYNC_DIRECTIONS }
     );
   }
+  if (typeof externalSync.autoLink !== 'boolean') {
+    throw new ValidationError(
+      'externalSync.autoLink must be a boolean',
+      ErrorCode.INVALID_INPUT,
+      { field: 'externalSync.autoLink', value: externalSync.autoLink, expected: 'boolean' }
+    );
+  }
+  if (externalSync.autoLinkProvider !== undefined) {
+    if (typeof externalSync.autoLinkProvider !== 'string') {
+      throw new ValidationError(
+        'externalSync.autoLinkProvider must be a string',
+        ErrorCode.INVALID_INPUT,
+        { field: 'externalSync.autoLinkProvider', value: externalSync.autoLinkProvider, expected: 'string' }
+      );
+    }
+    if (!VALID_AUTO_LINK_PROVIDERS.includes(externalSync.autoLinkProvider)) {
+      throw new ValidationError(
+        `externalSync.autoLinkProvider must be one of: ${VALID_AUTO_LINK_PROVIDERS.join(', ')}`,
+        ErrorCode.INVALID_INPUT,
+        { field: 'externalSync.autoLinkProvider', value: externalSync.autoLinkProvider, expected: VALID_AUTO_LINK_PROVIDERS }
+      );
+    }
+  }
 
   return config as Configuration;
 }
@@ -538,6 +562,15 @@ export function validatePartialConfiguration(config: PartialConfiguration): void
         `externalSync.defaultDirection must be one of: ${VALID_SYNC_DIRECTIONS.join(', ')}`,
         ErrorCode.INVALID_INPUT,
         { field: 'externalSync.defaultDirection', value: config.externalSync.defaultDirection, expected: VALID_SYNC_DIRECTIONS }
+      );
+    }
+  }
+  if (config.externalSync?.autoLinkProvider !== undefined) {
+    if (!VALID_AUTO_LINK_PROVIDERS.includes(config.externalSync.autoLinkProvider)) {
+      throw new ValidationError(
+        `externalSync.autoLinkProvider must be one of: ${VALID_AUTO_LINK_PROVIDERS.join(', ')}`,
+        ErrorCode.INVALID_INPUT,
+        { field: 'externalSync.autoLinkProvider', value: config.externalSync.autoLinkProvider, expected: VALID_AUTO_LINK_PROVIDERS }
       );
     }
   }

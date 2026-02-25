@@ -21,6 +21,7 @@ import type {
 import {
   VALID_CONFLICT_STRATEGIES,
   VALID_SYNC_DIRECTIONS,
+  VALID_AUTO_LINK_PROVIDERS,
 } from './types.js';
 import { parseDurationValue } from './duration.js';
 
@@ -286,6 +287,20 @@ export function convertYamlToConfig(yamlConfig: YamlConfigFile): PartialConfigur
       }
       result.externalSync.defaultDirection = direction as SyncDirection;
     }
+    if (yamlConfig.external_sync.auto_link !== undefined) {
+      result.externalSync.autoLink = yamlConfig.external_sync.auto_link;
+    }
+    if (yamlConfig.external_sync.auto_link_provider !== undefined) {
+      const provider = yamlConfig.external_sync.auto_link_provider;
+      if (!VALID_AUTO_LINK_PROVIDERS.includes(provider)) {
+        throw new ValidationError(
+          `Invalid auto-link provider: '${provider}'. Must be one of: ${VALID_AUTO_LINK_PROVIDERS.join(', ')}`,
+          ErrorCode.INVALID_INPUT,
+          { field: 'externalSync.autoLinkProvider', value: provider }
+        );
+      }
+      result.externalSync.autoLinkProvider = provider;
+    }
   }
 
   return result;
@@ -409,6 +424,12 @@ export function convertConfigToYaml(config: Configuration | PartialConfiguration
     }
     if (config.externalSync.defaultDirection !== undefined) {
       es.default_direction = config.externalSync.defaultDirection;
+    }
+    if (config.externalSync.autoLink !== undefined) {
+      es.auto_link = config.externalSync.autoLink;
+    }
+    if (config.externalSync.autoLinkProvider !== undefined) {
+      es.auto_link_provider = config.externalSync.autoLinkProvider;
     }
     if (Object.keys(es).length > 0) {
       result.external_sync = es;

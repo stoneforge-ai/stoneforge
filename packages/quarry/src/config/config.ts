@@ -335,6 +335,10 @@ function createTrackedDefaults(): TrackedConfiguration {
       pollInterval: { value: DEFAULT_CONFIG.externalSync.pollInterval, source: ConfigSourceEnum.DEFAULT },
       conflictStrategy: { value: DEFAULT_CONFIG.externalSync.conflictStrategy, source: ConfigSourceEnum.DEFAULT },
       defaultDirection: { value: DEFAULT_CONFIG.externalSync.defaultDirection, source: ConfigSourceEnum.DEFAULT },
+      autoLink: { value: DEFAULT_CONFIG.externalSync.autoLink, source: ConfigSourceEnum.DEFAULT },
+      autoLinkProvider: DEFAULT_CONFIG.externalSync.autoLinkProvider !== undefined
+        ? { value: DEFAULT_CONFIG.externalSync.autoLinkProvider, source: ConfigSourceEnum.DEFAULT }
+        : undefined,
     },
   };
 }
@@ -399,6 +403,12 @@ function mergeTrackedConfig(
   }
   if (partial.externalSync?.defaultDirection !== undefined) {
     result.externalSync = { ...result.externalSync, defaultDirection: { value: partial.externalSync.defaultDirection, source } };
+  }
+  if (partial.externalSync?.autoLink !== undefined) {
+    result.externalSync = { ...result.externalSync, autoLink: { value: partial.externalSync.autoLink, source } };
+  }
+  if (partial.externalSync?.autoLinkProvider !== undefined) {
+    result.externalSync = { ...result.externalSync, autoLinkProvider: { value: partial.externalSync.autoLinkProvider, source } };
   }
 
   return result;
