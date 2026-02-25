@@ -2,7 +2,7 @@
  * External Sync Link-All Command Tests
  *
  * Tests the `sf external-sync link-all` command with mocked providers:
- * - Success: links all unlinked tasks
+ * - Success: links all unlinked tasks via mock provider
  * - Dry run: lists tasks without creating issues
  * - Status filtering: only links tasks with specified status
  * - Partial failure: continues when individual tasks fail
@@ -16,7 +16,7 @@ import { join } from 'node:path';
 import type { GlobalOptions } from '../types.js';
 import { ExitCode } from '../types.js';
 import { createAPI } from '../db.js';
-import type { Task, ElementId } from '@stoneforge/core';
+import type { Task, ElementId, ExternalProvider, SyncDirection } from '@stoneforge/core';
 
 // ============================================================================
 // Test Utilities
@@ -162,6 +162,28 @@ function createMockProvider(opts?: {
   };
 }
 
+/**
+ * Creates a _providerFactory function that injects a mock provider.
+ * This is used with the handler's dependency injection support to bypass
+ * the real createProviderFromSettings (which needs tokens, settings service, etc.).
+ */
+function createMockProviderFactory(mockProvider: ReturnType<typeof createMockProvider>) {
+  return async (
+    _providerName: string,
+    _projectOverride: string | undefined,
+    _options: GlobalOptions
+  ): Promise<{
+    provider?: ExternalProvider;
+    project?: string;
+    direction?: SyncDirection;
+    error?: string;
+  }> => ({
+    provider: mockProvider as unknown as ExternalProvider,
+    project: 'test/repo',
+    direction: 'bidirectional' as SyncDirection,
+  });
+}
+
 // ============================================================================
 // Setup / Teardown
 // ============================================================================
@@ -279,7 +301,7 @@ describe('external-sync link-all', () => {
     expect(tasks[0].status).toBe('open');
   });
 
-  test('successfully links all unlinked tasks', async () => {
+  test('successfully links all unlinked tasks via mock provider', async () => {
     const options = createTestOptions();
     const taskIds = await createTestTasks(options, [
       { title: 'Task to link 1' },
@@ -292,30 +314,157 @@ describe('external-sync link-all', () => {
     ]);
     await linkTask(options, thirdIds[0]);
 
-    // Mock the provider creation
+    // Create mock provider and inject via _providerFactory
     const mockProvider = createMockProvider();
-    const autoLinkHelperModule = await import('./auto-link-helper.js');
+    const factory = createMockProviderFactory(mockProvider);
 
     const { externalSyncCommand } = await import('./external-sync.js');
     const linkAllCmd = externalSyncCommand.subcommands!['link-all'];
 
-    // We need to mock createProviderFromSettings since it's an internal function.
-    // Instead, mock the dynamic imports used by the function.
-    // The simplest approach: mock the smithy services import and github provider import.
-
-    // For this test, we'll test the dry-run path (which doesn't need provider)
-    // and verify the command structure. Full integration testing would require
-    // a real DB with provider tokens configured.
-    const dryResult = await linkAllCmd.handler([], {
+    const result = await linkAllCmd.handler([], {
       ...options,
       provider: 'github',
-      'dry-run': true,
+      _providerFactory: factory,
     });
 
-    expect(dryResult.exitCode).toBe(ExitCode.SUCCESS);
-    const data = dryResult.data as Record<string, unknown>;
-    // Should find 2 unlinked tasks (the third is already linked)
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    const data = result.data as Record<string, unknown>;
+
+    // Should have linked 2 tasks (the third was already linked)
+    expect(data.linked).toBe(2);
+    expect(data.failed).toBe(0);
     expect(data.total).toBe(2);
+
+    // Verify external issues were actually created
+    expect(issueCounter).toBe(2);
+
+    // Verify the tasks in the DB now have _externalSync metadata
+    const { api } = createAPI(options);
+    for (const taskId of taskIds) {
+      const task = await api!.get<Task>(taskId as ElementId);
+      expect(task).toBeDefined();
+      const metadata = (task!.metadata ?? {}) as Record<string, unknown>;
+      expect(metadata._externalSync).toBeDefined();
+      const syncState = metadata._externalSync as Record<string, unknown>;
+      expect(syncState.provider).toBe('github');
+      expect(syncState.project).toBe('test/repo');
+      expect(syncState.direction).toBe('bidirectional');
+      expect(syncState.adapterType).toBe('task');
+      expect(typeof syncState.externalId).toBe('string');
+      expect(typeof syncState.url).toBe('string');
+      expect((syncState.url as string).startsWith('https://github.com/test/repo/issues/')).toBe(true);
+    }
+
+    // Verify the already-linked task was NOT modified
+    const linkedTask = await api!.get<Task>(thirdIds[0] as ElementId);
+    const linkedMeta = (linkedTask!.metadata ?? {}) as Record<string, unknown>;
+    const linkedSync = linkedMeta._externalSync as Record<string, unknown>;
+    expect(linkedSync.externalId).toBe('1'); // Original ID preserved
+  });
+
+  test('partial failure: continues linking when individual tasks fail', async () => {
+    const options = createTestOptions();
+
+    // Use a distinctive title for the task that should fail.
+    // The mock provider checks issue.title.includes(failId), so we match on title substrings.
+    const FAIL_MARKER = 'SHOULD_FAIL_TASK';
+    const taskIds = await createTestTasks(options, [
+      { title: 'Good task 1' },
+      { title: `Task ${FAIL_MARKER} here` },
+      { title: 'Good task 3' },
+    ]);
+
+    const mockProvider = createMockProvider({ failOnTaskIds: new Set([FAIL_MARKER]) });
+    const factory = createMockProviderFactory(mockProvider);
+
+    const { externalSyncCommand } = await import('./external-sync.js');
+    const linkAllCmd = externalSyncCommand.subcommands!['link-all'];
+
+    const result = await linkAllCmd.handler([], {
+      ...options,
+      provider: 'github',
+      _providerFactory: factory,
+    });
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    const data = result.data as Record<string, unknown>;
+
+    // 2 succeeded, 1 failed
+    expect(data.linked).toBe(2);
+    expect(data.failed).toBe(1);
+    expect(data.total).toBe(3);
+
+    // Verify the successful tasks have _externalSync metadata
+    const { api } = createAPI(options);
+
+    const successTask0 = await api!.get<Task>(taskIds[0] as ElementId);
+    const meta0 = (successTask0!.metadata ?? {}) as Record<string, unknown>;
+    expect(meta0._externalSync).toBeDefined();
+
+    const successTask2 = await api!.get<Task>(taskIds[2] as ElementId);
+    const meta2 = (successTask2!.metadata ?? {}) as Record<string, unknown>;
+    expect(meta2._externalSync).toBeDefined();
+
+    // Verify the failed task does NOT have _externalSync metadata
+    const failedTask = await api!.get<Task>(taskIds[1] as ElementId);
+    const failedMeta = (failedTask!.metadata ?? {}) as Record<string, unknown>;
+    expect(failedMeta._externalSync).toBeUndefined();
+  });
+
+  test('rate limit: stops gracefully and reports partial success', async () => {
+    const options = createTestOptions();
+    const taskIds = await createTestTasks(options, [
+      { title: 'Task A' },
+      { title: 'Task B' },
+      { title: 'Task C' },
+      { title: 'Task D' },
+    ]);
+
+    // Rate limit after 2 successful creations — the 3rd will trigger rate limit
+    const mockProvider = createMockProvider({ rateLimitAfter: 2 });
+    const factory = createMockProviderFactory(mockProvider);
+
+    const { externalSyncCommand } = await import('./external-sync.js');
+    const linkAllCmd = externalSyncCommand.subcommands!['link-all'];
+
+    const result = await linkAllCmd.handler([], {
+      ...options,
+      provider: 'github',
+      _providerFactory: factory,
+      'batch-size': '10', // Process all in one batch so rate limit is hit mid-batch
+    });
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    const data = result.data as Record<string, unknown>;
+
+    // Should have linked 2, then hit rate limit
+    expect(data.linked).toBe(2);
+    expect(data.rateLimited).toBe(true);
+    expect(typeof data.rateLimitResetAt).toBe('string'); // ISO date string
+
+    // The remaining tasks are counted as skipped (rate-limited + never attempted)
+    // Task C triggered rate limit (not linked, not counted as failed), Task D never attempted
+    expect(data.skipped).toBe(2);
+    expect(data.total).toBe(4);
+
+    // Verify exactly 2 tasks have _externalSync metadata (order may vary from list())
+    const { api } = createAPI(options);
+    let linkedCount = 0;
+    let unlinkedCount = 0;
+    for (const taskId of taskIds) {
+      const task = await api!.get<Task>(taskId as ElementId);
+      const meta = (task!.metadata ?? {}) as Record<string, unknown>;
+      if (meta._externalSync) {
+        linkedCount++;
+        const syncState = meta._externalSync as Record<string, unknown>;
+        expect(syncState.provider).toBe('github');
+        expect(syncState.project).toBe('test/repo');
+      } else {
+        unlinkedCount++;
+      }
+    }
+    expect(linkedCount).toBe(2);
+    expect(unlinkedCount).toBe(2);
   });
 
   test('dry-run excludes tombstone tasks by default', async () => {
@@ -504,9 +653,8 @@ describe('external-sync link-all', () => {
 // ============================================================================
 
 describe('isRateLimitError detection', () => {
-  // We test the rate limit detection logic through the command's behavior.
-  // The isRateLimitError function is internal, but we can test its behavior
-  // indirectly through the mock provider tests above.
+  // We test the rate limit detection logic through the command's behavior
+  // (see the rate limit test above), and also verify error shapes here.
 
   test('error with isRateLimited property is detected', () => {
     // This tests the pattern used by GitHubApiError and LinearApiError

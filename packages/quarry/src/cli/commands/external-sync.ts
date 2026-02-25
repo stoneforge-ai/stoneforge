@@ -1128,6 +1128,17 @@ interface LinkAllOptions {
   status?: string | string[];
   'dry-run'?: boolean;
   'batch-size'?: string;
+  /** @internal Dependency injection for testing — overrides createProviderFromSettings */
+  _providerFactory?: (
+    providerName: string,
+    projectOverride: string | undefined,
+    options: GlobalOptions
+  ) => Promise<{
+    provider?: ExternalProvider;
+    project?: string;
+    direction?: SyncDirection;
+    error?: string;
+  }>;
 }
 
 const linkAllOptions: CommandOption[] = [
@@ -1427,13 +1438,14 @@ async function linkAllHandler(
     return success({ dryRun: true, provider: providerName, total: unlinkedTasks.length, tasks: taskList }, lines.join('\n'));
   }
 
-  // Create provider for actual linking
+  // Create provider for actual linking (supports DI for testing)
+  const providerFactory = options._providerFactory ?? createProviderFromSettings;
   const {
     provider: externalProvider,
     project,
     direction,
     error: providerError,
-  } = await createProviderFromSettings(providerName, options.project, options);
+  } = await providerFactory(providerName, options.project, options);
 
   if (providerError) {
     return failure(providerError, ExitCode.GENERAL_ERROR);
