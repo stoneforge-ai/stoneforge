@@ -1163,18 +1163,21 @@ export class DispatchDaemonImpl implements DispatchDaemon {
         } else {
           // Normal recovery: re-spawn the worker, then increment resume count on success
           try {
-            await this.recoverOrphanedTask(worker, taskAssignment.task, taskAssignment.orchestratorMeta);
-            // Only increment resumeCount after successful recovery — if recovery fails,
-            // the count stays the same so the task isn't prematurely flagged as stuck.
-            // Re-read task metadata since recoverOrphanedTask may have updated it (e.g., new sessionId).
-            const freshTask = await this.api.get<Task>(taskAssignment.task.id);
-            await this.api.update<Task>(taskAssignment.task.id, {
-              metadata: updateOrchestratorTaskMeta(
-                freshTask?.metadata as Record<string, unknown> | undefined,
-                { resumeCount: resumeCount + 1 }
-              ),
-            });
-            processed++;
+            const recovered = await this.recoverOrphanedTask(worker, taskAssignment.task, taskAssignment.orchestratorMeta);
+            if (recovered) {
+              // Only increment resumeCount after successful recovery — if recovery fails
+              // or was skipped due to rate limiting, the count stays the same so the task
+              // isn't prematurely flagged as stuck.
+              // Re-read task metadata since recoverOrphanedTask may have updated it (e.g., new sessionId).
+              const freshTask = await this.api.get<Task>(taskAssignment.task.id);
+              await this.api.update<Task>(taskAssignment.task.id, {
+                metadata: updateOrchestratorTaskMeta(
+                  freshTask?.metadata as Record<string, unknown> | undefined,
+                  { resumeCount: resumeCount + 1 }
+                ),
+              });
+              processed++;
+            }
           } catch (error) {
             errors++;
             const errorMessage = error instanceof Error ? error.message : String(error);
@@ -1882,13 +1885,28 @@ export class DispatchDaemonImpl implements DispatchDaemon {
    * Recovers a single orphaned task by re-spawning a session for the worker.
    * Tries to resume the previous provider session first (preserves context),
    * falls back to a fresh spawn if no sessionId or resume fails.
+   *
+   * @returns `true` if a session was actually spawned/resumed, `false` if
+   *          recovery was skipped (e.g. due to rate limiting).
    */
   private async recoverOrphanedTask(
     worker: AgentEntity,
     task: Task,
     taskMeta: import('../types/task-meta.js').OrchestratorTaskMeta | undefined
-  ): Promise<void> {
+  ): Promise<boolean> {
     const workerId = asEntityId(worker.id);
+
+    // 0. Check rate limits before attempting any resume or spawn.
+    // The outer recoverOrphanedAssignments() also checks, but that check can
+    // pass due to fallback chain key mismatches. This defense-in-depth guard
+    // prevents burning a resumeCount on a session that will immediately exit.
+    const preCheck = this.resolveExecutableWithFallback(worker);
+    if (preCheck === 'all_limited') {
+      logger.debug(
+        `All executables rate-limited, deferring recovery for worker ${worker.name}`
+      );
+      return false;
+    }
 
     // 1. Resolve worktree — reuse existing or create new
     let worktreePath = taskMeta?.worktree ?? taskMeta?.handoffWorktree;
@@ -1970,7 +1988,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
 
         this.emitter.emit('agent:spawned', workerId, worktreePath);
         logger.info(`Resumed session for orphaned task ${task.id} on worker ${worker.name}`);
-        return;
+        return true;
       } catch (error) {
         logger.warn(
           `Failed to resume session ${previousSessionId} for worker ${worker.name}, falling back to fresh spawn:`,
@@ -1992,7 +2010,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       logger.warn(
         `All executables rate-limited, deferring orphan recovery for worker ${worker.name}`
       );
-      return;
+      return false;
     }
 
     const initialPrompt = await this.buildTaskPrompt(task, workerId);
@@ -2041,6 +2059,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
 
     this.emitter.emit('agent:spawned', workerId, worktreePath);
     logger.info(`Spawned fresh session for orphaned task ${task.id} on worker ${worker.name}`);
+    return true;
   }
 
   /**
