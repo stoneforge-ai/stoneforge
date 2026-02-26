@@ -11,6 +11,7 @@ import { createLogger } from '../../utils/logger.js';
 import {
   createSyncEngine,
   createDefaultProviderRegistry,
+  createConfiguredProviderRegistry,
   type SyncOptions,
 } from '@stoneforge/quarry';
 import {
@@ -29,7 +30,6 @@ export function createExternalSyncRoutes(services: Services) {
    * The engine is created per-request to pick up latest provider configs.
    */
   function createEngine() {
-    const registry = createDefaultProviderRegistry();
     const syncSettings = settingsService.getExternalSyncSettings();
 
     // Build provider configs from settings
@@ -41,6 +41,9 @@ export function createExternalSyncRoutes(services: Services) {
         apiBaseUrl: p.apiBaseUrl,
         defaultProject: p.defaultProject,
       }));
+
+    // Create a registry with real configured providers replacing placeholders
+    const registry = createConfiguredProviderRegistry(providerConfigs);
 
     return createSyncEngine({
       api,

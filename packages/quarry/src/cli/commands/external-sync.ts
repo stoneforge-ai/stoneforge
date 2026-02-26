@@ -90,6 +90,8 @@ interface SettingsServiceLike {
   setExternalSyncSettings(settings: ExternalSyncSettingsLike): ExternalSyncSettingsLike;
   getProviderConfig(provider: string): ProviderConfigLike | undefined;
   setProviderConfig(provider: string, config: ProviderConfigLike): ProviderConfigLike;
+  getSetting(key: string): { value: unknown } | undefined;
+  setSetting(key: string, value: unknown): { value: unknown };
 }
 
 // ============================================================================
@@ -593,25 +595,53 @@ async function pushHandler(
     return failure(error, ExitCode.GENERAL_ERROR);
   }
 
-  // Find tasks to push
-  let taskIds: string[];
+  // Get settings service to create a configured sync engine
+  const { settingsService, error: settingsError } = await createSettingsServiceFromOptions(options);
+  if (settingsError) {
+    return failure(settingsError, ExitCode.GENERAL_ERROR);
+  }
 
+  const syncSettings = settingsService.getExternalSyncSettings();
+  const providerConfigs = Object.values(syncSettings.providers).filter(
+    (p): p is ProviderConfigLike & { token: string } => !!p.token
+  );
+
+  if (providerConfigs.length === 0) {
+    return failure(
+      'No providers configured with tokens. Run "sf external-sync config set-token <provider> <token>" first.',
+      ExitCode.GENERAL_ERROR
+    );
+  }
+
+  // Build sync options
+  const { createSyncEngine, createConfiguredProviderRegistry } = await import('../../external-sync/index.js');
+  const registry = createConfiguredProviderRegistry(
+    providerConfigs.map((p) => ({
+      provider: p.provider,
+      token: p.token,
+      apiBaseUrl: p.apiBaseUrl,
+      defaultProject: p.defaultProject,
+    }))
+  );
+
+  const engine = createSyncEngine({
+    api,
+    registry,
+    settings: settingsService,
+    providerConfigs: providerConfigs.map((p) => ({
+      provider: p.provider,
+      token: p.token,
+      apiBaseUrl: p.apiBaseUrl,
+      defaultProject: p.defaultProject,
+    })),
+  });
+
+  // Build push options
+  const syncPushOptions: { taskIds?: string[]; all?: boolean } = {};
   if (options.all) {
-    // Find all tasks with _externalSync metadata
-    try {
-      const allTasks = await api.list({ type: 'task' });
-      taskIds = allTasks
-        .filter((t) => {
-          const task = t as Task;
-          return task.externalRef && (task.metadata as Record<string, unknown>)?._externalSync;
-        })
-        .map((t) => t.id);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      return failure(`Failed to list tasks: ${message}`, ExitCode.GENERAL_ERROR);
-    }
+    syncPushOptions.all = true;
   } else if (args.length > 0) {
-    taskIds = args;
+    syncPushOptions.taskIds = args;
   } else {
     return failure(
       'Usage: sf external-sync push [taskId...] or sf external-sync push --all',
@@ -619,76 +649,56 @@ async function pushHandler(
     );
   }
 
-  if (taskIds.length === 0) {
+  try {
+    const result = await engine.push(syncPushOptions);
+
     const mode = getOutputMode(options);
+    const output = {
+      success: result.success,
+      pushed: result.pushed,
+      skipped: result.skipped,
+      errors: result.errors,
+      conflicts: result.conflicts,
+    };
+
     if (mode === 'json') {
-      return success({ pushed: 0, tasks: [] });
+      return success(output);
     }
-    return success({ pushed: 0 }, 'No linked tasks found to push.');
-  }
 
-  // Validate tasks are linked
-  const linkedTasks: Array<{ id: string; externalRef: string; syncMeta: Record<string, unknown> }> = [];
-  const errors: string[] = [];
+    if (mode === 'quiet') {
+      return success(String(result.pushed));
+    }
 
-  for (const taskId of taskIds) {
-    try {
-      const task = await api.get<Task>(taskId as ElementId);
-      if (!task) {
-        errors.push(`${taskId}: not found`);
-        continue;
+    const lines: string[] = [
+      `Push: ${result.pushed} task(s) pushed successfully`,
+      '',
+    ];
+
+    if (result.skipped > 0) {
+      lines.push(`Skipped: ${result.skipped}`);
+    }
+
+    if (result.errors.length > 0) {
+      lines.push('');
+      lines.push(`Errors (${result.errors.length}):`);
+      for (const err of result.errors) {
+        lines.push(`  ${err.elementId ?? 'unknown'}: ${err.message}`);
       }
-      if (!task.externalRef || !(task.metadata as Record<string, unknown>)?._externalSync) {
-        errors.push(`${taskId}: not linked to external issue`);
-        continue;
+    }
+
+    if (result.conflicts.length > 0) {
+      lines.push('');
+      lines.push(`Conflicts (${result.conflicts.length}):`);
+      for (const conflict of result.conflicts) {
+        lines.push(`  ${conflict.elementId} ↔ ${conflict.externalId} (${conflict.strategy}, resolved: ${conflict.resolved})`);
       }
-      linkedTasks.push({
-        id: task.id,
-        externalRef: task.externalRef,
-        syncMeta: (task.metadata as Record<string, unknown>)._externalSync as Record<string, unknown>,
-      });
-    } catch {
-      errors.push(`${taskId}: not found`);
     }
+
+    return success(output, lines.join('\n'));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return failure(`Push failed: ${message}`, ExitCode.GENERAL_ERROR);
   }
-
-  const mode = getOutputMode(options);
-  const result = {
-    pushed: linkedTasks.length,
-    skipped: errors.length,
-    tasks: linkedTasks.map((t) => ({ id: t.id, externalRef: t.externalRef })),
-    errors,
-  };
-
-  if (mode === 'json') {
-    return success(result);
-  }
-
-  if (mode === 'quiet') {
-    return success(String(linkedTasks.length));
-  }
-
-  const lines: string[] = [
-    `Push: ${linkedTasks.length} task(s) queued for push`,
-    '',
-  ];
-
-  for (const task of linkedTasks) {
-    lines.push(`  ${task.id} → ${task.externalRef}`);
-  }
-
-  if (errors.length > 0) {
-    lines.push('');
-    lines.push(`Skipped (${errors.length}):`);
-    for (const err of errors) {
-      lines.push(`  ${err}`);
-    }
-  }
-
-  lines.push('');
-  lines.push('Note: Push requires a running sync daemon or server. Tasks have been validated and are ready for sync.');
-
-  return success(result, lines.join('\n'));
 }
 
 // ============================================================================

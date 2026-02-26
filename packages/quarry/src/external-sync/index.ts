@@ -11,6 +11,7 @@ export {
   ProviderRegistry,
   createProviderRegistry,
   createDefaultProviderRegistry,
+  createConfiguredProviderRegistry,
 } from './provider-registry.js';
 export type { ProviderAdapterEntry } from './provider-registry.js';
 

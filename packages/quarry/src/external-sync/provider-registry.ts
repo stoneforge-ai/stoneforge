@@ -18,13 +18,14 @@
 
 import type {
   ExternalProvider,
+  ProviderConfig,
   SyncAdapterType,
   TaskSyncAdapter,
   DocumentSyncAdapter,
   MessageSyncAdapter,
 } from '@stoneforge/core';
-import { createGitHubPlaceholderProvider } from './providers/github/index.js';
-import { createLinearPlaceholderProvider } from './providers/linear/index.js';
+import { createGitHubProvider, createGitHubPlaceholderProvider } from './providers/github/index.js';
+import { createLinearProvider, createLinearPlaceholderProvider } from './providers/linear/index.js';
 
 // ============================================================================
 // Types
@@ -186,5 +187,55 @@ export function createDefaultProviderRegistry(): ProviderRegistry {
   const registry = new ProviderRegistry();
   registry.register(createGitHubPlaceholderProvider());
   registry.register(createLinearPlaceholderProvider());
+  return registry;
+}
+
+/**
+ * Create a ProviderRegistry with real configured providers.
+ *
+ * Starts with placeholder providers for all known providers (GitHub, Linear),
+ * then replaces placeholders with real configured providers for any configs
+ * that have a token set. This ensures providers without tokens remain as
+ * placeholders (which throw descriptive errors), while configured providers
+ * are ready for actual sync operations.
+ *
+ * @param providerConfigs - Array of provider configurations (from settings)
+ * @returns A ProviderRegistry with configured providers replacing placeholders
+ */
+export function createConfiguredProviderRegistry(
+  providerConfigs: readonly ProviderConfig[]
+): ProviderRegistry {
+  const registry = createDefaultProviderRegistry();
+
+  for (const config of providerConfigs) {
+    if (!config.token) {
+      continue;
+    }
+
+    // Replace the placeholder with a real configured provider
+    registry.unregister(config.provider);
+
+    switch (config.provider) {
+      case 'github':
+        registry.register(
+          createGitHubProvider({
+            provider: 'github',
+            token: config.token,
+            apiBaseUrl: config.apiBaseUrl,
+            defaultProject: config.defaultProject,
+          })
+        );
+        break;
+      case 'linear':
+        registry.register(
+          createLinearProvider({
+            apiKey: config.token,
+          })
+        );
+        break;
+      // Unknown providers are silently skipped — their placeholders remain
+    }
+  }
+
   return registry;
 }

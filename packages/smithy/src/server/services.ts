@@ -54,7 +54,7 @@ import {
   type ExternalSyncDaemon,
   trackListeners,
 } from '../index.js';
-import { createSyncEngine, createDefaultProviderRegistry } from '@stoneforge/quarry';
+import { createSyncEngine, createConfiguredProviderRegistry } from '@stoneforge/quarry';
 import { attachSessionEventSaver } from './routes/sessions.js';
 import { notifySSEClientsOfNewSession } from './routes/events.js';
 import { DB_PATH as DEFAULT_DB_PATH, PROJECT_ROOT as DEFAULT_PROJECT_ROOT, getClaudePath } from './config.js';
@@ -407,12 +407,13 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
     );
 
     if (hasConfiguredProvider) {
-      const registry = createDefaultProviderRegistry();
+      const providerConfigs = Object.values(externalSyncSettings.providers);
+      const registry = createConfiguredProviderRegistry(providerConfigs);
       const syncEngine = createSyncEngine({
         api,
         registry,
         settings: settingsService,
-        providerConfigs: Object.values(externalSyncSettings.providers),
+        providerConfigs,
       });
       externalSyncDaemon = createExternalSyncDaemon(syncEngine, {
         pollIntervalMs: externalSyncSettings.pollIntervalMs ?? config.externalSync.pollInterval,

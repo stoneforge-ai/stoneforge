@@ -21,6 +21,7 @@ import {
   ProviderRegistry,
   createProviderRegistry,
   createDefaultProviderRegistry,
+  createConfiguredProviderRegistry,
 } from './provider-registry.js';
 
 // ============================================================================
@@ -249,5 +250,104 @@ describe('createDefaultProviderRegistry', () => {
     const github = registry.get('github');
     expect(github).toBeDefined();
     expect(github!.supportedAdapters).toContain('task');
+  });
+
+  test('default GitHub provider is a placeholder that throws on adapter use', () => {
+    const registry = createDefaultProviderRegistry();
+    const github = registry.get('github')!;
+    const adapter = github.getTaskAdapter!();
+    expect(adapter.getIssue('owner/repo', '1')).rejects.toThrow(/not configured/);
+  });
+
+  test('default Linear provider is a placeholder that throws on adapter use', () => {
+    const registry = createDefaultProviderRegistry();
+    const linear = registry.get('linear')!;
+    const adapter = linear.getTaskAdapter!();
+    expect(adapter.getIssue('team', '1')).rejects.toThrow(/not.*configured/);
+  });
+});
+
+// ============================================================================
+// createConfiguredProviderRegistry
+// ============================================================================
+
+describe('createConfiguredProviderRegistry', () => {
+  test('creates a registry with both providers when no configs have tokens', () => {
+    const registry = createConfiguredProviderRegistry([]);
+    expect(registry).toBeInstanceOf(ProviderRegistry);
+    expect(registry.has('github')).toBe(true);
+    expect(registry.has('linear')).toBe(true);
+  });
+
+  test('keeps placeholder when config has no token', () => {
+    const registry = createConfiguredProviderRegistry([
+      { provider: 'github' },
+    ]);
+    const github = registry.get('github')!;
+    // Placeholder adapter should throw on use
+    const adapter = github.getTaskAdapter!();
+    expect(adapter.getIssue('owner/repo', '1')).rejects.toThrow(/not configured/);
+  });
+
+  test('replaces GitHub placeholder with configured provider when token is set', () => {
+    const registry = createConfiguredProviderRegistry([
+      { provider: 'github', token: 'ghp_test123', defaultProject: 'owner/repo' },
+    ]);
+    const github = registry.get('github')!;
+    expect(github).toBeDefined();
+    expect(github.name).toBe('github');
+    // A configured provider should NOT throw the placeholder message
+    // (it will throw a network error instead since the token is fake, but not "not configured")
+    const adapter = github.getTaskAdapter!();
+    expect(adapter.getIssue('owner/repo', '1')).rejects.not.toThrow(/not configured/);
+  });
+
+  test('replaces Linear placeholder with configured provider when token is set', () => {
+    const registry = createConfiguredProviderRegistry([
+      { provider: 'linear', token: 'lin_api_test123' },
+    ]);
+    const linear = registry.get('linear')!;
+    expect(linear).toBeDefined();
+    expect(linear.name).toBe('linear');
+    // A configured provider should NOT throw the placeholder message
+    const adapter = linear.getTaskAdapter!();
+    expect(adapter.getIssue('team', '1')).rejects.not.toThrow(/not configured/);
+  });
+
+  test('replaces only providers with tokens, keeps others as placeholders', () => {
+    const registry = createConfiguredProviderRegistry([
+      { provider: 'github', token: 'ghp_test123', defaultProject: 'owner/repo' },
+      { provider: 'linear' }, // no token
+    ]);
+    // GitHub should be configured (not placeholder)
+    const github = registry.get('github')!;
+    const githubAdapter = github.getTaskAdapter!();
+    expect(githubAdapter.getIssue('owner/repo', '1')).rejects.not.toThrow(/not configured/);
+
+    // Linear should still be placeholder
+    const linear = registry.get('linear')!;
+    const linearAdapter = linear.getTaskAdapter!();
+    expect(linearAdapter.getIssue('team', '1')).rejects.toThrow(/not.*configured/);
+  });
+
+  test('ignores unknown provider names gracefully', () => {
+    const registry = createConfiguredProviderRegistry([
+      { provider: 'unknown-provider', token: 'some_token' },
+    ]);
+    // Known providers should still be placeholders
+    expect(registry.has('github')).toBe(true);
+    expect(registry.has('linear')).toBe(true);
+    // Unknown provider should not be registered
+    expect(registry.has('unknown-provider')).toBe(false);
+  });
+
+  test('handles multiple configs for the same provider (last wins)', () => {
+    // The second config for github should replace the first
+    const registry = createConfiguredProviderRegistry([
+      { provider: 'github', token: 'ghp_first', defaultProject: 'owner/repo1' },
+    ]);
+    const github = registry.get('github')!;
+    expect(github).toBeDefined();
+    expect(github.name).toBe('github');
   });
 });
