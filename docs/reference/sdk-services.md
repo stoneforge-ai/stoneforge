@@ -373,6 +373,95 @@ syncService.importFromStrings(elementsJsonl, dependenciesJsonl, { force: true })
 
 ---
 
+## AutoExportService
+
+**File:** `sync/auto-export.ts`
+
+Interval-based service that polls for dirty elements and automatically triggers incremental JSONL exports. Uses the same polling pattern as EventBroadcaster. Wraps `SyncService` to provide hands-free export — on startup it runs a full export, then periodically checks for dirty elements and exports only what changed.
+
+```typescript
+import { createAutoExportService } from '@stoneforge/quarry';
+
+const autoExportService = createAutoExportService({
+  syncService,
+  backend: storageBackend,
+  syncConfig: config.sync,
+  outputDir: '/path/to/sync/output',
+});
+```
+
+### AutoExportOptions
+
+```typescript
+interface AutoExportOptions {
+  syncService: SyncService;       // SyncService instance for export operations
+  backend: StorageBackend;        // Storage backend to check for dirty elements
+  syncConfig: SyncConfig;         // Sync configuration (autoExport flag, exportDebounce interval)
+  outputDir: string;              // Output directory for JSONL files
+}
+```
+
+### Lifecycle Methods
+
+```typescript
+// Start the auto-export polling loop
+// - Runs an initial full export to ensure JSONL files are in sync
+// - Begins interval-based polling at syncConfig.exportDebounce interval
+// - No-op if syncConfig.autoExport is false
+// - No-op if already started
+await autoExportService.start();
+
+// Stop the polling loop
+// - Clears the interval timer
+// - No-op if not running
+autoExportService.stop();
+```
+
+### Configuration
+
+Auto-export behavior is controlled via `SyncConfig`:
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `autoExport` | `true` | Enable/disable auto-export. When `false`, `start()` is a no-op |
+| `exportDebounce` | `300000` (5 min) | Polling interval in milliseconds |
+
+### Behavior
+
+- **Initial export:** On `start()`, runs a full export to ensure JSONL files reflect the current database state.
+- **Polling:** After the initial export, polls at the configured `exportDebounce` interval.
+- **Dirty check:** Each tick calls `backend.getDirtyElements()`. If no dirty elements, the tick is skipped.
+- **Incremental export:** When dirty elements exist, triggers an incremental (non-full) `syncService.export()`.
+- **Overlap protection:** If a previous export is still in progress, the current tick is skipped to prevent concurrent exports.
+- **Error handling:** Export failures are logged but do not stop the polling loop.
+
+### Server Usage
+
+The Quarry server creates and starts AutoExportService during initialization:
+
+```typescript
+import { createAutoExportService } from '@stoneforge/quarry';
+import { loadConfig } from '@stoneforge/quarry/config';
+
+const config = loadConfig();
+const autoExportService = createAutoExportService({
+  syncService,
+  backend: storageBackend,
+  syncConfig: config.sync,
+  outputDir: resolve(PROJECT_ROOT, '.stoneforge/sync'),
+});
+
+// Start (fire-and-forget)
+autoExportService.start().catch((err) => {
+  console.error('Failed to start auto-export:', err);
+});
+
+// Stop on shutdown
+autoExportService.stop();
+```
+
+---
+
 ## SearchUtils
 
 **File:** `services/search-utils.ts`
@@ -466,6 +555,8 @@ import {
   createPriorityService,
   createInboxService,
   createIdLengthCache,
+  createSyncService,
+  createAutoExportService,
 } from '@stoneforge/quarry';
 
 // Create services
@@ -474,6 +565,13 @@ const blockedCache = createBlockedCacheService(storage);
 const priorityService = createPriorityService(storage);
 const inboxService = createInboxService(storage);
 const idLengthCache = createIdLengthCache(storage);
+const syncService = createSyncService(storage);
+const autoExportService = createAutoExportService({
+  syncService,
+  backend: storage,
+  syncConfig: config.sync,
+  outputDir: '/path/to/sync/output',
+});
 
 // Wire up auto-transitions
 blockedCache.setStatusTransitionCallback({
