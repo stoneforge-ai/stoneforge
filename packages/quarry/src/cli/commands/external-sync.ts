@@ -1209,6 +1209,33 @@ function isRateLimitError(err: unknown): { isRateLimit: boolean; resetAt?: numbe
 }
 
 /**
+ * Extracts validation error details from a GitHub API error response.
+ * GitHub's 422 responses include an `errors` array with `resource`, `field`,
+ * `code`, and sometimes `value` or `message` entries.
+ *
+ * Example output: "invalid label: sf:priority:high"
+ */
+function extractValidationDetail(err: unknown): string | null {
+  if (!err || typeof err !== 'object') return null;
+
+  const responseBody = (err as { responseBody?: Record<string, unknown> | null }).responseBody;
+  if (!responseBody || !Array.isArray(responseBody.errors)) return null;
+
+  const details = (responseBody.errors as Array<Record<string, unknown>>)
+    .map((e) => {
+      const parts: string[] = [];
+      if (e.code && typeof e.code === 'string') parts.push(e.code);
+      if (e.field && typeof e.field === 'string') parts.push(e.field as string);
+      if (e.value !== undefined) parts.push(String(e.value));
+      if (e.message && typeof e.message === 'string') parts.push(e.message as string);
+      return parts.join(': ');
+    })
+    .filter(Boolean);
+
+  return details.length > 0 ? details.join('; ') : null;
+}
+
+/**
  * Creates an ExternalProvider instance from settings for the given provider name.
  * Returns the provider, project, and direction, or an error message.
  */
@@ -1344,7 +1371,12 @@ async function processBatch(
 
       // Log warning and continue with next task
       const message = err instanceof Error ? err.message : String(err);
-      progressLines.push(`Failed to link ${task.id}: ${message}`);
+      const detail = extractValidationDetail(err);
+      progressLines.push(
+        detail
+          ? `Failed to link ${task.id}: ${message} — ${detail}`
+          : `Failed to link ${task.id}: ${message}`
+      );
       failed++;
     }
   }

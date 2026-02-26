@@ -18,7 +18,7 @@ import type {
 import type { Timestamp } from '@stoneforge/core';
 import { GitHubApiClient, isGitHubApiError } from './github-api.js';
 import type { GitHubApiClientOptions, GitHubIssue } from './github-api.js';
-import { GITHUB_FIELD_MAP_CONFIG } from './github-field-map.js';
+import { GITHUB_FIELD_MAP_CONFIG, GITHUB_SYNC_LABEL_PREFIX } from './github-field-map.js';
 
 // ============================================================================
 // Project Parsing
@@ -71,6 +71,44 @@ function githubIssueToExternalTask(issue: GitHubIssue, project: string): Externa
 }
 
 // ============================================================================
+// Label Color Defaults
+// ============================================================================
+
+/**
+ * Default colors for auto-created sf:* labels on GitHub repos.
+ * Colors are hex strings without '#' prefix.
+ *
+ * - Priority labels: blue shades
+ * - Type labels: green shades
+ * - Fallback: neutral gray
+ */
+const SF_LABEL_COLORS: Record<string, string> = {
+  // Priority labels — blue palette
+  'sf:priority:critical': 'b60205',  // red for critical
+  'sf:priority:high': 'd93f0b',     // orange-red
+  'sf:priority:medium': 'fbca04',   // yellow
+  'sf:priority:low': '0e8a16',      // green
+  'sf:priority:minimal': 'c5def5',  // light blue
+
+  // Type labels — green/teal palette
+  'sf:type:bug': 'd73a4a',          // red (bug convention)
+  'sf:type:feature': 'a2eeef',      // teal
+  'sf:type:task': '0075ca',         // blue
+  'sf:type:chore': 'e4e669',        // yellow-green
+};
+
+/** Fallback color for sf:* labels not in the mapping */
+const SF_LABEL_DEFAULT_COLOR = 'ededed';
+
+/**
+ * Returns the default color for a given sf:* label name.
+ * Falls back to a neutral gray if no specific color is defined.
+ */
+export function getDefaultLabelColor(labelName: string): string {
+  return SF_LABEL_COLORS[labelName] ?? SF_LABEL_DEFAULT_COLOR;
+}
+
+// ============================================================================
 // GitHubTaskAdapter
 // ============================================================================
 
@@ -79,6 +117,9 @@ function githubIssueToExternalTask(issue: GitHubIssue, project: string): Externa
  *
  * Maps between Stoneforge's normalized ExternalTask format and GitHub's
  * issue API. Uses GitHubApiClient for all HTTP operations.
+ *
+ * Auto-creates sf:* labels on the target repository before assigning them
+ * to issues, preventing GitHub 422 "Validation Failed" errors.
  *
  * Usage:
  * ```typescript
@@ -93,6 +134,13 @@ function githubIssueToExternalTask(issue: GitHubIssue, project: string): Externa
  */
 export class GitHubTaskAdapter implements TaskSyncAdapter {
   private readonly client: GitHubApiClient;
+
+  /**
+   * Per-repo cache of known label names.
+   * Key is 'owner/repo', value is a Set of label names that exist on the repo.
+   * Populated once per repo per session to avoid redundant API calls.
+   */
+  private readonly labelCache: Map<string, Set<string>> = new Map();
 
   constructor(options: GitHubApiClientOptions) {
     this.client = new GitHubApiClient(options);
@@ -172,6 +220,11 @@ export class GitHubTaskAdapter implements TaskSyncAdapter {
   async createIssue(project: string, issue: ExternalTaskInput): Promise<ExternalTask> {
     const [owner, repo] = parseProject(project);
 
+    // Ensure sf:* labels exist on the repo before creating the issue
+    if (issue.labels && issue.labels.length > 0) {
+      await this.ensureLabelsExist(project, [...issue.labels]);
+    }
+
     const created = await this.client.createIssue(owner, repo, {
       title: issue.title,
       body: issue.body,
@@ -208,6 +261,11 @@ export class GitHubTaskAdapter implements TaskSyncAdapter {
       );
     }
 
+    // Ensure sf:* labels exist on the repo before updating the issue
+    if (updates.labels !== undefined && updates.labels.length > 0) {
+      await this.ensureLabelsExist(project, [...updates.labels]);
+    }
+
     // Build the update payload, only including defined fields
     const payload: Record<string, unknown> = {};
 
@@ -230,6 +288,65 @@ export class GitHubTaskAdapter implements TaskSyncAdapter {
     const updated = await this.client.updateIssue(owner, repo, issueNumber, payload);
 
     return githubIssueToExternalTask(updated, project);
+  }
+
+  /**
+   * Ensures that all sf:* labels in the given list exist on the target repository.
+   *
+   * For each label with the sync prefix (sf:), checks the per-repo cache first.
+   * If the cache hasn't been populated yet, fetches all labels from the repo once.
+   * Any missing sf:* labels are created with sensible default colors.
+   *
+   * Non-sf:* labels (user-managed) are not checked or created — those are the
+   * user's responsibility.
+   *
+   * @param project - Repository in 'owner/repo' format
+   * @param labels - Array of label names that will be assigned to an issue
+   */
+  async ensureLabelsExist(project: string, labels: string[]): Promise<void> {
+    const sfLabels = labels.filter((l) => l.startsWith(GITHUB_SYNC_LABEL_PREFIX));
+    if (sfLabels.length === 0) return;
+
+    const [owner, repo] = parseProject(project);
+
+    // Populate cache if this is the first time we're checking this repo
+    if (!this.labelCache.has(project)) {
+      const existingLabels = await this.client.getLabels(owner, repo);
+      this.labelCache.set(project, new Set(existingLabels.map((l) => l.name)));
+    }
+
+    const knownLabels = this.labelCache.get(project)!;
+
+    // Create any missing sf:* labels
+    for (const labelName of sfLabels) {
+      if (knownLabels.has(labelName)) continue;
+
+      const color = getDefaultLabelColor(labelName);
+      try {
+        await this.client.createLabel(owner, repo, {
+          name: labelName,
+          color,
+          description: `Stoneforge sync label`,
+        });
+        knownLabels.add(labelName);
+      } catch (error) {
+        // If the label was created concurrently (422 with "already_exists"),
+        // just add it to the cache and continue
+        if (
+          isGitHubApiError(error) &&
+          error.status === 422 &&
+          error.responseBody?.errors &&
+          Array.isArray(error.responseBody.errors) &&
+          error.responseBody.errors.some(
+            (e: Record<string, unknown>) => e.code === 'already_exists'
+          )
+        ) {
+          knownLabels.add(labelName);
+          continue;
+        }
+        throw error;
+      }
+    }
   }
 
   /**

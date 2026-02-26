@@ -9,7 +9,7 @@
 export { createGitHubProvider, createGitHubPlaceholderProvider } from './github-provider.js';
 
 // Task adapter
-export { GitHubTaskAdapter } from './github-task-adapter.js';
+export { GitHubTaskAdapter, getDefaultLabelColor } from './github-task-adapter.js';
 
 // Field mapping configuration
 export {
@@ -30,6 +30,7 @@ export type {
   GitHubApiClientOptions,
   ListIssuesOptions,
   CreateIssueInput,
+  CreateLabelInput,
   UpdateIssueInput,
   RateLimitInfo,
 } from './github-api.js';

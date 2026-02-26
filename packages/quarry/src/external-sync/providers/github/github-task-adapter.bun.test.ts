@@ -6,8 +6,8 @@
  */
 
 import { describe, expect, test, beforeEach, afterEach } from 'bun:test';
-import type { GitHubIssue } from './github-api.js';
-import { GitHubTaskAdapter, GITHUB_FIELD_MAP_CONFIG } from './github-task-adapter.js';
+import type { GitHubIssue, GitHubLabel } from './github-api.js';
+import { GitHubTaskAdapter, GITHUB_FIELD_MAP_CONFIG, getDefaultLabelColor } from './github-task-adapter.js';
 
 // ============================================================================
 // Test Helpers
@@ -343,6 +343,339 @@ describe('GitHubTaskAdapter', () => {
       );
       expect(tagsField).toBeDefined();
     });
+  });
+
+  // --------------------------------------------------------------------------
+  // ensureLabelsExist
+  // --------------------------------------------------------------------------
+
+  describe('ensureLabelsExist', () => {
+    test('creates missing sf:* labels on the repo', async () => {
+      const createdLabels: Array<{ name: string; color: string }> = [];
+
+      globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        const method = init?.method ?? 'GET';
+
+        // GET /repos/owner/repo/labels — return empty (no labels exist)
+        if (method === 'GET' && url.includes('/labels')) {
+          return createMockResponse([], 200);
+        }
+
+        // POST /repos/owner/repo/labels — record what was created
+        if (method === 'POST' && url.includes('/labels')) {
+          const body = JSON.parse(init?.body as string);
+          createdLabels.push({ name: body.name, color: body.color });
+          return createMockResponse(
+            { id: createdLabels.length, name: body.name, color: body.color, description: body.description },
+            201
+          );
+        }
+
+        return createMockResponse({}, 200);
+      };
+
+      const adapter = new GitHubTaskAdapter({ token: 'test-token' });
+      await adapter.ensureLabelsExist('owner/repo', [
+        'sf:priority:high',
+        'sf:type:bug',
+        'user-tag', // non-sf label — should be skipped
+      ]);
+
+      expect(createdLabels).toHaveLength(2);
+      expect(createdLabels[0].name).toBe('sf:priority:high');
+      expect(createdLabels[1].name).toBe('sf:type:bug');
+    });
+
+    test('does not create labels that already exist on the repo', async () => {
+      let createCalled = false;
+
+      globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        const method = init?.method ?? 'GET';
+
+        // GET /repos/owner/repo/labels — labels already exist
+        if (method === 'GET' && url.includes('/labels')) {
+          return createMockResponse([
+            { id: 1, name: 'sf:priority:high', color: 'd93f0b', description: null },
+            { id: 2, name: 'sf:type:bug', color: 'd73a4a', description: null },
+          ], 200);
+        }
+
+        if (method === 'POST' && url.includes('/labels')) {
+          createCalled = true;
+          return createMockResponse({}, 201);
+        }
+
+        return createMockResponse({}, 200);
+      };
+
+      const adapter = new GitHubTaskAdapter({ token: 'test-token' });
+      await adapter.ensureLabelsExist('owner/repo', ['sf:priority:high', 'sf:type:bug']);
+
+      expect(createCalled).toBe(false);
+    });
+
+    test('caches labels per repo to avoid redundant API calls', async () => {
+      let getLabelsCalls = 0;
+
+      globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        const method = init?.method ?? 'GET';
+
+        if (method === 'GET' && url.includes('/labels')) {
+          getLabelsCalls++;
+          return createMockResponse([
+            { id: 1, name: 'sf:priority:high', color: 'd93f0b', description: null },
+          ], 200);
+        }
+
+        if (method === 'POST' && url.includes('/labels')) {
+          const body = JSON.parse(init?.body as string);
+          return createMockResponse(
+            { id: 99, name: body.name, color: body.color, description: null },
+            201
+          );
+        }
+
+        return createMockResponse({}, 200);
+      };
+
+      const adapter = new GitHubTaskAdapter({ token: 'test-token' });
+
+      // First call: should fetch labels from API
+      await adapter.ensureLabelsExist('owner/repo', ['sf:priority:high']);
+      expect(getLabelsCalls).toBe(1);
+
+      // Second call: should use cache, NOT call API again
+      await adapter.ensureLabelsExist('owner/repo', ['sf:priority:high']);
+      expect(getLabelsCalls).toBe(1);
+
+      // Third call with new label: should use cache for existing, create new one
+      await adapter.ensureLabelsExist('owner/repo', ['sf:priority:high', 'sf:type:task']);
+      expect(getLabelsCalls).toBe(1); // still no additional getLabels call
+    });
+
+    test('handles 422 "already_exists" gracefully during concurrent creation', async () => {
+      globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        const method = init?.method ?? 'GET';
+
+        if (method === 'GET' && url.includes('/labels')) {
+          return createMockResponse([], 200);
+        }
+
+        // Simulate a concurrent creation race — label was created by another process
+        if (method === 'POST' && url.includes('/labels')) {
+          return createMockResponse(
+            {
+              message: 'Validation Failed',
+              errors: [{ resource: 'Label', code: 'already_exists', field: 'name' }],
+            },
+            422
+          );
+        }
+
+        return createMockResponse({}, 200);
+      };
+
+      const adapter = new GitHubTaskAdapter({ token: 'test-token' });
+
+      // Should NOT throw — the 422 "already_exists" is handled gracefully
+      await adapter.ensureLabelsExist('owner/repo', ['sf:priority:high']);
+
+      // Subsequent call should skip the label (it was added to cache)
+      let createCalled = false;
+      globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
+        const method = init?.method ?? 'GET';
+        if (method === 'POST') createCalled = true;
+        return createMockResponse({}, 200);
+      };
+      await adapter.ensureLabelsExist('owner/repo', ['sf:priority:high']);
+      expect(createCalled).toBe(false);
+    });
+
+    test('throws on non-already_exists 422 errors', async () => {
+      globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        const method = init?.method ?? 'GET';
+
+        if (method === 'GET' && url.includes('/labels')) {
+          return createMockResponse([], 200);
+        }
+
+        if (method === 'POST' && url.includes('/labels')) {
+          return createMockResponse(
+            {
+              message: 'Validation Failed',
+              errors: [{ resource: 'Label', code: 'invalid', field: 'color' }],
+            },
+            422
+          );
+        }
+
+        return createMockResponse({}, 200);
+      };
+
+      const adapter = new GitHubTaskAdapter({ token: 'test-token' });
+      await expect(
+        adapter.ensureLabelsExist('owner/repo', ['sf:priority:high'])
+      ).rejects.toThrow(/Validation Failed/);
+    });
+
+    test('skips non-sf labels entirely', async () => {
+      let fetchCalled = false;
+
+      globalThis.fetch = async () => {
+        fetchCalled = true;
+        return createMockResponse({}, 200);
+      };
+
+      const adapter = new GitHubTaskAdapter({ token: 'test-token' });
+      await adapter.ensureLabelsExist('owner/repo', ['user-tag', 'another-tag']);
+
+      // No API calls should be made for non-sf labels
+      expect(fetchCalled).toBe(false);
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // createIssue with label auto-creation
+  // --------------------------------------------------------------------------
+
+  describe('createIssue with label auto-creation', () => {
+    test('ensures sf:* labels exist before creating issue', async () => {
+      const apiCalls: Array<{ method: string; url: string }> = [];
+
+      globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        const method = init?.method ?? 'GET';
+        apiCalls.push({ method, url });
+
+        // GET /labels — no labels exist
+        if (method === 'GET' && url.includes('/labels')) {
+          return createMockResponse([], 200);
+        }
+
+        // POST /labels — create label
+        if (method === 'POST' && url.includes('/labels')) {
+          const body = JSON.parse(init?.body as string);
+          return createMockResponse(
+            { id: 10, name: body.name, color: body.color, description: null },
+            201
+          );
+        }
+
+        // POST /issues — create issue
+        if (method === 'POST' && url.includes('/issues')) {
+          return createMockResponse(
+            createMockIssue({ number: 99, title: 'New Issue' }),
+            201
+          );
+        }
+
+        return createMockResponse({}, 200);
+      };
+
+      const adapter = new GitHubTaskAdapter({ token: 'test-token' });
+      const result = await adapter.createIssue('owner/repo', {
+        title: 'New Issue',
+        labels: ['sf:priority:high', 'sf:type:bug', 'user-tag'],
+      });
+
+      expect(result.externalId).toBe('99');
+
+      // Verify labels were created BEFORE the issue
+      const labelCreates = apiCalls.filter(
+        (c) => c.method === 'POST' && c.url.includes('/labels')
+      );
+      const issueCreate = apiCalls.findIndex(
+        (c) => c.method === 'POST' && c.url.includes('/issues')
+      );
+
+      expect(labelCreates).toHaveLength(2);
+      // Label creation should happen before issue creation
+      const lastLabelCreateIndex = apiCalls.findIndex(
+        (c) => c.method === 'POST' && c.url.includes('/labels') && c === labelCreates[1]
+      );
+      expect(lastLabelCreateIndex).toBeLessThan(issueCreate);
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // updateIssue with label auto-creation
+  // --------------------------------------------------------------------------
+
+  describe('updateIssue with label auto-creation', () => {
+    test('ensures sf:* labels exist before updating issue', async () => {
+      const apiCalls: Array<{ method: string; url: string }> = [];
+
+      globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        const method = init?.method ?? 'GET';
+        apiCalls.push({ method, url });
+
+        // GET /labels — no labels exist
+        if (method === 'GET' && url.includes('/labels')) {
+          return createMockResponse([], 200);
+        }
+
+        // POST /labels — create label
+        if (method === 'POST' && url.includes('/labels')) {
+          const body = JSON.parse(init?.body as string);
+          return createMockResponse(
+            { id: 10, name: body.name, color: body.color, description: null },
+            201
+          );
+        }
+
+        // PATCH /issues — update issue
+        if (method === 'PATCH' && url.includes('/issues')) {
+          return createMockResponse(createMockIssue({ number: 42, title: 'Updated' }));
+        }
+
+        return createMockResponse({}, 200);
+      };
+
+      const adapter = new GitHubTaskAdapter({ token: 'test-token' });
+      const result = await adapter.updateIssue('owner/repo', '42', {
+        labels: ['sf:priority:medium'],
+      });
+
+      expect(result.externalId).toBe('42');
+
+      // Verify labels were created before the issue update
+      const labelCreates = apiCalls.filter(
+        (c) => c.method === 'POST' && c.url.includes('/labels')
+      );
+      expect(labelCreates).toHaveLength(1);
+    });
+  });
+});
+
+// ============================================================================
+// getDefaultLabelColor Tests
+// ============================================================================
+
+describe('getDefaultLabelColor', () => {
+  test('returns specific color for priority labels', () => {
+    expect(getDefaultLabelColor('sf:priority:critical')).toBe('b60205');
+    expect(getDefaultLabelColor('sf:priority:high')).toBe('d93f0b');
+    expect(getDefaultLabelColor('sf:priority:medium')).toBe('fbca04');
+    expect(getDefaultLabelColor('sf:priority:low')).toBe('0e8a16');
+    expect(getDefaultLabelColor('sf:priority:minimal')).toBe('c5def5');
+  });
+
+  test('returns specific color for type labels', () => {
+    expect(getDefaultLabelColor('sf:type:bug')).toBe('d73a4a');
+    expect(getDefaultLabelColor('sf:type:feature')).toBe('a2eeef');
+    expect(getDefaultLabelColor('sf:type:task')).toBe('0075ca');
+    expect(getDefaultLabelColor('sf:type:chore')).toBe('e4e669');
+  });
+
+  test('returns fallback color for unknown sf labels', () => {
+    expect(getDefaultLabelColor('sf:unknown:label')).toBe('ededed');
+    expect(getDefaultLabelColor('sf:custom')).toBe('ededed');
   });
 });
 

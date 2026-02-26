@@ -400,6 +400,106 @@ describe('GitHubApiClient', () => {
   });
 
   // --------------------------------------------------------------------------
+  // getLabels
+  // --------------------------------------------------------------------------
+
+  describe('getLabels', () => {
+    test('fetches all labels for a repository', async () => {
+      const labels = [
+        { id: 1, name: 'bug', color: 'fc2929', description: 'Bug report' },
+        { id: 2, name: 'enhancement', color: '0075ca', description: 'New feature' },
+      ];
+      setMockFetchResponse(labels);
+
+      const result = await client.getLabels('owner', 'repo');
+
+      expect(result).toHaveLength(2);
+      expect(result[0].name).toBe('bug');
+      expect(result[1].name).toBe('enhancement');
+    });
+
+    test('calls correct URL', async () => {
+      setMockFetchResponse([]);
+
+      await client.getLabels('my-org', 'my-repo');
+
+      const url = (mockFetch.mock.calls[0] as [string, RequestInit])[0] as string;
+      expect(url).toContain('/repos/my-org/my-repo/labels');
+    });
+
+    test('uses GET method', async () => {
+      setMockFetchResponse([]);
+
+      await client.getLabels('owner', 'repo');
+
+      const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+      expect(init.method).toBe('GET');
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // createLabel
+  // --------------------------------------------------------------------------
+
+  describe('createLabel', () => {
+    test('creates a label with all fields', async () => {
+      const created = { id: 10, name: 'sf:priority:high', color: 'd93f0b', description: 'High priority' };
+      setMockFetchResponse(created, 201);
+
+      const result = await client.createLabel('owner', 'repo', {
+        name: 'sf:priority:high',
+        color: 'd93f0b',
+        description: 'High priority',
+      });
+
+      expect(result.name).toBe('sf:priority:high');
+      expect(result.color).toBe('d93f0b');
+    });
+
+    test('sends POST request with JSON body', async () => {
+      setMockFetchResponse({ id: 10, name: 'test', color: '000000', description: null }, 201);
+
+      await client.createLabel('owner', 'repo', {
+        name: 'sf:type:bug',
+        color: 'd73a4a',
+        description: 'Bug label',
+      });
+
+      const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+      expect(url).toBe('https://api.github.com/repos/owner/repo/labels');
+      expect(init.method).toBe('POST');
+
+      const body = JSON.parse(init.body as string);
+      expect(body.name).toBe('sf:type:bug');
+      expect(body.color).toBe('d73a4a');
+      expect(body.description).toBe('Bug label');
+    });
+
+    test('throws GitHubApiError on 422 (label already exists)', async () => {
+      setMockFetchResponse(
+        {
+          message: 'Validation Failed',
+          errors: [{ resource: 'Label', code: 'already_exists', field: 'name' }],
+        },
+        422
+      );
+
+      try {
+        await client.createLabel('owner', 'repo', {
+          name: 'sf:priority:high',
+          color: 'd93f0b',
+        });
+        throw new Error('Should have thrown');
+      } catch (err) {
+        expect(isGitHubApiError(err)).toBe(true);
+        const apiErr = err as GitHubApiError;
+        expect(apiErr.status).toBe(422);
+        expect(apiErr.responseBody?.errors).toBeDefined();
+      }
+    });
+  });
+
+  // --------------------------------------------------------------------------
   // Rate Limit Handling
   // --------------------------------------------------------------------------
 

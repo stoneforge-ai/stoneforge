@@ -74,6 +74,18 @@ export interface ListIssuesOptions {
 }
 
 /**
+ * Input for creating a new label on a repository
+ */
+export interface CreateLabelInput {
+  /** Label name (required) */
+  name: string;
+  /** Label color as hex string without '#' prefix (e.g. '0075ca') */
+  color: string;
+  /** Optional description for the label */
+  description?: string;
+}
+
+/**
  * Input for creating a new issue
  */
 export interface CreateIssueInput {
@@ -351,6 +363,37 @@ export class GitHubApiClient {
       'PATCH',
       `/repos/${enc(owner)}/${enc(repo)}/issues/${issueNumber}`,
       updates
+    );
+  }
+
+  /**
+   * List all labels for a repository.
+   *
+   * GET /repos/{owner}/{repo}/labels
+   *
+   * Auto-paginates through all pages to return the complete label set.
+   */
+  async getLabels(owner: string, repo: string): Promise<GitHubLabel[]> {
+    return this.paginatedRequest<GitHubLabel>(
+      `/repos/${enc(owner)}/${enc(repo)}/labels`,
+      new URLSearchParams()
+    );
+  }
+
+  /**
+   * Create a new label on a repository.
+   *
+   * POST /repos/{owner}/{repo}/labels
+   */
+  async createLabel(
+    owner: string,
+    repo: string,
+    input: CreateLabelInput
+  ): Promise<GitHubLabel> {
+    return this.request<GitHubLabel>(
+      'POST',
+      `/repos/${enc(owner)}/${enc(repo)}/labels`,
+      input
     );
   }
 
