@@ -1922,6 +1922,13 @@ export class DispatchDaemonImpl implements DispatchDaemon {
           ].join('\n'),
         });
 
+        // Attach event listeners IMMEDIATELY after session resume, before any awaits.
+        // This prevents a race where rate_limited events emitted during the async
+        // gap (metadata updates) would be lost.
+        if (this.config.onSessionStarted) {
+          this.config.onSessionStarted(session, events, workerId, `[resumed session for task ${task.id}]`);
+        }
+
         // Record session history entry for recovered worker session
         const resumeHistoryEntry: TaskSessionHistoryEntry = {
           sessionId: session.id,
@@ -1938,10 +1945,6 @@ export class DispatchDaemonImpl implements DispatchDaemon {
             resumeHistoryEntry
           );
           await this.api.update<Task>(task.id, { metadata: metadataWithHistory });
-        }
-
-        if (this.config.onSessionStarted) {
-          this.config.onSessionStarted(session, events, workerId, `[resumed session for task ${task.id}]`);
         }
 
         // Attach rapid-exit detector to catch silent rate limits
@@ -1985,6 +1988,13 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       executablePathOverride: orphanExecutableOverride ?? undefined,
     });
 
+    // Attach event listeners IMMEDIATELY after session start, before any awaits.
+    // This prevents a race where rate_limited events emitted during the async
+    // gap (metadata updates) would be lost.
+    if (this.config.onSessionStarted) {
+      this.config.onSessionStarted(session, events, workerId, initialPrompt);
+    }
+
     // Record session history entry and new sessionId for fresh spawned worker session
     const freshSpawnHistoryEntry: TaskSessionHistoryEntry = {
       sessionId: session.id,
@@ -2006,10 +2016,6 @@ export class DispatchDaemonImpl implements DispatchDaemon {
         { sessionId: session.providerSessionId ?? session.id }
       );
       await this.api.update<Task>(task.id, { metadata: metadataWithSessionId });
-    }
-
-    if (this.config.onSessionStarted) {
-      this.config.onSessionStarted(session, events, workerId, initialPrompt);
     }
 
     // Attach rapid-exit detector to catch silent rate limits
@@ -2142,6 +2148,13 @@ export class DispatchDaemonImpl implements DispatchDaemon {
           ].join('\n'),
         });
 
+        // Attach event listeners IMMEDIATELY after session resume, before any awaits.
+        // This prevents a race where rate_limited events emitted during the async
+        // gap (metadata updates) would be lost.
+        if (this.config.onSessionStarted) {
+          this.config.onSessionStarted(session, events, stewardId, `[resumed steward session for task ${task.id}]`);
+        }
+
         // Record session history entry for recovered steward session
         const resumeHistoryEntry: TaskSessionHistoryEntry = {
           sessionId: session.id,
@@ -2158,10 +2171,6 @@ export class DispatchDaemonImpl implements DispatchDaemon {
             resumeHistoryEntry
           );
           await this.api.update<Task>(task.id, { metadata: metadataWithHistory });
-        }
-
-        if (this.config.onSessionStarted) {
-          this.config.onSessionStarted(session, events, stewardId, `[resumed steward session for task ${task.id}]`);
         }
         this.emitter.emit('agent:spawned', stewardId, worktreePath);
         logger.info(`Resumed steward session for orphaned task ${task.id} on ${steward.name}`);
@@ -2294,6 +2303,14 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       executablePathOverride: executableOverride ?? undefined,
     });
 
+    // Attach event listeners IMMEDIATELY after session start, before any awaits.
+    // This prevents a race condition where rate_limited events emitted during
+    // the async gap (dispatch, metadata updates) would be lost because no
+    // listener was attached yet.
+    if (this.config.onSessionStarted) {
+      this.config.onSessionStarted(session, events, workerId, initialPrompt);
+    }
+
     // Session started successfully — now dispatch the task (assigns + sends message)
     const dispatchOptions: DispatchOptions = {
       branch,
@@ -2323,11 +2340,6 @@ export class DispatchDaemonImpl implements DispatchDaemon {
         sessionHistoryEntry
       );
       await this.api.update<Task>(task.id, { metadata: metadataWithHistory });
-    }
-
-    // Call the onSessionStarted callback if provided (for event saver and initial prompt saving)
-    if (this.config.onSessionStarted) {
-      this.config.onSessionStarted(session, events, workerId, initialPrompt);
     }
 
     // Notify pool service that agent was spawned
@@ -2647,6 +2659,13 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       executablePathOverride: stewardExecutableOverride ?? undefined,
     });
 
+    // Attach event listeners IMMEDIATELY after session start, before any awaits.
+    // This prevents a race where rate_limited events emitted during the async
+    // gap (metadata updates) would be lost.
+    if (this.config.onSessionStarted) {
+      this.config.onSessionStarted(session, events, stewardId, initialPrompt);
+    }
+
     // Record steward assignment and session history on the task to prevent double-dispatch and enable recovery.
     // Setting task.assignee makes the steward visible in the UI and enables
     // getAgentTasks() lookups for orphan recovery.
@@ -2677,11 +2696,6 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       assignee: stewardId,
       metadata: finalMetadata,
     });
-
-    // Call the onSessionStarted callback if provided
-    if (this.config.onSessionStarted) {
-      this.config.onSessionStarted(session, events, stewardId, initialPrompt);
-    }
 
     // Notify pool service that agent was spawned
     if (this.poolService) {
@@ -2829,6 +2843,13 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       executablePathOverride: recoveryExecutableOverride ?? undefined,
     });
 
+    // 5a. Attach event listeners IMMEDIATELY after session start, before any awaits.
+    //     This prevents a race where rate_limited events emitted during the async
+    //     gap (metadata updates) would be lost.
+    if (this.config.onSessionStarted) {
+      this.config.onSessionStarted(session, events, stewardId, initialPrompt);
+    }
+
     // 5b. Mark steward as used this cycle so it won't be re-assigned if the session
     //     terminates immediately (e.g. rate-limited) before the next loop iteration checks.
     stewardsUsedThisCycle?.add(stewardId as string);
@@ -2880,11 +2901,6 @@ export class DispatchDaemonImpl implements DispatchDaemon {
         );
       }
       throw metadataError;
-    }
-
-    // 7. Callbacks and notifications
-    if (this.config.onSessionStarted) {
-      this.config.onSessionStarted(session, events, stewardId, initialPrompt);
     }
 
     if (this.poolService) {

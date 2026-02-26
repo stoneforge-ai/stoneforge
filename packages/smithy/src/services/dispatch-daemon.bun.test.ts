@@ -2115,6 +2115,242 @@ describe('DispatchDaemon Rate Limit Integration', () => {
 });
 
 // ============================================================================
+// onSessionStarted race condition — rate_limited events before callback
+// ============================================================================
+
+describe('onSessionStarted race condition - rate limit events caught immediately', () => {
+  let api: QuarryAPI;
+  let inboxService: InboxService;
+  let agentRegistry: AgentRegistry;
+  let taskAssignment: TaskAssignmentService;
+  let dispatchService: DispatchService;
+  let sessionManager: SessionManager;
+  let worktreeManager: WorktreeManager;
+  let stewardScheduler: StewardScheduler;
+  let daemon: DispatchDaemon;
+  let testDbPath: string;
+  let systemEntity: EntityId;
+
+  beforeEach(async () => {
+    testDbPath = `/tmp/dispatch-daemon-race-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`;
+    const storage = createStorage({ path: testDbPath, create: true });
+    initializeSchema(storage);
+
+    api = createQuarryAPI(storage);
+    inboxService = createInboxService(storage);
+    agentRegistry = createAgentRegistry(api);
+    taskAssignment = createTaskAssignmentService(api);
+    dispatchService = createDispatchService(api, taskAssignment, agentRegistry);
+    sessionManager = createMockSessionManager();
+    worktreeManager = createMockWorktreeManager();
+    stewardScheduler = createMockStewardScheduler();
+
+    const { createEntity, EntityTypeValue } = await import('@stoneforge/core');
+    const entity = await createEntity({
+      name: 'test-system',
+      entityType: EntityTypeValue.SYSTEM,
+      createdBy: 'system:test' as EntityId,
+    });
+    const saved = await api.create(entity as unknown as Record<string, unknown> & { createdBy: EntityId });
+    systemEntity = saved.id as unknown as EntityId;
+  });
+
+  afterEach(async () => {
+    await daemon.stop();
+    if (fs.existsSync(testDbPath)) {
+      fs.unlinkSync(testDbPath);
+    }
+  });
+
+  test('rate_limited event emitted during dispatch async gap is caught by listener', async () => {
+    // This test verifies the fix for a race condition where rate_limited events
+    // emitted during the async gap between startSession() and the deferred
+    // onSessionStarted callback were lost because no listener was attached.
+    //
+    // The fix moves onSessionStarted to fire IMMEDIATELY after startSession()
+    // returns, BEFORE the dispatch() call and other async database operations.
+    //
+    // We verify this by having the dispatch mock emit a rate_limited event on
+    // the session's events emitter. If onSessionStarted was called before
+    // dispatch (as in the fix), the listener catches it. If it was called after
+    // dispatch (as in the old code), the event would be lost.
+
+    let rateLimitCaptured = false;
+    let sessionEvents: EventEmitter | null = null;
+
+    // Capture the events emitter from startSession
+    (sessionManager.startSession as ReturnType<typeof mock>).mockImplementation(
+      async (agentId: EntityId, options?: StartSessionOptions) => {
+        const events = new EventEmitter();
+        sessionEvents = events;
+        const session: SessionRecord = {
+          id: `session-${Date.now()}`,
+          agentId,
+          agentRole: 'worker',
+          workerMode: 'ephemeral',
+          status: 'running',
+          workingDirectory: options?.workingDirectory,
+          worktree: options?.worktree,
+          createdAt: createTimestamp(),
+          startedAt: createTimestamp(),
+          lastActivityAt: createTimestamp(),
+        };
+        return { session, events };
+      }
+    );
+
+    // Wrap the real dispatch to emit rate_limited DURING the dispatch call.
+    // This simulates a rate limit event arriving during the async gap that
+    // previously existed between startSession() and onSessionStarted().
+    const originalDispatch = dispatchService.dispatch.bind(dispatchService);
+    dispatchService.dispatch = async (...args: Parameters<typeof dispatchService.dispatch>) => {
+      // Emit rate_limited on the session's events emitter during dispatch.
+      // Before the fix, onSessionStarted hadn't been called yet at this point,
+      // so this event would have had no listener.
+      if (sessionEvents) {
+        sessionEvents.emit('rate_limited', {
+          executablePath: 'claude',
+          resetsAt: new Date(Date.now() + 60_000),
+          message: 'Rate limited',
+        });
+      }
+      return originalDispatch(...args);
+    };
+
+    // onSessionStarted callback that attaches the rate_limited listener
+    const onSessionStarted = (
+      _session: SessionRecord,
+      events: EventEmitter,
+      _agentId: EntityId,
+      _initialPrompt: string
+    ) => {
+      events.on('rate_limited', () => {
+        rateLimitCaptured = true;
+      });
+    };
+
+    daemon = new DispatchDaemonImpl(
+      api,
+      agentRegistry,
+      sessionManager,
+      dispatchService,
+      worktreeManager,
+      taskAssignment,
+      stewardScheduler,
+      inboxService,
+      {
+        pollIntervalMs: 100,
+        workerAvailabilityPollEnabled: true,
+        inboxPollEnabled: false,
+        stewardTriggerPollEnabled: false,
+        workflowTaskPollEnabled: false,
+        onSessionStarted,
+      }
+    );
+
+    // Register worker and create task
+    await agentRegistry.registerWorker({
+      name: 'race-worker',
+      workerMode: 'ephemeral',
+      createdBy: systemEntity,
+      maxConcurrentTasks: 1,
+    });
+    await api.create(
+      await createTask({ title: 'Task for race test', createdBy: systemEntity, status: TaskStatus.OPEN }) as unknown as Record<string, unknown> & { createdBy: EntityId }
+    );
+
+    // Poll to trigger dispatch
+    await daemon.pollWorkerAvailability();
+
+    // The rate_limited event should have been caught because onSessionStarted
+    // was called immediately after startSession() — before dispatch() ran —
+    // so the listener was already attached when dispatch emitted the event.
+    expect(rateLimitCaptured).toBe(true);
+  });
+
+  test('onSessionStarted is called before dispatch service runs (ordering verification)', async () => {
+    // Verify the execution ordering: onSessionStarted MUST be called before
+    // dispatchService.dispatch(). This is the core fix — listeners are attached
+    // before the async gap starts.
+    const callOrder: string[] = [];
+    let sessionEvents: EventEmitter | null = null;
+
+    (sessionManager.startSession as ReturnType<typeof mock>).mockImplementation(
+      async (agentId: EntityId, options?: StartSessionOptions) => {
+        const events = new EventEmitter();
+        sessionEvents = events;
+        const session: SessionRecord = {
+          id: `session-${Date.now()}`,
+          agentId,
+          agentRole: 'worker',
+          workerMode: 'ephemeral',
+          status: 'running',
+          workingDirectory: options?.workingDirectory,
+          worktree: options?.worktree,
+          createdAt: createTimestamp(),
+          startedAt: createTimestamp(),
+          lastActivityAt: createTimestamp(),
+        };
+        callOrder.push('startSession');
+        return { session, events };
+      }
+    );
+
+    // Wrap dispatch to track ordering
+    const originalDispatch = dispatchService.dispatch.bind(dispatchService);
+    dispatchService.dispatch = async (...args: Parameters<typeof dispatchService.dispatch>) => {
+      callOrder.push('dispatch');
+      return originalDispatch(...args);
+    };
+
+    const onSessionStarted = (
+      _session: SessionRecord,
+      _events: EventEmitter,
+      _agentId: EntityId,
+      _initialPrompt: string
+    ) => {
+      callOrder.push('onSessionStarted');
+    };
+
+    daemon = new DispatchDaemonImpl(
+      api,
+      agentRegistry,
+      sessionManager,
+      dispatchService,
+      worktreeManager,
+      taskAssignment,
+      stewardScheduler,
+      inboxService,
+      {
+        pollIntervalMs: 100,
+        workerAvailabilityPollEnabled: true,
+        inboxPollEnabled: false,
+        stewardTriggerPollEnabled: false,
+        workflowTaskPollEnabled: false,
+        onSessionStarted,
+      }
+    );
+
+    await agentRegistry.registerWorker({
+      name: 'order-worker',
+      workerMode: 'ephemeral',
+      createdBy: systemEntity,
+      maxConcurrentTasks: 1,
+    });
+    await api.create(
+      await createTask({ title: 'Task for order test', createdBy: systemEntity, status: TaskStatus.OPEN }) as unknown as Record<string, unknown> & { createdBy: EntityId }
+    );
+
+    await daemon.pollWorkerAvailability();
+
+    // The fix ensures onSessionStarted is called BEFORE dispatch.
+    // Before the fix, the order was: startSession -> dispatch -> onSessionStarted
+    // After the fix, the order is: startSession -> onSessionStarted -> dispatch
+    expect(callOrder).toEqual(['startSession', 'onSessionStarted', 'dispatch']);
+  });
+});
+
+// ============================================================================
 // spawnRecoveryStewardForTask - atomicity tests
 // ============================================================================
 
