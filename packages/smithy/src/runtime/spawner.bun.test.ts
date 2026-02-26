@@ -1327,3 +1327,168 @@ describe('waitForInit still resolves normally on init event', () => {
     expect(sessions[0].status).toBe('terminated');
   });
 });
+
+// ============================================================================
+// Rate limit event executable path tracking
+// ============================================================================
+
+describe('rate_limited event carries correct executablePath', () => {
+  test('rate_limited event uses claudePath from SpawnOptions when provided', async () => {
+    // Create a mock headless session that emits a rate limit message after init,
+    // with a delay so we can attach the listener before the event fires.
+    const createRateLimitHeadlessSession = (): HeadlessSession => {
+      let sentInit = false;
+      let sentRateLimit = false;
+      return {
+        sendMessage: () => {},
+        [Symbol.asyncIterator]() {
+          return {
+            async next(): Promise<IteratorResult<AgentMessage>> {
+              if (!sentInit) {
+                sentInit = true;
+                return {
+                  done: false,
+                  value: {
+                    type: 'system',
+                    subtype: 'init',
+                    sessionId: 'provider-session-rl-path',
+                    content: 'Session initialized',
+                    raw: { type: 'system', subtype: 'init', session_id: 'provider-session-rl-path' },
+                  },
+                };
+              }
+              if (!sentRateLimit) {
+                sentRateLimit = true;
+                // Delay rate limit message so listener can be attached after spawn
+                await new Promise((resolve) => setTimeout(resolve, 100));
+                return {
+                  done: false,
+                  value: {
+                    type: 'assistant',
+                    content: "You've hit your limit · resets 12am",
+                    raw: { type: 'assistant' },
+                  },
+                };
+              }
+              await new Promise((resolve) => setTimeout(resolve, 50));
+              return { done: true, value: undefined };
+            },
+          };
+        },
+        interrupt: async () => {},
+        close: () => {},
+      };
+    };
+
+    const mockProvider = createMockProvider(createRateLimitHeadlessSession);
+
+    const spawner = new SpawnerServiceImpl({
+      provider: mockProvider,
+      workingDirectory: '/tmp',
+      timeout: 5000,
+    });
+
+    // Collect rate_limited events — use a promise to wait for the event
+    const rateLimitPromise = new Promise<{ executablePath?: string; message?: string }>((resolve) => {
+      // We need to listen on the spawner's internal EventEmitter before spawn returns.
+      // Instead, spawn first, then immediately attach listener on the returned events.
+      // The 100ms delay in the mock ensures the event hasn't fired yet.
+      setTimeout(() => {}, 0); // no-op, just for clarity
+    });
+
+    // Spawn with a custom claudePath (simulating a fallback executable)
+    const result = await spawner.spawn(testAgentId, 'worker', {
+      mode: 'headless',
+      claudePath: 'claude-preview',
+    });
+
+    // Immediately attach listener — the rate limit message has a 100ms delay
+    const rateLimitEvents: Array<{ executablePath?: string; message?: string }> = [];
+    result.events.on('rate_limited', (data: { executablePath?: string; message?: string }) => {
+      rateLimitEvents.push(data);
+    });
+
+    // Wait for processProviderMessages to process the rate limit message
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    // The rate_limited event should carry the custom executable path
+    expect(rateLimitEvents.length).toBe(1);
+    expect(rateLimitEvents[0]!.executablePath).toBe('claude-preview');
+    expect(rateLimitEvents[0]!.message).toContain("You've hit your limit");
+  });
+
+  test('rate_limited event uses default claudePath when none provided in SpawnOptions', async () => {
+    // Create a mock headless session that emits a rate limit message with delay
+    const createRateLimitHeadlessSession = (): HeadlessSession => {
+      let sentInit = false;
+      let sentRateLimit = false;
+      return {
+        sendMessage: () => {},
+        [Symbol.asyncIterator]() {
+          return {
+            async next(): Promise<IteratorResult<AgentMessage>> {
+              if (!sentInit) {
+                sentInit = true;
+                return {
+                  done: false,
+                  value: {
+                    type: 'system',
+                    subtype: 'init',
+                    sessionId: 'provider-session-rl-default',
+                    content: 'Session initialized',
+                    raw: { type: 'system', subtype: 'init', session_id: 'provider-session-rl-default' },
+                  },
+                };
+              }
+              if (!sentRateLimit) {
+                sentRateLimit = true;
+                // Delay rate limit message so listener can be attached after spawn
+                await new Promise((resolve) => setTimeout(resolve, 100));
+                return {
+                  done: false,
+                  value: {
+                    type: 'assistant',
+                    content: "You've hit your limit · resets 12am",
+                    raw: { type: 'assistant' },
+                  },
+                };
+              }
+              await new Promise((resolve) => setTimeout(resolve, 50));
+              return { done: true, value: undefined };
+            },
+          };
+        },
+        interrupt: async () => {},
+        close: () => {},
+      };
+    };
+
+    const mockProvider = createMockProvider(createRateLimitHeadlessSession);
+
+    // Create spawner with a known default claudePath
+    const spawner = new SpawnerServiceImpl({
+      provider: mockProvider,
+      claudePath: 'claude',
+      workingDirectory: '/tmp',
+      timeout: 5000,
+    });
+
+    // Spawn WITHOUT a custom claudePath — should use the default
+    const result = await spawner.spawn(testAgentId, 'worker', {
+      mode: 'headless',
+    });
+
+    // Immediately attach listener — the rate limit message has a 100ms delay
+    const rateLimitEvents: Array<{ executablePath?: string; message?: string }> = [];
+    result.events.on('rate_limited', (data: { executablePath?: string; message?: string }) => {
+      rateLimitEvents.push(data);
+    });
+
+    // Wait for processProviderMessages to process the rate limit message
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    // The rate_limited event should carry the default executable path
+    expect(rateLimitEvents.length).toBe(1);
+    expect(rateLimitEvents[0]!.executablePath).toBe('claude');
+  });
+});

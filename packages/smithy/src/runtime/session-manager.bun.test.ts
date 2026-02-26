@@ -79,19 +79,21 @@ function createMockAgent(
   } as unknown as AgentEntity;
 }
 
-function createMockSpawnerService(): SpawnerService & { _mockEmitters: Map<string, EventEmitter>; _mockSessions: Map<string, SpawnedSession> } {
+function createMockSpawnerService(): SpawnerService & { _mockEmitters: Map<string, EventEmitter>; _mockSessions: Map<string, SpawnedSession>; _lastSpawnOptions?: SpawnOptions } {
   const sessions = new Map<string, SpawnedSession>();
   const emitters = new Map<string, EventEmitter>();
 
-  return {
+  const service = {
     _mockEmitters: emitters,
     _mockSessions: sessions,
+    _lastSpawnOptions: undefined as SpawnOptions | undefined,
 
     async spawn(
       agentId: EntityId,
       agentRole: 'director' | 'worker' | 'steward',
       options?: SpawnOptions
     ): Promise<SpawnResult> {
+      service._lastSpawnOptions = options;
       sessionIdCounter++;
       const sessionId = `session-mock-${sessionIdCounter}`;
       const now = createTimestamp();
@@ -193,6 +195,8 @@ function createMockSpawnerService(): SpawnerService & { _mockEmitters: Map<strin
       return { hasReadyTask: false, autoStarted: false };
     },
   };
+
+  return service;
 }
 
 function createMockAgentRegistry(agents: Map<EntityId, AgentEntity>): AgentRegistry {
@@ -1352,5 +1356,80 @@ describe('SessionManager', () => {
       const found = sessionManager.getSession(session.id);
       expect(found).toBeUndefined();
     }, 10000);
+  });
+});
+
+// ============================================================================
+// Executable path tracking for rate limit attribution
+// ============================================================================
+
+describe('SessionManager executable path tracking', () => {
+  test('passes executablePathOverride as claudePath to spawner for rate limit attribution', async () => {
+    const agents = new Map<EntityId, AgentEntity>();
+    agents.set(testAgentId, createMockAgent(testAgentId, 'worker'));
+
+    const spawner = createMockSpawnerService();
+    const registry = createMockAgentRegistry(agents);
+    const api = createMockApi();
+    const sessionManager = createSessionManager(spawner, api, registry);
+
+    await sessionManager.startSession(testAgentId, {
+      executablePathOverride: 'claude-preview',
+    });
+
+    // The spawner should have received claudePath = 'claude-preview'
+    expect(spawner._lastSpawnOptions?.claudePath).toBe('claude-preview');
+  });
+
+  test('passes agent metadata executablePath as claudePath to spawner when no override', async () => {
+    // Create an agent with a custom executable path in metadata
+    const agentWithExecPath: AgentEntity = {
+      id: testAgentId2,
+      type: ElementType.ENTITY,
+      name: 'test-agent-exec-path',
+      entityType: 'agent',
+      version: 1,
+      createdAt: createTimestamp(),
+      updatedAt: createTimestamp(),
+      createdBy: testCreatorId,
+      tags: [],
+      metadata: {
+        agent: {
+          agentRole: 'worker' as const,
+          workerMode: 'ephemeral' as const,
+          sessionStatus: 'idle',
+          executablePath: '/custom/claude-binary',
+        },
+      },
+    } as unknown as AgentEntity;
+
+    const agents = new Map<EntityId, AgentEntity>();
+    agents.set(testAgentId2, agentWithExecPath);
+
+    const spawner = createMockSpawnerService();
+    const registry = createMockAgentRegistry(agents);
+    const api = createMockApi();
+    const sessionManager = createSessionManager(spawner, api, registry);
+
+    await sessionManager.startSession(testAgentId2, {});
+
+    // The spawner should have received claudePath = '/custom/claude-binary'
+    expect(spawner._lastSpawnOptions?.claudePath).toBe('/custom/claude-binary');
+  });
+
+  test('does not set claudePath when no executable path override or metadata path', async () => {
+    const agents = new Map<EntityId, AgentEntity>();
+    agents.set(testAgentId, createMockAgent(testAgentId, 'worker'));
+
+    const spawner = createMockSpawnerService();
+    const registry = createMockAgentRegistry(agents);
+    const api = createMockApi();
+    const sessionManager = createSessionManager(spawner, api, registry);
+
+    await sessionManager.startSession(testAgentId, {});
+
+    // claudePath should be undefined since there's no executable path override
+    // and no custom path in agent metadata (resolveExecutablePath returns undefined)
+    expect(spawner._lastSpawnOptions?.claudePath).toBeUndefined();
   });
 });

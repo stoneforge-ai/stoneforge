@@ -1869,72 +1869,95 @@ describe('DispatchDaemon Rate Limit Integration', () => {
     daemon.handleRateLimitDetected('claude2', resetsAt);
 
     const status = daemon.getRateLimitStatus();
+    // Plan-level rate limits: marking 'claude2' (which is in the fallback chain
+    // ['claude2', 'claude']) marks ALL chain entries as limited
+    expect(status.limits).toHaveLength(2);
+    const executables = status.limits.map(l => l.executable).sort();
+    expect(executables).toEqual(['claude', 'claude2']);
+    for (const limit of status.limits) {
+      expect(limit.resetsAt).toBe(resetsAt.toISOString());
+    }
+  });
+
+  test('handleRateLimitDetected marks ALL fallback chain entries when a chain executable is rate-limited', () => {
+    // When a fallback executable (e.g. 'claude2') hits a plan-level rate limit,
+    // all executables in the fallback chain should be marked as limited because
+    // they share the same API plan.
+    const resetsAt = new Date(Date.now() + 20 * 60 * 1000);
+    daemon.handleRateLimitDetected('claude2', resetsAt);
+
+    const status = daemon.getRateLimitStatus();
+    // Both 'claude2' and 'claude' should be limited (fallback chain is ['claude2', 'claude'])
+    expect(status.limits).toHaveLength(2);
+    const executables = status.limits.map(l => l.executable).sort();
+    expect(executables).toEqual(['claude', 'claude2']);
+    // All should have the same reset time
+    for (const limit of status.limits) {
+      expect(limit.resetsAt).toBe(resetsAt.toISOString());
+    }
+  });
+
+  test('handleRateLimitDetected marks ALL fallback chain entries when any chain executable hits limit', () => {
+    // Same behavior when 'claude' (the second entry) is the one hitting the limit
+    const resetsAt = new Date(Date.now() + 20 * 60 * 1000);
+    daemon.handleRateLimitDetected('claude', resetsAt);
+
+    const status = daemon.getRateLimitStatus();
+    expect(status.limits).toHaveLength(2);
+    const executables = status.limits.map(l => l.executable).sort();
+    expect(executables).toEqual(['claude', 'claude2']);
+  });
+
+  test('handleRateLimitDetected marks ALL chain entries so resolveExecutableWithFallback returns all_limited', async () => {
+    // This is the core bug scenario: a fallback executable (e.g. 'claude-preview')
+    // hits a rate limit, but only that one entry was being marked. Then
+    // resolveExecutableWithFallback() would still return another chain entry
+    // thinking it was available, causing a dispatch loop.
+    const worker = await createTestWorker('chain-limit-worker');
+    await createTestTask('Task for chain limit test');
+
+    const resetsAt = new Date(Date.now() + 20 * 60 * 1000);
+    // Only report the rate limit from 'claude2' (the fallback executable that was used)
+    daemon.handleRateLimitDetected('claude2', resetsAt);
+
+    // With the fix, ALL chain entries should be marked, so the daemon should
+    // report as fully paused (all_limited)
+    const status = daemon.getRateLimitStatus();
+    expect(status.isPaused).toBe(true);
+  });
+
+  test('handleRateLimitDetected does NOT mark chain entries for executable not in chain', () => {
+    // An executable not in the fallback chain should only mark itself
+    const resetsAt = new Date(Date.now() + 20 * 60 * 1000);
+    daemon.handleRateLimitDetected('some-other-executable', resetsAt);
+
+    const status = daemon.getRateLimitStatus();
     expect(status.limits).toHaveLength(1);
-    expect(status.limits[0]!.executable).toBe('claude2');
-    expect(status.limits[0]!.resetsAt).toBe(resetsAt.toISOString());
+    expect(status.limits[0]!.executable).toBe('some-other-executable');
   });
 
   // --------------------------------------------------------------------------
   // 2. Fallback selection at dispatch time
   // --------------------------------------------------------------------------
 
-  test('dispatches worker with fallback executable when primary is limited', async () => {
-    // Configure fallback chain: ['claude2', 'claude']
-    // Mark 'claude2' as limited so 'claude' should be used instead
+  test('skips worker dispatch when any chain executable is rate-limited (plan-level)', async () => {
+    // With plan-level rate limits, marking any executable in the fallback chain
+    // marks ALL chain entries as limited (they share the same API plan).
+    // So marking 'claude' should also mark 'claude2', preventing dispatch.
     const worker = await createTestWorker('fallback-alice');
     await createTestTask('Task for fallback test');
 
-    const resetsAt = new Date(Date.now() + 60_000);
-    daemon.handleRateLimitDetected('claude2', resetsAt);
-
-    // The worker uses 'claude' as default provider (no executablePath set),
-    // which resolves to 'claude'. Since 'claude' is not limited, the primary is fine.
-    // Let's instead mark 'claude' (the default provider name) as limited:
+    // Mark 'claude' as limited — since it's in the fallback chain, ALL chain
+    // entries ('claude2' and 'claude') should be marked
     daemon.handleRateLimitDetected('claude', new Date(Date.now() + 60_000));
 
-    // Now 'claude' (the effective executable for a default worker) is limited.
-    // The fallback chain is ['claude2', 'claude']. 'claude2' is also limited.
-    // So actually both are limited and dispatch should be skipped.
-    // Let me rethink: we need only the primary to be limited, not the fallback.
+    const result = await daemon.pollWorkerAvailability();
 
-    // Clear and start fresh:
-    // Use a fresh daemon with only claude2 limited
-    await daemon.stop();
+    // Worker should NOT be dispatched because all chain entries are limited
+    expect(result.processed).toBe(0);
 
-    // Mark only 'claude' as limited (that's the effective executable for default workers)
-    // The fallback chain is ['claude2', 'claude']. 'claude2' is available.
-    const daemon2 = new DispatchDaemonImpl(
-      api,
-      agentRegistry,
-      sessionManager,
-      dispatchService,
-      worktreeManager,
-      taskAssignment,
-      stewardScheduler,
-      inboxService,
-      { pollIntervalMs: 100, workerAvailabilityPollEnabled: true, inboxPollEnabled: false, stewardTriggerPollEnabled: false, workflowTaskPollEnabled: false },
-      undefined,
-      settingsService
-    );
-
-    // Mark 'claude' (the default provider) as limited
-    daemon2.handleRateLimitDetected('claude', new Date(Date.now() + 60_000));
-
-    const result = await daemon2.pollWorkerAvailability();
-
-    // The worker should have been dispatched using the fallback 'claude2'
-    expect(result.processed).toBe(1);
-
-    // Verify the session was started with the fallback executable override
-    expect(sessionManager.startSession).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        executablePathOverride: 'claude2',
-      })
-    );
-
-    await daemon2.stop();
-    daemon = daemon2; // so afterEach cleanup works
+    const status = daemon.getRateLimitStatus();
+    expect(status.isPaused).toBe(true);
   });
 
   // --------------------------------------------------------------------------
@@ -2058,24 +2081,26 @@ describe('DispatchDaemon Rate Limit Integration', () => {
     expect(initialStatus.limits).toHaveLength(0);
     expect(initialStatus.soonestReset).toBeUndefined();
 
-    // Mark one executable as limited (time above the 15-minute floor)
+    // Mark one chain executable as limited (time above the 15-minute floor).
+    // Since rate limits are plan-level, marking any chain entry marks ALL entries.
     const resetTime1 = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes from now
     daemon.handleRateLimitDetected('claude2', resetTime1);
 
-    const partialStatus = daemon.getRateLimitStatus();
-    expect(partialStatus.isPaused).toBe(false); // Only one of two is limited
-    expect(partialStatus.limits).toHaveLength(1);
-    expect(partialStatus.limits[0]!.executable).toBe('claude2');
-    expect(partialStatus.soonestReset).toBe(resetTime1.toISOString());
+    const afterFirstLimit = daemon.getRateLimitStatus();
+    // Plan-level: marking 'claude2' marks both chain entries
+    expect(afterFirstLimit.isPaused).toBe(true);
+    expect(afterFirstLimit.limits).toHaveLength(2);
+    expect(afterFirstLimit.soonestReset).toBe(resetTime1.toISOString());
 
-    // Mark the second executable as limited (sooner but still above floor)
+    // Mark with a sooner time — the tracker only keeps the LATER reset time
+    // per executable, so this call should not downgrade claude2's limit.
+    // Both chain entries get re-marked with the same time.
     const resetTime2 = new Date(Date.now() + 20 * 60 * 1000); // 20 minutes from now
     daemon.handleRateLimitDetected('claude', resetTime2);
 
     const fullStatus = daemon.getRateLimitStatus();
     expect(fullStatus.isPaused).toBe(true); // Both are limited
     expect(fullStatus.limits).toHaveLength(2);
-    expect(fullStatus.soonestReset).toBe(resetTime2.toISOString()); // Soonest is claude's
 
     // Verify both executables are in the limits list
     const executables = fullStatus.limits.map((l) => l.executable).sort();
@@ -3329,22 +3354,29 @@ describe('recoverOrphanedAssignments - rate limit guard', () => {
     expect(sessionManager.resumeSession).not.toHaveBeenCalled();
   });
 
-  test('processes orphan recovery when only some executables are rate-limited (fallback available)', async () => {
+  test('skips orphan recovery when any chain executable is rate-limited (plan-level)', async () => {
     const worker = await createTestWorker('partial-limit-worker');
     const workerId = worker.id as unknown as EntityId;
-    await createAssignedTask('Task with partial rate limit', workerId, {
+    const task = await createAssignedTask('Task with plan-level rate limit', workerId, {
       worktree: '/worktrees/partial-limit-worker/task',
       resumeCount: 0,
     });
 
-    // Only mark 'claude' as limited — 'claude2' is still available in the fallback chain
+    // Mark 'claude' as limited — since it's in the fallback chain, ALL chain
+    // entries are marked (plan-level rate limits share the same API plan)
     const resetsAt = new Date(Date.now() + 60_000);
     daemon.handleRateLimitDetected('claude', resetsAt);
 
     const result = await daemon.recoverOrphanedAssignments();
 
-    // Should proceed with recovery using fallback executable
-    expect(result.processed).toBe(1);
+    // Should skip recovery because all chain entries are limited
+    expect(result.processed).toBe(0);
+
+    // resumeCount should NOT have been incremented (stays at initial value)
+    const updated = await api.get<Task>(task.id);
+    const meta = updated?.metadata as Record<string, unknown> | undefined;
+    // resumeCount 0 may be stored as undefined — either way, it must NOT be 1+
+    expect(meta?.resumeCount ?? 0).toBe(0);
   });
 });
 
@@ -3507,11 +3539,15 @@ describe('handleRateLimitDetected - minimum floor', () => {
     daemon.handleRateLimitDetected('claude', tooSoon);
 
     const status = daemon.getRateLimitStatus();
-    expect(status.limits).toHaveLength(1);
+    // Plan-level: marking 'claude' (in chain) marks all chain entries
+    expect(status.limits).toHaveLength(2);
 
-    const recordedResetTime = new Date(status.limits[0]!.resetsAt).getTime();
-    // Should be at least RATE_LIMIT_MINIMUM_FLOOR_MS from now (minus a small tolerance)
-    expect(recordedResetTime).toBeGreaterThanOrEqual(now + RATE_LIMIT_MINIMUM_FLOOR_MS - 1000);
+    // All entries should be clamped to the floor
+    for (const limit of status.limits) {
+      const recordedResetTime = new Date(limit.resetsAt).getTime();
+      // Should be at least RATE_LIMIT_MINIMUM_FLOOR_MS from now (minus a small tolerance)
+      expect(recordedResetTime).toBeGreaterThanOrEqual(now + RATE_LIMIT_MINIMUM_FLOOR_MS - 1000);
+    }
   });
 
   test('preserves reset time when already above the floor', () => {
@@ -3521,8 +3557,11 @@ describe('handleRateLimitDetected - minimum floor', () => {
     daemon.handleRateLimitDetected('claude', farEnough);
 
     const status = daemon.getRateLimitStatus();
-    expect(status.limits).toHaveLength(1);
-    expect(status.limits[0]!.resetsAt).toBe(farEnough.toISOString());
+    // Plan-level: marking 'claude' (in chain) marks all chain entries
+    expect(status.limits).toHaveLength(2);
+    for (const limit of status.limits) {
+      expect(limit.resetsAt).toBe(farEnough.toISOString());
+    }
   });
 
   test('clamps reset time in the past to minimum floor', () => {
@@ -3532,11 +3571,14 @@ describe('handleRateLimitDetected - minimum floor', () => {
     daemon.handleRateLimitDetected('claude', pastTime);
 
     const status = daemon.getRateLimitStatus();
-    expect(status.limits).toHaveLength(1);
+    // Plan-level: marking 'claude' (in chain) marks all chain entries
+    expect(status.limits).toHaveLength(2);
 
-    const recordedResetTime = new Date(status.limits[0]!.resetsAt).getTime();
-    // Should be clamped to at least the minimum floor from now
-    expect(recordedResetTime).toBeGreaterThanOrEqual(now + RATE_LIMIT_MINIMUM_FLOOR_MS - 1000);
+    for (const limit of status.limits) {
+      const recordedResetTime = new Date(limit.resetsAt).getTime();
+      // Should be clamped to at least the minimum floor from now
+      expect(recordedResetTime).toBeGreaterThanOrEqual(now + RATE_LIMIT_MINIMUM_FLOOR_MS - 1000);
+    }
   });
 
   test('clamps reset time exactly at the floor boundary', () => {
@@ -3546,11 +3588,14 @@ describe('handleRateLimitDetected - minimum floor', () => {
     daemon.handleRateLimitDetected('claude', exactlyAtFloor);
 
     const status = daemon.getRateLimitStatus();
-    expect(status.limits).toHaveLength(1);
+    // Plan-level: marking 'claude' (in chain) marks all chain entries
+    expect(status.limits).toHaveLength(2);
 
-    const recordedResetTime = new Date(status.limits[0]!.resetsAt).getTime();
-    // Should be very close to the original (within tolerance of test execution time)
-    expect(Math.abs(recordedResetTime - exactlyAtFloor.getTime())).toBeLessThan(2000);
+    for (const limit of status.limits) {
+      const recordedResetTime = new Date(limit.resetsAt).getTime();
+      // Should be very close to the original (within tolerance of test execution time)
+      expect(Math.abs(recordedResetTime - exactlyAtFloor.getTime())).toBeLessThan(2000);
+    }
   });
 });
 

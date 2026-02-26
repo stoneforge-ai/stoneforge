@@ -663,10 +663,25 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       );
     }
 
-    this.rateLimitTracker.markLimited(executable, effectiveResetsAt);
-    logger.info(
-      `Rate limit detected for executable '${executable}', resets at ${effectiveResetsAt.toISOString()}`
-    );
+    // When a fallback chain is configured, rate limits are plan-level: hitting
+    // a limit on any executable in the chain means ALL executables share the
+    // same plan and are equally limited. Mark every entry in the chain to
+    // prevent resolveExecutableWithFallback() from thinking other executables
+    // in the chain are still available.
+    const fallbackChain = this.settingsService?.getAgentDefaults().fallbackChain ?? [];
+    if (fallbackChain.length > 0 && fallbackChain.includes(executable)) {
+      for (const chainExecutable of fallbackChain) {
+        this.rateLimitTracker.markLimited(chainExecutable, effectiveResetsAt);
+      }
+      logger.info(
+        `Rate limit detected for executable '${executable}', marked all ${fallbackChain.length} fallback chain entries as limited until ${effectiveResetsAt.toISOString()}`
+      );
+    } else {
+      this.rateLimitTracker.markLimited(executable, effectiveResetsAt);
+      logger.info(
+        `Rate limit detected for executable '${executable}', resets at ${effectiveResetsAt.toISOString()}`
+      );
+    }
     this.operationLog?.write('warn', 'rate-limit', `Rate limit detected for '${executable}', resets at ${resetsAt.toISOString()}`, { executable, resetsAt: resetsAt.toISOString() });
   }
 

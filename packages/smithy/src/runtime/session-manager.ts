@@ -566,7 +566,10 @@ export class SessionManagerImpl implements SessionManager {
     // Resolve model: use options override, or fall back to agent metadata
     const modelOverride = options?.model ?? (meta as { model?: string }).model;
 
-    // Build spawn options
+    // Build spawn options.
+    // Pass the resolved executable path as claudePath so the spawner can track
+    // the actual executable used for rate-limit event attribution.
+    const resolvedExecutablePath = this.resolveExecutablePath(providerName ?? 'claude-code', agentExecutablePath);
     const spawnOptions: SpawnOptions = {
       workingDirectory: options?.workingDirectory,
       initialPrompt: options?.initialPrompt,
@@ -576,10 +579,10 @@ export class SessionManagerImpl implements SessionManager {
       rows: options?.rows,
       provider: providerOverride,
       model: modelOverride,
+      claudePath: resolvedExecutablePath,
     };
 
-    const resolvedPath = this.resolveExecutablePath(providerName ?? 'claude-code', agentExecutablePath);
-    console.log('[session-manager] Starting session for agent', agentId, 'mode:', spawnOptions.mode, 'provider:', providerName ?? 'claude-code', 'model:', modelOverride ?? 'default', 'executablePath:', resolvedPath ?? 'default', 'prompt length:', options?.initialPrompt?.length ?? 0);
+    console.log('[session-manager] Starting session for agent', agentId, 'mode:', spawnOptions.mode, 'provider:', providerName ?? 'claude-code', 'model:', modelOverride ?? 'default', 'executablePath:', resolvedExecutablePath ?? 'default', 'prompt length:', options?.initialPrompt?.length ?? 0);
 
     // Spawn the session
     const result = await this.spawner.spawn(agentId, meta.agentRole, spawnOptions);
@@ -679,10 +682,13 @@ export class SessionManagerImpl implements SessionManager {
       }
     }
 
-    // Resolve provider from agent metadata, with executable path resolution
+    // Resolve provider from agent metadata, with executable path resolution.
+    // Pass the resolved executable path as claudePath so the spawner can track
+    // the actual executable used for rate-limit event attribution.
     const providerName = (meta as { provider?: string }).provider;
     const agentExecutablePath = (meta as { executablePath?: string }).executablePath;
     const providerOverride = await this.resolveProvider(providerName, agentExecutablePath);
+    const resolvedExecutablePath = this.resolveExecutablePath(providerName ?? 'claude-code', agentExecutablePath);
 
     // Resolve model from agent metadata (resume doesn't allow model override)
     const modelFromMeta = (meta as { model?: string }).model;
@@ -694,6 +700,7 @@ export class SessionManagerImpl implements SessionManager {
       initialPrompt: effectivePrompt,
       provider: providerOverride,
       model: modelFromMeta,
+      claudePath: resolvedExecutablePath,
     };
 
     // Spawn the session with resume
