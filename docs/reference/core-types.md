@@ -33,7 +33,7 @@ interface Element {
 
 ```typescript
 interface Task extends Element {
-  type: 'task';
+  readonly type: 'task';
   title: string;
   descriptionRef?: DocumentId;
   acceptanceCriteria?: string;
@@ -140,7 +140,7 @@ interface Message extends Element {
 
 ```typescript
 interface Document extends Element {
-  type: 'document';
+  readonly type: 'document';
   title?: string;                       // Optional display title
   readonly contentType: ContentType;
   content: string;
@@ -299,7 +299,7 @@ type TestResult = (typeof TestResult)[keyof typeof TestResult];
 
 ```typescript
 interface Plan extends Element {
-  type: 'plan';
+  readonly type: 'plan';
   title: string;
   descriptionRef?: DocumentId;
   status: PlanStatus;
@@ -336,7 +336,7 @@ Use `calculatePlanProgress(taskStatusCounts)` to compute progress from task stat
 
 ```typescript
 interface Workflow extends Element {
-  type: 'workflow';
+  readonly type: 'workflow';
   title: string;
   descriptionRef?: DocumentId;
   status: WorkflowStatus;
@@ -389,7 +389,7 @@ type ChannelType = 'direct' | 'group';
 
 ```typescript
 interface Library extends Element {
-  type: 'library';
+  readonly type: 'library';
   name: string;
   descriptionRef?: DocumentId;
 }
@@ -406,7 +406,7 @@ Contains documents and sub-libraries via `parent-child` dependencies:
 
 ```typescript
 interface Team extends Element {
-  type: 'team';
+  readonly type: 'team';
   name: string;
   members: EntityId[];
   descriptionRef?: DocumentId;
@@ -425,7 +425,7 @@ type TeamStatus = 'active' | 'tombstone';
 
 ```typescript
 interface Playbook extends Element {
-  type: 'playbook';
+  readonly type: 'playbook';
   name: string;
   title: string;
   descriptionRef?: DocumentId;
@@ -524,6 +524,11 @@ interface HydratedLibrary extends Library {
 interface HydratedTeam extends Team {
   description?: string;
   memberCount?: number;
+}
+
+// Playbook with resolved description document
+interface HydratedPlaybook extends Playbook {
+  description?: string;
 }
 ```
 
