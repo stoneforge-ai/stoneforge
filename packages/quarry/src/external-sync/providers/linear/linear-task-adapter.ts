@@ -13,7 +13,7 @@
  * - Maps status via workflow state TYPE, not state name
  */
 
-import type { Timestamp } from '@stoneforge/core';
+import type { Timestamp, Priority } from '@stoneforge/core';
 import type {
   TaskSyncAdapter,
   ExternalTask,
@@ -223,6 +223,8 @@ export class LinearTaskAdapter implements TaskSyncAdapter {
       state: isCompleted ? 'closed' : 'open',
       labels,
       assignees,
+      // Convert Linear native priority (0-4) to Stoneforge priority (1-5)
+      priority: linearPriorityToStoneforge(issue.priority),
       createdAt: issue.createdAt,
       updatedAt: issue.updatedAt,
       closedAt: isCompleted ? issue.updatedAt : undefined,
@@ -272,12 +274,13 @@ export class LinearTaskAdapter implements TaskSyncAdapter {
       }
     }
 
-    // Map priority from labels (look for sf: prefixed priority labels)
-    // Note: Priority is handled natively in Linear, so we extract from
-    // the raw data if available, otherwise default to no priority
-    // The sync engine passes priority info through labels for label-based
-    // providers, but Linear uses native priority. We default to 0 (none).
-    input.priority = 0;
+    // Map priority: convert Stoneforge priority (1-5) to Linear native priority (0-4).
+    // If no priority is provided, default to Linear 0 (No priority).
+    if (issue.priority !== undefined) {
+      input.priority = stoneforgePriorityToLinear(issue.priority as Priority);
+    } else {
+      input.priority = 0; // Linear "No priority"
+    }
 
     return input;
   }
@@ -317,6 +320,11 @@ export class LinearTaskAdapter implements TaskSyncAdapter {
       if (stateId) {
         input.stateId = stateId;
       }
+    }
+
+    // Map priority: convert Stoneforge priority (1-5) to Linear native priority (0-4)
+    if (updates.priority !== undefined) {
+      input.priority = stoneforgePriorityToLinear(updates.priority as Priority);
     }
 
     return input;

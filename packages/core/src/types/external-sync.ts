@@ -95,6 +95,13 @@ export interface ExternalTask {
   readonly labels: readonly string[];
   /** Assignee usernames/identifiers */
   readonly assignees: readonly string[];
+  /**
+   * Native priority value, normalized to Stoneforge priority (1-5).
+   * Set by providers that have native priority support (e.g., Linear).
+   * Providers without native priority (e.g., GitHub) leave this undefined
+   * and use label-based priority instead.
+   */
+  readonly priority?: number;
   /** Creation timestamp (ISO 8601) */
   readonly createdAt: string;
   /** Last update timestamp (ISO 8601) */
@@ -164,6 +171,13 @@ export interface ExternalTaskInput {
   readonly state?: 'open' | 'closed';
   readonly labels?: readonly string[];
   readonly assignees?: readonly string[];
+  /**
+   * Native priority value as Stoneforge priority (1-5).
+   * Providers with native priority support (e.g., Linear) convert this to
+   * their native format (e.g., Linear 0-4). Providers without native priority
+   * (e.g., GitHub) ignore this field and use label-based priority instead.
+   */
+  readonly priority?: number;
 }
 
 /**
