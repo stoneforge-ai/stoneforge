@@ -59,6 +59,26 @@ export const GITHUB_TASK_TYPE_LABELS: Record<TaskTypeValue, string> = {
 export const GITHUB_SYNC_LABEL_PREFIX = 'sf:';
 
 // ============================================================================
+// Status Label Mapping
+// ============================================================================
+
+/**
+ * Maps Stoneforge TaskStatus values to GitHub label names.
+ * These labels are prefixed with 'sf:' when pushed to GitHub to
+ * provide granular status visibility beyond GitHub's binary open/closed state.
+ */
+export const GITHUB_STATUS_LABELS: Record<TaskStatus, string> = {
+  open: 'status:open',
+  in_progress: 'status:in-progress',
+  blocked: 'status:blocked',
+  deferred: 'status:deferred',
+  backlog: 'status:backlog',
+  review: 'status:review',
+  closed: 'status:closed',
+  tombstone: 'status:tombstone',
+};
+
+// ============================================================================
 // Status <-> State Mapping
 // ============================================================================
 
@@ -90,21 +110,44 @@ export function statusToGitHubState(status: TaskStatus): 'open' | 'closed' {
 }
 
 /**
- * Maps GitHub issue state back to Stoneforge TaskStatus.
+ * Maps GitHub issue state + labels back to Stoneforge TaskStatus.
  *
- * Since GitHub has only 'open' and 'closed', we can't infer
- * fine-grained statuses like 'in_progress' or 'review' from
- * the state alone. Labels could be used in the future for
- * more granular mapping.
+ * Uses sf:status:* labels for granular status inference when available.
+ * If a status label is found, it takes precedence over the basic
+ * open/closed state mapping. Falls back to the simple state mapping
+ * when no status label is present.
  *
- * Mapping:
- * - 'open' -> 'open' (simple default)
- * - 'closed' -> 'closed'
+ * Mapping with labels:
+ * - 'sf:status:in-progress' → 'in_progress'
+ * - 'sf:status:blocked' → 'blocked'
+ * - etc.
+ *
+ * Fallback mapping (no status label):
+ * - 'open' → 'open'
+ * - 'closed' → 'closed'
  */
 export function gitHubStateToStatus(
   state: 'open' | 'closed',
-  _labels: string[]
+  labels: string[]
 ): TaskStatus {
+  // Build a reverse lookup from status labels: 'status:open' → 'open', etc.
+  const statusByLabel = new Map<string, TaskStatus>();
+  for (const [status, label] of Object.entries(GITHUB_STATUS_LABELS)) {
+    statusByLabel.set(label, status as TaskStatus);
+  }
+
+  // Check labels for a status label (strip the sync prefix first)
+  for (const label of labels) {
+    if (label.startsWith(GITHUB_SYNC_LABEL_PREFIX)) {
+      const value = label.slice(GITHUB_SYNC_LABEL_PREFIX.length);
+      const matchedStatus = statusByLabel.get(value);
+      if (matchedStatus !== undefined) {
+        return matchedStatus;
+      }
+    }
+  }
+
+  // Fallback: basic open/closed mapping
   switch (state) {
     case 'closed':
       return 'closed';
@@ -127,6 +170,7 @@ export function gitHubStateToStatus(
 export const GITHUB_FIELD_MAP_CONFIG: TaskSyncFieldMapConfig = {
   priorityLabels: GITHUB_PRIORITY_LABELS,
   taskTypeLabels: GITHUB_TASK_TYPE_LABELS,
+  statusLabels: GITHUB_STATUS_LABELS,
   syncLabelPrefix: GITHUB_SYNC_LABEL_PREFIX,
   statusToState: statusToGitHubState,
   stateToStatus: gitHubStateToStatus,

@@ -67,6 +67,19 @@ export interface TaskSyncFieldMapConfig {
   readonly taskTypeLabels: Record<TaskTypeValue, string>;
 
   /**
+   * Optional: Maps Stoneforge TaskStatus values to external label strings.
+   * When present, status labels are pushed alongside priority and type labels,
+   * providing granular status visibility on external systems that only have
+   * binary open/closed states (e.g., GitHub).
+   *
+   * Optional because some providers (e.g., Linear) map status natively
+   * via workflow states and don't need label-based status mapping.
+   *
+   * e.g., { open: 'status:open', in_progress: 'status:in-progress', ... }
+   */
+  readonly statusLabels?: Record<string, string>;
+
+  /**
    * Prefix for sync-managed labels in the external system.
    * Labels with this prefix are managed by the sync system and will be
    * added/removed automatically. User labels without this prefix are preserved.
@@ -232,7 +245,8 @@ export function externalTaskToTaskUpdates(
  * Combines:
  * 1. Sync-managed priority label (prefixed)
  * 2. Sync-managed task type label (prefixed)
- * 3. User tags from the task (not prefixed — these are user-owned)
+ * 3. Sync-managed status label (prefixed, when config.statusLabels is present)
+ * 4. User tags from the task (not prefixed — these are user-owned)
  */
 export function buildExternalLabels(
   task: Task,
@@ -251,6 +265,14 @@ export function buildExternalLabels(
   const taskTypeLabel = config.taskTypeLabels[task.taskType];
   if (taskTypeLabel) {
     labels.push(`${prefix}${taskTypeLabel}`);
+  }
+
+  // Add status label (when config.statusLabels is present)
+  if (config.statusLabels) {
+    const statusLabel = config.statusLabels[task.status];
+    if (statusLabel) {
+      labels.push(`${prefix}${statusLabel}`);
+    }
   }
 
   // Add user tags (not prefixed — these are user-managed)
@@ -273,6 +295,8 @@ export interface ParsedExternalLabels {
   priority: Priority | undefined;
   /** Extracted task type value, or undefined if no task type label found */
   taskType: TaskTypeValue | undefined;
+  /** Extracted status value, or undefined if no status label found */
+  status: TaskStatus | undefined;
   /** Labels that are not sync-managed (user tags) */
   userTags: string[];
 }
@@ -281,7 +305,7 @@ export interface ParsedExternalLabels {
  * Parses external labels into structured task field values.
  *
  * Separates sync-managed labels (prefixed) from user labels,
- * and extracts priority and task type values from the managed labels.
+ * and extracts priority, task type, and status values from the managed labels.
  */
 export function parseExternalLabels(
   labels: readonly string[],
@@ -290,11 +314,17 @@ export function parseExternalLabels(
   const prefix = config.syncLabelPrefix;
   let priority: Priority | undefined;
   let taskType: TaskTypeValue | undefined;
+  let status: TaskStatus | undefined;
   const userTags: string[] = [];
 
   // Build reverse lookup maps for priority and task type
   const priorityByLabel = buildReverseLookup(config.priorityLabels);
   const taskTypeByLabel = buildReverseLookup(config.taskTypeLabels);
+
+  // Build reverse lookup for status labels (when present)
+  const statusByLabel = config.statusLabels
+    ? buildReverseLookup(config.statusLabels)
+    : undefined;
 
   for (const label of labels) {
     if (label.startsWith(prefix)) {
@@ -313,6 +343,12 @@ export function parseExternalLabels(
         continue;
       }
 
+      // Check if it's a status label
+      if (statusByLabel && statusByLabel.has(value)) {
+        status = statusByLabel.get(value)! as TaskStatus;
+        continue;
+      }
+
       // Sync-managed label we don't recognize — skip it
       // (could be from a newer version or a different adapter)
       continue;
@@ -322,7 +358,7 @@ export function parseExternalLabels(
     userTags.push(label);
   }
 
-  return { priority, taskType, userTags };
+  return { priority, taskType, status, userTags };
 }
 
 // ============================================================================

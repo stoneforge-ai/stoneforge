@@ -95,6 +95,16 @@ const SF_LABEL_COLORS: Record<string, string> = {
   'sf:type:feature': 'a2eeef',      // teal
   'sf:type:task': '0075ca',         // blue
   'sf:type:chore': 'e4e669',        // yellow-green
+
+  // Status labels — distinct palette for workflow states
+  'sf:status:open': '0e8a16',       // green — active
+  'sf:status:in-progress': '1d76db', // blue — working
+  'sf:status:blocked': 'e4e669',    // yellow — waiting
+  'sf:status:deferred': 'c5def5',   // light blue — postponed
+  'sf:status:backlog': 'd4c5f9',    // lavender — queued
+  'sf:status:review': 'f9d0c4',     // peach — review
+  'sf:status:closed': '5319e7',     // purple — done
+  'sf:status:tombstone': 'ededed',  // gray — deleted
 };
 
 /** Fallback color for sf:* labels not in the mapping */
