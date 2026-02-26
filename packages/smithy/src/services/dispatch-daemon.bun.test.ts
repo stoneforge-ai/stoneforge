@@ -4702,10 +4702,17 @@ describe('spawnRecoveryStewardForTask - multi-assignment guard', () => {
 
     const result = await daemon.recoverOrphanedAssignments();
 
-    // Recovery steward should NOT be spawned — it already has a task
-    expect(result.processed).toBe(0);
-    expect(result.errors).toBe(0);
+    // Phase 1: Recovery steward should NOT be spawned for the worker's stuck task
+    // — it already has a task from a previous cycle
     expect(sessionManager.startSession).not.toHaveBeenCalled();
+    // Phase 3: The steward's orphaned task from the previous cycle IS recovered
+    // (unassigned so it can be picked up by a fresh worker)
+    expect(result.processed).toBe(1);
+    expect(result.errors).toBe(0);
+
+    // Verify the steward's previous-cycle task was unassigned by Phase 3
+    const updatedExisting = await api.get<Task>(savedExisting.id);
+    expect(updatedExisting!.assignee).toBeUndefined();
   });
 
   test('assigns recovery steward that has no assigned tasks', async () => {
@@ -4755,13 +4762,324 @@ describe('spawnRecoveryStewardForTask - multi-assignment guard', () => {
 
     const result = await daemon.recoverOrphanedAssignments();
 
-    // Should have spawned the free steward, not the busy one
-    expect(result.processed).toBe(1);
-    expect(result.errors).toBe(0);
-
-    // Verify session was started for the free steward
+    // Phase 1: Should have spawned the free steward (not the busy one) for the stuck task
     const startSessionCalls = (sessionManager.startSession as ReturnType<typeof mock>).mock.calls;
     expect(startSessionCalls.length).toBe(1);
     expect(startSessionCalls[0][0]).toBe(freeStewardId);
+
+    // Phase 3: Also recovers the busy steward's orphaned task from previous cycle
+    // Total: 1 (Phase 1 spawn) + 1 (Phase 3 unassign) = 2
+    expect(result.processed).toBe(2);
+    expect(result.errors).toBe(0);
+
+    // Verify the busy steward's previous-cycle task was unassigned by Phase 3
+    const updatedExisting = await api.get<Task>(savedExisting.id);
+    expect(updatedExisting!.assignee).toBeUndefined();
+  });
+});
+
+// ============================================================================
+// Phase 3: Recovery Steward Orphan Recovery
+// ============================================================================
+
+describe('recoverOrphanedAssignments - recovery steward orphan recovery', () => {
+  let api: QuarryAPI;
+  let inboxService: InboxService;
+  let agentRegistry: AgentRegistry;
+  let taskAssignment: TaskAssignmentService;
+  let dispatchService: DispatchService;
+  let sessionManager: SessionManager;
+  let worktreeManager: WorktreeManager;
+  let stewardScheduler: StewardScheduler;
+  let daemon: DispatchDaemon;
+  let testDbPath: string;
+  let systemEntity: EntityId;
+
+  beforeEach(async () => {
+    testDbPath = `/tmp/dispatch-daemon-recovery-steward-orphan-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`;
+    const storage = createStorage({ path: testDbPath, create: true });
+    initializeSchema(storage);
+
+    api = createQuarryAPI(storage);
+    inboxService = createInboxService(storage);
+    agentRegistry = createAgentRegistry(api);
+    taskAssignment = createTaskAssignmentService(api);
+    dispatchService = createDispatchService(api, taskAssignment, agentRegistry);
+    sessionManager = createMockSessionManager();
+    worktreeManager = createMockWorktreeManager();
+    stewardScheduler = createMockStewardScheduler();
+
+    const { createEntity, EntityTypeValue } = await import('@stoneforge/core');
+    const entity = await createEntity({
+      name: 'test-system',
+      entityType: EntityTypeValue.SYSTEM,
+      createdBy: 'system:test' as EntityId,
+    });
+    const saved = await api.create(entity as unknown as Record<string, unknown> & { createdBy: EntityId });
+    systemEntity = saved.id as unknown as EntityId;
+
+    const config: DispatchDaemonConfig = {
+      pollIntervalMs: 100,
+      workerAvailabilityPollEnabled: false,
+      inboxPollEnabled: false,
+      stewardTriggerPollEnabled: false,
+      workflowTaskPollEnabled: false,
+      orphanRecoveryEnabled: true,
+      maxResumeAttemptsBeforeRecovery: 3,
+    };
+
+    daemon = createDispatchDaemon(
+      api,
+      agentRegistry,
+      sessionManager,
+      dispatchService,
+      worktreeManager,
+      taskAssignment,
+      stewardScheduler,
+      inboxService,
+      config
+    );
+  });
+
+  afterEach(async () => {
+    await daemon.stop();
+    if (fs.existsSync(testDbPath)) {
+      fs.unlinkSync(testDbPath);
+    }
+  });
+
+  async function createTestRecoverySteward(name: string): Promise<AgentEntity> {
+    return agentRegistry.registerSteward({
+      name,
+      stewardFocus: 'recovery',
+      createdBy: systemEntity,
+      maxConcurrentTasks: 1,
+    });
+  }
+
+  async function createOrphanedRecoveryStewardTask(
+    title: string,
+    stewardId: EntityId,
+    meta?: {
+      sessionId?: string;
+      resumeCount?: number;
+      sessionHistory?: readonly { sessionId: string; agentId: EntityId; agentName: string; agentRole: 'worker' | 'steward'; startedAt: string }[];
+    }
+  ): Promise<Task> {
+    const task = await createTask({
+      title,
+      createdBy: systemEntity,
+      status: TaskStatus.IN_PROGRESS,
+      assignee: stewardId,
+    });
+    const saved = await api.create(task as unknown as Record<string, unknown> & { createdBy: EntityId }) as Task;
+
+    await api.update(saved.id, {
+      metadata: updateOrchestratorTaskMeta(undefined, {
+        assignedAgent: stewardId,
+        branch: 'agent/worker/task-branch',
+        worktree: '/worktrees/worker/task',
+        sessionId: meta?.sessionId ?? 'recovery-steward-session-123',
+        resumeCount: meta?.resumeCount ?? 3,
+        sessionHistory: meta?.sessionHistory,
+      }),
+    });
+
+    return (await api.get<Task>(saved.id))!;
+  }
+
+  test('recovers orphaned recovery steward task by unassigning and resetting resumeCount', async () => {
+    const steward = await createTestRecoverySteward('orphan-recovery-steward');
+    const stewardId = steward.id as unknown as EntityId;
+
+    const task = await createOrphanedRecoveryStewardTask('Task stuck with recovery steward', stewardId, {
+      sessionId: 'recovery-steward-prev-session',
+      resumeCount: 5,
+    });
+
+    const result = await daemon.recoverOrphanedAssignments();
+
+    expect(result.pollType).toBe('orphan-recovery');
+    expect(result.processed).toBe(1);
+    expect(result.errors).toBe(0);
+
+    // Verify the task was unassigned and resumeCount was reset
+    const updatedTask = await api.get<Task>(task.id);
+    expect(updatedTask!.assignee).toBeUndefined();
+
+    const meta = getOrchestratorTaskMeta(updatedTask!.metadata as Record<string, unknown> | undefined);
+    expect(meta!.assignedAgent).toBeUndefined();
+    expect(meta!.resumeCount).toBe(0);
+
+    // Session history should still be intact
+    // No session should have been started or resumed (just unassigned)
+    expect(sessionManager.resumeSession).not.toHaveBeenCalled();
+    expect(sessionManager.startSession).not.toHaveBeenCalled();
+  });
+
+  test('skips recovery steward with active session', async () => {
+    const steward = await createTestRecoverySteward('active-recovery-steward');
+    const stewardId = steward.id as unknown as EntityId;
+
+    // Start a session for this steward
+    await sessionManager.startSession(stewardId, {});
+
+    await createOrphanedRecoveryStewardTask('Task with active recovery steward', stewardId);
+
+    const result = await daemon.recoverOrphanedAssignments();
+
+    // Should not recover — steward has an active session
+    expect(result.processed).toBe(0);
+  });
+
+  test('skips recovery when all executables are rate-limited', async () => {
+    const steward = await createTestRecoverySteward('rate-limited-recovery-steward');
+    const stewardId = steward.id as unknown as EntityId;
+
+    await createOrphanedRecoveryStewardTask('Task with rate-limited recovery steward', stewardId, {
+      resumeCount: 3,
+    });
+
+    // Mock resolveExecutableWithFallback to return 'all_limited'
+    const impl = daemon as unknown as DispatchDaemonImpl;
+    const originalResolve = impl.resolveExecutableWithFallback.bind(impl);
+    impl.resolveExecutableWithFallback = (agent: AgentEntity) => {
+      if (agent.id === steward.id) return 'all_limited';
+      return originalResolve(agent);
+    };
+
+    const result = await daemon.recoverOrphanedAssignments();
+
+    // Should skip — all executables rate-limited
+    expect(result.processed).toBe(0);
+  });
+
+  test('escalates to director when session history shows repeated steward failures', async () => {
+    const steward = await createTestRecoverySteward('escalation-recovery-steward');
+    const stewardId = steward.id as unknown as EntityId;
+
+    // Create session history with 3+ steward sessions (indicating repeated failures)
+    const sessionHistory = [
+      { sessionId: 'worker-session-1', agentId: 'el-worker1' as EntityId, agentName: 'worker-1', agentRole: 'worker' as const, startedAt: '2026-01-01T00:00:00.000Z' },
+      { sessionId: 'worker-session-2', agentId: 'el-worker1' as EntityId, agentName: 'worker-1', agentRole: 'worker' as const, startedAt: '2026-01-01T00:10:00.000Z' },
+      { sessionId: 'steward-session-1', agentId: stewardId, agentName: 'escalation-recovery-steward', agentRole: 'steward' as const, startedAt: '2026-01-01T00:20:00.000Z' },
+      { sessionId: 'steward-session-2', agentId: stewardId, agentName: 'escalation-recovery-steward', agentRole: 'steward' as const, startedAt: '2026-01-01T00:30:00.000Z' },
+      { sessionId: 'steward-session-3', agentId: stewardId, agentName: 'escalation-recovery-steward', agentRole: 'steward' as const, startedAt: '2026-01-01T00:40:00.000Z' },
+    ];
+
+    const task = await createOrphanedRecoveryStewardTask('Task with repeated steward failures', stewardId, {
+      resumeCount: 5,
+      sessionHistory,
+    });
+
+    // Listen for daemon notification events
+    const notifications: { type: string; title: string; message: string }[] = [];
+    const impl = daemon as unknown as DispatchDaemonImpl;
+    impl.emitter.on('daemon:notification', (notification: { type: string; title: string; message: string }) => {
+      notifications.push(notification);
+    });
+
+    const result = await daemon.recoverOrphanedAssignments();
+
+    expect(result.processed).toBe(1);
+    expect(result.errors).toBe(0);
+
+    // Verify task was still unassigned (not left stuck)
+    const updatedTask = await api.get<Task>(task.id);
+    expect(updatedTask!.assignee).toBeUndefined();
+
+    const meta = getOrchestratorTaskMeta(updatedTask!.metadata as Record<string, unknown> | undefined);
+    expect(meta!.assignedAgent).toBeUndefined();
+    // resumeCount should NOT be reset (escalation path preserves it)
+    expect(meta!.resumeCount).toBe(5);
+
+    // Verify an escalation notification was emitted
+    const escalation = notifications.find(n => n.title === 'Recovery steward escalation');
+    expect(escalation).toBeDefined();
+    expect(escalation!.message).toContain(task.id);
+    expect(escalation!.message).toContain('Manual intervention');
+  });
+
+  test('does not escalate when steward session count is below threshold', async () => {
+    const steward = await createTestRecoverySteward('below-threshold-recovery-steward');
+    const stewardId = steward.id as unknown as EntityId;
+
+    // Create session history with only 2 steward sessions (below threshold of 3)
+    const sessionHistory = [
+      { sessionId: 'worker-session-1', agentId: 'el-worker1' as EntityId, agentName: 'worker-1', agentRole: 'worker' as const, startedAt: '2026-01-01T00:00:00.000Z' },
+      { sessionId: 'steward-session-1', agentId: stewardId, agentName: 'below-threshold-recovery-steward', agentRole: 'steward' as const, startedAt: '2026-01-01T00:20:00.000Z' },
+      { sessionId: 'steward-session-2', agentId: stewardId, agentName: 'below-threshold-recovery-steward', agentRole: 'steward' as const, startedAt: '2026-01-01T00:30:00.000Z' },
+    ];
+
+    const task = await createOrphanedRecoveryStewardTask('Task with few steward sessions', stewardId, {
+      resumeCount: 5,
+      sessionHistory,
+    });
+
+    const result = await daemon.recoverOrphanedAssignments();
+
+    expect(result.processed).toBe(1);
+    expect(result.errors).toBe(0);
+
+    // Verify normal recovery: unassigned with resumeCount reset
+    const updatedTask = await api.get<Task>(task.id);
+    expect(updatedTask!.assignee).toBeUndefined();
+
+    const meta = getOrchestratorTaskMeta(updatedTask!.metadata as Record<string, unknown> | undefined);
+    expect(meta!.assignedAgent).toBeUndefined();
+    expect(meta!.resumeCount).toBe(0); // Reset for fresh worker
+  });
+
+  test('recovers multiple tasks from same recovery steward', async () => {
+    const steward = await createTestRecoverySteward('multi-task-recovery-steward');
+    const stewardId = steward.id as unknown as EntityId;
+
+    const task1 = await createOrphanedRecoveryStewardTask('First orphaned recovery task', stewardId, {
+      resumeCount: 4,
+    });
+    const task2 = await createOrphanedRecoveryStewardTask('Second orphaned recovery task', stewardId, {
+      resumeCount: 2,
+    });
+
+    const result = await daemon.recoverOrphanedAssignments();
+
+    expect(result.processed).toBe(2);
+    expect(result.errors).toBe(0);
+
+    // Both tasks should be unassigned and reset
+    const updatedTask1 = await api.get<Task>(task1.id);
+    expect(updatedTask1!.assignee).toBeUndefined();
+    const meta1 = getOrchestratorTaskMeta(updatedTask1!.metadata as Record<string, unknown> | undefined);
+    expect(meta1!.resumeCount).toBe(0);
+
+    const updatedTask2 = await api.get<Task>(task2.id);
+    expect(updatedTask2!.assignee).toBeUndefined();
+    const meta2 = getOrchestratorTaskMeta(updatedTask2!.metadata as Record<string, unknown> | undefined);
+    expect(meta2!.resumeCount).toBe(0);
+  });
+
+  test('preserves sessionHistory when recovering orphaned recovery steward task', async () => {
+    const steward = await createTestRecoverySteward('history-preservation-steward');
+    const stewardId = steward.id as unknown as EntityId;
+
+    const sessionHistory = [
+      { sessionId: 'worker-session-1', agentId: 'el-worker1' as EntityId, agentName: 'worker-1', agentRole: 'worker' as const, startedAt: '2026-01-01T00:00:00.000Z' },
+      { sessionId: 'steward-session-1', agentId: stewardId, agentName: 'history-preservation-steward', agentRole: 'steward' as const, startedAt: '2026-01-01T00:20:00.000Z' },
+    ];
+
+    const task = await createOrphanedRecoveryStewardTask('Task with session history', stewardId, {
+      resumeCount: 3,
+      sessionHistory,
+    });
+
+    await daemon.recoverOrphanedAssignments();
+
+    // Verify session history is preserved
+    const updatedTask = await api.get<Task>(task.id);
+    const meta = getOrchestratorTaskMeta(updatedTask!.metadata as Record<string, unknown> | undefined);
+    expect(meta!.sessionHistory).toBeDefined();
+    expect(meta!.sessionHistory!.length).toBe(2);
+    expect(meta!.sessionHistory![0].sessionId).toBe('worker-session-1');
+    expect(meta!.sessionHistory![1].sessionId).toBe('steward-session-1');
   });
 });

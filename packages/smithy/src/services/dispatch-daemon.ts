@@ -1284,6 +1284,123 @@ export class DispatchDaemonImpl implements DispatchDaemon {
         }
       }
 
+      // --- Phase 3: Recover orphaned recovery steward assignments ---
+      // Recovery stewards triage stuck tasks. If a recovery steward's session exits
+      // (e.g., rate limit, crash, timeout), the task remains assigned with no session.
+      // Unlike merge stewards, recovery stewards don't do the work — they triage.
+      // The correct recovery action is to unassign the steward and let the dispatch
+      // system retry with a fresh worker.
+      const recoveryStewards = await this.agentRegistry.listAgents({
+        role: 'steward',
+        stewardFocus: 'recovery',
+      });
+
+      for (const recoverySteward of recoveryStewards) {
+        const recoveryStewardId = asEntityId(recoverySteward.id);
+
+        // Skip if steward has an active session
+        const recoveryStewardSession = this.sessionManager.getActiveSession(recoveryStewardId);
+        if (recoveryStewardSession) continue;
+
+        // Skip recovery stewards that were just assigned in this cycle by Phase 1.
+        // When Phase 1 spawns a recovery steward and the session terminates immediately
+        // (e.g., rate-limited), the steward appears orphaned within the same cycle.
+        // Don't undo Phase 1's work — let the next cycle handle it.
+        if (stewardsUsedThisCycle.has(recoveryStewardId as string)) continue;
+
+        // Find OPEN or IN_PROGRESS tasks assigned to this recovery steward
+        const recoveryStewardTasks = await this.taskAssignment.getAgentTasks(recoveryStewardId, {
+          taskStatus: [TaskStatus.OPEN, TaskStatus.IN_PROGRESS],
+        });
+        if (recoveryStewardTasks.length === 0) continue;
+
+        // Skip recovery when all executables are rate-limited (same guard as Phase 1/2)
+        const recoveryExecCheck = this.resolveExecutableWithFallback(recoverySteward);
+        if (recoveryExecCheck === 'all_limited') {
+          logger.debug(
+            `All executables rate-limited, skipping recovery steward orphan recovery for ${recoverySteward.name}`
+          );
+          continue;
+        }
+
+        for (const orphanedAssignment of recoveryStewardTasks) {
+          try {
+            const { task, orchestratorMeta } = orphanedAssignment;
+
+            // Check if session history shows repeated recovery steward failures.
+            // If a recovery steward has already failed to triage this task multiple times,
+            // escalate to the director rather than cycling endlessly.
+            const sessionHistory = orchestratorMeta?.sessionHistory ?? [];
+            const recoveryStewardSessions = sessionHistory.filter(
+              (entry: TaskSessionHistoryEntry) => entry.agentRole === 'steward'
+            );
+
+            if (recoveryStewardSessions.length >= 3) {
+              // Escalate: too many recovery steward failures
+              logger.warn(
+                `Recovery steward failed to triage task ${task.id} after ${recoveryStewardSessions.length} steward sessions, escalating`
+              );
+              this.operationLog?.write(
+                'warn',
+                'recovery',
+                `Recovery steward orphan recovery: task ${task.id} has had ${recoveryStewardSessions.length} steward sessions without resolution — escalating to director`,
+                { taskId: task.id, agentId: recoverySteward.id, stewardSessionCount: recoveryStewardSessions.length }
+              );
+              this.emitter.emit('daemon:notification', {
+                type: 'warning' as const,
+                title: 'Recovery steward escalation',
+                message: `Task ${task.id} ("${task.title}") has failed triage by recovery stewards ${recoveryStewardSessions.length} times. Manual intervention may be required.`,
+              });
+
+              // Still unassign the recovery steward so the task isn't permanently stuck
+              await this.api.update<Task>(task.id, {
+                assignee: undefined,
+                metadata: updateOrchestratorTaskMeta(
+                  task.metadata as Record<string, unknown> | undefined,
+                  {
+                    assignedAgent: undefined,
+                    // Do NOT reset resumeCount — keep it high so a fresh worker
+                    // doesn't get auto-dispatched into a known-failing loop
+                  }
+                ),
+              });
+              processed++;
+              continue;
+            }
+
+            // Normal recovery: unassign the steward and reset resumeCount
+            // so the dispatch system can assign a fresh worker
+            await this.api.update<Task>(task.id, {
+              assignee: undefined,
+              metadata: updateOrchestratorTaskMeta(
+                task.metadata as Record<string, unknown> | undefined,
+                {
+                  assignedAgent: undefined,
+                  resumeCount: 0, // Give a fresh worker a clean slate
+                  // Keep sessionHistory intact for debugging
+                }
+              ),
+            });
+
+            processed++;
+            logger.info(
+              `[dispatch-daemon] Recovered orphaned recovery steward task ${task.id} from ${recoverySteward.name} — unassigned and reset for fresh dispatch`
+            );
+            this.operationLog?.write(
+              'info',
+              'recovery',
+              `Recovered orphaned recovery steward task ${task.id} from ${recoverySteward.name}`,
+              { taskId: task.id, agentId: recoverySteward.id }
+            );
+          } catch (error) {
+            errors++;
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            errorMessages.push(`Recovery steward ${recoverySteward.name}: ${errorMessage}`);
+            logger.error(`Error recovering orphaned recovery steward task for ${recoverySteward.name}:`, error);
+          }
+        }
+      }
+
       if (processed > 0) {
         logger.info(`Recovered ${processed} orphaned task assignment(s)`);
         this.operationLog?.write('info', 'recovery', `Recovered ${processed} orphaned task assignment(s)`);
