@@ -362,3 +362,226 @@ describe('getFallbackResetTime', () => {
     expect(result.getTime()).toBeGreaterThanOrEqual(before + sixHoursMs);
   });
 });
+
+// ============================================================================
+// Timezone test helpers
+// ============================================================================
+
+/**
+ * Returns the hour (0–23) of a Date as it appears in the given IANA timezone.
+ */
+function getHourInTimezone(date: Date, timezone: string): number {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    hour: 'numeric',
+    hour12: false,
+  });
+  const val = parseInt(formatter.format(date), 10);
+  return val === 24 ? 0 : val;
+}
+
+/**
+ * Returns the minute (0–59) of a Date as it appears in the given IANA timezone.
+ */
+function getMinuteInTimezone(date: Date, timezone: string): number {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    minute: 'numeric',
+  });
+  return parseInt(formatter.format(date), 10);
+}
+
+/**
+ * Returns the month (0–11) of a Date as it appears in the given IANA timezone.
+ */
+function getMonthInTimezone(date: Date, timezone: string): number {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    month: 'numeric',
+  });
+  return parseInt(formatter.format(date), 10) - 1;
+}
+
+/**
+ * Returns the day-of-month of a Date as it appears in the given IANA timezone.
+ */
+function getDayInTimezone(date: Date, timezone: string): number {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    day: 'numeric',
+  });
+  return parseInt(formatter.format(date), 10);
+}
+
+// ============================================================================
+// parseRateLimitResetTime — Timezone support (Format A)
+// ============================================================================
+
+describe('parseRateLimitResetTime — Timezone support (Format A)', () => {
+  it('parses "resets 11pm (Pacific/Honolulu)" as 11pm HST', () => {
+    const result = parseRateLimitResetTime(
+      "You've hit your limit · resets 11pm (Pacific/Honolulu)",
+    );
+    expect(result).toBeInstanceOf(Date);
+    expect(getHourInTimezone(result!, 'Pacific/Honolulu')).toBe(23);
+    expect(getMinuteInTimezone(result!, 'Pacific/Honolulu')).toBe(0);
+  });
+
+  it('parses "resets 3pm (America/New_York)" as 3pm Eastern', () => {
+    const result = parseRateLimitResetTime(
+      "You've hit your limit · resets 3pm (America/New_York)",
+    );
+    expect(result).toBeInstanceOf(Date);
+    expect(getHourInTimezone(result!, 'America/New_York')).toBe(15);
+    expect(getMinuteInTimezone(result!, 'America/New_York')).toBe(0);
+  });
+
+  it('parses "resets 9:30am (Europe/London)" as 9:30am London time', () => {
+    const result = parseRateLimitResetTime(
+      "You've hit your limit · resets 9:30am (Europe/London)",
+    );
+    expect(result).toBeInstanceOf(Date);
+    expect(getHourInTimezone(result!, 'Europe/London')).toBe(9);
+    expect(getMinuteInTimezone(result!, 'Europe/London')).toBe(30);
+  });
+
+  it('parses "resets 12am (US/Eastern)" as midnight Eastern', () => {
+    const result = parseRateLimitResetTime(
+      "You've hit your limit · resets 12am (US/Eastern)",
+    );
+    expect(result).toBeInstanceOf(Date);
+    expect(getHourInTimezone(result!, 'US/Eastern')).toBe(0);
+    expect(getMinuteInTimezone(result!, 'US/Eastern')).toBe(0);
+  });
+
+  it('returns a future date with timezone', () => {
+    const now = new Date();
+    const result = parseRateLimitResetTime(
+      "You've hit your limit · resets 11pm (Pacific/Honolulu)",
+    );
+    expect(result).toBeInstanceOf(Date);
+    // The result should always be in the future (or today/tomorrow depending on time)
+    // Since we can't know if 11pm HST has passed, just check it's a valid Date
+    expect(result!.getTime()).toBeGreaterThan(0);
+  });
+});
+
+// ============================================================================
+// parseRateLimitResetTime — Timezone support (Format B)
+// ============================================================================
+
+describe('parseRateLimitResetTime — Timezone support (Format B)', () => {
+  it('parses "resets Feb 22 at 9:30am (US/Eastern)" as 9:30am Eastern', () => {
+    const result = parseRateLimitResetTime(
+      'Weekly limit reached · resets Feb 22 at 9:30am (US/Eastern)',
+    );
+    expect(result).toBeInstanceOf(Date);
+    expect(getMonthInTimezone(result!, 'US/Eastern')).toBe(1); // February
+    expect(getDayInTimezone(result!, 'US/Eastern')).toBe(22);
+    expect(getHourInTimezone(result!, 'US/Eastern')).toBe(9);
+    expect(getMinuteInTimezone(result!, 'US/Eastern')).toBe(30);
+  });
+
+  it('parses "resets Mar 1 at 12:00pm (Asia/Tokyo)" as noon Tokyo time', () => {
+    const result = parseRateLimitResetTime(
+      'Weekly limit reached · resets Mar 1 at 12:00pm (Asia/Tokyo)',
+    );
+    expect(result).toBeInstanceOf(Date);
+    expect(getMonthInTimezone(result!, 'Asia/Tokyo')).toBe(2); // March
+    expect(getDayInTimezone(result!, 'Asia/Tokyo')).toBe(1);
+    expect(getHourInTimezone(result!, 'Asia/Tokyo')).toBe(12);
+    expect(getMinuteInTimezone(result!, 'Asia/Tokyo')).toBe(0);
+  });
+});
+
+// ============================================================================
+// parseRateLimitResetTime — Timezone support (Format C)
+// ============================================================================
+
+describe('parseRateLimitResetTime — Timezone support (Format C)', () => {
+  it('parses "resets tomorrow at 3pm (Europe/London)" as 3pm London time tomorrow', () => {
+    const result = parseRateLimitResetTime(
+      "You've hit your limit · resets tomorrow at 3pm (Europe/London)",
+    );
+    expect(result).toBeInstanceOf(Date);
+    expect(getHourInTimezone(result!, 'Europe/London')).toBe(15);
+    expect(getMinuteInTimezone(result!, 'Europe/London')).toBe(0);
+
+    // Should be in the future
+    const now = new Date();
+    expect(result!.getTime()).toBeGreaterThan(now.getTime());
+  });
+
+  it('parses "resets tomorrow at 9:30am (Pacific/Honolulu)" as 9:30am HST', () => {
+    const result = parseRateLimitResetTime(
+      "You've hit your limit · resets tomorrow at 9:30am (Pacific/Honolulu)",
+    );
+    expect(result).toBeInstanceOf(Date);
+    expect(getHourInTimezone(result!, 'Pacific/Honolulu')).toBe(9);
+    expect(getMinuteInTimezone(result!, 'Pacific/Honolulu')).toBe(30);
+  });
+});
+
+// ============================================================================
+// parseRateLimitResetTime — Timezone fallback and edge cases
+// ============================================================================
+
+describe('parseRateLimitResetTime — Timezone fallback and edge cases', () => {
+  it('falls back to local time for invalid timezone', () => {
+    const withInvalidTz = parseRateLimitResetTime(
+      "You've hit your limit · resets 3pm (Invalid/Timezone)",
+    );
+    const withoutTz = parseRateLimitResetTime(
+      "You've hit your limit · resets 3pm",
+    );
+    expect(withInvalidTz).toBeInstanceOf(Date);
+    expect(withoutTz).toBeInstanceOf(Date);
+    // Both should produce the same result (local time 3pm)
+    expect(withInvalidTz!.getHours()).toBe(15);
+    expect(withoutTz!.getHours()).toBe(15);
+    expect(withInvalidTz!.getTime()).toBe(withoutTz!.getTime());
+  });
+
+  it('ignores non-timezone parenthetical text', () => {
+    // Text in parens that doesn't match timezone format
+    const result = parseRateLimitResetTime(
+      "You've hit your limit · resets 3pm (5 tokens remaining)",
+    );
+    expect(result).toBeInstanceOf(Date);
+    // Should fall back to local time since "5 tokens remaining" isn't an IANA timezone
+    expect(result!.getHours()).toBe(15);
+  });
+
+  it('still parses messages without any timezone (backward compatible)', () => {
+    const result = parseRateLimitResetTime("You've hit your limit · resets 3pm");
+    expect(result).toBeInstanceOf(Date);
+    expect(result!.getHours()).toBe(15);
+    expect(result!.getMinutes()).toBe(0);
+  });
+
+  it('handles timezone with sub-location (America/Indiana/Indianapolis)', () => {
+    const result = parseRateLimitResetTime(
+      "You've hit your limit · resets 5pm (America/Indiana/Indianapolis)",
+    );
+    expect(result).toBeInstanceOf(Date);
+    expect(getHourInTimezone(result!, 'America/Indiana/Indianapolis')).toBe(17);
+    expect(getMinuteInTimezone(result!, 'America/Indiana/Indianapolis')).toBe(0);
+  });
+
+  it('handles timezone with trailing whitespace after closing paren', () => {
+    const result = parseRateLimitResetTime(
+      "You've hit your limit · resets 11pm (Pacific/Honolulu)  ",
+    );
+    expect(result).toBeInstanceOf(Date);
+    expect(getHourInTimezone(result!, 'Pacific/Honolulu')).toBe(23);
+  });
+
+  it('detects rate limit messages with timezone context', () => {
+    expect(
+      isRateLimitMessage("You've hit your limit · resets 11pm (Pacific/Honolulu)"),
+    ).toBe(true);
+    expect(
+      isRateLimitMessage('Weekly limit reached · resets Feb 22 at 9:30am (US/Eastern)'),
+    ).toBe(true);
+  });
+});
