@@ -19,7 +19,10 @@ import { getOutputMode } from '../formatter.js';
 import { createAPI, resolveDatabasePath } from '../db.js';
 import { createStorage, initializeSchema } from '@stoneforge/storage';
 import { getValue, setValue, VALID_AUTO_LINK_PROVIDERS } from '../../config/index.js';
-import type { Task, ElementId, ExternalProvider, ExternalSyncState, SyncDirection } from '@stoneforge/core';
+import type { Task, ElementId, ExternalProvider, ExternalSyncState, SyncDirection, TaskSyncAdapter } from '@stoneforge/core';
+import { taskToExternalTask, type TaskSyncFieldMapConfig } from '../../external-sync/adapters/task-sync-adapter.js';
+import { GITHUB_FIELD_MAP_CONFIG } from '../../external-sync/providers/github/github-field-map.js';
+import { createLinearSyncFieldMapConfig } from '../../external-sync/providers/linear/linear-field-map.js';
 
 // ============================================================================
 // Settings Service Helper
@@ -1268,11 +1271,29 @@ async function createProviderFromSettings(
 }
 
 /**
+ * Returns the TaskSyncFieldMapConfig for a given provider name.
+ * Used by processBatch to build properly mapped external task inputs.
+ */
+function getFieldMapConfigForProvider(providerName: string): TaskSyncFieldMapConfig {
+  switch (providerName) {
+    case 'github':
+      return GITHUB_FIELD_MAP_CONFIG;
+    case 'linear':
+      return createLinearSyncFieldMapConfig();
+    default:
+      // Fallback to GitHub-style config for unknown providers
+      return GITHUB_FIELD_MAP_CONFIG;
+  }
+}
+
+/**
  * Process a batch of tasks: create external issues and link them.
+ * Uses the adapter's field mapping to include priority, taskType, and status
+ * labels on the created external issues.
  */
 async function processBatch(
   tasks: Task[],
-  adapter: { createIssue(project: string, issue: { title: string; body?: string; labels?: string[] }): Promise<{ externalId: string; url: string }> },
+  adapter: TaskSyncAdapter,
   api: ReturnType<typeof createAPI>['api'],
   providerName: string,
   project: string,
@@ -1283,15 +1304,17 @@ async function processBatch(
   let failed = 0;
   let rateLimited = false;
   let resetAt: number | undefined;
+  const fieldMapConfig = getFieldMapConfigForProvider(providerName);
 
   for (const task of tasks) {
     try {
-      // Create the external issue
-      const externalTask = await adapter.createIssue(project, {
-        title: task.title,
-        body: task.descriptionRef ? `Stoneforge task: ${task.id}` : undefined,
-        labels: task.tags ? [...task.tags] : undefined,
-      });
+      // Build the complete external task input using field mapping.
+      // This maps priority → sf:priority:* labels, taskType → sf:type:* labels,
+      // status → open/closed state, user tags → labels, and hydrates description.
+      const externalInput = await taskToExternalTask(task, fieldMapConfig, api!);
+
+      // Create the external issue with fully mapped fields
+      const externalTask = await adapter.createIssue(project, externalInput);
 
       // Build the ExternalSyncState metadata
       const syncState: ExternalSyncState = {

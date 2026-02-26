@@ -16,7 +16,7 @@ import { join } from 'node:path';
 import type { GlobalOptions } from '../types.js';
 import { ExitCode } from '../types.js';
 import { createAPI } from '../db.js';
-import type { Task, ElementId, ExternalProvider, SyncDirection } from '@stoneforge/core';
+import type { Task, ElementId, ExternalProvider, ExternalTaskInput, SyncDirection } from '@stoneforge/core';
 
 // ============================================================================
 // Test Utilities
@@ -46,7 +46,7 @@ function createTestOptions(
  */
 async function createTestTasks(
   options: GlobalOptions,
-  tasks: Array<{ title: string; status?: string; tags?: string[] }>
+  tasks: Array<{ title: string; status?: string; tags?: string[]; priority?: number; taskType?: string }>
 ): Promise<string[]> {
   const { createCommand } = await import('./crud.js');
   const ids: string[] = [];
@@ -61,7 +61,17 @@ async function createTestTasks(
     const result = await createCommand.handler(['task'], opts);
     if (result.exitCode === 0 && result.data) {
       const data = result.data as Record<string, unknown>;
-      ids.push(data.id as string);
+      const taskId = data.id as string;
+      ids.push(taskId);
+
+      // Set priority and taskType via direct API update if specified
+      if (taskDef.priority !== undefined || taskDef.taskType !== undefined) {
+        const { api } = createAPI(options);
+        const updates: Record<string, unknown> = {};
+        if (taskDef.priority !== undefined) updates.priority = taskDef.priority;
+        if (taskDef.taskType !== undefined) updates.taskType = taskDef.taskType;
+        await api!.update<Task>(taskId as ElementId, updates as Partial<Task>);
+      }
     }
   }
 
@@ -99,6 +109,9 @@ async function linkTask(options: GlobalOptions, taskId: string): Promise<void> {
 
 let issueCounter = 0;
 
+/** Tracks all issues created by mock providers for assertion in tests */
+let createdIssues: Array<{ title: string; body?: string; labels: readonly string[]; state?: string; assignees?: readonly string[] }> = [];
+
 function createMockProvider(opts?: {
   failOnTaskIds?: Set<string>;
   rateLimitAfter?: number;
@@ -113,7 +126,7 @@ function createMockProvider(opts?: {
     getTaskAdapter: () => ({
       getIssue: async () => null,
       listIssuesSince: async () => [],
-      createIssue: async (_project: string, issue: { title: string; body?: string; labels?: string[] }) => {
+      createIssue: async (_project: string, issue: ExternalTaskInput) => {
         createCount++;
 
         // Simulate rate limit
@@ -139,6 +152,15 @@ function createMockProvider(opts?: {
           }
         }
 
+        // Track the created issue for test assertions
+        createdIssues.push({
+          title: issue.title,
+          body: issue.body,
+          labels: issue.labels ?? [],
+          state: issue.state,
+          assignees: issue.assignees,
+        });
+
         issueCounter++;
         return {
           externalId: String(issueCounter),
@@ -147,9 +169,9 @@ function createMockProvider(opts?: {
           project: 'test/repo',
           title: issue.title,
           body: issue.body,
-          state: 'open' as const,
-          labels: issue.labels ?? [],
-          assignees: [],
+          state: (issue.state ?? 'open') as 'open' | 'closed',
+          labels: [...(issue.labels ?? [])],
+          assignees: [...(issue.assignees ?? [])],
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
@@ -194,6 +216,7 @@ beforeEach(() => {
   }
   mkdirSync(STONEFORGE_DIR, { recursive: true });
   issueCounter = 0;
+  createdIssues = [];
 });
 
 afterEach(() => {
@@ -645,6 +668,159 @@ describe('external-sync link-all', () => {
 
     // Should fail — either at provider creation or because no token
     expect(result.exitCode).not.toBe(ExitCode.SUCCESS);
+  });
+
+  // ==========================================================================
+  // Field Mapping Tests: Priority, TaskType, Status Labels
+  // ==========================================================================
+
+  test('creates GitHub issues with sf:priority:* labels based on task priority', async () => {
+    const options = createTestOptions();
+    await createTestTasks(options, [
+      { title: 'Critical task', priority: 1 },
+      { title: 'High task', priority: 2 },
+      { title: 'Medium task', priority: 3 },
+    ]);
+
+    const mockProvider = createMockProvider();
+    const factory = createMockProviderFactory(mockProvider);
+
+    const { externalSyncCommand } = await import('./external-sync.js');
+    const linkAllCmd = externalSyncCommand.subcommands!['link-all'];
+
+    const result = await linkAllCmd.handler([], {
+      ...options,
+      provider: 'github',
+      _providerFactory: factory,
+    });
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    const data = result.data as Record<string, unknown>;
+    expect(data.linked).toBe(3);
+
+    // Verify priority labels were included on created issues
+    const criticalIssue = createdIssues.find(i => i.title === 'Critical task');
+    expect(criticalIssue).toBeDefined();
+    expect(criticalIssue!.labels).toContain('sf:priority:critical');
+
+    const highIssue = createdIssues.find(i => i.title === 'High task');
+    expect(highIssue).toBeDefined();
+    expect(highIssue!.labels).toContain('sf:priority:high');
+
+    const mediumIssue = createdIssues.find(i => i.title === 'Medium task');
+    expect(mediumIssue).toBeDefined();
+    expect(mediumIssue!.labels).toContain('sf:priority:medium');
+  });
+
+  test('creates GitHub issues with sf:type:* labels based on task taskType', async () => {
+    const options = createTestOptions();
+    await createTestTasks(options, [
+      { title: 'Bug report', taskType: 'bug' },
+      { title: 'New feature', taskType: 'feature' },
+      { title: 'Regular task', taskType: 'task' },
+      { title: 'Chore item', taskType: 'chore' },
+    ]);
+
+    const mockProvider = createMockProvider();
+    const factory = createMockProviderFactory(mockProvider);
+
+    const { externalSyncCommand } = await import('./external-sync.js');
+    const linkAllCmd = externalSyncCommand.subcommands!['link-all'];
+
+    const result = await linkAllCmd.handler([], {
+      ...options,
+      provider: 'github',
+      _providerFactory: factory,
+    });
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    const data = result.data as Record<string, unknown>;
+    expect(data.linked).toBe(4);
+
+    // Verify taskType labels were included on created issues
+    const bugIssue = createdIssues.find(i => i.title === 'Bug report');
+    expect(bugIssue).toBeDefined();
+    expect(bugIssue!.labels).toContain('sf:type:bug');
+
+    const featureIssue = createdIssues.find(i => i.title === 'New feature');
+    expect(featureIssue).toBeDefined();
+    expect(featureIssue!.labels).toContain('sf:type:feature');
+
+    const taskIssue = createdIssues.find(i => i.title === 'Regular task');
+    expect(taskIssue).toBeDefined();
+    expect(taskIssue!.labels).toContain('sf:type:task');
+
+    const choreIssue = createdIssues.find(i => i.title === 'Chore item');
+    expect(choreIssue).toBeDefined();
+    expect(choreIssue!.labels).toContain('sf:type:chore');
+  });
+
+  test('creates GitHub issues with correct open/closed state based on task status', async () => {
+    const options = createTestOptions();
+    const taskIds = await createTestTasks(options, [
+      { title: 'Open task' },
+      { title: 'Closed task' },
+    ]);
+
+    // Close the second task
+    const { api } = createAPI(options);
+    await api!.update<Task>(taskIds[1] as ElementId, {
+      status: 'closed',
+    } as Partial<Task>);
+
+    const mockProvider = createMockProvider();
+    const factory = createMockProviderFactory(mockProvider);
+
+    const { externalSyncCommand } = await import('./external-sync.js');
+    const linkAllCmd = externalSyncCommand.subcommands!['link-all'];
+
+    const result = await linkAllCmd.handler([], {
+      ...options,
+      provider: 'github',
+      _providerFactory: factory,
+    });
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+
+    // Verify state mapping
+    const openIssue = createdIssues.find(i => i.title === 'Open task');
+    expect(openIssue).toBeDefined();
+    expect(openIssue!.state).toBe('open');
+
+    const closedIssue = createdIssues.find(i => i.title === 'Closed task');
+    expect(closedIssue).toBeDefined();
+    expect(closedIssue!.state).toBe('closed');
+  });
+
+  test('includes user tags alongside mapped priority and taskType labels', async () => {
+    const options = createTestOptions();
+    await createTestTasks(options, [
+      { title: 'Tagged task', priority: 2, taskType: 'bug', tags: ['frontend', 'urgent'] },
+    ]);
+
+    const mockProvider = createMockProvider();
+    const factory = createMockProviderFactory(mockProvider);
+
+    const { externalSyncCommand } = await import('./external-sync.js');
+    const linkAllCmd = externalSyncCommand.subcommands!['link-all'];
+
+    const result = await linkAllCmd.handler([], {
+      ...options,
+      provider: 'github',
+      _providerFactory: factory,
+    });
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    const data = result.data as Record<string, unknown>;
+    expect(data.linked).toBe(1);
+
+    // Verify all label types are present together
+    const issue = createdIssues[0];
+    expect(issue).toBeDefined();
+    expect(issue.labels).toContain('sf:priority:high');    // from priority: 2
+    expect(issue.labels).toContain('sf:type:bug');          // from taskType: 'bug'
+    expect(issue.labels).toContain('frontend');             // user tag
+    expect(issue.labels).toContain('urgent');               // user tag
   });
 });
 
