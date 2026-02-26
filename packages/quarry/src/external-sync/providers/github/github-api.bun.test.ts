@@ -404,6 +404,16 @@ describe('GitHubApiClient', () => {
   // --------------------------------------------------------------------------
 
   describe('rate limit handling', () => {
+    let warnSpy: ReturnType<typeof spyOn>;
+
+    beforeEach(() => {
+      warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      warnSpy.mockRestore();
+    });
+
     test('tracks rate limit info from response headers', async () => {
       setMockFetchResponse(createMockIssue(), 200, {
         'X-RateLimit-Limit': '5000',
@@ -425,8 +435,6 @@ describe('GitHubApiClient', () => {
     });
 
     test('logs warning when rate limit is near threshold', async () => {
-      const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
-
       setMockFetchResponse(createMockIssue(), 200, {
         'X-RateLimit-Limit': '5000',
         'X-RateLimit-Remaining': '5',
@@ -439,13 +447,9 @@ describe('GitHubApiClient', () => {
       const warnMessage = warnSpy.mock.calls[0][0] as string;
       expect(warnMessage).toContain('Rate limit warning');
       expect(warnMessage).toContain('5/5000');
-
-      warnSpy.mockRestore();
     });
 
     test('does not log warning when rate limit is above threshold', async () => {
-      const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
-
       setMockFetchResponse(createMockIssue(), 200, {
         'X-RateLimit-Limit': '5000',
         'X-RateLimit-Remaining': '4999',
@@ -455,12 +459,9 @@ describe('GitHubApiClient', () => {
       await client.getIssue('owner', 'repo', 1);
 
       expect(warnSpy).not.toHaveBeenCalled();
-      warnSpy.mockRestore();
     });
 
     test('custom warning threshold is respected', async () => {
-      const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
-
       const customClient = new GitHubApiClient({
         token: 'test',
         rateLimitWarningThreshold: 100,
@@ -475,7 +476,6 @@ describe('GitHubApiClient', () => {
       await customClient.getIssue('owner', 'repo', 1);
 
       expect(warnSpy).toHaveBeenCalledTimes(1);
-      warnSpy.mockRestore();
     });
 
     test('throws with rate limit info when rate limit exhausted', async () => {
@@ -504,8 +504,6 @@ describe('GitHubApiClient', () => {
     });
 
     test('does not warn when remaining is 0 (error handles it)', async () => {
-      const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
-
       setMockFetchResponse(
         { message: 'API rate limit exceeded' },
         403,
@@ -524,7 +522,6 @@ describe('GitHubApiClient', () => {
 
       // Warning only fires when remaining > 0 and <= threshold
       expect(warnSpy).not.toHaveBeenCalled();
-      warnSpy.mockRestore();
     });
   });
 

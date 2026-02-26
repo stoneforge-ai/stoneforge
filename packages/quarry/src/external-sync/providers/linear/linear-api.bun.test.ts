@@ -712,6 +712,16 @@ describe('LinearApiClient', () => {
   // --------------------------------------------------------------------------
 
   describe('error handling', () => {
+    let warnSpy: ReturnType<typeof spyOn>;
+
+    beforeEach(() => {
+      warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      warnSpy.mockRestore();
+    });
+
     test('throws LinearApiError on non-200 HTTP response', async () => {
       setMockFetchResponse(
         { errors: [{ message: 'Unauthorized' }] },
@@ -731,8 +741,6 @@ describe('LinearApiClient', () => {
     });
 
     test('handles GraphQL partial errors (data + errors)', async () => {
-      const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
-
       setMockFetchResponse(
         {
           data: { viewer: createMockViewer() },
@@ -750,8 +758,6 @@ describe('LinearApiClient', () => {
       const warnMessage = warnSpy.mock.calls[0][0] as string;
       expect(warnMessage).toContain('Partial GraphQL errors');
       expect(warnMessage).toContain('Deprecated field used');
-
-      warnSpy.mockRestore();
     });
 
     test('throws on GraphQL errors with no data', async () => {
@@ -853,6 +859,16 @@ describe('LinearApiClient', () => {
   // --------------------------------------------------------------------------
 
   describe('rate limit handling', () => {
+    let warnSpy: ReturnType<typeof spyOn>;
+
+    beforeEach(() => {
+      warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      warnSpy.mockRestore();
+    });
+
     test('tracks rate limit info from response headers', async () => {
       setMockFetchResponse(
         createGraphQLResponse({ viewer: createMockViewer() }),
@@ -878,8 +894,6 @@ describe('LinearApiClient', () => {
     });
 
     test('logs warning when rate limit is near threshold', async () => {
-      const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
-
       setMockFetchResponse(
         createGraphQLResponse({ viewer: createMockViewer() }),
         200,
@@ -896,13 +910,9 @@ describe('LinearApiClient', () => {
       const warnMessage = warnSpy.mock.calls[0][0] as string;
       expect(warnMessage).toContain('Rate limit warning');
       expect(warnMessage).toContain('5/5000');
-
-      warnSpy.mockRestore();
     });
 
     test('does not log warning when rate limit is above threshold', async () => {
-      const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
-
       setMockFetchResponse(
         createGraphQLResponse({ viewer: createMockViewer() }),
         200,
@@ -916,12 +926,9 @@ describe('LinearApiClient', () => {
       await client.getViewer();
 
       expect(warnSpy).not.toHaveBeenCalled();
-      warnSpy.mockRestore();
     });
 
     test('custom warning threshold is respected', async () => {
-      const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
-
       const customClient = new LinearApiClient({
         apiKey: 'lin_api_test',
         rateLimitWarningThreshold: 200,
@@ -940,7 +947,6 @@ describe('LinearApiClient', () => {
       await customClient.getViewer();
 
       expect(warnSpy).toHaveBeenCalledTimes(1);
-      warnSpy.mockRestore();
     });
 
     test('throws with rate limit info when rate limit exhausted (429)', async () => {
@@ -989,8 +995,6 @@ describe('LinearApiClient', () => {
     });
 
     test('does not warn when remaining is 0 (error handles it)', async () => {
-      const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
-
       setMockFetchResponse(
         { errors: [{ message: 'Rate limit exceeded' }] },
         429,
@@ -1009,7 +1013,6 @@ describe('LinearApiClient', () => {
 
       // Warning only fires when remaining > 0 and <= threshold
       expect(warnSpy).not.toHaveBeenCalled();
-      warnSpy.mockRestore();
     });
 
     test('parses standard fallback rate limit headers', async () => {
