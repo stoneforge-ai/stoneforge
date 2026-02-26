@@ -195,7 +195,7 @@ sf delete <id> [options]
 | Option                | Description                              |
 | --------------------- | ---------------------------------------- |
 | `-r, --reason <text>` | Deletion reason (recorded in audit trail) |
-| `-f, --force`         | Skip confirmation (for scripts)          |
+| `-f, --force`         | Force deletion without prompting (currently a no-op; deletion is always immediate) |
 
 Note: Messages cannot be deleted as they are immutable.
 

@@ -288,11 +288,23 @@ const idLengthCache = createIdLengthCache(storage, {
 // Get minimum ID hash length for unique prefix
 const hashLength = idLengthCache.getHashLength();
 
+// Get cached element count
+const count = idLengthCache.getElementCount();
+
 // Force refresh
 idLengthCache.refresh();
 
 // Check if stale
 const isStale = idLengthCache.isStale();
+
+// Clear cache (forces refresh on next access)
+idLengthCache.clear();
+
+// Get cache statistics (hit rate, age, element count, etc.)
+const stats = idLengthCache.getStats(); // Returns IdLengthCacheStats
+
+// Notify cache of new element creation (may trigger refresh if growth threshold exceeded)
+idLengthCache.notifyCreate();
 ```
 
 Refreshes automatically on access if stale. Used by CLI for short ID support.

@@ -309,9 +309,26 @@ interface Plan extends Element {
 }
 
 type PlanStatus = 'draft' | 'active' | 'completed' | 'cancelled';
+
+interface PlanProgress {
+  totalTasks: number;          // Total number of child tasks
+  completedTasks: number;      // Tasks with 'closed' status
+  inProgressTasks: number;     // Tasks with 'in_progress' status
+  blockedTasks: number;        // Tasks with 'blocked' status
+  remainingTasks: number;      // Tasks with 'open' or 'deferred' status
+  completionPercentage: number; // Completion percentage (0-100)
+}
+
+// Hydrated variant with computed progress
+interface HydratedPlan extends Plan {
+  description?: string;        // Hydrated description Document content
+  progress?: PlanProgress;     // Computed progress metrics
+}
 ```
 
 Contains tasks via `parent-child` dependencies. **Tasks in a plan are NOT blocked by plan status.**
+
+Use `calculatePlanProgress(taskStatusCounts)` to compute progress from task status counts.
 
 ### Workflow
 
@@ -420,6 +437,97 @@ interface Playbook extends Element {
 ```
 
 **Variable substitution:** `{{varName}}` pattern.
+
+#### PlaybookVariable
+
+```typescript
+type VariableType = 'string' | 'number' | 'boolean';
+
+interface PlaybookVariable {
+  name: string;              // Variable name (must be valid identifier)
+  description?: string;      // Human-readable description
+  type: VariableType;        // Variable type
+  required: boolean;         // Whether value must be provided
+  default?: unknown;         // Default value if not provided
+  enum?: unknown[];          // Allowed values (for enums)
+}
+```
+
+#### PlaybookStep
+
+`PlaybookStep` is a union of two step types:
+
+```typescript
+type PlaybookStep = PlaybookTaskStep | PlaybookFunctionStep;
+
+// Shared base properties
+interface PlaybookStepBase {
+  id: string;                // Unique step identifier within playbook
+  title: string;             // Step title (supports {{variable}} substitution)
+  description?: string;      // Step description (supports {{variable}} substitution)
+  dependsOn?: string[];      // Step IDs this step depends on
+  condition?: string;        // Condition expression for inclusion
+}
+
+// Task step — creates an agent task to be executed
+interface PlaybookTaskStep extends PlaybookStepBase {
+  stepType?: 'task';         // Defaults to 'task'
+  taskType?: TaskTypeValue;
+  priority?: Priority;
+  complexity?: Complexity;
+  assignee?: string;         // Supports {{variable}} substitution
+}
+
+// Function step — executes code directly
+interface PlaybookFunctionStep extends PlaybookStepBase {
+  stepType: 'function';
+  runtime: FunctionRuntime;  // 'typescript' | 'python' | 'shell'
+  code?: string;             // Code to execute (for typescript/python)
+  command?: string;          // Command to execute (for shell)
+  timeout?: number;          // Timeout in ms (default: 30000)
+}
+```
+
+Use `isTaskStep(step)` and `isFunctionStep(step)` type guards to discriminate.
+
+---
+
+## Hydrated Types
+
+Several core types have "hydrated" variants that include resolved document references and computed fields. These are returned by API list/get operations that join related data.
+
+```typescript
+// Task with resolved description document
+interface HydratedTask extends Task {
+  description?: string;
+}
+
+// Message with resolved content and attachment documents
+interface HydratedMessage extends Message {
+  content?: string;
+  attachmentContents?: string[];
+}
+
+// Workflow with resolved description document
+interface HydratedWorkflow extends Workflow {
+  description?: string;
+}
+
+// Library with resolved description and counts
+interface HydratedLibrary extends Library {
+  description?: string;
+  documentCount?: number;     // Number of direct child documents
+  subLibraryCount?: number;   // Number of direct child libraries
+}
+
+// Team with resolved description and member count
+interface HydratedTeam extends Team {
+  description?: string;
+  memberCount?: number;
+}
+```
+
+**Note:** `HydratedChannel` is a type alias for `Channel` since channels use a plain `description` string rather than a document reference.
 
 ---
 

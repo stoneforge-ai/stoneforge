@@ -305,6 +305,9 @@ await daemon.start();
 
 // Stop the daemon
 await daemon.stop();
+
+// Check if running
+const running = daemon.isRunning();
 ```
 
 ### Runtime Configuration
