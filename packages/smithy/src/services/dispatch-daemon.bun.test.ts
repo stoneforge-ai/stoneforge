@@ -649,10 +649,10 @@ describe('recoverOrphanedAssignments', () => {
       ),
     });
 
-    // Mock recoverOrphanedTask to succeed
+    // Mock recoverOrphanedTask to succeed (returns true = session was spawned)
     const impl = daemon as DispatchDaemonImpl;
     (impl as any).recoverOrphanedTask = mock(async () => {
-      // Recovery succeeds — no error thrown
+      return true;
     });
 
     const result = await daemon.recoverOrphanedAssignments();
@@ -3376,6 +3376,66 @@ describe('recoverOrphanedAssignments - rate limit guard', () => {
     const updated = await api.get<Task>(task.id);
     const meta = updated?.metadata as Record<string, unknown> | undefined;
     // resumeCount 0 may be stored as undefined — either way, it must NOT be 1+
+    expect(meta?.resumeCount ?? 0).toBe(0);
+  });
+
+  test('recoverOrphanedTask returns false and skips resume when rate-limited (inner guard)', async () => {
+    const worker = await createTestWorker('inner-guard-worker');
+    const workerId = worker.id as unknown as EntityId;
+    const task = await createAssignedTask('Task with inner rate limit guard', workerId, {
+      sessionId: 'prev-session-inner',
+      worktree: '/worktrees/inner-guard-worker/task',
+      resumeCount: 2,
+    });
+
+    // Mark all executables as rate-limited
+    const resetsAt = new Date(Date.now() + 60_000);
+    daemon.handleRateLimitDetected('claude2', resetsAt);
+    daemon.handleRateLimitDetected('claude', resetsAt);
+
+    const result = await daemon.recoverOrphanedAssignments();
+
+    // Should skip entirely — no session activity
+    expect(result.processed).toBe(0);
+    expect(result.errors).toBe(0);
+    expect(sessionManager.resumeSession).not.toHaveBeenCalled();
+    expect(sessionManager.startSession).not.toHaveBeenCalled();
+
+    // resumeCount should NOT have been incremented — still 2
+    const updatedTask = await api.get<Task>(task.id);
+    const meta = getOrchestratorTaskMeta(updatedTask!.metadata as Record<string, unknown>);
+    expect(meta?.resumeCount).toBe(2);
+  });
+
+  test('recoverOrphanedTask skips both resume and fresh spawn when rate-limited (no session activity)', async () => {
+    // This ensures the inner rate limit guard in recoverOrphanedTask prevents
+    // BOTH the resume path (when sessionId is present) and the fresh spawn
+    // fallback from being attempted.
+    const worker = await createTestWorker('no-activity-worker');
+    const workerId = worker.id as unknown as EntityId;
+
+    // Task WITHOUT a previous sessionId — would normally fall through to fresh spawn
+    const task = await createAssignedTask('Task without session', workerId, {
+      worktree: '/worktrees/no-activity-worker/task',
+      resumeCount: 0,
+    });
+
+    // Mark all executables as rate-limited
+    const resetsAt = new Date(Date.now() + 60_000);
+    daemon.handleRateLimitDetected('claude2', resetsAt);
+    daemon.handleRateLimitDetected('claude', resetsAt);
+
+    const result = await daemon.recoverOrphanedAssignments();
+
+    // Should skip entirely — no session spawned, no errors
+    expect(result.processed).toBe(0);
+    expect(result.errors).toBe(0);
+    expect(sessionManager.resumeSession).not.toHaveBeenCalled();
+    expect(sessionManager.startSession).not.toHaveBeenCalled();
+
+    // resumeCount should NOT have been incremented — still 0
+    const updatedTask = await api.get<Task>(task.id);
+    const meta = getOrchestratorTaskMeta(updatedTask!.metadata as Record<string, unknown>);
     expect(meta?.resumeCount ?? 0).toBe(0);
   });
 });
