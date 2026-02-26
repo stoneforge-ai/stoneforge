@@ -89,6 +89,10 @@ For message conversations:
 
 ## The computed `blocked` status
 
+The Tasks kanban view visually shows how blocked status affects task organization — blocked tasks appear in their own column:
+
+![The Tasks kanban view shows tasks grouped by status columns including Backlog, Unassigned, Assigned, and In Progress.](/screenshots/tasks-kanban.png)
+
 The `blocked` status is a key architectural concept: **it is never set directly**. You never write `status: 'blocked'` — instead, the system computes it automatically from unresolved blocking dependencies.
 
 An element is blocked when:

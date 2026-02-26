@@ -109,6 +109,8 @@ Workspace-level defaults can be set in **Settings > Workspace > Agent Defaults**
 - **Default model per provider** — each provider can have its own default model
 - **Executable paths** — custom paths to provider CLI binaries
 
+![The Settings Workspace tab shows configuration for worktrees, ephemeral task retention, and steward schedules.](/screenshots/settings-workspace.png)
+
 These defaults are stored via the SettingsService (SQLite-backed, not in `config.yaml`). When creating a new agent, the dialog pre-fills the default provider and its corresponding default model. Agents can still override defaults at registration or session start.
 
 ## Strategy patterns

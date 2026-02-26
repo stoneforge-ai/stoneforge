@@ -25,6 +25,8 @@ This is a good multi-agent task because the API and UI work can happen in parall
 
 Open the **Director Panel** in the dashboard sidebar and describe what you want:
 
+![The Director Panel opens as a sidebar where you describe goals to the Director agent.](/screenshots/director-panel.png)
+
 ```
 Add a user profile feature:
 - GET /api/users/:id/profile endpoint that returns name, email, avatar, and bio
@@ -37,6 +39,8 @@ The Director reads your goal and begins planning.
 ## Step 2: Watch the Director create a plan
 
 Within a few seconds, the Director creates a plan with tasks, priorities, and dependencies. You'll see it appear on the **Tasks** page:
+
+![The Tasks page in kanban view shows tasks organized by status columns — Backlog, Unassigned, Assigned, In Progress.](/screenshots/tasks-kanban.png)
 
 ```
 Plan: "User Profile Feature"  (draft → active)
@@ -71,7 +75,9 @@ Each worker gets a dispatch message in its inbox containing the task title, desc
 
 ## Step 4: Monitor progress
 
-Switch to the **Activity** page to see real-time output from both workers. You'll see them working simultaneously — Worker1 writing the API endpoint while Worker2 builds the React component.
+Switch to the **Activity** page to see real-time output from both workers.
+
+![The Activity page shows active agents with their current status and an expandable event feed.](/screenshots/activity-feed.png) You'll see them working simultaneously — Worker1 writing the API endpoint while Worker2 builds the React component.
 
 The **Tasks** page shows live status updates:
 
@@ -104,7 +110,9 @@ What happens behind the scenes:
 
 ## Step 6: Merge review
 
-When a worker finishes, it runs `sf task complete <id>`. The task moves to `review` status and a merge request is created. The merge steward picks it up:
+When a worker finishes, it runs `sf task complete <id>`. The task moves to `review` status and a merge request is created. The merge steward picks it up on the **Merge Requests** page:
+
+![The Merge Requests page shows completed work with branch info, merge status, and steward assignment.](/screenshots/merge-requests-page.png)
 
 <Steps>
 1. **Steward detects** the completed task in REVIEW status
