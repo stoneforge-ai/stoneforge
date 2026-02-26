@@ -102,6 +102,20 @@ export const RAPID_EXIT_FALLBACK_RESET_MS = 60 * 60 * 1000;
  */
 export const RAPID_EXIT_THRESHOLD_MS = 10_000;
 
+/**
+ * Number of recent session history entries to examine when detecting
+ * a rate limit pattern. If the last N sessions were all very short-lived,
+ * the task is likely stuck due to rate limiting rather than a genuine bug.
+ */
+export const RATE_LIMIT_SESSION_PATTERN_COUNT = 3;
+
+/**
+ * Maximum gap (in milliseconds) between consecutive session starts to
+ * consider them part of a rapid-retry pattern. Sessions started within
+ * this window of each other suggest automatic retries hitting rate limits.
+ */
+export const RATE_LIMIT_SESSION_GAP_MS = 5 * 60 * 1000; // 5 minutes
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -1147,12 +1161,14 @@ export class DispatchDaemonImpl implements DispatchDaemon {
           // Task has been resumed too many times without status change —
           // spawn a recovery steward instead of resuming the worker again
           try {
-            await this.spawnRecoveryStewardForTask(worker, taskAssignment.task, taskAssignment.orchestratorMeta, stewardsUsedThisCycle);
-            processed++;
-            logger.info(
-              `[dispatch-daemon] Spawning recovery steward for stuck task ${taskAssignment.task.id} after ${resumeCount} resume attempts`
-            );
-            this.operationLog?.write('warn', 'recovery', `Spawning recovery steward for stuck task ${taskAssignment.task.id} after ${resumeCount} resume attempts`, { taskId: taskAssignment.task.id, agentId: worker.id, resumeCount });
+            const spawned = await this.spawnRecoveryStewardForTask(worker, taskAssignment.task, taskAssignment.orchestratorMeta, stewardsUsedThisCycle);
+            if (spawned) {
+              processed++;
+              logger.info(
+                `[dispatch-daemon] Spawning recovery steward for stuck task ${taskAssignment.task.id} after ${resumeCount} resume attempts`
+              );
+              this.operationLog?.write('warn', 'recovery', `Spawning recovery steward for stuck task ${taskAssignment.task.id} after ${resumeCount} resume attempts`, { taskId: taskAssignment.task.id, agentId: worker.id, resumeCount });
+            }
           } catch (error) {
             errors++;
             const errorMessage = error instanceof Error ? error.message : String(error);
@@ -2184,6 +2200,49 @@ export class DispatchDaemonImpl implements DispatchDaemon {
   }
 
   /**
+   * Checks a task's session history for a rate limit pattern.
+   *
+   * Returns true if the last N sessions (RATE_LIMIT_SESSION_PATTERN_COUNT)
+   * all appear to be rapid exits — sessions that started in quick succession
+   * (within RATE_LIMIT_SESSION_GAP_MS of each other) and none completed
+   * properly (no endedAt set). This pattern indicates the task is stuck due
+   * to rate limiting rather than a genuine bug requiring recovery steward
+   * intervention.
+   *
+   * @param taskMeta - The task's orchestrator metadata
+   * @returns true if the session history shows a rate limit pattern
+   */
+  private hasRecentRateLimitPattern(
+    taskMeta: import('../types/task-meta.js').OrchestratorTaskMeta | undefined
+  ): boolean {
+    const sessionHistory = taskMeta?.sessionHistory;
+    if (!sessionHistory || sessionHistory.length < RATE_LIMIT_SESSION_PATTERN_COUNT) {
+      return false;
+    }
+
+    // Get the last N entries
+    const recentSessions = sessionHistory.slice(-RATE_LIMIT_SESSION_PATTERN_COUNT);
+
+    // All recent sessions must lack a proper endedAt (i.e., the session exited
+    // without the agent calling task complete or handoff)
+    const allLackEndedAt = recentSessions.every(entry => !entry.endedAt);
+    if (!allLackEndedAt) return false;
+
+    // Check that consecutive sessions started close together (rapid retries)
+    for (let i = 1; i < recentSessions.length; i++) {
+      const prevStart = new Date(recentSessions[i - 1].startedAt).getTime();
+      const currStart = new Date(recentSessions[i].startedAt).getTime();
+      const gap = currStart - prevStart;
+      if (gap < 0 || gap > RATE_LIMIT_SESSION_GAP_MS) {
+        return false;
+      }
+    }
+
+    // All recent sessions were rapid retries without proper completion
+    return true;
+  }
+
+  /**
    * Recovers a single orphaned merge steward task by resuming or re-spawning.
    * Tries to resume the previous provider session first (preserves context),
    * falls back to a fresh spawn via spawnMergeStewardForTask.
@@ -2800,8 +2859,21 @@ export class DispatchDaemonImpl implements DispatchDaemon {
     task: Task,
     taskMeta: import('../types/task-meta.js').OrchestratorTaskMeta | undefined,
     stewardsUsedThisCycle?: Set<string>
-  ): Promise<void> {
+  ): Promise<boolean> {
     const workerId = asEntityId(worker.id);
+
+    // 0. Check session history for rate limit pattern.
+    // If the last N sessions were all very short-lived (started in rapid succession
+    // without proper completion), the task is likely stuck due to rate limiting.
+    // Don't spawn a recovery steward — leave the task for retry when limits expire.
+    if (this.hasRecentRateLimitPattern(taskMeta)) {
+      logger.info(
+        `Task ${task.id} shows rate limit pattern in session history ` +
+        `(last ${RATE_LIMIT_SESSION_PATTERN_COUNT} sessions were rapid exits). ` +
+        `Skipping recovery steward spawn.`
+      );
+      return false;
+    }
 
     // 1. Find an available recovery steward
     const stewards = await this.agentRegistry.listAgents({
@@ -2809,19 +2881,23 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       stewardFocus: 'recovery',
     });
 
-    // Find a steward without an active session that hasn't already been used this cycle.
-    // The stewardsUsedThisCycle guard prevents cascade assignment: when a steward session
-    // terminates immediately (e.g. due to rate limiting), getActiveSession returns null
-    // and the steward appears available for the next task in the same loop iteration.
+    // Find a steward without an active session that hasn't already been used this cycle
+    // and doesn't already have assigned tasks from a previous cycle.
+    // The stewardsUsedThisCycle guard prevents cascade assignment within a single cycle.
+    // The getAgentTasks guard prevents multi-assignment across cycles: after a steward
+    // session exits (e.g., rate-limited), the steward appears available on the next poll
+    // cycle but may still have tasks assigned from the previous cycle.
     let recoverySteward: AgentEntity | undefined;
     for (const steward of stewards) {
       const sid = asEntityId(steward.id);
       if (stewardsUsedThisCycle?.has(sid as string)) continue;
       const session = this.sessionManager.getActiveSession(sid);
-      if (!session) {
-        recoverySteward = steward;
-        break;
-      }
+      if (session) continue;
+      // Check if steward already has assigned tasks from a previous cycle
+      const stewardTasks = await this.taskAssignment.getAgentTasks(sid);
+      if (stewardTasks.length > 0) continue;
+      recoverySteward = steward;
+      break;
     }
 
     if (!recoverySteward) {
@@ -2835,7 +2911,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
         `No available recovery steward for stuck task ${task.id}. ` +
         `Task has been resumed ${taskMeta?.resumeCount ?? 0} times without status change.`
       );
-      return;
+      return false;
     }
 
     const stewardId = asEntityId(recoverySteward.id);
@@ -2854,7 +2930,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
         logger.debug(
           `Pool capacity reached for recovery steward ${recoverySteward.name}: ${poolCheck.reason}`
         );
-        return;
+        return false;
       }
     }
 
@@ -2864,7 +2940,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       logger.warn(
         `All executables rate-limited, deferring recovery steward spawn for ${recoverySteward.name}`
       );
-      return;
+      return false;
     }
 
     // 3. Resolve worktree — reuse the worker's existing worktree
@@ -2900,7 +2976,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
         title: 'Recovery steward skipped',
         message: `Cannot spawn recovery steward for task ${task.id}: worktree missing and no branch info available to create a new one.`,
       });
-      return;
+      return false;
     }
 
     // 4. Build the recovery steward prompt
@@ -2982,6 +3058,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
     }
 
     this.emitter.emit('agent:spawned', stewardId, worktreePath);
+    return true;
   }
 
   /**

@@ -37,6 +37,8 @@ import {
   RATE_LIMIT_MINIMUM_FLOOR_MS,
   RAPID_EXIT_THRESHOLD_MS,
   RAPID_EXIT_FALLBACK_RESET_MS,
+  RATE_LIMIT_SESSION_PATTERN_COUNT,
+  RATE_LIMIT_SESSION_GAP_MS,
 } from './dispatch-daemon.js';
 import type { SettingsService, ServerAgentDefaults } from './settings-service.js';
 import { createAgentRegistry, type AgentRegistry, type AgentEntity } from './agent-registry.js';
@@ -45,7 +47,7 @@ import { createDispatchService, type DispatchService } from './dispatch-service.
 import type { SessionManager, SessionRecord, StartSessionOptions } from '../runtime/session-manager.js';
 import type { WorktreeManager, CreateWorktreeResult, CreateWorktreeOptions } from '../git/worktree-manager.js';
 import type { StewardScheduler } from './steward-scheduler.js';
-import { getOrchestratorTaskMeta, updateOrchestratorTaskMeta } from '../types/task-meta.js';
+import { getOrchestratorTaskMeta, updateOrchestratorTaskMeta, appendTaskSessionHistory, type TaskSessionHistoryEntry } from '../types/task-meta.js';
 
 // ============================================================================
 // Mock Factories
@@ -4273,5 +4275,493 @@ describe('spawnTriageSession - rate limit guard', () => {
 
     // startSession SHOULD have been called (triage was spawned)
     expect(startSessionMock.mock.calls.length).toBeGreaterThan(callCountBefore);
+  });
+});
+
+// ============================================================================
+// Recovery steward — rate limit session history pattern detection
+// ============================================================================
+
+describe('spawnRecoveryStewardForTask - rate limit session history guard', () => {
+  let api: QuarryAPI;
+  let inboxService: InboxService;
+  let agentRegistry: AgentRegistry;
+  let taskAssignment: TaskAssignmentService;
+  let dispatchService: DispatchService;
+  let sessionManager: SessionManager;
+  let worktreeManager: WorktreeManager;
+  let stewardScheduler: StewardScheduler;
+  let daemon: DispatchDaemon;
+  let testDbPath: string;
+  let systemEntity: EntityId;
+
+  beforeEach(async () => {
+    testDbPath = `/tmp/dispatch-daemon-rl-pattern-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`;
+    const storage = createStorage({ path: testDbPath, create: true });
+    initializeSchema(storage);
+
+    api = createQuarryAPI(storage);
+    inboxService = createInboxService(storage);
+    agentRegistry = createAgentRegistry(api);
+    taskAssignment = createTaskAssignmentService(api);
+    dispatchService = createDispatchService(api, taskAssignment, agentRegistry);
+    sessionManager = createMockSessionManager();
+    worktreeManager = createMockWorktreeManager();
+    stewardScheduler = createMockStewardScheduler();
+
+    const { createEntity, EntityTypeValue } = await import('@stoneforge/core');
+    const entity = await createEntity({
+      name: 'test-system-rl-pattern',
+      entityType: EntityTypeValue.SYSTEM,
+      createdBy: 'system:test' as EntityId,
+    });
+    const saved = await api.create(entity as unknown as Record<string, unknown> & { createdBy: EntityId });
+    systemEntity = saved.id as unknown as EntityId;
+
+    const config: DispatchDaemonConfig = {
+      pollIntervalMs: 100,
+      workerAvailabilityPollEnabled: false,
+      inboxPollEnabled: false,
+      stewardTriggerPollEnabled: false,
+      workflowTaskPollEnabled: false,
+      orphanRecoveryEnabled: true,
+      maxResumeAttemptsBeforeRecovery: 3,
+    };
+
+    daemon = createDispatchDaemon(
+      api,
+      agentRegistry,
+      sessionManager,
+      dispatchService,
+      worktreeManager,
+      taskAssignment,
+      stewardScheduler,
+      inboxService,
+      config
+    );
+  });
+
+  afterEach(async () => {
+    await daemon.stop();
+    if (fs.existsSync(testDbPath)) {
+      fs.unlinkSync(testDbPath);
+    }
+  });
+
+  async function createTestWorker(name: string): Promise<AgentEntity> {
+    return agentRegistry.registerWorker({
+      name,
+      workerMode: 'ephemeral',
+      createdBy: systemEntity,
+      maxConcurrentTasks: 1,
+    });
+  }
+
+  async function createTestRecoverySteward(name: string): Promise<AgentEntity> {
+    return agentRegistry.registerSteward({
+      name,
+      stewardFocus: 'recovery',
+      createdBy: systemEntity,
+      maxConcurrentTasks: 1,
+    });
+  }
+
+  /**
+   * Creates a stuck task with session history entries simulating rapid rate-limited exits.
+   * Each session started shortly after the previous one and none have endedAt set.
+   */
+  async function createTaskWithRateLimitPattern(
+    title: string,
+    workerId: EntityId,
+    sessionCount: number = RATE_LIMIT_SESSION_PATTERN_COUNT,
+  ): Promise<Task> {
+    const task = await createTask({
+      title,
+      createdBy: systemEntity,
+      status: TaskStatus.IN_PROGRESS,
+      assignee: workerId,
+    });
+    const saved = await api.create(task as unknown as Record<string, unknown> & { createdBy: EntityId }) as Task;
+
+    // Build session history with rapid succession entries (no endedAt)
+    const now = Date.now();
+    let metadata: Record<string, unknown> | undefined = undefined;
+    metadata = updateOrchestratorTaskMeta(metadata, {
+      assignedAgent: workerId,
+      branch: 'agent/test-worker/task-branch',
+      worktree: '/worktrees/test-worker/task',
+      sessionId: 'prev-session-stuck',
+      resumeCount: 3,
+    });
+
+    for (let i = 0; i < sessionCount; i++) {
+      const entry: TaskSessionHistoryEntry = {
+        sessionId: `session-rl-${i}`,
+        agentId: workerId,
+        agentName: 'test-worker',
+        agentRole: 'worker',
+        startedAt: new Date(now - (sessionCount - i) * 30_000).toISOString() as import('@stoneforge/core').Timestamp, // 30s apart
+        // No endedAt — session exited without proper completion
+      };
+      metadata = appendTaskSessionHistory(metadata, entry);
+    }
+
+    await api.update(saved.id, { metadata });
+    return (await api.get<Task>(saved.id))!;
+  }
+
+  test('does not spawn recovery steward when session history shows rate limit pattern', async () => {
+    const worker = await createTestWorker('rl-pattern-worker');
+    const workerId = worker.id as unknown as EntityId;
+    await createTestRecoverySteward('recovery-steward-rl');
+
+    // Task has N rapid sessions without proper completion
+    await createTaskWithRateLimitPattern('Rate limited task', workerId);
+
+    const result = await daemon.recoverOrphanedAssignments();
+
+    // Recovery steward should NOT have been spawned
+    expect(result.processed).toBe(0);
+    expect(result.errors).toBe(0);
+    expect(sessionManager.startSession).not.toHaveBeenCalled();
+  });
+
+  test('spawns recovery steward when session history has proper completions (not rate-limited)', async () => {
+    const worker = await createTestWorker('non-rl-worker');
+    const workerId = worker.id as unknown as EntityId;
+    await createTestRecoverySteward('recovery-steward-ok');
+
+    // Create task with session history where sessions have endedAt set (proper completions)
+    const task = await createTask({
+      title: 'Properly stuck task',
+      createdBy: systemEntity,
+      status: TaskStatus.IN_PROGRESS,
+      assignee: workerId,
+    });
+    const saved = await api.create(task as unknown as Record<string, unknown> & { createdBy: EntityId }) as Task;
+
+    const now = Date.now();
+    let metadata: Record<string, unknown> | undefined = undefined;
+    metadata = updateOrchestratorTaskMeta(metadata, {
+      assignedAgent: workerId,
+      branch: 'agent/test-worker/task-branch',
+      worktree: '/worktrees/test-worker/task',
+      sessionId: 'prev-session-stuck',
+      resumeCount: 3,
+    });
+
+    // Sessions with endedAt set (proper completions, not rate limits)
+    for (let i = 0; i < RATE_LIMIT_SESSION_PATTERN_COUNT; i++) {
+      const startTime = new Date(now - (RATE_LIMIT_SESSION_PATTERN_COUNT - i) * 60_000);
+      const entry: TaskSessionHistoryEntry = {
+        sessionId: `session-ok-${i}`,
+        agentId: workerId,
+        agentName: 'test-worker',
+        agentRole: 'worker',
+        startedAt: startTime.toISOString() as import('@stoneforge/core').Timestamp,
+        endedAt: new Date(startTime.getTime() + 30_000).toISOString() as import('@stoneforge/core').Timestamp, // Ran for 30s
+      };
+      metadata = appendTaskSessionHistory(metadata, entry);
+    }
+
+    await api.update(saved.id, { metadata });
+
+    const result = await daemon.recoverOrphanedAssignments();
+
+    // Recovery steward SHOULD be spawned for genuinely stuck task
+    expect(result.processed).toBe(1);
+    expect(result.errors).toBe(0);
+    expect(sessionManager.startSession).toHaveBeenCalled();
+  });
+
+  test('spawns recovery steward when insufficient session history entries', async () => {
+    const worker = await createTestWorker('few-sessions-worker');
+    const workerId = worker.id as unknown as EntityId;
+    await createTestRecoverySteward('recovery-steward-few');
+
+    // Create task with fewer sessions than the threshold
+    const task = await createTask({
+      title: 'Task with few sessions',
+      createdBy: systemEntity,
+      status: TaskStatus.IN_PROGRESS,
+      assignee: workerId,
+    });
+    const saved = await api.create(task as unknown as Record<string, unknown> & { createdBy: EntityId }) as Task;
+
+    let metadata: Record<string, unknown> | undefined = undefined;
+    metadata = updateOrchestratorTaskMeta(metadata, {
+      assignedAgent: workerId,
+      branch: 'agent/test-worker/task-branch',
+      worktree: '/worktrees/test-worker/task',
+      sessionId: 'prev-session-stuck',
+      resumeCount: 3,
+    });
+
+    // Only 1 session (below RATE_LIMIT_SESSION_PATTERN_COUNT threshold)
+    const entry: TaskSessionHistoryEntry = {
+      sessionId: 'session-single',
+      agentId: workerId,
+      agentName: 'test-worker',
+      agentRole: 'worker',
+      startedAt: new Date().toISOString() as import('@stoneforge/core').Timestamp,
+    };
+    metadata = appendTaskSessionHistory(metadata, entry);
+
+    await api.update(saved.id, { metadata });
+
+    const result = await daemon.recoverOrphanedAssignments();
+
+    // Recovery steward SHOULD be spawned — not enough history to detect pattern
+    expect(result.processed).toBe(1);
+    expect(sessionManager.startSession).toHaveBeenCalled();
+  });
+
+  test('does not detect rate limit pattern when sessions are far apart', async () => {
+    const worker = await createTestWorker('far-apart-worker');
+    const workerId = worker.id as unknown as EntityId;
+    await createTestRecoverySteward('recovery-steward-far');
+
+    const task = await createTask({
+      title: 'Task with spaced sessions',
+      createdBy: systemEntity,
+      status: TaskStatus.IN_PROGRESS,
+      assignee: workerId,
+    });
+    const saved = await api.create(task as unknown as Record<string, unknown> & { createdBy: EntityId }) as Task;
+
+    const now = Date.now();
+    let metadata: Record<string, unknown> | undefined = undefined;
+    metadata = updateOrchestratorTaskMeta(metadata, {
+      assignedAgent: workerId,
+      branch: 'agent/test-worker/task-branch',
+      worktree: '/worktrees/test-worker/task',
+      sessionId: 'prev-session-stuck',
+      resumeCount: 3,
+    });
+
+    // Sessions without endedAt but spaced far apart (> RATE_LIMIT_SESSION_GAP_MS)
+    for (let i = 0; i < RATE_LIMIT_SESSION_PATTERN_COUNT; i++) {
+      const entry: TaskSessionHistoryEntry = {
+        sessionId: `session-far-${i}`,
+        agentId: workerId,
+        agentName: 'test-worker',
+        agentRole: 'worker',
+        startedAt: new Date(now - (RATE_LIMIT_SESSION_PATTERN_COUNT - i) * (RATE_LIMIT_SESSION_GAP_MS + 60_000)).toISOString() as import('@stoneforge/core').Timestamp,
+      };
+      metadata = appendTaskSessionHistory(metadata, entry);
+    }
+
+    await api.update(saved.id, { metadata });
+
+    const result = await daemon.recoverOrphanedAssignments();
+
+    // Recovery steward SHOULD be spawned — sessions not in rapid succession
+    expect(result.processed).toBe(1);
+    expect(sessionManager.startSession).toHaveBeenCalled();
+  });
+});
+
+// ============================================================================
+// Recovery steward — multi-assignment guard
+// ============================================================================
+
+describe('spawnRecoveryStewardForTask - multi-assignment guard', () => {
+  let api: QuarryAPI;
+  let inboxService: InboxService;
+  let agentRegistry: AgentRegistry;
+  let taskAssignment: TaskAssignmentService;
+  let dispatchService: DispatchService;
+  let sessionManager: SessionManager;
+  let worktreeManager: WorktreeManager;
+  let stewardScheduler: StewardScheduler;
+  let daemon: DispatchDaemon;
+  let testDbPath: string;
+  let systemEntity: EntityId;
+
+  beforeEach(async () => {
+    testDbPath = `/tmp/dispatch-daemon-multi-assign-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`;
+    const storage = createStorage({ path: testDbPath, create: true });
+    initializeSchema(storage);
+
+    api = createQuarryAPI(storage);
+    inboxService = createInboxService(storage);
+    agentRegistry = createAgentRegistry(api);
+    taskAssignment = createTaskAssignmentService(api);
+    dispatchService = createDispatchService(api, taskAssignment, agentRegistry);
+    sessionManager = createMockSessionManager();
+    worktreeManager = createMockWorktreeManager();
+    stewardScheduler = createMockStewardScheduler();
+
+    const { createEntity, EntityTypeValue } = await import('@stoneforge/core');
+    const entity = await createEntity({
+      name: 'test-system-multi-assign',
+      entityType: EntityTypeValue.SYSTEM,
+      createdBy: 'system:test' as EntityId,
+    });
+    const saved = await api.create(entity as unknown as Record<string, unknown> & { createdBy: EntityId });
+    systemEntity = saved.id as unknown as EntityId;
+
+    const config: DispatchDaemonConfig = {
+      pollIntervalMs: 100,
+      workerAvailabilityPollEnabled: false,
+      inboxPollEnabled: false,
+      stewardTriggerPollEnabled: false,
+      workflowTaskPollEnabled: false,
+      orphanRecoveryEnabled: true,
+      maxResumeAttemptsBeforeRecovery: 3,
+    };
+
+    daemon = createDispatchDaemon(
+      api,
+      agentRegistry,
+      sessionManager,
+      dispatchService,
+      worktreeManager,
+      taskAssignment,
+      stewardScheduler,
+      inboxService,
+      config
+    );
+  });
+
+  afterEach(async () => {
+    await daemon.stop();
+    if (fs.existsSync(testDbPath)) {
+      fs.unlinkSync(testDbPath);
+    }
+  });
+
+  async function createTestWorker(name: string): Promise<AgentEntity> {
+    return agentRegistry.registerWorker({
+      name,
+      workerMode: 'ephemeral',
+      createdBy: systemEntity,
+      maxConcurrentTasks: 1,
+    });
+  }
+
+  async function createTestRecoverySteward(name: string): Promise<AgentEntity> {
+    return agentRegistry.registerSteward({
+      name,
+      stewardFocus: 'recovery',
+      createdBy: systemEntity,
+      maxConcurrentTasks: 1,
+    });
+  }
+
+  async function createStuckTask(
+    title: string,
+    workerId: EntityId,
+    resumeCount: number = 3,
+  ): Promise<Task> {
+    const task = await createTask({
+      title,
+      createdBy: systemEntity,
+      status: TaskStatus.IN_PROGRESS,
+      assignee: workerId,
+    });
+    const saved = await api.create(task as unknown as Record<string, unknown> & { createdBy: EntityId }) as Task;
+
+    await api.update(saved.id, {
+      metadata: updateOrchestratorTaskMeta(undefined, {
+        assignedAgent: workerId,
+        branch: 'agent/test-worker/task-branch',
+        worktree: '/worktrees/test-worker/task',
+        sessionId: 'prev-session-stuck',
+        resumeCount,
+      }),
+    });
+
+    return (await api.get<Task>(saved.id))!;
+  }
+
+  test('skips recovery steward that already has assigned tasks from a previous cycle', async () => {
+    const worker = await createTestWorker('stuck-worker');
+    const workerId = worker.id as unknown as EntityId;
+
+    // Create a recovery steward
+    const steward = await createTestRecoverySteward('recovery-steward-busy');
+    const stewardId = steward.id as unknown as EntityId;
+
+    // Create a stuck task for the worker
+    await createStuckTask('Stuck task', workerId);
+
+    // Assign an existing task to the steward (simulating a previous cycle assignment)
+    const existingTask = await createTask({
+      title: 'Existing steward task',
+      createdBy: systemEntity,
+      status: TaskStatus.IN_PROGRESS,
+      assignee: stewardId,
+    });
+    const savedExisting = await api.create(existingTask as unknown as Record<string, unknown> & { createdBy: EntityId }) as Task;
+    await api.update(savedExisting.id, {
+      metadata: updateOrchestratorTaskMeta(undefined, {
+        assignedAgent: stewardId,
+      }),
+    });
+
+    const result = await daemon.recoverOrphanedAssignments();
+
+    // Recovery steward should NOT be spawned — it already has a task
+    expect(result.processed).toBe(0);
+    expect(result.errors).toBe(0);
+    expect(sessionManager.startSession).not.toHaveBeenCalled();
+  });
+
+  test('assigns recovery steward that has no assigned tasks', async () => {
+    const worker = await createTestWorker('stuck-worker-ok');
+    const workerId = worker.id as unknown as EntityId;
+
+    // Create a recovery steward with NO existing tasks
+    const steward = await createTestRecoverySteward('recovery-steward-free');
+
+    // Create a stuck task for the worker
+    await createStuckTask('Stuck task - free steward', workerId);
+
+    const result = await daemon.recoverOrphanedAssignments();
+
+    // Recovery steward SHOULD be spawned — it has no assigned tasks
+    expect(result.processed).toBe(1);
+    expect(result.errors).toBe(0);
+    expect(sessionManager.startSession).toHaveBeenCalled();
+  });
+
+  test('selects second steward when first already has tasks from previous cycle', async () => {
+    const worker = await createTestWorker('stuck-worker-multi');
+    const workerId = worker.id as unknown as EntityId;
+
+    // Create two recovery stewards
+    const busySteward = await createTestRecoverySteward('recovery-steward-busy');
+    const busyStewardId = busySteward.id as unknown as EntityId;
+    const freeSteward = await createTestRecoverySteward('recovery-steward-free');
+    const freeStewardId = freeSteward.id as unknown as EntityId;
+
+    // Assign an existing task to the first steward
+    const existingTask = await createTask({
+      title: 'Previous cycle task',
+      createdBy: systemEntity,
+      status: TaskStatus.IN_PROGRESS,
+      assignee: busyStewardId,
+    });
+    const savedExisting = await api.create(existingTask as unknown as Record<string, unknown> & { createdBy: EntityId }) as Task;
+    await api.update(savedExisting.id, {
+      metadata: updateOrchestratorTaskMeta(undefined, {
+        assignedAgent: busyStewardId,
+      }),
+    });
+
+    // Create a stuck task for the worker
+    await createStuckTask('Stuck task - multi steward', workerId);
+
+    const result = await daemon.recoverOrphanedAssignments();
+
+    // Should have spawned the free steward, not the busy one
+    expect(result.processed).toBe(1);
+    expect(result.errors).toBe(0);
+
+    // Verify session was started for the free steward
+    const startSessionCalls = (sessionManager.startSession as ReturnType<typeof mock>).mock.calls;
+    expect(startSessionCalls.length).toBe(1);
+    expect(startSessionCalls[0][0]).toBe(freeStewardId);
   });
 });
