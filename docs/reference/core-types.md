@@ -273,6 +273,22 @@ type AwaitsMetadata =
   | WebhookGateMetadata;
 ```
 
+**Validates metadata (for `validates`):**
+
+```typescript
+interface ValidatesMetadata {
+  testType: TestType | string;  // Type of test
+  result: TestResult;           // 'pass' or 'fail'
+  details?: string;             // Test output or notes
+}
+
+const TestType = { UNIT: 'unit', INTEGRATION: 'integration', MANUAL: 'manual', E2E: 'e2e', PROPERTY: 'property' } as const;
+type TestType = (typeof TestType)[keyof typeof TestType];
+
+const TestResult = { PASS: 'pass', FAIL: 'fail' } as const;
+type TestResult = (typeof TestResult)[keyof typeof TestResult];
+```
+
 ---
 
 ## Collections

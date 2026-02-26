@@ -1152,6 +1152,24 @@ await mergeSteward.updateMergeStatus(taskId, 'not_applicable');
 
 All cleanup operations are best-effort and log warnings on failure without blocking the merge result.
 
+### Error Handling
+
+`MergeStatusConflictError` is thrown when an optimistic locking conflict is detected during a merge status transition (e.g., another steward instance has already claimed the task):
+
+```typescript
+import { MergeStatusConflictError } from '@stoneforge/smithy';
+
+try {
+  await mergeSteward.processTask(taskId);
+} catch (error) {
+  if (error instanceof MergeStatusConflictError) {
+    // error.taskId - the conflicting task
+    // error.expectedStatus - what status was expected
+    // error.actualStatus - what status was found
+  }
+}
+```
+
 ---
 
 ## AgentPoolService

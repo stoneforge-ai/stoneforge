@@ -85,6 +85,7 @@ const tasks = await api.list({
 **Filter values:**
 - Direct values for exact match: `status: 'open'`, `priority: 2`
 - Arrays for OR matching: `status: ['open', 'in_progress']`, `priority: [1, 2]`
+- Deadline filters: `hasDeadline: true` (tasks with any deadline), `deadlineBefore: timestamp` (tasks with deadline before given time)
 
 ### List with pagination
 
