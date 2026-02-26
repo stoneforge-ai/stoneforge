@@ -230,7 +230,7 @@ describe('GitHubTaskAdapter', () => {
       expect(result.provider).toBe('github');
     });
 
-    test('sends correct request body', async () => {
+    test('sends correct request body without assignees', async () => {
       let capturedBody: Record<string, unknown> | undefined;
       globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
         if (init?.body) {
@@ -244,14 +244,15 @@ describe('GitHubTaskAdapter', () => {
         title: 'Test',
         body: 'Body text',
         labels: ['bug', 'feature'],
-        assignees: ['user1'],
+        assignees: ['user1'],  // Even if provided, should NOT be sent to GitHub
       });
 
       expect(capturedBody).toBeDefined();
       expect(capturedBody!.title).toBe('Test');
       expect(capturedBody!.body).toBe('Body text');
       expect(capturedBody!.labels).toEqual(['bug', 'feature']);
-      expect(capturedBody!.assignees).toEqual(['user1']);
+      // Assignees should NOT be sent to GitHub — Stoneforge agents aren't GitHub users
+      expect(capturedBody!.assignees).toBeUndefined();
     });
   });
 
@@ -293,6 +294,27 @@ describe('GitHubTaskAdapter', () => {
       // Other fields should not be present
       expect(capturedBody!.body).toBeUndefined();
       expect(capturedBody!.state).toBeUndefined();
+    });
+
+    test('does not send assignees even when provided in updates', async () => {
+      let capturedBody: Record<string, unknown> | undefined;
+      globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+        if (init?.body) {
+          capturedBody = JSON.parse(init.body as string);
+        }
+        return createMockResponse(createMockIssue());
+      };
+
+      const adapter = new GitHubTaskAdapter({ token: 'test-token' });
+      await adapter.updateIssue('owner/repo', '42', {
+        title: 'Updated',
+        assignees: ['some-user'],
+      });
+
+      expect(capturedBody).toBeDefined();
+      expect(capturedBody!.title).toBe('Updated');
+      // Assignees should NOT be forwarded to GitHub
+      expect(capturedBody!.assignees).toBeUndefined();
     });
 
     test('throws for invalid issue number', async () => {

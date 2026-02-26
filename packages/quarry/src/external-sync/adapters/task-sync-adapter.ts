@@ -35,7 +35,7 @@ import { createLinearSyncFieldMapConfig } from '../providers/linear/linear-field
 
 /**
  * Minimal API interface used by task sync adapter utilities.
- * Only requires `get()` for description hydration and assignee resolution.
+ * Only requires `get()` for description hydration.
  * Both QuarryAPI and SyncEngineAPI satisfy this interface structurally.
  */
 export interface TaskSyncAPI {
@@ -103,12 +103,15 @@ export interface TaskSyncFieldMapConfig {
  * - Tags → labels (user tags preserved, sync-managed labels added)
  * - Priority → label via config.priorityLabels
  * - Task type → label via config.taskTypeLabels
- * - Assignee → assignee list (entity name lookup)
  * - Description hydration from descriptionRef document via api.get()
+ *
+ * Note: Assignees are intentionally NOT written to external systems.
+ * Stoneforge assignees are ephemeral agents (e.g., el-xxxx) that don't
+ * correspond to valid users on external platforms like GitHub.
  *
  * @param task - The Stoneforge task to convert
  * @param config - Provider-specific field mapping configuration
- * @param api - API with get() for hydrating description documents and resolving assignees
+ * @param api - API with get() for hydrating description documents
  * @returns ExternalTaskInput ready for the provider adapter
  */
 export async function taskToExternalTask(
@@ -125,9 +128,6 @@ export async function taskToExternalTask(
   // Build labels from sync-managed fields + user tags
   const labels = buildExternalLabels(task, config);
 
-  // Build assignee list
-  const assignees = await resolveAssignees(task, api);
-
   // Hydrate description from descriptionRef document
   const body = await hydrateDescription(task.descriptionRef, api);
 
@@ -136,7 +136,9 @@ export async function taskToExternalTask(
     body,
     state,
     labels,
-    assignees,
+    // Assignees are intentionally omitted — Stoneforge assignees are ephemeral
+    // agents (e.g., el-xxxx) that don't map to valid external system users.
+    assignees: undefined,
     priority: task.priority,
   };
 }
@@ -353,9 +355,12 @@ export async function hydrateDescription(
 /**
  * Resolves task assignee to an external-friendly name.
  *
- * Looks up the assignee entity and returns its name in an array
- * (external systems typically accept multiple assignees).
+ * @deprecated No longer used — Stoneforge assignees are ephemeral agents
+ * that don't map to valid users on external platforms. Assignee writing
+ * to external systems has been removed. This function is kept temporarily
+ * for reference but will be removed in a future cleanup.
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function resolveAssignees(
   task: Task,
   api: TaskSyncAPI

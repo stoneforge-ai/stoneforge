@@ -208,7 +208,9 @@ export class GitHubTaskAdapter implements TaskSyncAdapter {
    * - title -> title
    * - body -> body
    * - labels -> labels (as label names)
-   * - assignees -> assignees (as usernames)
+   *
+   * Note: Assignees are intentionally NOT set on created issues. Stoneforge
+   * assignees are ephemeral agents that don't correspond to GitHub users.
    *
    * Note: The 'state' field from ExternalTaskInput is ignored for creation
    * since GitHub issues are always created in the 'open' state.
@@ -229,7 +231,7 @@ export class GitHubTaskAdapter implements TaskSyncAdapter {
       title: issue.title,
       body: issue.body,
       labels: issue.labels ? [...issue.labels] : undefined,
-      assignees: issue.assignees ? [...issue.assignees] : undefined,
+      // Assignees intentionally omitted — Stoneforge agents are not GitHub users
     });
 
     return githubIssueToExternalTask(created, project);
@@ -281,9 +283,7 @@ export class GitHubTaskAdapter implements TaskSyncAdapter {
     if (updates.labels !== undefined) {
       payload.labels = [...updates.labels];
     }
-    if (updates.assignees !== undefined) {
-      payload.assignees = [...updates.assignees];
-    }
+    // Assignees intentionally omitted — Stoneforge agents are not GitHub users
 
     const updated = await this.client.updateIssue(owner, repo, issueNumber, payload);
 
@@ -405,7 +405,7 @@ export class GitHubTaskAdapter implements TaskSyncAdapter {
         {
           localField: 'assignee',
           externalField: 'assignees',
-          direction: 'bidirectional',
+          direction: 'pull',
         },
       ],
     };

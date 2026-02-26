@@ -131,7 +131,8 @@ describe('taskToExternalTask', () => {
     expect(result.labels).toContain('auth');
     expect(result.labels).toContain('urgent');
     expect(result.body).toBeUndefined();
-    expect(result.assignees).toEqual([]);
+    // Assignees should never be set on push — Stoneforge agents aren't GitHub users
+    expect(result.assignees).toBeUndefined();
   });
 
   test('maps closed status to closed state', async () => {
@@ -241,7 +242,7 @@ describe('taskToExternalTask', () => {
     expect(result.body).toBeUndefined();
   });
 
-  test('resolves assignee entity name', async () => {
+  test('does not set assignees even when task has an assignee entity', async () => {
     const assigneeId = 'el-agent01' as EntityId;
     const task = createTestTask({ assignee: assigneeId });
     const config = createTestConfig();
@@ -261,28 +262,18 @@ describe('taskToExternalTask', () => {
 
     const result = await taskToExternalTask(task, config, api);
 
-    expect(result.assignees).toEqual(['alice']);
+    // Assignees should never be written to external systems
+    expect(result.assignees).toBeUndefined();
   });
 
-  test('returns empty assignees when assignee entity not found', async () => {
-    const assigneeId = 'el-missing' as EntityId;
-    const task = createTestTask({ assignee: assigneeId });
-    const config = createTestConfig();
-    const api = createMockApi();
-
-    const result = await taskToExternalTask(task, config, api);
-
-    expect(result.assignees).toEqual([]);
-  });
-
-  test('returns empty assignees when task has no assignee', async () => {
+  test('does not set assignees when task has no assignee', async () => {
     const task = createTestTask({ assignee: undefined });
     const config = createTestConfig();
     const api = createMockApi();
 
     const result = await taskToExternalTask(task, config, api);
 
-    expect(result.assignees).toEqual([]);
+    expect(result.assignees).toBeUndefined();
   });
 
   test('preserves user tags alongside sync labels', async () => {
