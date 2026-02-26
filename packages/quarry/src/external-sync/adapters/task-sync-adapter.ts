@@ -121,6 +121,7 @@ export async function taskToExternalTask(
     state,
     labels,
     assignees,
+    priority: task.priority,
   };
 }
 
@@ -162,8 +163,10 @@ export function externalTaskToTaskUpdates(
   // Map state + labels → status
   const status = config.stateToStatus(externalTask.state, [...externalTask.labels]);
 
-  // Map priority from labels (default to medium if not found)
-  const priority = parsed.priority ?? 3;
+  // Map priority: prefer native priority from the ExternalTask (set by providers
+  // with native priority support like Linear), fall back to label-based extraction,
+  // then default to medium (3) if neither is available.
+  const priority = externalTask.priority ?? parsed.priority ?? 3;
 
   // Map task type from labels (default to 'task' if not found)
   const taskType = parsed.taskType ?? 'task';

@@ -796,6 +796,274 @@ describe('LinearTaskAdapter', () => {
   });
 
   // --------------------------------------------------------------------------
+  // Priority through create/update (native priority support)
+  // --------------------------------------------------------------------------
+
+  describe('priority through create/update', () => {
+    test('createIssue converts Stoneforge priority 2 (high) to Linear priority 2 (High)', async () => {
+      await adapter.createIssue('ENG', {
+        title: 'High Priority Issue',
+        state: 'open',
+        labels: [],
+        assignees: [],
+        priority: 2,
+      });
+
+      const createCall = (api.createIssue as ReturnType<typeof mock>).mock.calls[0] as [unknown];
+      const input = createCall[0] as { priority?: number };
+      expect(input.priority).toBe(2); // Linear "High"
+    });
+
+    test('createIssue converts Stoneforge priority 1 (critical) to Linear priority 1 (Urgent)', async () => {
+      await adapter.createIssue('ENG', {
+        title: 'Urgent Issue',
+        state: 'open',
+        labels: [],
+        assignees: [],
+        priority: 1,
+      });
+
+      const createCall = (api.createIssue as ReturnType<typeof mock>).mock.calls[0] as [unknown];
+      const input = createCall[0] as { priority?: number };
+      expect(input.priority).toBe(1); // Linear "Urgent"
+    });
+
+    test('createIssue converts Stoneforge priority 5 (minimal) to Linear priority 0 (No priority)', async () => {
+      await adapter.createIssue('ENG', {
+        title: 'Minimal Priority Issue',
+        state: 'open',
+        labels: [],
+        assignees: [],
+        priority: 5,
+      });
+
+      const createCall = (api.createIssue as ReturnType<typeof mock>).mock.calls[0] as [unknown];
+      const input = createCall[0] as { priority?: number };
+      expect(input.priority).toBe(0); // Linear "No priority"
+    });
+
+    test('createIssue defaults to Linear 0 (No priority) when no priority is provided', async () => {
+      await adapter.createIssue('ENG', {
+        title: 'No Priority Issue',
+        state: 'open',
+        labels: [],
+        assignees: [],
+      });
+
+      const createCall = (api.createIssue as ReturnType<typeof mock>).mock.calls[0] as [unknown];
+      const input = createCall[0] as { priority?: number };
+      expect(input.priority).toBe(0); // Linear "No priority"
+    });
+
+    test('createIssue converts all 5 Stoneforge priorities to correct Linear values', async () => {
+      const expectedMappings: Array<{ sf: number; linear: number }> = [
+        { sf: 1, linear: 1 }, // critical → Urgent
+        { sf: 2, linear: 2 }, // high → High
+        { sf: 3, linear: 3 }, // medium → Medium
+        { sf: 4, linear: 4 }, // low → Low
+        { sf: 5, linear: 0 }, // minimal → No priority
+      ];
+
+      for (const { sf, linear } of expectedMappings) {
+        // Reset mock
+        (api.createIssue as ReturnType<typeof mock>).mockClear();
+        (api.getTeams as ReturnType<typeof mock>).mockClear();
+        (api.getTeamWorkflowStates as ReturnType<typeof mock>).mockClear();
+
+        const freshApi = createMockApiClient();
+        const freshAdapter = new LinearTaskAdapter(freshApi);
+
+        await freshAdapter.createIssue('ENG', {
+          title: `Priority ${sf} Issue`,
+          state: 'open',
+          labels: [],
+          assignees: [],
+          priority: sf,
+        });
+
+        const createCall = (freshApi.createIssue as ReturnType<typeof mock>).mock.calls[0] as [unknown];
+        const input = createCall[0] as { priority?: number };
+        expect(input.priority).toBe(linear);
+      }
+    });
+
+    test('updateIssue converts Stoneforge priority to Linear priority', async () => {
+      await adapter.updateIssue('ENG', 'issue-uuid-1', {
+        priority: 2, // Stoneforge "high"
+      });
+
+      const updateCall = (api.updateIssue as ReturnType<typeof mock>).mock.calls[0] as [
+        string,
+        unknown,
+      ];
+      const input = updateCall[1] as { priority?: number };
+      expect(input.priority).toBe(2); // Linear "High"
+    });
+
+    test('updateIssue converts Stoneforge priority 5 to Linear priority 0', async () => {
+      await adapter.updateIssue('ENG', 'issue-uuid-1', {
+        priority: 5, // Stoneforge "minimal"
+      });
+
+      const updateCall = (api.updateIssue as ReturnType<typeof mock>).mock.calls[0] as [
+        string,
+        unknown,
+      ];
+      const input = updateCall[1] as { priority?: number };
+      expect(input.priority).toBe(0); // Linear "No priority"
+    });
+
+    test('updateIssue does not set priority when not provided', async () => {
+      await adapter.updateIssue('ENG', 'issue-uuid-1', {
+        title: 'Updated Title',
+      });
+
+      const updateCall = (api.updateIssue as ReturnType<typeof mock>).mock.calls[0] as [
+        string,
+        unknown,
+      ];
+      const input = updateCall[1] as { priority?: number };
+      expect(input.priority).toBeUndefined();
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // Priority through pull (ExternalTask.priority)
+  // --------------------------------------------------------------------------
+
+  describe('priority through pull', () => {
+    test('getIssue sets Stoneforge priority from Linear native priority', async () => {
+      const issue = createMockIssue({ priority: 2 }); // Linear "High"
+      (api.getIssue as ReturnType<typeof mock>).mockImplementation(() =>
+        Promise.resolve(issue)
+      );
+
+      const result = await adapter.getIssue('ENG', 'issue-uuid-1');
+
+      expect(result).not.toBeNull();
+      expect(result!.priority).toBe(2); // Stoneforge "high"
+    });
+
+    test('getIssue maps Linear 0 (No priority) to Stoneforge 5 (minimal)', async () => {
+      const issue = createMockIssue({ priority: 0 });
+      (api.getIssue as ReturnType<typeof mock>).mockImplementation(() =>
+        Promise.resolve(issue)
+      );
+
+      const result = await adapter.getIssue('ENG', 'issue-uuid-1');
+
+      expect(result).not.toBeNull();
+      expect(result!.priority).toBe(5); // Stoneforge "minimal"
+    });
+
+    test('getIssue maps Linear 1 (Urgent) to Stoneforge 1 (critical)', async () => {
+      const issue = createMockIssue({ priority: 1 });
+      (api.getIssue as ReturnType<typeof mock>).mockImplementation(() =>
+        Promise.resolve(issue)
+      );
+
+      const result = await adapter.getIssue('ENG', 'issue-uuid-1');
+
+      expect(result).not.toBeNull();
+      expect(result!.priority).toBe(1); // Stoneforge "critical"
+    });
+
+    test('listIssuesSince includes Stoneforge priority on all issues', async () => {
+      const issues = [
+        createMockIssue({ id: 'i1', priority: 1 }),
+        createMockIssue({ id: 'i2', priority: 3 }),
+        createMockIssue({ id: 'i3', priority: 0 }),
+      ];
+      (api.listIssuesSince as ReturnType<typeof mock>).mockImplementation(() =>
+        Promise.resolve(issues)
+      );
+
+      const result = await adapter.listIssuesSince('ENG', '2024-01-01T00:00:00Z');
+
+      expect(result).toHaveLength(3);
+      expect(result[0].priority).toBe(1); // Urgent → critical
+      expect(result[1].priority).toBe(3); // Medium → medium
+      expect(result[2].priority).toBe(5); // No priority → minimal
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // Priority round-trip
+  // --------------------------------------------------------------------------
+
+  describe('priority round-trip', () => {
+    test('push P2 task → Linear shows High → pull back → still P2', async () => {
+      // Step 1: Push — create an issue with Stoneforge priority 2
+      const createdIssue = createMockIssue({ priority: 2 }); // Linear returns "High" (2)
+      (api.createIssue as ReturnType<typeof mock>).mockImplementation(() =>
+        Promise.resolve(createdIssue)
+      );
+
+      const pushResult = await adapter.createIssue('ENG', {
+        title: 'P2 Task',
+        state: 'open',
+        labels: [],
+        assignees: [],
+        priority: 2, // Stoneforge "high"
+      });
+
+      // Verify create was called with Linear priority 2 (High)
+      const createCall = (api.createIssue as ReturnType<typeof mock>).mock.calls[0] as [unknown];
+      const createInput = createCall[0] as { priority?: number };
+      expect(createInput.priority).toBe(2); // Linear "High"
+
+      // Step 2: Pull — the returned ExternalTask should have Stoneforge priority 2
+      expect(pushResult.priority).toBe(2); // Stoneforge "high"
+      expect(pushResult.raw!.linearPriority).toBe(2); // Linear native value preserved
+
+      // Step 3: Verify round-trip — if we fetch the same issue, priority is still P2
+      (api.getIssue as ReturnType<typeof mock>).mockImplementation(() =>
+        Promise.resolve(createdIssue)
+      );
+      const pullResult = await adapter.getIssue('ENG', createdIssue.id);
+      expect(pullResult!.priority).toBe(2); // Still Stoneforge "high"
+    });
+
+    test('all 5 Stoneforge priorities round-trip through create and pull', async () => {
+      const mappings = [
+        { sf: 1, linear: 1 },
+        { sf: 2, linear: 2 },
+        { sf: 3, linear: 3 },
+        { sf: 4, linear: 4 },
+        { sf: 5, linear: 0 },
+      ];
+
+      for (const { sf, linear } of mappings) {
+        const freshApi = createMockApiClient();
+        const freshAdapter = new LinearTaskAdapter(freshApi);
+
+        // Mock: Linear API returns issue with the expected Linear priority
+        const returnedIssue = createMockIssue({ priority: linear });
+        (freshApi.createIssue as ReturnType<typeof mock>).mockImplementation(() =>
+          Promise.resolve(returnedIssue)
+        );
+
+        // Push with Stoneforge priority
+        const result = await freshAdapter.createIssue('ENG', {
+          title: `Priority ${sf}`,
+          state: 'open',
+          labels: [],
+          assignees: [],
+          priority: sf,
+        });
+
+        // Verify the create API was called with the correct Linear priority
+        const createCall = (freshApi.createIssue as ReturnType<typeof mock>).mock.calls[0] as [unknown];
+        const input = createCall[0] as { priority?: number };
+        expect(input.priority).toBe(linear);
+
+        // Verify the returned ExternalTask has the correct Stoneforge priority
+        expect(result.priority).toBe(sf);
+      }
+    });
+  });
+
+  // --------------------------------------------------------------------------
   // getFieldMapConfig
   // --------------------------------------------------------------------------
 

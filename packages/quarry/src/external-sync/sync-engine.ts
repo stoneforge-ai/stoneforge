@@ -730,6 +730,13 @@ export class SyncEngine {
       input.labels = [...task.tags];
     }
 
+    // Map priority (Stoneforge priority 1-5) — providers with native priority
+    // support (e.g., Linear) will convert to their native format; providers
+    // without native priority (e.g., GitHub) will ignore this field.
+    if (task.priority !== undefined) {
+      input.priority = task.priority;
+    }
+
     return input as Partial<ExternalTaskInput>;
   }
 
@@ -764,6 +771,13 @@ export class SyncEngine {
       updates.externalRef = item.url;
     }
 
+    // Map priority from providers with native priority support (e.g., Linear).
+    // The priority value is already in Stoneforge format (1-5), converted by
+    // the adapter when constructing the ExternalTask.
+    if (item.priority !== undefined) {
+      updates.priority = item.priority;
+    }
+
     return updates;
   }
 
@@ -794,7 +808,7 @@ export class SyncEngine {
     const closedStatuses = ['closed'];
     const status = closedStatuses.includes(item.state) ? 'closed' : 'open';
 
-    const element = await this.api.create<Element>({
+    const createInput: Record<string, unknown> = {
       type: 'task',
       title: item.title,
       status,
@@ -802,7 +816,14 @@ export class SyncEngine {
       externalRef: item.url,
       createdBy: 'system',
       metadata: { _externalSync: syncState },
-    });
+    };
+
+    // Include priority from providers with native priority support (e.g., Linear)
+    if (item.priority !== undefined) {
+      createInput.priority = item.priority;
+    }
+
+    const element = await this.api.create<Element>(createInput);
 
     return element;
   }
@@ -908,6 +929,7 @@ function computeExternalItemHash(item: ExternalTask): string {
     assignees: [...item.assignees].sort(),
     body: item.body ?? '',
     labels: [...item.labels].sort(),
+    priority: item.priority,
     state: item.state,
     title: item.title,
   };
