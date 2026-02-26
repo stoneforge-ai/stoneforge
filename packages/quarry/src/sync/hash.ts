@@ -3,6 +3,11 @@
  *
  * Computes content hashes for elements to detect actual content changes
  * during merge operations. Excludes identity and attribution fields.
+ *
+ * NOTE: metadata._externalSync is stripped before hashing. These sync
+ * bookkeeping fields (lastPushedAt, lastPushedHash, etc.) change after
+ * every push and would otherwise create a feedback loop where each push
+ * changes the hash, triggering another push on the next daemon cycle.
  */
 
 import { createHash } from 'crypto';
@@ -34,7 +39,7 @@ export async function computeContentHash(element: Element): Promise<ContentHashR
 
   for (const [key, value] of Object.entries(element)) {
     if (!HASH_EXCLUDED_FIELDS.includes(key as (typeof HASH_EXCLUDED_FIELDS)[number])) {
-      contentFields[key] = value;
+      contentFields[key] = stripSyncBookkeeping(key, value);
       includedFields.push(key);
     }
   }
@@ -73,7 +78,7 @@ export function computeContentHashSync(element: Element): ContentHashResult {
 
   for (const [key, value] of Object.entries(element)) {
     if (!HASH_EXCLUDED_FIELDS.includes(key as (typeof HASH_EXCLUDED_FIELDS)[number])) {
-      contentFields[key] = value;
+      contentFields[key] = stripSyncBookkeeping(key, value);
       includedFields.push(key);
     }
   }
@@ -129,6 +134,21 @@ export function matchesContentHash(element: Element, expectedHash: string): bool
 // ============================================================================
 // Helpers
 // ============================================================================
+
+/**
+ * Strip sync bookkeeping fields from metadata before hashing.
+ *
+ * metadata._externalSync contains fields like lastPushedAt and lastPushedHash
+ * that are updated after every push. Including them in the hash would create a
+ * feedback loop: push → metadata changes → hash changes → looks dirty → push again.
+ */
+function stripSyncBookkeeping(key: string, value: unknown): unknown {
+  if (key === 'metadata' && typeof value === 'object' && value !== null) {
+    const { _externalSync, ...restMetadata } = value as Record<string, unknown>;
+    return restMetadata;
+  }
+  return value;
+}
 
 /**
  * JSON replacer that sorts object keys for deterministic stringification

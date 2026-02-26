@@ -611,6 +611,66 @@ describe('Content Hashing', () => {
 
       expect(hash1.hash).toBe(hash2.hash);
     });
+
+    test('changes to metadata._externalSync do NOT change the hash', () => {
+      const elementWithoutSync = createTestElement({
+        metadata: { _pendingAssignee: 'agent-1' },
+      });
+      const elementWithSync = createTestElement({
+        metadata: {
+          _pendingAssignee: 'agent-1',
+          _externalSync: {
+            lastPushedAt: '2025-06-01T00:00:00.000Z',
+            lastPushedHash: 'abc123',
+            lastPulledAt: '2025-06-01T00:00:00.000Z',
+            lastPulledHash: 'def456',
+          },
+        },
+      });
+      const elementWithUpdatedSync = createTestElement({
+        metadata: {
+          _pendingAssignee: 'agent-1',
+          _externalSync: {
+            lastPushedAt: '2025-06-02T00:00:00.000Z',
+            lastPushedHash: 'xyz789',
+            lastPulledAt: '2025-06-02T00:00:00.000Z',
+            lastPulledHash: 'uvw012',
+          },
+        },
+      });
+
+      const hash1 = computeContentHashSync(elementWithoutSync);
+      const hash2 = computeContentHashSync(elementWithSync);
+      const hash3 = computeContentHashSync(elementWithUpdatedSync);
+
+      expect(hash1.hash).toBe(hash2.hash);
+      expect(hash2.hash).toBe(hash3.hash);
+    });
+
+    test('changes to other metadata fields DO change the hash', () => {
+      const element1 = createTestElement({
+        metadata: { _pendingAssignee: 'agent-1' },
+      });
+      const element2 = createTestElement({
+        metadata: { _pendingAssignee: 'agent-2' },
+      });
+
+      const hash1 = computeContentHashSync(element1);
+      const hash2 = computeContentHashSync(element2);
+
+      expect(hash1.hash).not.toBe(hash2.hash);
+    });
+
+    test('metadata field is still included in hash fields list', () => {
+      const element = createTestElement({
+        metadata: {
+          _externalSync: { lastPushedAt: '2025-06-01T00:00:00.000Z' },
+          someField: 'value',
+        },
+      });
+      const result = computeContentHashSync(element);
+      expect(result.fields).toContain('metadata');
+    });
   });
 
   describe('computeContentHash', () => {
@@ -621,6 +681,26 @@ describe('Content Hashing', () => {
 
       expect(asyncResult.hash).toBe(syncResult.hash);
       expect(asyncResult.fields).toEqual(syncResult.fields);
+    });
+
+    test('async version also excludes _externalSync from hash', async () => {
+      const elementWithoutSync = createTestElement({
+        metadata: { custom: 'data' },
+      });
+      const elementWithSync = createTestElement({
+        metadata: {
+          custom: 'data',
+          _externalSync: {
+            lastPushedAt: '2025-06-01T00:00:00.000Z',
+            lastPushedHash: 'abc123',
+          },
+        },
+      });
+
+      const hash1 = await computeContentHash(elementWithoutSync);
+      const hash2 = await computeContentHash(elementWithSync);
+
+      expect(hash1.hash).toBe(hash2.hash);
     });
   });
 
