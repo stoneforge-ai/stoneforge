@@ -7,7 +7,7 @@
 
 import { describe, expect, test, mock } from 'bun:test';
 import type { Task, Document, Entity, Priority, TaskTypeValue, TaskStatus, ElementId, EntityId, DocumentId } from '@stoneforge/core';
-import { ElementType, createTimestamp } from '@stoneforge/core';
+import { ElementType, createTimestamp, TaskStatus as TaskStatusEnum } from '@stoneforge/core';
 import type { ExternalTask } from '@stoneforge/core';
 import type { QuarryAPI } from '../../api/types.js';
 import {
@@ -20,6 +20,11 @@ import {
   type TaskSyncFieldMapConfig,
   type ParsedExternalLabels,
 } from './task-sync-adapter.js';
+import {
+  GITHUB_FIELD_MAP_CONFIG,
+  GITHUB_STATUS_LABELS,
+  gitHubStateToStatus,
+} from '../providers/github/github-field-map.js';
 
 // ============================================================================
 // Test Helpers
@@ -1025,5 +1030,285 @@ describe('edge cases', () => {
     const result = externalTaskToTaskUpdates(externalTask, undefined, config);
 
     expect(result.status).toBe('in_progress');
+  });
+});
+
+// ============================================================================
+// Status Label Sync — Push Path (buildExternalLabels with GITHUB_FIELD_MAP_CONFIG)
+// ============================================================================
+
+describe('buildExternalLabels — status labels (push path)', () => {
+  test('status label is included alongside priority and type labels', () => {
+    const task = createTestTask({
+      status: 'deferred' as TaskStatus,
+      priority: 3 as Priority,
+      taskType: 'task' as TaskTypeValue,
+      tags: [],
+    });
+
+    const labels = buildExternalLabels(task, GITHUB_FIELD_MAP_CONFIG);
+
+    expect(labels).toContain('sf:priority:medium');
+    expect(labels).toContain('sf:type:task');
+    expect(labels).toContain('sf:status:deferred');
+    expect(labels).toHaveLength(3);
+  });
+
+  test('status label changes when status is in_progress', () => {
+    const task = createTestTask({
+      status: 'in_progress' as TaskStatus,
+      tags: [],
+    });
+
+    const labels = buildExternalLabels(task, GITHUB_FIELD_MAP_CONFIG);
+
+    expect(labels).toContain('sf:status:in-progress');
+  });
+
+  test('status label changes when status is review', () => {
+    const task = createTestTask({
+      status: 'review' as TaskStatus,
+      tags: [],
+    });
+
+    const labels = buildExternalLabels(task, GITHUB_FIELD_MAP_CONFIG);
+
+    expect(labels).toContain('sf:status:review');
+  });
+
+  test('status label changes when status is blocked', () => {
+    const task = createTestTask({
+      status: 'blocked' as TaskStatus,
+      tags: [],
+    });
+
+    const labels = buildExternalLabels(task, GITHUB_FIELD_MAP_CONFIG);
+
+    expect(labels).toContain('sf:status:blocked');
+  });
+
+  test('all TaskStatus values produce a status label', () => {
+    const allStatuses: TaskStatus[] = Object.values(TaskStatusEnum) as TaskStatus[];
+
+    for (const status of allStatuses) {
+      const task = createTestTask({ status, tags: [] });
+      const labels = buildExternalLabels(task, GITHUB_FIELD_MAP_CONFIG);
+
+      const statusLabels = labels.filter((l) => l.startsWith('sf:status:'));
+      expect(statusLabels).toHaveLength(1);
+
+      // Verify the status label corresponds to the expected mapping
+      const expectedLabel = `sf:${GITHUB_STATUS_LABELS[status]}`;
+      expect(labels).toContain(expectedLabel);
+    }
+  });
+
+  test('config without statusLabels does NOT produce status labels (Linear compatibility)', () => {
+    const configWithoutStatusLabels: TaskSyncFieldMapConfig = {
+      ...createTestConfig(),
+      // createTestConfig() does not include statusLabels
+    };
+
+    // Verify the test config doesn't have statusLabels
+    expect(configWithoutStatusLabels.statusLabels).toBeUndefined();
+
+    const task = createTestTask({
+      status: 'in_progress' as TaskStatus,
+      tags: [],
+    });
+
+    const labels = buildExternalLabels(task, configWithoutStatusLabels);
+
+    const statusLabels = labels.filter((l) => l.includes('status:'));
+    expect(statusLabels).toHaveLength(0);
+    // Should still have priority and type labels
+    expect(labels).toHaveLength(2);
+  });
+});
+
+// ============================================================================
+// Status Label Sync — Pull Path (parseExternalLabels with GITHUB_FIELD_MAP_CONFIG)
+// ============================================================================
+
+describe('parseExternalLabels — status labels (pull path)', () => {
+  test('extracts status from sf:status:* label', () => {
+    const labels = ['sf:status:deferred', 'sf:priority:high'];
+
+    const result = parseExternalLabels(labels, GITHUB_FIELD_MAP_CONFIG);
+
+    expect(result.status).toBe('deferred');
+    expect(result.priority).toBe(2);
+  });
+
+  test('unknown sf:status:* values are ignored (forward compatibility)', () => {
+    const labels = ['sf:status:unknown-future-status', 'sf:priority:medium'];
+
+    const result = parseExternalLabels(labels, GITHUB_FIELD_MAP_CONFIG);
+
+    // Unknown status value is not in the reverse lookup, so it's skipped
+    expect(result.status).toBeUndefined();
+    expect(result.priority).toBe(3);
+    // The unknown label should NOT appear in userTags (it has the sync prefix)
+    expect(result.userTags).toEqual([]);
+  });
+
+  test('status extraction works alongside priority and taskType extraction', () => {
+    const labels = ['sf:status:in-progress', 'sf:priority:critical', 'sf:type:bug', 'user-tag'];
+
+    const result = parseExternalLabels(labels, GITHUB_FIELD_MAP_CONFIG);
+
+    expect(result.status).toBe('in_progress');
+    expect(result.priority).toBe(1);
+    expect(result.taskType).toBe('bug');
+    expect(result.userTags).toEqual(['user-tag']);
+  });
+
+  test('config without statusLabels ignores sf:status:* labels', () => {
+    const configWithoutStatusLabels = createTestConfig();
+
+    // Verify no statusLabels
+    expect(configWithoutStatusLabels.statusLabels).toBeUndefined();
+
+    const labels = ['sf:status:in-progress', 'sf:priority:high', 'user-tag'];
+
+    const result = parseExternalLabels(labels, configWithoutStatusLabels);
+
+    // sf:status:in-progress should be treated as an unrecognized sync label (skipped)
+    expect(result.status).toBeUndefined();
+    expect(result.priority).toBe(2);
+    // The sf:status:in-progress label should NOT be in userTags (it has the sync prefix)
+    expect(result.userTags).toEqual(['user-tag']);
+  });
+});
+
+// ============================================================================
+// Status Label Sync — Pull Path (gitHubStateToStatus, GitHub-specific)
+// ============================================================================
+
+describe('gitHubStateToStatus — granular status from labels', () => {
+  test('returns in_progress from sf:status:in-progress label', () => {
+    const status = gitHubStateToStatus('open', ['sf:status:in-progress']);
+    expect(status).toBe('in_progress');
+  });
+
+  test('returns deferred from sf:status:deferred label', () => {
+    const status = gitHubStateToStatus('open', ['sf:status:deferred']);
+    expect(status).toBe('deferred');
+  });
+
+  test('returns backlog from sf:status:backlog label', () => {
+    const status = gitHubStateToStatus('open', ['sf:status:backlog']);
+    expect(status).toBe('backlog');
+  });
+
+  test('returns review from sf:status:review label', () => {
+    const status = gitHubStateToStatus('open', ['sf:status:review']);
+    expect(status).toBe('review');
+  });
+
+  test('returns blocked from sf:status:blocked label', () => {
+    const status = gitHubStateToStatus('open', ['sf:status:blocked']);
+    expect(status).toBe('blocked');
+  });
+
+  test('falls back to open when no status label present', () => {
+    const status = gitHubStateToStatus('open', []);
+    expect(status).toBe('open');
+  });
+
+  test('falls back to closed when no status label present', () => {
+    const status = gitHubStateToStatus('closed', []);
+    expect(status).toBe('closed');
+  });
+
+  test('status label takes precedence for open state', () => {
+    // When state is open and a status label is present, use the label
+    const status = gitHubStateToStatus('open', ['sf:status:review', 'sf:priority:high']);
+    expect(status).toBe('review');
+  });
+
+  test('status label takes precedence even for closed state', () => {
+    // gitHubStateToStatus checks labels first regardless of state
+    // When state is 'closed' but a label is present, the label wins
+    const status = gitHubStateToStatus('closed', ['sf:status:in-progress']);
+    // The implementation checks labels first, so label takes precedence
+    expect(status).toBe('in_progress');
+  });
+
+  test('ignores non-status sync labels', () => {
+    const status = gitHubStateToStatus('open', ['sf:priority:high', 'sf:type:bug']);
+    expect(status).toBe('open');
+  });
+
+  test('ignores non-sync labels', () => {
+    const status = gitHubStateToStatus('open', ['enhancement', 'help wanted']);
+    expect(status).toBe('open');
+  });
+});
+
+// ============================================================================
+// Status Label Sync — Integration (externalTaskToTaskUpdates with GITHUB_FIELD_MAP_CONFIG)
+// ============================================================================
+
+describe('externalTaskToTaskUpdates — status label integration (pull path)', () => {
+  test('end-to-end: sf:status:deferred label results in status=deferred', () => {
+    const externalTask = createTestExternalTask({
+      title: 'Deferred Issue',
+      state: 'open',
+      labels: ['sf:status:deferred', 'sf:priority:high', 'sf:type:task'],
+    });
+
+    const result = externalTaskToTaskUpdates(externalTask, undefined, GITHUB_FIELD_MAP_CONFIG);
+
+    expect(result.status).toBe('deferred');
+    expect(result.priority).toBe(2);
+    expect(result.taskType).toBe('task');
+  });
+
+  test('end-to-end: sf:status:in-progress label results in status=in_progress', () => {
+    const externalTask = createTestExternalTask({
+      state: 'open',
+      labels: ['sf:status:in-progress', 'sf:priority:medium', 'sf:type:feature'],
+    });
+
+    const result = externalTaskToTaskUpdates(externalTask, undefined, GITHUB_FIELD_MAP_CONFIG);
+
+    expect(result.status).toBe('in_progress');
+  });
+
+  test('end-to-end: no status label falls back to state-based mapping', () => {
+    const externalTask = createTestExternalTask({
+      state: 'open',
+      labels: ['sf:priority:medium', 'sf:type:task'],
+    });
+
+    const result = externalTaskToTaskUpdates(externalTask, undefined, GITHUB_FIELD_MAP_CONFIG);
+
+    expect(result.status).toBe('open');
+  });
+
+  test('end-to-end: closed state falls back correctly', () => {
+    const externalTask = createTestExternalTask({
+      state: 'closed',
+      labels: ['sf:priority:medium', 'sf:type:task'],
+    });
+
+    const result = externalTaskToTaskUpdates(externalTask, undefined, GITHUB_FIELD_MAP_CONFIG);
+
+    expect(result.status).toBe('closed');
+  });
+
+  test('status label parsed from labels is reflected alongside other fields', () => {
+    const externalTask = createTestExternalTask({
+      state: 'open',
+      labels: ['sf:status:review', 'sf:priority:critical', 'sf:type:bug', 'user-label'],
+    });
+
+    const result = externalTaskToTaskUpdates(externalTask, undefined, GITHUB_FIELD_MAP_CONFIG);
+
+    expect(result.status).toBe('review');
+    expect(result.priority).toBe(1);
+    expect(result.taskType).toBe('bug');
+    expect(result.tags).toEqual(['user-label']);
   });
 });
