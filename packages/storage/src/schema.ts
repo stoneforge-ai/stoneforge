@@ -14,7 +14,7 @@ import type { Migration, MigrationResult, StorageBackend } from './index.js';
 /**
  * Current schema version
  */
-export const CURRENT_SCHEMA_VERSION = 10;
+export const CURRENT_SCHEMA_VERSION = 11;
 
 // ============================================================================
 // Migrations
@@ -190,6 +190,7 @@ ALTER TABLE blocked_cache_new RENAME TO blocked_cache;
  * Inbox items are created when:
  * - A message is sent directly to an entity
  * - An entity is mentioned in a message
+ * - A reply is added to a thread the entity started
  */
 const migration004: Migration = {
   version: 4,
@@ -201,7 +202,7 @@ CREATE TABLE inbox_items (
     recipient_id TEXT NOT NULL,
     message_id TEXT NOT NULL,
     channel_id TEXT NOT NULL,
-    source_type TEXT NOT NULL CHECK (source_type IN ('direct', 'mention')),
+    source_type TEXT NOT NULL CHECK (source_type IN ('direct', 'mention', 'thread_reply')),
     status TEXT NOT NULL DEFAULT 'unread' CHECK (status IN ('unread', 'read', 'archived')),
     read_at TEXT,
     created_at TEXT NOT NULL,
@@ -465,9 +466,76 @@ DROP TABLE IF EXISTS operation_log;
 };
 
 /**
+ * Migration 11: Add 'thread_reply' to inbox_items source_type CHECK constraint
+ *
+ * The core type system defines InboxSourceType.THREAD_REPLY = 'thread_reply'
+ * but the original migration004 only allowed ('direct', 'mention').
+ * SQLite does not support ALTER CONSTRAINT, so we recreate the table.
+ */
+const migration011: Migration = {
+  version: 11,
+  description: 'Add thread_reply to inbox_items source_type CHECK constraint',
+  up: `
+-- Recreate inbox_items with updated CHECK constraint to include thread_reply
+CREATE TABLE inbox_items_new (
+    id TEXT PRIMARY KEY,
+    recipient_id TEXT NOT NULL,
+    message_id TEXT NOT NULL,
+    channel_id TEXT NOT NULL,
+    source_type TEXT NOT NULL CHECK (source_type IN ('direct', 'mention', 'thread_reply')),
+    status TEXT NOT NULL DEFAULT 'unread' CHECK (status IN ('unread', 'read', 'archived')),
+    read_at TEXT,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (message_id) REFERENCES elements(id) ON DELETE CASCADE,
+    UNIQUE(recipient_id, message_id)
+);
+
+INSERT INTO inbox_items_new (id, recipient_id, message_id, channel_id, source_type, status, read_at, created_at)
+SELECT id, recipient_id, message_id, channel_id, source_type, status, read_at, created_at
+FROM inbox_items;
+
+DROP TABLE inbox_items;
+ALTER TABLE inbox_items_new RENAME TO inbox_items;
+
+-- Recreate indexes
+CREATE INDEX idx_inbox_recipient_status ON inbox_items(recipient_id, status);
+CREATE INDEX idx_inbox_recipient_created ON inbox_items(recipient_id, created_at DESC);
+CREATE INDEX idx_inbox_message ON inbox_items(message_id);
+`,
+  down: `
+-- Recreate inbox_items with original CHECK constraint (without thread_reply)
+CREATE TABLE inbox_items_old (
+    id TEXT PRIMARY KEY,
+    recipient_id TEXT NOT NULL,
+    message_id TEXT NOT NULL,
+    channel_id TEXT NOT NULL,
+    source_type TEXT NOT NULL CHECK (source_type IN ('direct', 'mention')),
+    status TEXT NOT NULL DEFAULT 'unread' CHECK (status IN ('unread', 'read', 'archived')),
+    read_at TEXT,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (message_id) REFERENCES elements(id) ON DELETE CASCADE,
+    UNIQUE(recipient_id, message_id)
+);
+
+INSERT INTO inbox_items_old (id, recipient_id, message_id, channel_id, source_type, status, read_at, created_at)
+SELECT id, recipient_id, message_id, channel_id, source_type, status, read_at, created_at
+FROM inbox_items
+WHERE source_type IN ('direct', 'mention');
+
+DROP TABLE inbox_items;
+ALTER TABLE inbox_items_old RENAME TO inbox_items;
+
+-- Recreate indexes
+CREATE INDEX idx_inbox_recipient_status ON inbox_items(recipient_id, status);
+CREATE INDEX idx_inbox_recipient_created ON inbox_items(recipient_id, created_at DESC);
+CREATE INDEX idx_inbox_message ON inbox_items(message_id);
+`,
+};
+
+/**
  * All migrations in order
  */
-export const MIGRATIONS: readonly Migration[] = [migration001, migration002, migration003, migration004, migration005, migration006, migration007, migration008, migration009, migration010];
+export const MIGRATIONS: readonly Migration[] = [migration001, migration002, migration003, migration004, migration005, migration006, migration007, migration008, migration009, migration010, migration011];
 
 // ============================================================================
 // Schema Functions

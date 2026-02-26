@@ -87,7 +87,7 @@ export class InboxService {
         recipient_id TEXT NOT NULL,
         message_id TEXT NOT NULL,
         channel_id TEXT NOT NULL,
-        source_type TEXT NOT NULL CHECK (source_type IN ('direct', 'mention')),
+        source_type TEXT NOT NULL CHECK (source_type IN ('direct', 'mention', 'thread_reply')),
         status TEXT NOT NULL DEFAULT 'unread' CHECK (status IN ('unread', 'read', 'archived')),
         read_at TEXT,
         created_at TEXT NOT NULL,

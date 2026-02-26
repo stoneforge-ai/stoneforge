@@ -105,6 +105,26 @@ describe('InboxService', () => {
       expect(item.sourceType).toBe(InboxSourceType.MENTION);
     });
 
+    test('creates inbox item with thread_reply source type', () => {
+      const item = service.addToInbox({
+        recipientId,
+        messageId: messageId1,
+        channelId: channelId1,
+        sourceType: InboxSourceType.THREAD_REPLY,
+        createdBy: senderId,
+      });
+
+      expect(item.id).toBeDefined();
+      expect(item.id).toMatch(/^inbox-/);
+      expect(item.recipientId).toBe(recipientId);
+      expect(item.messageId).toBe(messageId1);
+      expect(item.channelId).toBe(channelId1);
+      expect(item.sourceType).toBe(InboxSourceType.THREAD_REPLY);
+      expect(item.status).toBe(InboxStatus.UNREAD);
+      expect(item.readAt).toBeNull();
+      expect(item.createdAt).toBeDefined();
+    });
+
     test('throws ConflictError for duplicate recipient/message', () => {
       service.addToInbox({
         recipientId,
@@ -285,6 +305,25 @@ describe('InboxService', () => {
         sourceType: InboxSourceType.MENTION,
       });
       expect(mentionItems).toHaveLength(1);
+    });
+
+    test('filters by thread_reply sourceType', () => {
+      // Add a thread_reply item
+      const messageId4 = 'el-message4' as unknown as MessageId;
+      service.addToInbox({
+        recipientId,
+        messageId: messageId4,
+        channelId: channelId1,
+        sourceType: InboxSourceType.THREAD_REPLY,
+        createdBy: senderId,
+      });
+
+      const threadReplyItems = service.getInbox(recipientId, {
+        sourceType: InboxSourceType.THREAD_REPLY,
+      });
+      expect(threadReplyItems).toHaveLength(1);
+      expect(threadReplyItems[0].sourceType).toBe(InboxSourceType.THREAD_REPLY);
+      expect(threadReplyItems[0].messageId).toBe(messageId4);
     });
 
     test('filters by channelId', () => {
@@ -892,7 +931,7 @@ describe('Inbox Schema Migration', () => {
   });
 
   test('check constraint on status', () => {
-    
+
     initializeSchema(db);
 
     expect(() =>
@@ -902,5 +941,34 @@ describe('Inbox Schema Migration', () => {
         ['inbox-1', 'el-recipient', 'el-message', 'el-channel', 'direct', 'invalid', new Date().toISOString()]
       )
     ).toThrow(/CHECK constraint failed/);
+  });
+
+  test('check constraint allows thread_reply source type', () => {
+
+    initializeSchema(db);
+
+    // Create a fake message in elements table to satisfy foreign key
+    db.run(
+      `INSERT INTO elements (id, type, data, created_at, updated_at, created_by)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      ['el-message', 'message', '{}', new Date().toISOString(), new Date().toISOString(), 'el-sender']
+    );
+
+    // Should NOT throw - thread_reply is a valid source type
+    expect(() =>
+      db.run(
+        `INSERT INTO inbox_items (id, recipient_id, message_id, channel_id, source_type, status, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        ['inbox-1', 'el-recipient', 'el-message', 'el-channel', 'thread_reply', 'unread', new Date().toISOString()]
+      )
+    ).not.toThrow();
+
+    // Verify the row was inserted
+    const rows = db.query<{ source_type: string }>(
+      `SELECT source_type FROM inbox_items WHERE id = ?`,
+      ['inbox-1']
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].source_type).toBe('thread_reply');
   });
 });
