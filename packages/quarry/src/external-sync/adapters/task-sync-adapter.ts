@@ -20,11 +20,27 @@ import type {
   TaskTypeValue,
   DocumentId,
   Document,
+  Element,
   EntityId,
   ElementId,
 } from '@stoneforge/core';
 import type { ExternalTask, ExternalTaskInput } from '@stoneforge/core';
 import type { QuarryAPI } from '../../api/types.js';
+import { GITHUB_FIELD_MAP_CONFIG } from '../providers/github/github-field-map.js';
+import { createLinearSyncFieldMapConfig } from '../providers/linear/linear-field-map.js';
+
+// ============================================================================
+// Minimal API Interface
+// ============================================================================
+
+/**
+ * Minimal API interface used by task sync adapter utilities.
+ * Only requires `get()` for description hydration and assignee resolution.
+ * Both QuarryAPI and SyncEngineAPI satisfy this interface structurally.
+ */
+export interface TaskSyncAPI {
+  get<T extends Element>(id: ElementId): Promise<T | null>;
+}
 
 // ============================================================================
 // Task Sync Field Map Configuration
@@ -92,13 +108,13 @@ export interface TaskSyncFieldMapConfig {
  *
  * @param task - The Stoneforge task to convert
  * @param config - Provider-specific field mapping configuration
- * @param api - QuarryAPI instance for hydrating description documents
+ * @param api - API with get() for hydrating description documents and resolving assignees
  * @returns ExternalTaskInput ready for the provider adapter
  */
 export async function taskToExternalTask(
   task: Task,
   config: TaskSyncFieldMapConfig,
-  api: QuarryAPI
+  api: TaskSyncAPI
 ): Promise<ExternalTaskInput> {
   // Map title (1:1)
   const title = task.title;
@@ -320,7 +336,7 @@ export function parseExternalLabels(
  */
 export async function hydrateDescription(
   descriptionRef: DocumentId | undefined,
-  api: QuarryAPI
+  api: TaskSyncAPI
 ): Promise<string | undefined> {
   if (!descriptionRef) {
     return undefined;
@@ -342,7 +358,7 @@ export async function hydrateDescription(
  */
 async function resolveAssignees(
   task: Task,
-  api: QuarryAPI
+  api: TaskSyncAPI
 ): Promise<string[]> {
   if (!task.assignee) {
     return [];
@@ -444,4 +460,29 @@ function arraysEqual(a: readonly string[], b: readonly string[]): boolean {
   const sortedA = [...a].sort();
   const sortedB = [...b].sort();
   return sortedA.every((val, idx) => val === sortedB[idx]);
+}
+
+// ============================================================================
+// Provider Field Map Config Lookup
+// ============================================================================
+
+/**
+ * Returns the TaskSyncFieldMapConfig for a given provider name.
+ *
+ * Shared utility used by both the CLI link-all command and the sync engine
+ * push path to get the correct field mapping for a provider.
+ *
+ * @param providerName - The provider name (e.g., 'github', 'linear')
+ * @returns The provider-specific TaskSyncFieldMapConfig
+ */
+export function getFieldMapConfigForProvider(providerName: string): TaskSyncFieldMapConfig {
+  switch (providerName) {
+    case 'github':
+      return GITHUB_FIELD_MAP_CONFIG;
+    case 'linear':
+      return createLinearSyncFieldMapConfig();
+    default:
+      // Fallback to GitHub-style config for unknown providers
+      return GITHUB_FIELD_MAP_CONFIG;
+  }
 }

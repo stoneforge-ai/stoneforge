@@ -32,7 +32,6 @@ import type {
   ExternalSyncError,
   ExternalSyncState,
   ExternalTask,
-  ExternalTaskInput,
   TaskSyncAdapter,
   ConflictStrategy,
   SyncAdapterType,
@@ -55,6 +54,7 @@ import { createTimestamp } from '@stoneforge/core';
 import { createHash } from 'crypto';
 import { computeContentHashSync } from '../sync/hash.js';
 import type { ProviderRegistry } from './provider-registry.js';
+import { taskToExternalTask, getFieldMapConfigForProvider } from './adapters/task-sync-adapter.js';
 
 // ============================================================================
 // Types
@@ -339,8 +339,11 @@ export class SyncEngine {
       throw new Error(`No task adapter found for provider '${syncState.provider}'`);
     }
 
-    // Build external task input from local element
-    const taskInput = this.elementToExternalInput(element as Task);
+    // Build external task input using the shared field mapping utilities.
+    // This properly converts priority → sf:priority:* labels, taskType → sf:type:* labels,
+    // status → open/closed state, hydrates description, and resolves assignees.
+    const fieldMapConfig = getFieldMapConfigForProvider(syncState.provider);
+    const taskInput = await taskToExternalTask(element as Task, fieldMapConfig, this.api);
 
     // Push to external service
     await adapter.updateIssue(syncState.project, syncState.externalId, taskInput);
@@ -708,37 +711,6 @@ export class SyncEngine {
   // --------------------------------------------------------------------------
   // Field Mapping Utilities
   // --------------------------------------------------------------------------
-
-  /**
-   * Convert a local task to ExternalTaskInput for pushing to the external service.
-   * Maps Stoneforge task fields to the external format.
-   */
-  private elementToExternalInput(task: Task): Partial<ExternalTaskInput> {
-    const input: Record<string, unknown> = {};
-
-    // Map title
-    if (task.title) {
-      input.title = task.title;
-    }
-
-    // Map status → state
-    const closedStatuses = ['closed', 'tombstone'];
-    input.state = closedStatuses.includes(task.status) ? 'closed' : 'open';
-
-    // Map tags → labels
-    if (task.tags) {
-      input.labels = [...task.tags];
-    }
-
-    // Map priority (Stoneforge priority 1-5) — providers with native priority
-    // support (e.g., Linear) will convert to their native format; providers
-    // without native priority (e.g., GitHub) will ignore this field.
-    if (task.priority !== undefined) {
-      input.priority = task.priority;
-    }
-
-    return input as Partial<ExternalTaskInput>;
-  }
 
   /**
    * Convert an ExternalTask to partial updates for applying to a local element.

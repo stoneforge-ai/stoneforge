@@ -341,6 +341,117 @@ describe('SyncEngine.push', () => {
     expect(result.skipped).toBe(0);
     expect(result.success).toBe(true);
   });
+
+  test('push payload includes sf:priority:* and sf:type:* labels from field mapping', async () => {
+    const syncState = createTestSyncState({
+      lastPushedHash: 'old-hash-that-differs',
+      lastPushedAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+    });
+
+    // Create element with priority and taskType fields
+    const element = {
+      id: 'el-test1' as ElementId,
+      type: 'task',
+      title: 'Test Task',
+      status: 'open',
+      priority: 2, // high
+      taskType: 'bug',
+      tags: ['user-label'],
+      createdAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+      updatedAt: '2024-01-10T00:00:00.000Z' as Timestamp,
+      createdBy: 'el-user1',
+      metadata: setExternalSyncState({}, syncState),
+    } as unknown as Element;
+
+    let capturedUpdates: Partial<ExternalTaskInput> | undefined;
+    const engine = buildEngine({
+      elements: [element],
+      events: [
+        { elementId: element.id, eventType: 'updated', createdAt: '2024-01-05T00:00:00.000Z' as Timestamp },
+      ],
+      onUpdateIssue: (_project, _externalId, updates) => {
+        capturedUpdates = updates;
+      },
+    });
+
+    const result = await engine.push({ all: true });
+    expect(result.pushed).toBe(1);
+    expect(capturedUpdates).toBeDefined();
+
+    // Verify sf:priority:* label is present
+    expect(capturedUpdates!.labels).toContain('sf:priority:high');
+
+    // Verify sf:type:* label is present
+    expect(capturedUpdates!.labels).toContain('sf:type:bug');
+
+    // Verify user tags are also preserved
+    expect(capturedUpdates!.labels).toContain('user-label');
+
+    // Verify state mapping is correct
+    expect(capturedUpdates!.state).toBe('open');
+  });
+
+  test('push payload hydrates description from descriptionRef', async () => {
+    const syncState = createTestSyncState({
+      lastPushedHash: 'old-hash-that-differs',
+      lastPushedAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+    });
+
+    const descDoc = {
+      id: 'el-desc1' as ElementId,
+      type: 'document',
+      content: 'This is the task description body.',
+      contentType: 'markdown',
+      createdAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+      updatedAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+      createdBy: 'el-user1',
+      tags: [],
+      metadata: {},
+    } as unknown as Element;
+
+    const element = {
+      id: 'el-test1' as ElementId,
+      type: 'task',
+      title: 'Test Task',
+      status: 'open',
+      priority: 3, // medium
+      taskType: 'task',
+      tags: [],
+      descriptionRef: 'el-desc1',
+      createdAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+      updatedAt: '2024-01-10T00:00:00.000Z' as Timestamp,
+      createdBy: 'el-user1',
+      metadata: setExternalSyncState({}, syncState),
+    } as unknown as Element;
+
+    let capturedUpdates: Partial<ExternalTaskInput> | undefined;
+    const adapter = createMockTaskAdapter({
+      onUpdateIssue: (_project, _externalId, updates) => {
+        capturedUpdates = updates;
+      },
+    });
+    const provider = createMockProvider('github', adapter);
+    const registry = new ProviderRegistry();
+    registry.register(provider);
+
+    const engine = createSyncEngine({
+      api: createMockApi({
+        elements: [element, descDoc],
+        events: [
+          { elementId: element.id, eventType: 'updated', createdAt: '2024-01-05T00:00:00.000Z' as Timestamp },
+        ],
+      }),
+      registry,
+      providerConfigs: [{ provider: 'github', token: 'test', defaultProject: 'owner/repo' }],
+    });
+
+    const result = await engine.push({ all: true });
+    expect(result.pushed).toBe(1);
+    expect(capturedUpdates).toBeDefined();
+
+    // Verify description is hydrated (not just raw descriptionRef ID)
+    expect(capturedUpdates!.body).toBe('This is the task description body.');
+  });
 });
 
 // ============================================================================

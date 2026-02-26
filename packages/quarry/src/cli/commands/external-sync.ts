@@ -20,9 +20,7 @@ import { createAPI, resolveDatabasePath } from '../db.js';
 import { createStorage, initializeSchema } from '@stoneforge/storage';
 import { getValue, setValue, VALID_AUTO_LINK_PROVIDERS } from '../../config/index.js';
 import type { Task, ElementId, ExternalProvider, ExternalSyncState, SyncDirection, TaskSyncAdapter } from '@stoneforge/core';
-import { taskToExternalTask, type TaskSyncFieldMapConfig } from '../../external-sync/adapters/task-sync-adapter.js';
-import { GITHUB_FIELD_MAP_CONFIG } from '../../external-sync/providers/github/github-field-map.js';
-import { createLinearSyncFieldMapConfig } from '../../external-sync/providers/linear/linear-field-map.js';
+import { taskToExternalTask, getFieldMapConfigForProvider } from '../../external-sync/adapters/task-sync-adapter.js';
 
 // ============================================================================
 // Settings Service Helper
@@ -1277,22 +1275,6 @@ async function createProviderFromSettings(
       return { error: 'External sync requires @stoneforge/smithy package. Ensure it is installed.' };
     }
     return { error: `Failed to initialize provider: ${message}` };
-  }
-}
-
-/**
- * Returns the TaskSyncFieldMapConfig for a given provider name.
- * Used by processBatch to build properly mapped external task inputs.
- */
-function getFieldMapConfigForProvider(providerName: string): TaskSyncFieldMapConfig {
-  switch (providerName) {
-    case 'github':
-      return GITHUB_FIELD_MAP_CONFIG;
-    case 'linear':
-      return createLinearSyncFieldMapConfig();
-    default:
-      // Fallback to GitHub-style config for unknown providers
-      return GITHUB_FIELD_MAP_CONFIG;
   }
 }
 
