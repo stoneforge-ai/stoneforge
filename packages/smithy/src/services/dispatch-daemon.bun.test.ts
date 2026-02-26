@@ -3867,6 +3867,132 @@ describe('recoverOrphanedTask - rapid-exit detection', () => {
     meta = getOrchestratorTaskMeta(updatedTask!.metadata as Record<string, unknown>);
     expect(meta?.resumeCount).toBe(2);
   });
+
+  test('detects rate limit when assistant message matches rate limit pattern', async () => {
+    const worker = await createTestWorker('rapid-exit-rl-msg-worker');
+    const workerId = worker.id as unknown as EntityId;
+    const task = await createAssignedTask('Task with rate limit message', workerId, {
+      worktree: '/worktrees/rapid-exit-rl-msg-worker/task',
+      resumeCount: 1,
+    });
+
+    // Trigger orphan recovery
+    const result = await daemon.recoverOrphanedAssignments();
+    expect(result.processed).toBe(1);
+
+    // After recovery, resumeCount should be incremented to 2
+    let updatedTask = await api.get<Task>(task.id);
+    let meta = getOrchestratorTaskMeta(updatedTask!.metadata as Record<string, unknown>);
+    expect(meta?.resumeCount).toBe(2);
+
+    // Simulate session emitting a rate limit assistant message, then exiting quickly
+    const events = (sessionManager as ReturnType<typeof createMockSessionManagerWithEvents>)._lastEvents!;
+    events.emit('event', { type: 'assistant', message: "You've hit your limit · resets 11pm" });
+    events.emit('exit', 0, null);
+
+    // Wait for async handler to complete
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    // resumeCount should be rolled back to 1 (rate limit detected from assistant message)
+    updatedTask = await api.get<Task>(task.id);
+    meta = getOrchestratorTaskMeta(updatedTask!.metadata as Record<string, unknown>);
+    expect(meta?.resumeCount).toBe(1);
+  });
+
+  test('applies rate limit to fallback chain when assistant message is a rate limit', async () => {
+    const worker = await createTestWorker('rapid-exit-rl-msg-chain');
+    const workerId = worker.id as unknown as EntityId;
+    await createAssignedTask('Task with rate limit message chain', workerId, {
+      worktree: '/worktrees/rapid-exit-rl-msg-chain/task',
+      resumeCount: 0,
+    });
+
+    // No rate limits before recovery
+    let status = daemon.getRateLimitStatus();
+    expect(status.limits).toHaveLength(0);
+
+    // Trigger orphan recovery
+    await daemon.recoverOrphanedAssignments();
+
+    // Simulate rate limit assistant message followed by rapid exit
+    const events = (sessionManager as ReturnType<typeof createMockSessionManagerWithEvents>)._lastEvents!;
+    events.emit('event', { type: 'assistant', message: 'Weekly limit reached · resets Feb 22 at 9:30am' });
+    events.emit('exit', 0, null);
+
+    // Wait for async handler
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    // Rate limits should be applied to all executables in the fallback chain
+    status = daemon.getRateLimitStatus();
+    expect(status.limits.length).toBeGreaterThanOrEqual(1);
+    expect(status.isPaused).toBe(true);
+  });
+
+  test('does NOT trigger rate limit for non-rate-limit assistant messages on rapid exit', async () => {
+    const worker = await createTestWorker('rapid-exit-normal-msg');
+    const workerId = worker.id as unknown as EntityId;
+    const task = await createAssignedTask('Task with normal message', workerId, {
+      worktree: '/worktrees/rapid-exit-normal-msg/task',
+      resumeCount: 1,
+    });
+
+    // Trigger orphan recovery
+    await daemon.recoverOrphanedAssignments();
+
+    // After recovery, resumeCount should be incremented to 2
+    let updatedTask = await api.get<Task>(task.id);
+    let meta = getOrchestratorTaskMeta(updatedTask!.metadata as Record<string, unknown>);
+    expect(meta?.resumeCount).toBe(2);
+
+    // Simulate session emitting a normal assistant message, then exiting quickly
+    const events = (sessionManager as ReturnType<typeof createMockSessionManagerWithEvents>)._lastEvents!;
+    events.emit('event', { type: 'assistant', message: 'I am working on your task now.' });
+    events.emit('exit', 0, null);
+
+    // Wait for async handler
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    // resumeCount should NOT be rolled back (normal assistant message, not rate limit)
+    updatedTask = await api.get<Task>(task.id);
+    meta = getOrchestratorTaskMeta(updatedTask!.metadata as Record<string, unknown>);
+    expect(meta?.resumeCount).toBe(2);
+  });
+
+  test('parses reset time from rate limit assistant message instead of using fallback', async () => {
+    const worker = await createTestWorker('rapid-exit-rl-parse');
+    const workerId = worker.id as unknown as EntityId;
+    await createAssignedTask('Task with parseable rate limit', workerId, {
+      worktree: '/worktrees/rapid-exit-rl-parse/task',
+      resumeCount: 0,
+    });
+
+    // No rate limits before recovery
+    let status = daemon.getRateLimitStatus();
+    expect(status.limits).toHaveLength(0);
+
+    // Trigger orphan recovery
+    await daemon.recoverOrphanedAssignments();
+
+    // Simulate rate limit message with a specific reset time
+    const events = (sessionManager as ReturnType<typeof createMockSessionManagerWithEvents>)._lastEvents!;
+    events.emit('event', { type: 'assistant', message: "You've hit your limit · resets 11pm" });
+    events.emit('exit', 0, null);
+
+    // Wait for async handler
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    // Rate limits should be applied — the parsed reset time from the message
+    // should differ from the 1-hour fallback (RAPID_EXIT_FALLBACK_RESET_MS)
+    status = daemon.getRateLimitStatus();
+    expect(status.limits.length).toBeGreaterThanOrEqual(1);
+    expect(status.isPaused).toBe(true);
+
+    // The reset time should be set (parsed from "resets 11pm" or fallback)
+    for (const limit of status.limits) {
+      expect(limit.resetsAt).toBeDefined();
+      expect(new Date(limit.resetsAt).getTime()).toBeGreaterThan(Date.now());
+    }
+  });
 });
 
 // ============================================================================

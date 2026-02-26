@@ -33,6 +33,7 @@ import type { QuarryAPI, InboxService } from '@stoneforge/quarry';
 import { loadTriagePrompt, loadRolePrompt, renderPromptTemplate } from '../prompts/index.js';
 import { detectTargetBranch } from '../git/merge.js';
 import { createLogger } from '../utils/logger.js';
+import { isRateLimitMessage, parseRateLimitResetTime, getFallbackResetTime } from '../utils/rate-limit-parser.js';
 
 import type { AgentRegistry, AgentEntity } from './agent-registry.js';
 import { getAgentMetadata } from './agent-registry.js';
@@ -2030,15 +2031,25 @@ export class DispatchDaemonImpl implements DispatchDaemon {
   /**
    * Attaches a rapid-exit detector to a recovered session's event emitter.
    *
-   * When a recovered worker session exits within RAPID_EXIT_THRESHOLD_MS without
-   * producing any assistant events, it is likely a silent rate limit (e.g., HTTP 429
-   * before any stream output). In that case:
+   * When a recovered worker session exits within RAPID_EXIT_THRESHOLD_MS, two
+   * scenarios are detected as rate limits:
+   *
+   * 1. **Silent rate limit** (no assistant events): The session was rejected
+   *    before any stream output (e.g., HTTP 429). A conservative 1-hour
+   *    fallback is applied.
+   *
+   * 2. **Assistant rate limit message**: The session emitted an assistant event
+   *    whose content matches a known rate limit pattern (e.g., "You've hit your
+   *    limit · resets 11pm"). The reset time is parsed from the message when
+   *    possible, falling back to a conservative default.
+   *
+   * In both cases:
    * - The resumeCount is rolled back (decremented)
    * - A warning is logged
-   * - A conservative fallback reset time is applied to the rate limit tracker
+   * - A rate limit reset time is applied to the rate limit tracker
    *
    * This prevents the resume budget from being burned by sessions that never
-   * actually ran.
+   * actually ran or that were immediately rate-limited.
    */
   private attachRapidExitDetector(
     events: import('events').EventEmitter,
@@ -2047,10 +2058,14 @@ export class DispatchDaemonImpl implements DispatchDaemon {
   ): void {
     const startTime = Date.now();
     let hasAssistantEvent = false;
+    let lastAssistantContent: string | undefined;
 
-    const onEvent = (event: { type: string }) => {
+    const onEvent = (event: { type: string; message?: string }) => {
       if (event.type === 'assistant') {
         hasAssistantEvent = true;
+        if (event.message) {
+          lastAssistantContent = event.message;
+        }
       }
     };
 
@@ -2059,50 +2074,75 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       events.off('exit', onExit);
 
       const sessionDuration = Date.now() - startTime;
-      if (sessionDuration < RAPID_EXIT_THRESHOLD_MS && !hasAssistantEvent) {
-        logger.warn(
-          `Session exited rapidly without output — suspected rate limit (task=${task.id}, worker=${worker.name}, duration=${sessionDuration}ms)`
-        );
+      if (sessionDuration >= RAPID_EXIT_THRESHOLD_MS) return;
 
-        // Roll back the resumeCount that was incremented before recovery
-        try {
-          const currentTask = await this.api.get<Task>(task.id);
-          if (currentTask) {
-            const currentMeta = getOrchestratorTaskMeta(currentTask.metadata as Record<string, unknown>);
-            const currentResumeCount = currentMeta?.resumeCount ?? 0;
-            if (currentResumeCount > 0) {
-              await this.api.update<Task>(task.id, {
-                metadata: updateOrchestratorTaskMeta(
-                  currentTask.metadata as Record<string, unknown> | undefined,
-                  { resumeCount: currentResumeCount - 1 }
-                ),
-              });
-              logger.info(
-                `Rolled back resumeCount for task ${task.id} from ${currentResumeCount} to ${currentResumeCount - 1}`
-              );
-            }
+      // Determine if this rapid exit is a rate limit
+      const isSilentRateLimit = !hasAssistantEvent;
+      const isAssistantRateLimit = hasAssistantEvent
+        && lastAssistantContent != null
+        && isRateLimitMessage(lastAssistantContent);
+
+      if (!isSilentRateLimit && !isAssistantRateLimit) return;
+
+      const reason = isSilentRateLimit
+        ? 'silent rate limit (no output)'
+        : 'rate limit assistant message';
+
+      logger.warn(
+        `Session exited rapidly — suspected ${reason} (task=${task.id}, worker=${worker.name}, duration=${sessionDuration}ms)`
+      );
+
+      // Roll back the resumeCount that was incremented before recovery
+      try {
+        const currentTask = await this.api.get<Task>(task.id);
+        if (currentTask) {
+          const currentMeta = getOrchestratorTaskMeta(currentTask.metadata as Record<string, unknown>);
+          const currentResumeCount = currentMeta?.resumeCount ?? 0;
+          if (currentResumeCount > 0) {
+            await this.api.update<Task>(task.id, {
+              metadata: updateOrchestratorTaskMeta(
+                currentTask.metadata as Record<string, unknown> | undefined,
+                { resumeCount: currentResumeCount - 1 }
+              ),
+            });
+            logger.info(
+              `Rolled back resumeCount for task ${task.id} from ${currentResumeCount} to ${currentResumeCount - 1}`
+            );
           }
-        } catch (error) {
-          logger.warn(`Failed to roll back resumeCount for task ${task.id}:`, error);
         }
-
-        // Apply a conservative fallback rate limit to all executables in the fallback chain
-        const fallbackChain = this.settingsService?.getAgentDefaults().fallbackChain ?? [];
-        const fallbackResetTime = new Date(Date.now() + RAPID_EXIT_FALLBACK_RESET_MS);
-
-        if (fallbackChain.length > 0) {
-          for (const executable of fallbackChain) {
-            this.handleRateLimitDetected(executable, fallbackResetTime);
-          }
-        } else {
-          // No fallback chain — apply to the default provider
-          this.handleRateLimitDetected('claude', fallbackResetTime);
-        }
-
-        logger.info(
-          `Applied conservative fallback rate limit (1 hour) for suspected silent rate limit on task ${task.id}`
-        );
+      } catch (error) {
+        logger.warn(`Failed to roll back resumeCount for task ${task.id}:`, error);
       }
+
+      // Determine the reset time:
+      // - For assistant rate limit messages, try to parse the reset time from the message
+      // - For silent rate limits (or if parsing fails), use the conservative 1-hour fallback
+      let resetTime: Date;
+      if (isAssistantRateLimit && lastAssistantContent) {
+        resetTime = parseRateLimitResetTime(lastAssistantContent)
+          ?? getFallbackResetTime(lastAssistantContent);
+        logger.info(
+          `Parsed rate limit reset time from assistant message for task ${task.id}: ${resetTime.toISOString()}`
+        );
+      } else {
+        resetTime = new Date(Date.now() + RAPID_EXIT_FALLBACK_RESET_MS);
+      }
+
+      // Apply the rate limit to all executables in the fallback chain
+      const fallbackChain = this.settingsService?.getAgentDefaults().fallbackChain ?? [];
+
+      if (fallbackChain.length > 0) {
+        for (const executable of fallbackChain) {
+          this.handleRateLimitDetected(executable, resetTime);
+        }
+      } else {
+        // No fallback chain — apply to the default provider
+        this.handleRateLimitDetected('claude', resetTime);
+      }
+
+      logger.info(
+        `Applied rate limit (${reason}) for task ${task.id}, resets at ${resetTime.toISOString()}`
+      );
     };
 
     events.on('event', onEvent);
