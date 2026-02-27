@@ -185,16 +185,16 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for full architecture details.
 | Concept | Source | Tests |
 |---------|--------|-------|
 | **Core Components** | | |
-| Button | `components/Button.tsx` | `components/*.test.tsx` |
-| Card | `components/Card.tsx` | `components/*.test.tsx` |
-| Dialog | `components/Dialog.tsx` | `components/*.test.tsx` |
-| Badge | `components/Badge.tsx` | `components/*.test.tsx` |
-| Input | `components/Input.tsx` | `components/*.test.tsx` |
-| Select | `components/Select.tsx` | `components/*.test.tsx` |
-| Skeleton | `components/Skeleton.tsx` | `components/*.test.tsx` |
-| TagInput | `components/TagInput.tsx` | `components/*.test.tsx` |
-| ThemeToggle | `components/ThemeToggle.tsx` | `components/*.test.tsx` |
-| Tooltip | `components/Tooltip.tsx` | `components/*.test.tsx` |
+| Button | `components/Button.tsx` | `components/Button.test.tsx` |
+| Card | `components/Card.tsx` | - |
+| Dialog | `components/Dialog.tsx` | - |
+| Badge | `components/Badge.tsx` | - |
+| Input | `components/Input.tsx` | - |
+| Select | `components/Select.tsx` | - |
+| Skeleton | `components/Skeleton.tsx` | - |
+| TagInput | `components/TagInput.tsx` | - |
+| ThemeToggle | `components/ThemeToggle.tsx` | - |
+| Tooltip | `components/Tooltip.tsx` | - |
 | **Layout** | | |
 | Layout components | `layout/*.tsx` | `layout/layout.test.tsx` |
 | Header | `layout/Header.tsx` | - |
