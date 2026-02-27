@@ -10,6 +10,8 @@ import type {
   TaskFieldMapConfig,
   ExternalSyncState,
   ElementId,
+  Document,
+  DocumentId,
 } from '@stoneforge/core';
 import type { Timestamp } from '@stoneforge/core';
 import { autoLinkTask } from './auto-link.js';
@@ -132,12 +134,21 @@ describe('autoLinkTask', () => {
       expect(result.syncState!.direction).toBe('bidirectional');
       expect(result.syncState!.adapterType).toBe('task');
 
-      // Verify createIssue was called with correct args
+      // Verify createIssue was called with correct args (full field mapping)
       expect(adapter.createIssue).toHaveBeenCalledTimes(1);
       const [callProject, callInput] = (adapter.createIssue as ReturnType<typeof mock>).mock.calls[0] as [string, ExternalTaskInput];
       expect(callProject).toBe('owner/repo');
       expect(callInput.title).toBe('Test task');
-      expect(callInput.labels).toEqual(['tag1', 'tag2']);
+      // Labels should include priority, type, status, and user tags
+      expect(callInput.labels).toEqual([
+        'sf:priority:medium',  // priority 3
+        'sf:type:task',        // taskType 'task'
+        'sf:status:open',      // status 'open'
+        'tag1',
+        'tag2',
+      ]);
+      expect(callInput.state).toBe('open');
+      expect(callInput.priority).toBe(3);
 
       // Verify api.update was called to set externalRef and _externalSync
       expect(api.update).toHaveBeenCalledTimes(1);
@@ -197,8 +208,34 @@ describe('autoLinkTask', () => {
       expect(metadata._externalSync).toBeDefined();
     });
 
-    test('handles task with no tags', async () => {
+    test('handles task with no tags (falls back to simplified input)', async () => {
       const task = createMockTask({ tags: undefined });
+      const adapter = createMockTaskAdapter();
+      const provider = createMockProvider('github', adapter);
+      const api = createMockApi();
+
+      const result = await autoLinkTask({
+        task,
+        api,
+        provider,
+        project: 'owner/repo',
+        direction: 'bidirectional',
+      });
+
+      // Should still succeed via fallback (buildExternalLabels can't iterate undefined tags)
+      expect(result.success).toBe(true);
+      const [, callInput] = (adapter.createIssue as ReturnType<typeof mock>).mock.calls[0] as [string, ExternalTaskInput];
+      // Fallback simplified input: labels come from task.tags which is undefined
+      expect(callInput.labels).toBeUndefined();
+    });
+
+    test('auto-linked issue has priority, type, and status labels', async () => {
+      const task = createMockTask({
+        priority: 1,
+        taskType: 'bug' as Task['taskType'],
+        status: 'in_progress' as Task['status'],
+        tags: ['user-label'],
+      });
       const adapter = createMockTaskAdapter();
       const provider = createMockProvider('github', adapter);
       const api = createMockApi();
@@ -213,7 +250,50 @@ describe('autoLinkTask', () => {
 
       expect(result.success).toBe(true);
       const [, callInput] = (adapter.createIssue as ReturnType<typeof mock>).mock.calls[0] as [string, ExternalTaskInput];
-      expect(callInput.labels).toBeUndefined();
+      expect(callInput.labels).toContain('sf:priority:critical');
+      expect(callInput.labels).toContain('sf:type:bug');
+      expect(callInput.labels).toContain('sf:status:in-progress');
+      expect(callInput.labels).toContain('user-label');
+    });
+
+    test('auto-linked issue has the real description (not a stub)', async () => {
+      const descRef = 'el-desc1' as unknown as DocumentId;
+      const task = createMockTask({
+        descriptionRef: descRef,
+      });
+      const adapter = createMockTaskAdapter();
+      const provider = createMockProvider('github', adapter);
+      // Mock api.get to return a document with real content
+      const api = createMockApi({
+        get: mock(async (id: ElementId) => {
+          if ((id as unknown as string) === 'el-desc1') {
+            return {
+              id: 'el-desc1',
+              type: 'document',
+              content: 'This is the real task description with **markdown**.',
+              contentType: 'markdown',
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+              createdBy: 'el-0000',
+            } as unknown as Document;
+          }
+          return null;
+        }),
+      });
+
+      const result = await autoLinkTask({
+        task,
+        api,
+        provider,
+        project: 'owner/repo',
+        direction: 'bidirectional',
+      });
+
+      expect(result.success).toBe(true);
+      const [, callInput] = (adapter.createIssue as ReturnType<typeof mock>).mock.calls[0] as [string, ExternalTaskInput];
+      // Body should contain the real document content, not a stub
+      expect(callInput.body).toBe('This is the real task description with **markdown**.');
+      expect(callInput.body).not.toContain('Stoneforge task:');
     });
   });
 
@@ -341,6 +421,68 @@ describe('autoLinkTask', () => {
       const warnCall = newCalls[0]?.[0] as string;
       expect(warnCall).toContain('Auto-link failed');
       expect(warnCall).toContain('Network timeout');
+    });
+  });
+
+  describe('fallback cases', () => {
+    test('auto-link still succeeds if description hydration fails', async () => {
+      const descRef = 'el-bad-desc' as unknown as DocumentId;
+      const task = createMockTask({
+        descriptionRef: descRef,
+      });
+      const adapter = createMockTaskAdapter();
+      const provider = createMockProvider('github', adapter);
+      // Mock api.get to throw when fetching the description
+      const api = createMockApi({
+        get: mock(async () => {
+          throw new Error('Storage unavailable');
+        }),
+      });
+
+      const result = await autoLinkTask({
+        task,
+        api,
+        provider,
+        project: 'owner/repo',
+        direction: 'bidirectional',
+      });
+
+      // Should still succeed — the fallback simplified input is used
+      expect(result.success).toBe(true);
+      const [, callInput] = (adapter.createIssue as ReturnType<typeof mock>).mock.calls[0] as [string, ExternalTaskInput];
+      // Fallback uses stub body
+      expect(callInput.body).toBe(`Stoneforge task: ${task.id}`);
+      expect(callInput.title).toBe('Test task');
+    });
+
+    test('fallback uses simplified input when taskToExternalTask throws', async () => {
+      const task = createMockTask({
+        tags: ['my-tag'],
+        descriptionRef: 'el-desc99' as unknown as DocumentId,
+      });
+      const adapter = createMockTaskAdapter();
+      const provider = createMockProvider('github', adapter);
+      // Make api.get throw to trigger taskToExternalTask failure
+      const api = createMockApi({
+        get: mock(async () => {
+          throw new Error('Unexpected error');
+        }),
+      });
+
+      const result = await autoLinkTask({
+        task,
+        api,
+        provider,
+        project: 'owner/repo',
+        direction: 'bidirectional',
+      });
+
+      expect(result.success).toBe(true);
+      const [, callInput] = (adapter.createIssue as ReturnType<typeof mock>).mock.calls[0] as [string, ExternalTaskInput];
+      // Fallback: simplified labels (just user tags, no sf: labels)
+      expect(callInput.labels).toEqual(['my-tag']);
+      // Fallback: stub body
+      expect(callInput.body).toBe(`Stoneforge task: ${task.id}`);
     });
   });
 

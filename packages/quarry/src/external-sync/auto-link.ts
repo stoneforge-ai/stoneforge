@@ -11,11 +11,13 @@
 import type {
   Task,
   ExternalProvider,
+  ExternalTaskInput,
   ExternalSyncState,
   SyncDirection,
   ElementId,
 } from '@stoneforge/core';
 import type { QuarryAPI } from '../api/types.js';
+import { taskToExternalTask, getFieldMapConfigForProvider } from './adapters/task-sync-adapter.js';
 
 const LOG_PREFIX = '[external-sync]';
 
@@ -94,14 +96,29 @@ export async function autoLinkTask(params: AutoLinkTaskParams): Promise<AutoLink
       return { success: false, error: message };
     }
 
-    // 2. Create the external issue
-    const externalTask = await adapter.createIssue(project, {
-      title: task.title,
-      body: task.descriptionRef ? `Stoneforge task: ${task.id}` : undefined,
-      labels: task.tags ? [...task.tags] : undefined,
-    });
+    // 2. Build full ExternalTaskInput via taskToExternalTask, with fallback
+    let issueInput: ExternalTaskInput;
+    try {
+      const fieldMapConfig = getFieldMapConfigForProvider(provider.name);
+      issueInput = await taskToExternalTask(task, fieldMapConfig, api);
+    } catch (mappingErr) {
+      // Fallback to simplified input so auto-link still succeeds
+      console.warn(
+        `${LOG_PREFIX} Full field mapping failed for task ${task.id}, using simplified input: ${
+          mappingErr instanceof Error ? mappingErr.message : String(mappingErr)
+        }`
+      );
+      issueInput = {
+        title: task.title,
+        body: task.descriptionRef ? `Stoneforge task: ${task.id}` : undefined,
+        labels: task.tags ? [...task.tags] : undefined,
+      };
+    }
 
-    // 3. Build the ExternalSyncState metadata
+    // 3. Create the external issue
+    const externalTask = await adapter.createIssue(project, issueInput);
+
+    // 4. Build the ExternalSyncState metadata
     const syncState: ExternalSyncState = {
       provider: provider.name,
       project,
@@ -111,7 +128,7 @@ export async function autoLinkTask(params: AutoLinkTaskParams): Promise<AutoLink
       adapterType: 'task',
     };
 
-    // 4. Update the task with externalRef and _externalSync metadata
+    // 5. Update the task with externalRef and _externalSync metadata
     const existingMetadata = (task.metadata ?? {}) as Record<string, unknown>;
     await api.update<Task>(task.id as unknown as ElementId, {
       externalRef: externalTask.url,
@@ -125,10 +142,10 @@ export async function autoLinkTask(params: AutoLinkTaskParams): Promise<AutoLink
       `${LOG_PREFIX} Auto-linked task ${task.id} to ${provider.name} issue ${externalTask.externalId} (${externalTask.url})`
     );
 
-    // 5. Return success
+    // 6. Return success
     return { success: true, syncState };
   } catch (err) {
-    // 6. Never throw — catch all errors and return failure
+    // 7. Never throw — catch all errors and return failure
     const message = err instanceof Error ? err.message : String(err);
     console.warn(`${LOG_PREFIX} Auto-link failed for task ${task.id}: ${message}`);
     return { success: false, error: message };
