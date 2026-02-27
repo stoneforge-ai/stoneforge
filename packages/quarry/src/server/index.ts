@@ -553,7 +553,7 @@ app.post('/api/tasks', async (c) => {
         createdBy: body.createdBy as EntityId,
         tags: ['task-description'],
       };
-      const newDoc = await createDocument(docInput);
+      const newDoc = await createDocument(docInput, api.getIdGeneratorConfig());
       const docWithTitle = { ...newDoc, title: `Description for task ${body.title}` };
       const createdDoc = await api.create(docWithTitle as unknown as Element & Record<string, unknown>);
       descriptionRef = createdDoc.id;
@@ -575,7 +575,7 @@ app.post('/api/tasks', async (c) => {
       ...(descriptionRef !== undefined && { descriptionRef }),
       ...(body.acceptanceCriteria !== undefined && { acceptanceCriteria: body.acceptanceCriteria }),
     };
-    const task = await createTask(taskInput);
+    const task = await createTask(taskInput, api.getIdGeneratorConfig());
     const created = await api.create(task as unknown as Element & Record<string, unknown>);
 
     return c.json(created);
@@ -635,7 +635,7 @@ app.patch('/api/tasks/:id', async (c) => {
           createdBy: task.createdBy as EntityId,
           tags: ['task-description'],
         };
-        const newDoc = await createDocument(docInput);
+        const newDoc = await createDocument(docInput, api.getIdGeneratorConfig());
         const docWithTitle = { ...newDoc, title: `Description for task ${id}` };
         const createdDoc = await api.create(docWithTitle as unknown as Element & Record<string, unknown>);
         updates.descriptionRef = createdDoc.id;
@@ -2574,7 +2574,7 @@ app.post('/api/workflows', async (c) => {
         tags: body.initialTask.tags || [],
         createdBy: body.createdBy as EntityId,
       };
-      const task = await createTask(taskInput);
+      const task = await createTask(taskInput, api.getIdGeneratorConfig());
       createdTask = await api.create(task as unknown as Element & Record<string, unknown>);
       taskId = createdTask.id as ElementId;
     }
