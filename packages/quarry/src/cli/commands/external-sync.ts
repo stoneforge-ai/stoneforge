@@ -726,6 +726,11 @@ async function pullHandler(
   _args: string[],
   options: GlobalOptions & PullOptions
 ): Promise<CommandResult> {
+  const { api, error } = createAPI(options);
+  if (error) {
+    return failure(error, ExitCode.GENERAL_ERROR);
+  }
+
   const { settingsService, error: settingsError } = await createSettingsServiceFromOptions(options);
   if (settingsError) {
     return failure(settingsError, ExitCode.GENERAL_ERROR);
@@ -743,59 +748,116 @@ async function pullHandler(
     );
   }
 
-  // Validate providers have tokens
-  const validProviders: string[] = [];
+  // Validate providers have tokens and build provider configs
+  const providerConfigs: Array<{ provider: string; token: string; apiBaseUrl?: string; defaultProject?: string }> = [];
   const invalidProviders: string[] = [];
 
   for (const name of providerNames) {
     const config = settings.providers[name];
     if (config?.token) {
-      validProviders.push(name);
+      providerConfigs.push({
+        provider: config.provider,
+        token: config.token,
+        apiBaseUrl: config.apiBaseUrl,
+        defaultProject: config.defaultProject,
+      });
     } else {
       invalidProviders.push(name);
     }
   }
 
-  const mode = getOutputMode(options);
-  const result = {
-    providers: validProviders,
-    discover: options.discover ?? false,
-    message: 'Pull requires a running sync daemon or server.',
-    invalidProviders,
-  };
-
-  if (mode === 'json') {
-    return success(result);
+  if (providerConfigs.length === 0) {
+    return failure(
+      'No providers with valid tokens found. Run "sf external-sync config set-token <provider> <token>" first.',
+      ExitCode.GENERAL_ERROR
+    );
   }
 
-  if (mode === 'quiet') {
-    return success(validProviders.join(','));
-  }
+  // Create sync engine (same pattern as pushHandler)
+  const { createSyncEngine, createConfiguredProviderRegistry } = await import('../../external-sync/index.js');
+  const registry = createConfiguredProviderRegistry(
+    providerConfigs.map((p) => ({
+      provider: p.provider,
+      token: p.token,
+      apiBaseUrl: p.apiBaseUrl,
+      defaultProject: p.defaultProject,
+    }))
+  );
 
-  const lines: string[] = [
-    `Pull: ${validProviders.length} provider(s) ready`,
-    '',
-  ];
+  const engine = createSyncEngine({
+    api,
+    registry,
+    settings: settingsService,
+    providerConfigs: providerConfigs.map((p) => ({
+      provider: p.provider,
+      token: p.token,
+      apiBaseUrl: p.apiBaseUrl,
+      defaultProject: p.defaultProject,
+    })),
+  });
 
-  for (const name of validProviders) {
-    const config = settings.providers[name];
-    lines.push(`  ${name}: ${config.defaultProject ?? '(no default project)'}`);
-  }
-
-  if (invalidProviders.length > 0) {
-    lines.push('');
-    lines.push(`Skipped (no token): ${invalidProviders.join(', ')}`);
-  }
-
+  // Build pull options — discover maps to 'all' to create local tasks for unlinked external issues
+  const syncPullOptions: { all?: boolean } = {};
   if (options.discover) {
-    lines.push('');
-    lines.push('Discovery mode: will look for new unlinked issues.');
+    syncPullOptions.all = true;
   }
 
-  lines.push('');
-  lines.push('Note: Pull requires a running sync daemon or server to execute the actual sync.');
+  try {
+    const result = await engine.pull(syncPullOptions);
 
-  return success(result, lines.join('\n'));
+    const mode = getOutputMode(options);
+    const output = {
+      success: result.success,
+      pulled: result.pulled,
+      skipped: result.skipped,
+      errors: result.errors,
+      conflicts: result.conflicts,
+      invalidProviders,
+    };
+
+    if (mode === 'json') {
+      return success(output);
+    }
+
+    if (mode === 'quiet') {
+      return success(String(result.pulled));
+    }
+
+    const lines: string[] = [
+      `Pull: ${result.pulled} task(s) pulled successfully`,
+      '',
+    ];
+
+    if (result.skipped > 0) {
+      lines.push(`Skipped: ${result.skipped}`);
+    }
+
+    if (invalidProviders.length > 0) {
+      lines.push('');
+      lines.push(`Skipped providers (no token): ${invalidProviders.join(', ')}`);
+    }
+
+    if (result.errors.length > 0) {
+      lines.push('');
+      lines.push(`Errors (${result.errors.length}):`);
+      for (const err of result.errors) {
+        lines.push(`  ${err.elementId ?? 'unknown'}: ${err.message}`);
+      }
+    }
+
+    if (result.conflicts.length > 0) {
+      lines.push('');
+      lines.push(`Conflicts (${result.conflicts.length}):`);
+      for (const conflict of result.conflicts) {
+        lines.push(`  ${conflict.elementId} ↔ ${conflict.externalId} (${conflict.strategy}, resolved: ${conflict.resolved})`);
+      }
+    }
+
+    return success(output, lines.join('\n'));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return failure(`Pull failed: ${message}`, ExitCode.GENERAL_ERROR);
+  }
 }
 
 // ============================================================================
@@ -818,89 +880,113 @@ async function syncHandler(
   _args: string[],
   options: GlobalOptions & SyncOptions
 ): Promise<CommandResult> {
-  const { settingsService, error: settingsError } = await createSettingsServiceFromOptions(options);
-  if (settingsError) {
-    return failure(settingsError, ExitCode.GENERAL_ERROR);
-  }
-
-  const settings = settingsService.getExternalSyncSettings();
-  const isDryRun = options['dry-run'] ?? false;
-
   const { api, error: apiError } = createAPI(options);
   if (apiError) {
     return failure(apiError, ExitCode.GENERAL_ERROR);
   }
 
-  // Get linked tasks
-  let linkedTasks: Array<{ id: string; externalRef: string; provider: string }> = [];
-  try {
-    const allTasks = await api.list({ type: 'task' });
-    linkedTasks = allTasks
-      .filter((t) => {
-        const task = t as Task;
-        return task.externalRef && (task.metadata as Record<string, unknown>)?._externalSync;
-      })
-      .map((t) => {
-        const task = t as Task;
-        const syncMeta = (task.metadata as Record<string, unknown>)?._externalSync as Record<string, unknown>;
-        return {
-          id: task.id,
-          externalRef: task.externalRef!,
-          provider: (syncMeta?.provider as string) ?? 'unknown',
-        };
-      });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return failure(`Failed to list tasks: ${message}`, ExitCode.GENERAL_ERROR);
+  const { settingsService, error: settingsError } = await createSettingsServiceFromOptions(options);
+  if (settingsError) {
+    return failure(settingsError, ExitCode.GENERAL_ERROR);
   }
 
-  const configuredProviders = Object.keys(settings.providers).filter(
-    (name) => settings.providers[name]?.token
+  const syncSettings = settingsService.getExternalSyncSettings();
+  const isDryRun = options['dry-run'] ?? false;
+
+  const providerConfigs = Object.values(syncSettings.providers).filter(
+    (p): p is ProviderConfigLike & { token: string } => !!p.token
   );
 
-  const mode = getOutputMode(options);
-  const result = {
-    dryRun: isDryRun,
-    linkedTaskCount: linkedTasks.length,
-    configuredProviders,
-    tasks: linkedTasks,
-  };
-
-  if (mode === 'json') {
-    return success(result);
+  if (providerConfigs.length === 0) {
+    return failure(
+      'No providers configured with tokens. Run "sf external-sync config set-token <provider> <token>" first.',
+      ExitCode.GENERAL_ERROR
+    );
   }
 
-  if (mode === 'quiet') {
-    return success(String(linkedTasks.length));
+  // Create sync engine (same pattern as pushHandler)
+  const { createSyncEngine, createConfiguredProviderRegistry } = await import('../../external-sync/index.js');
+  const registry = createConfiguredProviderRegistry(
+    providerConfigs.map((p) => ({
+      provider: p.provider,
+      token: p.token,
+      apiBaseUrl: p.apiBaseUrl,
+      defaultProject: p.defaultProject,
+    }))
+  );
+
+  const engine = createSyncEngine({
+    api,
+    registry,
+    settings: settingsService,
+    providerConfigs: providerConfigs.map((p) => ({
+      provider: p.provider,
+      token: p.token,
+      apiBaseUrl: p.apiBaseUrl,
+      defaultProject: p.defaultProject,
+    })),
+  });
+
+  // Build sync options
+  const syncOpts: { dryRun?: boolean } = {};
+  if (isDryRun) {
+    syncOpts.dryRun = true;
   }
 
-  const lines: string[] = [
-    isDryRun ? 'Sync (dry run) - no changes will be made' : 'Bidirectional Sync',
-    '',
-    `  Configured providers: ${configuredProviders.length > 0 ? configuredProviders.join(', ') : '(none)'}`,
-    `  Linked tasks:         ${linkedTasks.length}`,
-    '',
-  ];
+  try {
+    const result = await engine.sync(syncOpts);
 
-  if (linkedTasks.length > 0) {
-    lines.push('  Tasks:');
-    for (const task of linkedTasks.slice(0, 20)) {
-      lines.push(`    ${task.id} ↔ ${task.externalRef} (${task.provider})`);
+    const mode = getOutputMode(options);
+    const output = {
+      success: result.success,
+      dryRun: isDryRun,
+      pushed: result.pushed,
+      pulled: result.pulled,
+      skipped: result.skipped,
+      errors: result.errors,
+      conflicts: result.conflicts,
+    };
+
+    if (mode === 'json') {
+      return success(output);
     }
-    if (linkedTasks.length > 20) {
-      lines.push(`    ... and ${linkedTasks.length - 20} more`);
+
+    if (mode === 'quiet') {
+      return success(`${result.pushed}/${result.pulled}`);
     }
-  }
 
-  if (configuredProviders.length === 0) {
-    lines.push('');
-    lines.push('No providers configured. Run "sf external-sync config set-token <provider> <token>" first.');
-  } else {
-    lines.push('');
-    lines.push('Note: Sync requires a running sync daemon or server to execute the actual sync operations.');
-  }
+    const lines: string[] = [
+      isDryRun ? 'Sync (dry run) - showing what would change' : 'Bidirectional Sync Complete',
+      '',
+      `  Pushed: ${result.pushed} task(s)`,
+      `  Pulled: ${result.pulled} task(s)`,
+    ];
 
-  return success(result, lines.join('\n'));
+    if (result.skipped > 0) {
+      lines.push(`  Skipped: ${result.skipped} (no changes)`);
+    }
+
+    if (result.errors.length > 0) {
+      lines.push('');
+      lines.push(`Errors (${result.errors.length}):`);
+      for (const err of result.errors) {
+        lines.push(`  ${err.elementId ?? 'unknown'}: ${err.message}`);
+      }
+    }
+
+    if (result.conflicts.length > 0) {
+      lines.push('');
+      lines.push(`Conflicts (${result.conflicts.length}):`);
+      for (const conflict of result.conflicts) {
+        lines.push(`  ${conflict.elementId} ↔ ${conflict.externalId} (${conflict.strategy}, resolved: ${conflict.resolved})`);
+      }
+    }
+
+    return success(output, lines.join('\n'));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return failure(`Sync failed: ${message}`, ExitCode.GENERAL_ERROR);
+  }
 }
 
 // ============================================================================
