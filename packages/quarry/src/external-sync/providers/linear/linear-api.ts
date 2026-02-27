@@ -563,7 +563,7 @@ export class LinearApiClient {
    */
   async listIssuesSince(teamKey: string, since: string): Promise<LinearIssue[]> {
     const query = `
-      query ListIssues($teamKey: String!, $since: DateTime!, $after: String) {
+      query ListIssues($teamKey: String!, $since: DateTimeOrDuration!, $after: String) {
         issues(
           filter: {
             team: { key: { eq: $teamKey } }
