@@ -1125,56 +1125,63 @@ describe('buildExternalLabels — status labels (push path)', () => {
     expect(labels).toHaveLength(2);
   });
 
-  test('blocked task adds "blocked" label when config has no statusLabels (Linear)', () => {
-    const configWithoutStatusLabels: TaskSyncFieldMapConfig = {
-      ...createTestConfig(),
-      // No statusLabels — simulates Linear config
-    };
-
-    // Verify no statusLabels
-    expect(configWithoutStatusLabels.statusLabels).toBeUndefined();
-
+  test('blocked task always adds "blocked" label regardless of config', () => {
     const task = createTestTask({
       status: 'blocked' as TaskStatus,
       tags: [],
     });
 
-    const labels = buildExternalLabels(task, configWithoutStatusLabels);
-
-    // Should have priority + type + "blocked" label
-    expect(labels).toContain('blocked');
-    expect(labels).toHaveLength(3);
-  });
-
-  test('non-blocked task does NOT add "blocked" label when config has no statusLabels', () => {
+    // Config without statusLabels
     const configWithoutStatusLabels: TaskSyncFieldMapConfig = {
       ...createTestConfig(),
     };
+    const labelsNoStatus = buildExternalLabels(task, configWithoutStatusLabels);
+    expect(labelsNoStatus).toContain('blocked');
 
+    // Config with statusLabels (e.g., GitHub)
+    const labelsWithStatus = buildExternalLabels(task, GITHUB_FIELD_MAP_CONFIG);
+    expect(labelsWithStatus).toContain('blocked');
+    // Also has the sync-managed status label
+    expect(labelsWithStatus).toContain('sf:status:blocked');
+  });
+
+  test('non-blocked task does NOT add "blocked" label', () => {
     const nonBlockedStatuses: TaskStatus[] = [
       'open', 'in_progress', 'deferred', 'backlog', 'review', 'closed', 'tombstone',
     ] as TaskStatus[];
 
     for (const status of nonBlockedStatuses) {
       const task = createTestTask({ status, tags: [] });
-      const labels = buildExternalLabels(task, configWithoutStatusLabels);
 
-      expect(labels).not.toContain('blocked');
+      // Without statusLabels
+      const configWithoutStatusLabels: TaskSyncFieldMapConfig = {
+        ...createTestConfig(),
+      };
+      const labelsNoStatus = buildExternalLabels(task, configWithoutStatusLabels);
+      expect(labelsNoStatus).not.toContain('blocked');
+
+      // With statusLabels (GitHub)
+      const labelsWithStatus = buildExternalLabels(task, GITHUB_FIELD_MAP_CONFIG);
+      expect(labelsWithStatus).not.toContain('blocked');
     }
   });
 
-  test('blocked task does NOT add "blocked" label when config HAS statusLabels (GitHub)', () => {
-    // GitHub config has statusLabels — "blocked" status is encoded as sf:status:blocked
+  test('blocked task with Linear config adds "blocked" label for adapter detection', () => {
+    const { createLinearSyncFieldMapConfig } = require('../providers/linear/linear-field-map.js');
+    const linearConfig = createLinearSyncFieldMapConfig();
+
     const task = createTestTask({
       status: 'blocked' as TaskStatus,
       tags: [],
     });
 
-    const labels = buildExternalLabels(task, GITHUB_FIELD_MAP_CONFIG);
+    const labels = buildExternalLabels(task, linearConfig);
 
-    // Should have sf:status:blocked (from statusLabels), NOT the plain "blocked" label
+    // The plain "blocked" label must be present so the Linear adapter can detect
+    // blocked status and add the native "blocked" label + set started state type
+    expect(labels).toContain('blocked');
+    // Also has the sync-managed status label (used for hashing/round-tripping)
     expect(labels).toContain('sf:status:blocked');
-    expect(labels).not.toContain('blocked');
   });
 });
 
