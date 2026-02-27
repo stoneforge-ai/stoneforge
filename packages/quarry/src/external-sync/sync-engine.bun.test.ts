@@ -1254,6 +1254,403 @@ describe('SyncEngine closed/tombstone task filtering', () => {
 });
 
 // ============================================================================
+// Pull — Description (Body) Sync Tests
+// ============================================================================
+
+describe('SyncEngine.pull — description body sync', () => {
+  test('pull with body change updates the existing description document', async () => {
+    const syncState = createTestSyncState({
+      externalId: '42',
+      lastPulledHash: 'old-remote-hash',
+      direction: 'bidirectional',
+    });
+
+    // Existing description document
+    const descDoc = {
+      id: 'el-desc1' as ElementId,
+      type: 'document',
+      content: 'Old description content.',
+      contentType: 'markdown',
+      createdAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+      updatedAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+      createdBy: 'system',
+      tags: ['task-description'],
+      metadata: {},
+    } as unknown as Element;
+
+    // Task element with descriptionRef pointing to the document
+    const element = {
+      ...createTestElement({ _syncState: syncState }),
+      descriptionRef: 'el-desc1',
+    } as unknown as Element;
+
+    const externalIssue = createTestExternalTask({
+      externalId: '42',
+      title: 'Updated Remote Title',
+      body: 'New description from GitHub.',
+    });
+
+    const updatedIds: Array<{ id: ElementId; updates: Partial<Element> }> = [];
+    const adapter = createMockTaskAdapter({ issues: [externalIssue] });
+    const provider = createMockProvider('github', adapter);
+    const registry = new ProviderRegistry();
+    registry.register(provider);
+
+    const engine = createSyncEngine({
+      api: createMockApi({
+        elements: [element, descDoc],
+        onUpdate: (id, updates) => {
+          updatedIds.push({ id, updates });
+        },
+      }),
+      registry,
+      settings: createMockSettings(),
+      providerConfigs: [{ provider: 'github', token: 'test', defaultProject: 'owner/repo' }],
+    });
+
+    const result = await engine.pull({ all: true });
+    expect(result.pulled).toBe(1);
+
+    // Verify the description document was updated
+    const descUpdate = updatedIds.find((u) => u.id === ('el-desc1' as ElementId));
+    expect(descUpdate).toBeDefined();
+    expect((descUpdate!.updates as Record<string, unknown>).content).toBe('New description from GitHub.');
+  });
+
+  test('pull with no body change skips description document update', async () => {
+    const syncState = createTestSyncState({
+      externalId: '42',
+      lastPulledHash: 'old-remote-hash',
+      direction: 'bidirectional',
+    });
+
+    // Existing description document with same content as the incoming body
+    const descDoc = {
+      id: 'el-desc1' as ElementId,
+      type: 'document',
+      content: 'Same description content.',
+      contentType: 'markdown',
+      createdAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+      updatedAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+      createdBy: 'system',
+      tags: ['task-description'],
+      metadata: {},
+    } as unknown as Element;
+
+    const element = {
+      ...createTestElement({ _syncState: syncState }),
+      descriptionRef: 'el-desc1',
+    } as unknown as Element;
+
+    const externalIssue = createTestExternalTask({
+      externalId: '42',
+      title: 'Updated Remote Title',
+      body: 'Same description content.',
+    });
+
+    const updatedIds: Array<{ id: ElementId; updates: Partial<Element> }> = [];
+    const adapter = createMockTaskAdapter({ issues: [externalIssue] });
+    const provider = createMockProvider('github', adapter);
+    const registry = new ProviderRegistry();
+    registry.register(provider);
+
+    const engine = createSyncEngine({
+      api: createMockApi({
+        elements: [element, descDoc],
+        onUpdate: (id, updates) => {
+          updatedIds.push({ id, updates });
+        },
+      }),
+      registry,
+      settings: createMockSettings(),
+      providerConfigs: [{ provider: 'github', token: 'test', defaultProject: 'owner/repo' }],
+    });
+
+    const result = await engine.pull({ all: true });
+    expect(result.pulled).toBe(1);
+
+    // Verify the description document was NOT updated (only the task element was)
+    const descUpdate = updatedIds.find((u) => u.id === ('el-desc1' as ElementId));
+    expect(descUpdate).toBeUndefined();
+
+    // But the task itself should still be updated (title etc.)
+    const taskUpdate = updatedIds.find((u) => u.id === element.id);
+    expect(taskUpdate).toBeDefined();
+  });
+
+  test('pull with body on a task with no descriptionRef creates new document and links it', async () => {
+    const syncState = createTestSyncState({
+      externalId: '42',
+      lastPulledHash: 'old-remote-hash',
+      direction: 'bidirectional',
+    });
+
+    // Element WITHOUT descriptionRef
+    const element = createTestElement({ _syncState: syncState });
+
+    const externalIssue = createTestExternalTask({
+      externalId: '42',
+      title: 'Remote Issue',
+      body: 'A brand new description.',
+    });
+
+    let createdDocInput: Record<string, unknown> | undefined;
+    let taskUpdateData: Partial<Element> | undefined;
+    const adapter = createMockTaskAdapter({ issues: [externalIssue] });
+    const provider = createMockProvider('github', adapter);
+    const registry = new ProviderRegistry();
+    registry.register(provider);
+
+    const engine = createSyncEngine({
+      api: createMockApi({
+        elements: [element],
+        onUpdate: (_id, updates) => {
+          taskUpdateData = updates;
+        },
+        onCreate: (input) => {
+          createdDocInput = input;
+          return {
+            id: 'el-newdoc1' as ElementId,
+            ...input,
+            createdAt: '2024-01-01T00:00:00.000Z',
+            updatedAt: '2024-01-01T00:00:00.000Z',
+          } as unknown as Element;
+        },
+      }),
+      registry,
+      settings: createMockSettings(),
+      providerConfigs: [{ provider: 'github', token: 'test', defaultProject: 'owner/repo' }],
+    });
+
+    const result = await engine.pull({ all: true });
+    expect(result.pulled).toBe(1);
+
+    // Verify a new document was created with correct properties
+    expect(createdDocInput).toBeDefined();
+    expect(createdDocInput!.type).toBe('document');
+    expect(createdDocInput!.contentType).toBe('markdown');
+    expect(createdDocInput!.content).toBe('A brand new description.');
+    expect(createdDocInput!.tags).toContain('task-description');
+
+    // Verify the task was updated with the descriptionRef
+    expect(taskUpdateData).toBeDefined();
+    expect((taskUpdateData as Record<string, unknown>).descriptionRef).toBe('el-newdoc1');
+  });
+
+  test('pull with empty body does not delete existing description', async () => {
+    const syncState = createTestSyncState({
+      externalId: '42',
+      lastPulledHash: 'old-remote-hash',
+      direction: 'bidirectional',
+    });
+
+    // Existing description document
+    const descDoc = {
+      id: 'el-desc1' as ElementId,
+      type: 'document',
+      content: 'Existing description.',
+      contentType: 'markdown',
+      createdAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+      updatedAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+      createdBy: 'system',
+      tags: ['task-description'],
+      metadata: {},
+    } as unknown as Element;
+
+    const element = {
+      ...createTestElement({ _syncState: syncState }),
+      descriptionRef: 'el-desc1',
+    } as unknown as Element;
+
+    // External issue with empty body
+    const externalIssue = createTestExternalTask({
+      externalId: '42',
+      title: 'Remote Issue',
+      body: '',
+    });
+
+    const updatedIds: Array<{ id: ElementId; updates: Partial<Element> }> = [];
+    const adapter = createMockTaskAdapter({ issues: [externalIssue] });
+    const provider = createMockProvider('github', adapter);
+    const registry = new ProviderRegistry();
+    registry.register(provider);
+
+    const engine = createSyncEngine({
+      api: createMockApi({
+        elements: [element, descDoc],
+        onUpdate: (id, updates) => {
+          updatedIds.push({ id, updates });
+        },
+      }),
+      registry,
+      settings: createMockSettings(),
+      providerConfigs: [{ provider: 'github', token: 'test', defaultProject: 'owner/repo' }],
+    });
+
+    const result = await engine.pull({ all: true });
+    expect(result.pulled).toBe(1);
+
+    // Verify the description document was NOT updated or deleted
+    const descUpdate = updatedIds.find((u) => u.id === ('el-desc1' as ElementId));
+    expect(descUpdate).toBeUndefined();
+
+    // The task should still be updated (for other field changes)
+    const taskUpdate = updatedIds.find((u) => u.id === element.id);
+    expect(taskUpdate).toBeDefined();
+    // descriptionRef should NOT be in the update (not removed)
+    expect((taskUpdate!.updates as Record<string, unknown>).descriptionRef).toBeUndefined();
+  });
+
+  test('pull with undefined body does not delete existing description', async () => {
+    const syncState = createTestSyncState({
+      externalId: '42',
+      lastPulledHash: 'old-remote-hash',
+      direction: 'bidirectional',
+    });
+
+    const descDoc = {
+      id: 'el-desc1' as ElementId,
+      type: 'document',
+      content: 'Existing description.',
+      contentType: 'markdown',
+      createdAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+      updatedAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+      createdBy: 'system',
+      tags: ['task-description'],
+      metadata: {},
+    } as unknown as Element;
+
+    const element = {
+      ...createTestElement({ _syncState: syncState }),
+      descriptionRef: 'el-desc1',
+    } as unknown as Element;
+
+    // External issue with undefined body
+    const externalIssue = createTestExternalTask({
+      externalId: '42',
+      title: 'Remote Issue',
+      body: undefined,
+    });
+
+    const updatedIds: Array<{ id: ElementId; updates: Partial<Element> }> = [];
+    const adapter = createMockTaskAdapter({ issues: [externalIssue] });
+    const provider = createMockProvider('github', adapter);
+    const registry = new ProviderRegistry();
+    registry.register(provider);
+
+    const engine = createSyncEngine({
+      api: createMockApi({
+        elements: [element, descDoc],
+        onUpdate: (id, updates) => {
+          updatedIds.push({ id, updates });
+        },
+      }),
+      registry,
+      settings: createMockSettings(),
+      providerConfigs: [{ provider: 'github', token: 'test', defaultProject: 'owner/repo' }],
+    });
+
+    const result = await engine.pull({ all: true });
+    expect(result.pulled).toBe(1);
+
+    // Verify the description document was NOT updated
+    const descUpdate = updatedIds.find((u) => u.id === ('el-desc1' as ElementId));
+    expect(descUpdate).toBeUndefined();
+  });
+
+  test('createTaskFromExternal creates description document for new tasks with body', async () => {
+    const externalIssue = createTestExternalTask({
+      externalId: '99',
+      title: 'New Issue With Description',
+      body: 'This is the issue description.',
+    });
+
+    const adapter = createMockTaskAdapter({ issues: [externalIssue] });
+    const provider = createMockProvider('github', adapter);
+    const registry = new ProviderRegistry();
+    registry.register(provider);
+
+    const createdInputs: Record<string, unknown>[] = [];
+    const engine = createSyncEngine({
+      api: createMockApi({
+        elements: [],
+        onCreate: (input) => {
+          createdInputs.push(input);
+          const id = input.type === 'document' ? 'el-newdoc1' : 'el-newtask1';
+          return {
+            id: id as ElementId,
+            ...input,
+            createdAt: '2024-01-01T00:00:00.000Z',
+            updatedAt: '2024-01-01T00:00:00.000Z',
+          } as unknown as Element;
+        },
+      }),
+      registry,
+      settings: createMockSettings(),
+      providerConfigs: [{ provider: 'github', token: 'test', defaultProject: 'owner/repo' }],
+    });
+
+    const result = await engine.pull({ all: true });
+    expect(result.pulled).toBe(1);
+
+    // Should have created two elements: a document and a task
+    expect(createdInputs).toHaveLength(2);
+
+    // First should be the description document
+    const docInput = createdInputs.find((i) => i.type === 'document');
+    expect(docInput).toBeDefined();
+    expect(docInput!.content).toBe('This is the issue description.');
+    expect(docInput!.contentType).toBe('markdown');
+    expect(docInput!.tags).toContain('task-description');
+
+    // Second should be the task with descriptionRef linked
+    const taskInput = createdInputs.find((i) => i.type === 'task');
+    expect(taskInput).toBeDefined();
+    expect(taskInput!.descriptionRef).toBe('el-newdoc1');
+  });
+
+  test('createTaskFromExternal skips description document for new tasks without body', async () => {
+    const externalIssue = createTestExternalTask({
+      externalId: '99',
+      title: 'New Issue Without Description',
+      body: '',
+    });
+
+    const adapter = createMockTaskAdapter({ issues: [externalIssue] });
+    const provider = createMockProvider('github', adapter);
+    const registry = new ProviderRegistry();
+    registry.register(provider);
+
+    const createdInputs: Record<string, unknown>[] = [];
+    const engine = createSyncEngine({
+      api: createMockApi({
+        elements: [],
+        onCreate: (input) => {
+          createdInputs.push(input);
+          return {
+            id: 'el-newtask1' as ElementId,
+            ...input,
+            createdAt: '2024-01-01T00:00:00.000Z',
+            updatedAt: '2024-01-01T00:00:00.000Z',
+          } as unknown as Element;
+        },
+      }),
+      registry,
+      settings: createMockSettings(),
+      providerConfigs: [{ provider: 'github', token: 'test', defaultProject: 'owner/repo' }],
+    });
+
+    const result = await engine.pull({ all: true });
+    expect(result.pulled).toBe(1);
+
+    // Should have created only the task, not a description document
+    expect(createdInputs).toHaveLength(1);
+    expect(createdInputs[0].type).toBe('task');
+    expect(createdInputs[0].descriptionRef).toBeUndefined();
+  });
+});
+
+// ============================================================================
 // Factory Function Tests
 // ============================================================================
 

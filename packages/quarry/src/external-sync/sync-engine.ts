@@ -37,6 +37,8 @@ import type {
   SyncAdapterType,
   ExternalProvider,
   ProviderConfig,
+  Document,
+  DocumentId,
 } from '@stoneforge/core';
 import {
   getExternalSyncState,
@@ -652,8 +654,17 @@ export class SyncEngine {
       updatedSyncState
     );
 
+    // Handle description (body) sync from external item.
+    // The body is not included in externalItemToUpdates() because it requires
+    // separate document creation/update operations.
+    const descriptionRefUpdate = await this.syncDescriptionFromExternal(
+      localElement as unknown as Task,
+      externalItem
+    );
+
     await this.api.update(localElement.id, {
       ...updates,
+      ...descriptionRefUpdate,
       metadata: mergedMetadata,
     } as Partial<Element>);
 
@@ -784,6 +795,15 @@ export class SyncEngine {
     // Merge metadata from field mapping (e.g., _pendingAssignee) with sync state
     const taskMetadata = (taskUpdates.metadata ?? {}) as Record<string, unknown>;
 
+    // Create a description document if the external item has a body
+    let descriptionRef: DocumentId | undefined;
+    if (item.body && item.body.trim().length > 0) {
+      descriptionRef = await this.createDescriptionDocument(
+        item.body,
+        taskUpdates.title ?? item.title
+      );
+    }
+
     const createInput: Record<string, unknown> = {
       type: 'task',
       title: taskUpdates.title ?? item.title,
@@ -794,11 +814,99 @@ export class SyncEngine {
       externalRef: taskUpdates.externalRef ?? item.url,
       createdBy: 'system',
       metadata: { ...taskMetadata, _externalSync: syncState },
+      ...(descriptionRef !== undefined && { descriptionRef }),
     };
 
     const element = await this.api.create<Element>(createInput);
 
     return element;
+  }
+
+  // --------------------------------------------------------------------------
+  // Description Sync Helpers
+  // --------------------------------------------------------------------------
+
+  /**
+   * Sync the description (body) from an external item to the local task's
+   * description document.
+   *
+   * - If the task already has a descriptionRef, compare the body against the
+   *   existing document content and update only if changed.
+   * - If the task has no descriptionRef and the body is non-empty, create a
+   *   new document and return the descriptionRef to link.
+   * - If the body is empty/undefined, skip (don't delete existing descriptions).
+   *
+   * @returns Partial update with descriptionRef if a new document was created,
+   *          or empty object if no descriptionRef change is needed.
+   */
+  private async syncDescriptionFromExternal(
+    localTask: Task,
+    externalItem: ExternalTask
+  ): Promise<Partial<Task>> {
+    const body = externalItem.body;
+
+    // If body is empty/undefined, skip — don't delete existing descriptions
+    if (!body || body.trim().length === 0) {
+      return {};
+    }
+
+    if (localTask.descriptionRef) {
+      // Task already has a description document — update if content changed
+      const existingDoc = await this.api.get<Document>(
+        localTask.descriptionRef as unknown as ElementId
+      );
+
+      if (existingDoc && existingDoc.type === 'document') {
+        if (existingDoc.content !== body) {
+          await this.api.update(localTask.descriptionRef as unknown as ElementId, {
+            content: body,
+          } as Partial<Element>);
+        }
+        // No descriptionRef change needed
+        return {};
+      }
+
+      // Document not found — fall through to create a new one
+    }
+
+    // No existing description document — create a new one and link it
+    const newDescRef = await this.createDescriptionDocument(body, localTask.title);
+    return { descriptionRef: newDescRef } as Partial<Task>;
+  }
+
+  /**
+   * Create a new description document for a task.
+   *
+   * Uses the same pattern as the server-side task creation:
+   * - contentType: 'markdown'
+   * - category: 'task-description' tag
+   * - createdBy: 'system'
+   *
+   * @param body - The description content
+   * @param taskTitle - The task title (used in the document title)
+   * @returns The DocumentId of the created document
+   */
+  private async createDescriptionDocument(
+    body: string,
+    taskTitle: string
+  ): Promise<DocumentId> {
+    const docInput = {
+      type: 'document',
+      contentType: 'markdown',
+      content: body,
+      createdBy: 'system',
+      tags: ['task-description'],
+      title: `Description for task ${taskTitle}`,
+      metadata: {},
+      version: 1,
+      previousVersionId: null,
+      category: 'task-description',
+      status: 'active',
+      immutable: false,
+    };
+
+    const createdDoc = await this.api.create<Element>(docInput);
+    return createdDoc.id as unknown as DocumentId;
   }
 
   // --------------------------------------------------------------------------
