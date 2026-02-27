@@ -1,5 +1,15 @@
 # @stoneforge/smithy-web
 
+## 1.13.0
+
+### Minor Changes
+
+- 77cab6e: Add RateLimitBanner component that shows a site-wide warning banner when the dispatch daemon is paused due to rate limits, with wake-up time display, Wake Now button, and dismissable behavior
+
+### Patch Changes
+
+- @stoneforge/ui@1.13.0
+
 ## 1.12.0
 
 ### Minor Changes
