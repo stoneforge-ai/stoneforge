@@ -155,6 +155,41 @@ Uses FTS5 with BM25 ranking, snippet generation, and adaptive elbow detection fo
 const channels = await api.searchChannels('channel-name');
 ```
 
+### Channel filtering (searchChannels)
+
+`searchChannels()` accepts an optional `ChannelFilter` to narrow results by channel type, visibility, join policy, or membership.
+
+```typescript
+// Search for public group channels
+const publicGroups = await api.searchChannels('general', {
+  channelType: 'group',
+  visibility: 'public',
+});
+
+// Search for channels containing a specific member
+const myChannels = await api.searchChannels('', {
+  member: entityId,
+});
+
+// Search for open, public group channels
+const openChannels = await api.searchChannels('', {
+  channelType: 'group',
+  visibility: 'public',
+  joinPolicy: 'open',
+});
+```
+
+**ChannelFilter fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `channelType` | `'direct' \| 'group'` | Filter by channel type |
+| `visibility` | `'public' \| 'private'` | Filter by channel visibility |
+| `joinPolicy` | `'open' \| 'invite-only' \| 'request'` | Filter by join policy |
+| `member` | `EntityId` | Filter channels containing a specific entity |
+
+All filter fields are optional. When multiple fields are provided, they are combined with AND logic (all conditions must match). `ChannelFilter` also inherits all base `ElementFilter` fields (`type`, `tags`, `tagsAny`, `createdBy`, etc.).
+
 ---
 
 ## Task-Specific Operations
