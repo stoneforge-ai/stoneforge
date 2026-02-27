@@ -103,6 +103,37 @@ async function linkTask(options: GlobalOptions, taskId: string): Promise<void> {
   }
 }
 
+/**
+ * Helper to mark a task as already linked to a specific provider.
+ */
+async function linkTaskToProvider(
+  options: GlobalOptions,
+  taskId: string,
+  provider: string,
+  project?: string
+): Promise<void> {
+  const { api } = createAPI(options);
+  const task = await api!.get<Task>(taskId as ElementId);
+  if (task) {
+    const existingMetadata = (task.metadata ?? {}) as Record<string, unknown>;
+    const proj = project ?? `${provider}-org/${provider}-repo`;
+    await api!.update<Task>(taskId as ElementId, {
+      externalRef: `https://${provider}.example.com/${proj}/issues/1`,
+      metadata: {
+        ...existingMetadata,
+        _externalSync: {
+          provider,
+          project: proj,
+          externalId: '1',
+          url: `https://${provider}.example.com/${proj}/issues/1`,
+          direction: 'bidirectional',
+          adapterType: 'task',
+        },
+      },
+    } as Partial<Task>);
+  }
+}
+
 // ============================================================================
 // Mock Provider Setup
 // ============================================================================
@@ -115,12 +146,15 @@ let createdIssues: Array<{ title: string; body?: string; labels: readonly string
 function createMockProvider(opts?: {
   failOnTaskIds?: Set<string>;
   rateLimitAfter?: number;
+  providerName?: string;
 }) {
   let createCount = 0;
+  const name = opts?.providerName ?? 'github';
+  const displayName = name === 'linear' ? 'Linear' : 'GitHub';
 
   return {
-    name: 'github',
-    displayName: 'GitHub',
+    name,
+    displayName,
     supportedAdapters: ['task' as const],
     testConnection: async () => true,
     getTaskAdapter: () => ({
@@ -821,6 +855,199 @@ describe('external-sync link-all', () => {
     expect(issue.labels).toContain('sf:type:bug');          // from taskType: 'bug'
     expect(issue.labels).toContain('frontend');             // user tag
     expect(issue.labels).toContain('urgent');               // user tag
+  });
+  // ==========================================================================
+  // --force Flag Tests: Re-linking to a different provider
+  // ==========================================================================
+
+  test('without --force: reports no unlinked tasks when all linked, suggests --force', async () => {
+    const options = createTestOptions();
+    const taskIds = await createTestTasks(options, [
+      { title: 'GitHub-linked task 1' },
+      { title: 'GitHub-linked task 2' },
+    ]);
+
+    // Link both tasks to GitHub
+    for (const id of taskIds) {
+      await linkTaskToProvider(options, id, 'github');
+    }
+
+    const { externalSyncCommand } = await import('./external-sync.js');
+    const linkAllCmd = externalSyncCommand.subcommands!['link-all'];
+
+    const result = await linkAllCmd.handler([], {
+      ...options,
+      provider: 'linear',
+    });
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    const data = result.data as Record<string, unknown>;
+    expect(data.total).toBe(0);
+    // Should suggest --force in the message
+    expect(result.message).toContain('--force');
+  });
+
+  test('--force re-links tasks from a different provider', async () => {
+    const options = createTestOptions();
+    const taskIds = await createTestTasks(options, [
+      { title: 'GitHub task 1' },
+      { title: 'GitHub task 2' },
+    ]);
+
+    // Link both tasks to GitHub
+    for (const id of taskIds) {
+      await linkTaskToProvider(options, id, 'github');
+    }
+
+    // Create a Linear mock provider and inject via _providerFactory
+    const mockProvider = createMockProvider({ providerName: 'linear' });
+    const factory = createMockProviderFactory(mockProvider);
+
+    const { externalSyncCommand } = await import('./external-sync.js');
+    const linkAllCmd = externalSyncCommand.subcommands!['link-all'];
+
+    const result = await linkAllCmd.handler([], {
+      ...options,
+      provider: 'linear',
+      force: true,
+      _providerFactory: factory,
+    });
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    const data = result.data as Record<string, unknown>;
+
+    // Should have re-linked both tasks
+    expect(data.linked).toBe(2);
+    expect(data.failed).toBe(0);
+    expect(data.total).toBe(2);
+    expect(data.force).toBe(true);
+    expect(data.relinkCount).toBe(2);
+    expect(data.relinkFromProvider).toBe('github');
+
+    // Verify tasks are now linked to linear
+    const { api } = createAPI(options);
+    for (const taskId of taskIds) {
+      const task = await api!.get<Task>(taskId as ElementId);
+      expect(task).toBeDefined();
+      const metadata = (task!.metadata ?? {}) as Record<string, unknown>;
+      expect(metadata._externalSync).toBeDefined();
+      const syncState = metadata._externalSync as Record<string, unknown>;
+      expect(syncState.provider).toBe('linear');
+    }
+  });
+
+  test('--force skips tasks already linked to the same target provider', async () => {
+    const options = createTestOptions();
+    const taskIds = await createTestTasks(options, [
+      { title: 'Already on GitHub 1' },
+      { title: 'Already on GitHub 2' },
+    ]);
+
+    // Link both tasks to GitHub
+    for (const id of taskIds) {
+      await linkTaskToProvider(options, id, 'github');
+    }
+
+    const mockProvider = createMockProvider();
+    const factory = createMockProviderFactory(mockProvider);
+
+    const { externalSyncCommand } = await import('./external-sync.js');
+    const linkAllCmd = externalSyncCommand.subcommands!['link-all'];
+
+    // Force with same provider — should skip
+    const result = await linkAllCmd.handler([], {
+      ...options,
+      provider: 'github',
+      force: true,
+      _providerFactory: factory,
+    });
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    const data = result.data as Record<string, unknown>;
+    expect(data.total).toBe(0);
+    // No issues should have been created
+    expect(issueCounter).toBe(0);
+  });
+
+  test('--force --dry-run shows what would be re-linked', async () => {
+    const options = createTestOptions();
+    const taskIds = await createTestTasks(options, [
+      { title: 'GitHub task A' },
+      { title: 'GitHub task B' },
+    ]);
+
+    // Link both to GitHub
+    for (const id of taskIds) {
+      await linkTaskToProvider(options, id, 'github');
+    }
+
+    const { externalSyncCommand } = await import('./external-sync.js');
+    const linkAllCmd = externalSyncCommand.subcommands!['link-all'];
+
+    const result = await linkAllCmd.handler([], {
+      ...options,
+      provider: 'linear',
+      force: true,
+      'dry-run': true,
+    });
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    const data = result.data as Record<string, unknown>;
+    expect(data.dryRun).toBe(true);
+    expect(data.total).toBe(2);
+    expect(data.force).toBe(true);
+    expect(data.relinkCount).toBe(2);
+    expect(data.relinkFromProvider).toBe('github');
+    // No issues should have been created (dry run)
+    expect(issueCounter).toBe(0);
+  });
+
+  test('--force with mix of unlinked and differently-linked tasks', async () => {
+    const options = createTestOptions();
+    const taskIds = await createTestTasks(options, [
+      { title: 'Unlinked task' },
+      { title: 'GitHub-linked task' },
+      { title: 'Another unlinked task' },
+    ]);
+
+    // Link only the second task to GitHub
+    await linkTaskToProvider(options, taskIds[1], 'github');
+
+    // Create a Linear mock provider
+    const mockProvider = createMockProvider({ providerName: 'linear' });
+    const factory = createMockProviderFactory(mockProvider);
+
+    const { externalSyncCommand } = await import('./external-sync.js');
+    const linkAllCmd = externalSyncCommand.subcommands!['link-all'];
+
+    const result = await linkAllCmd.handler([], {
+      ...options,
+      provider: 'linear',
+      force: true,
+      _providerFactory: factory,
+    });
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    const data = result.data as Record<string, unknown>;
+
+    // Should link all 3: 2 unlinked + 1 re-linked from GitHub
+    expect(data.linked).toBe(3);
+    expect(data.failed).toBe(0);
+    expect(data.total).toBe(3);
+    expect(data.force).toBe(true);
+    expect(data.relinkCount).toBe(1);
+    expect(data.relinkFromProvider).toBe('github');
+
+    // Verify all tasks are now linked to linear
+    const { api } = createAPI(options);
+    for (const taskId of taskIds) {
+      const task = await api!.get<Task>(taskId as ElementId);
+      expect(task).toBeDefined();
+      const metadata = (task!.metadata ?? {}) as Record<string, unknown>;
+      expect(metadata._externalSync).toBeDefined();
+      const syncState = metadata._externalSync as Record<string, unknown>;
+      expect(syncState.provider).toBe('linear');
+    }
   });
 });
 

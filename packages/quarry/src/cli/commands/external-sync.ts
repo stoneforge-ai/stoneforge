@@ -1225,6 +1225,7 @@ interface LinkAllOptions {
   status?: string | string[];
   'dry-run'?: boolean;
   'batch-size'?: string;
+  force?: boolean;
   /** @internal Dependency injection for testing — overrides createProviderFromSettings */
   _providerFactory?: (
     providerName: string,
@@ -1269,6 +1270,11 @@ const linkAllOptions: CommandOption[] = [
     description: 'How many tasks to process concurrently (default: 10)',
     hasValue: true,
     defaultValue: '10',
+  },
+  {
+    name: 'force',
+    short: 'f',
+    description: 'Re-link tasks that are already linked to a different provider',
   },
 ];
 
@@ -1483,6 +1489,7 @@ async function linkAllHandler(
   }
 
   const isDryRun = options['dry-run'] ?? false;
+  const force = options.force ?? false;
   const batchSize = parseInt(options['batch-size'] ?? '10', 10);
   if (isNaN(batchSize) || batchSize < 1) {
     return failure('--batch-size must be a positive integer', ExitCode.INVALID_ARGUMENTS);
@@ -1514,61 +1521,97 @@ async function linkAllHandler(
     return failure(`Failed to list tasks: ${message}`, ExitCode.GENERAL_ERROR);
   }
 
-  // Filter to unlinked tasks (no _externalSync metadata)
-  let unlinkedTasks = allTasks.filter((task) => {
+  // Filter tasks: unlinked tasks, plus (with --force) tasks linked to a DIFFERENT provider
+  let relinkedFromProvider: string | undefined;
+  let relinkCount = 0;
+  let tasksToLink = allTasks.filter((task) => {
     const metadata = (task.metadata ?? {}) as Record<string, unknown>;
-    return !metadata._externalSync;
+    const syncState = metadata._externalSync as ExternalSyncState | undefined;
+
+    if (!syncState) {
+      // Unlinked task — always include
+      return true;
+    }
+
+    if (force && syncState.provider !== providerName) {
+      // Force mode: include tasks linked to a DIFFERENT provider
+      relinkedFromProvider = syncState.provider;
+      relinkCount++;
+      return true;
+    }
+
+    // Already linked (to same provider, or force not set) — skip
+    return false;
   });
 
   // Apply status filter if specified
   if (statusFilters.length > 0) {
-    unlinkedTasks = unlinkedTasks.filter((task) => statusFilters.includes(task.status));
+    tasksToLink = tasksToLink.filter((task) => statusFilters.includes(task.status));
   }
 
   // Skip tombstone tasks by default (soft-deleted)
-  unlinkedTasks = unlinkedTasks.filter((task) => task.status !== 'tombstone');
+  tasksToLink = tasksToLink.filter((task) => task.status !== 'tombstone');
 
   const mode = getOutputMode(options);
 
-  if (unlinkedTasks.length === 0) {
+  if (tasksToLink.length === 0) {
     const result = { linked: 0, failed: 0, skipped: 0, total: 0, dryRun: isDryRun };
     if (mode === 'json') {
       return success(result);
     }
-    return success(result, 'No unlinked tasks found matching the specified criteria.');
+    const hint = force
+      ? 'No tasks found to re-link matching the specified criteria.'
+      : 'No unlinked tasks found. Use --force to re-link tasks from a different provider.';
+    return success(result, hint);
   }
 
   // Dry run — just list tasks that would be linked
   if (isDryRun) {
-    const taskList = unlinkedTasks.map((t) => ({
+    const taskList = tasksToLink.map((t) => ({
       id: t.id,
       title: t.title,
       status: t.status,
     }));
 
+    const jsonResult: Record<string, unknown> = {
+      dryRun: true,
+      provider: providerName,
+      total: tasksToLink.length,
+      tasks: taskList,
+    };
+    if (force && relinkCount > 0) {
+      jsonResult.force = true;
+      jsonResult.relinkCount = relinkCount;
+      jsonResult.relinkFromProvider = relinkedFromProvider;
+    }
+
     if (mode === 'json') {
-      return success({
-        dryRun: true,
-        provider: providerName,
-        total: unlinkedTasks.length,
-        tasks: taskList,
-      });
+      return success(jsonResult);
     }
 
     if (mode === 'quiet') {
-      return success(String(unlinkedTasks.length));
+      return success(String(tasksToLink.length));
     }
 
-    const lines: string[] = [
-      `Dry run: ${unlinkedTasks.length} task(s) would be linked to ${providerName}`,
-      '',
-    ];
+    const lines: string[] = [];
+    if (force && relinkCount > 0) {
+      lines.push(
+        `Dry run: Re-linking ${relinkCount} task(s) from ${relinkedFromProvider} to ${providerName} (--force)`
+      );
+      const newCount = tasksToLink.length - relinkCount;
+      if (newCount > 0) {
+        lines.push(`  Plus ${newCount} unlinked task(s) to link`);
+      }
+    } else {
+      lines.push(`Dry run: ${tasksToLink.length} task(s) would be linked to ${providerName}`);
+    }
+    lines.push('');
 
-    for (const task of unlinkedTasks) {
+    for (const task of tasksToLink) {
       lines.push(`  ${task.id}  ${task.status.padEnd(12)} ${task.title}`);
     }
 
-    return success({ dryRun: true, provider: providerName, total: unlinkedTasks.length, tasks: taskList }, lines.join('\n'));
+    return success(jsonResult, lines.join('\n'));
   }
 
   // Create provider for actual linking (supports DI for testing)
@@ -1593,15 +1636,28 @@ async function linkAllHandler(
     );
   }
 
-  // Process tasks in batches
   const progressLines: string[] = [];
+
+  // Log re-linking info when using --force
+  if (force && relinkCount > 0 && mode !== 'json' && mode !== 'quiet') {
+    progressLines.push(
+      `Re-linking ${relinkCount} task(s) from ${relinkedFromProvider} to ${providerName} (--force)`
+    );
+    const newCount = tasksToLink.length - relinkCount;
+    if (newCount > 0) {
+      progressLines.push(`Linking ${newCount} unlinked task(s)`);
+    }
+    progressLines.push('');
+  }
+
+  // Process tasks in batches
   let totalSucceeded = 0;
   let totalFailed = 0;
   let rateLimited = false;
   let rateLimitResetAt: number | undefined;
 
-  for (let i = 0; i < unlinkedTasks.length; i += batchSize) {
-    const batch = unlinkedTasks.slice(i, i + batchSize);
+  for (let i = 0; i < tasksToLink.length; i += batchSize) {
+    const batch = tasksToLink.slice(i, i + batchSize);
 
     const batchResult = await processBatch(
       batch,
@@ -1623,24 +1679,29 @@ async function linkAllHandler(
     }
 
     // Small delay between batches to be gentle on the API
-    if (i + batchSize < unlinkedTasks.length) {
+    if (i + batchSize < tasksToLink.length) {
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
   }
 
-  const skipped = unlinkedTasks.length - totalSucceeded - totalFailed;
+  const skipped = tasksToLink.length - totalSucceeded - totalFailed;
 
   // Build result
-  const result = {
+  const result: Record<string, unknown> = {
     provider: providerName,
     project,
     linked: totalSucceeded,
     failed: totalFailed,
     skipped,
-    total: unlinkedTasks.length,
+    total: tasksToLink.length,
     rateLimited,
     rateLimitResetAt: rateLimitResetAt ? new Date(rateLimitResetAt * 1000).toISOString() : undefined,
   };
+  if (force && relinkCount > 0) {
+    result.force = true;
+    result.relinkCount = relinkCount;
+    result.relinkFromProvider = relinkedFromProvider;
+  }
 
   if (mode === 'json') {
     return success(result);
@@ -1816,11 +1877,14 @@ Examples:
 const linkAllCommand: Command = {
   name: 'link-all',
   description: 'Bulk-link all unlinked tasks to external issues',
-  usage: 'sf external-sync link-all --provider <provider> [--project <project>] [--status <status>] [--dry-run] [--batch-size <n>]',
+  usage: 'sf external-sync link-all --provider <provider> [--project <project>] [--status <status>] [--dry-run] [--batch-size <n>] [--force]',
   help: `Create external issues for all unlinked tasks and link them in bulk.
 
 Finds all tasks that do NOT have external sync metadata and creates
 a corresponding external issue for each one, then links them.
+
+Use --force to re-link tasks that are already linked to a different provider.
+Tasks linked to the same target provider are always skipped.
 
 Options:
   -p, --provider <name>    Provider to link to (required)
@@ -1828,6 +1892,7 @@ Options:
   -s, --status <status>    Only link tasks with this status (can be repeated)
   -n, --dry-run            List tasks that would be linked without creating issues
   -b, --batch-size <n>     Tasks to process concurrently (default: 10)
+  -f, --force              Re-link tasks already linked to a different provider
 
 Rate Limits:
   If a rate limit is hit, the command stops gracefully and reports how
@@ -1839,7 +1904,9 @@ Examples:
   sf external-sync link-all --provider github --status open --status in_progress
   sf external-sync link-all --provider github --dry-run
   sf external-sync link-all --provider github --project my-org/my-repo
-  sf external-sync link-all --provider linear --batch-size 5`,
+  sf external-sync link-all --provider linear --batch-size 5
+  sf external-sync link-all --provider linear --force
+  sf external-sync link-all --provider linear --force --dry-run`,
   options: linkAllOptions,
   handler: linkAllHandler as Command['handler'],
 };
