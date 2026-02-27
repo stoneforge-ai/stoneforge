@@ -47,25 +47,7 @@ import {
  */
 const BLOCKED_LABEL = 'blocked';
 
-/**
- * The sync label prefix used by the Stoneforge ↔ Linear field mapping.
- * Labels with this prefix are sync-managed (e.g., sf:type:bug, sf:priority:high).
- */
-const SYNC_LABEL_PREFIX = 'sf:';
 
-/**
- * Prefix for priority labels (after the sync prefix).
- * Labels matching sf:priority:* should NOT be synced as Linear labels
- * because Linear handles priority natively via its numeric field.
- */
-const PRIORITY_LABEL_PREFIX = `${SYNC_LABEL_PREFIX}priority:`;
-
-/**
- * Prefix for status labels (after the sync prefix).
- * Labels matching sf:status:* should NOT be synced as Linear labels
- * because Linear handles status via native workflow states.
- */
-const STATUS_LABEL_PREFIX = `${SYNC_LABEL_PREFIX}status:`;
 
 // ============================================================================
 // Types
@@ -180,8 +162,9 @@ export class LinearTaskAdapter implements TaskSyncAdapter {
     // Resolve ALL labels to Linear label IDs:
     // - "blocked" label (special handling for blocked state)
     // - sf:type:* labels (task type labels synced as Linear labels)
+    // - sf:priority:* labels (synced alongside native priority for lossless round-tripping)
+    // - sf:status:* labels (synced alongside native workflow states for lossless round-tripping)
     // - User tags (non-prefixed labels synced as Linear labels)
-    // - sf:priority:* and sf:status:* are filtered out (handled natively)
     const labelIds = await this.resolveInputLabelIds(team.id, issue.labels);
     if (labelIds.length > 0) {
       input.labelIds = labelIds;
@@ -557,25 +540,17 @@ export class LinearTaskAdapter implements TaskSyncAdapter {
   /**
    * Filters input labels to only those that should be synced as Linear labels.
    *
-   * Excludes:
-   * - sf:priority:* labels (Linear has native priority)
-   * - sf:status:* labels (Linear has native workflow states)
-   *
-   * Keeps:
+   * All label types are now synced to Linear for lossless round-tripping:
+   * - sf:priority:* labels (synced alongside native priority for round-tripping)
+   * - sf:status:* labels (synced alongside native workflow states for round-tripping)
    * - "blocked" label (synced as a Linear label)
    * - sf:type:* labels (task type — Linear has no native type concept)
    * - User tags (non-prefixed labels)
+   *
+   * This method exists as an extension point for future label filtering needs.
    */
   private filterSyncableLabels(labels: readonly string[]): string[] {
-    return labels.filter((label) => {
-      // Filter out priority labels — handled natively
-      if (label.startsWith(PRIORITY_LABEL_PREFIX)) {
-        return false;
-      }
-      // Filter out status labels — handled via workflow states
-      if (label.startsWith(STATUS_LABEL_PREFIX)) {
-        return false;
-      }
+    return labels.filter(() => {
       return true;
     });
   }
@@ -626,9 +601,8 @@ export class LinearTaskAdapter implements TaskSyncAdapter {
 
   /**
    * Resolves all syncable labels from an ExternalTaskInput to Linear label IDs.
-   * Filters out priority and status labels, then resolves each remaining label
-   * (including blocked, type labels, and user tags) to a Linear label ID,
-   * creating labels that don't exist.
+   * All labels (including sf:priority:* and sf:status:*) are synced to Linear
+   * for lossless round-tripping alongside native fields.
    *
    * @param teamId - Team ID for label creation
    * @param labels - Input labels from ExternalTaskInput
@@ -665,8 +639,9 @@ export class LinearTaskAdapter implements TaskSyncAdapter {
    * Handles all label types:
    * - "blocked" label (added/removed based on blocked status)
    * - sf:type:* labels (task type synced as Linear labels)
+   * - sf:priority:* labels (synced alongside native priority for lossless round-tripping)
+   * - sf:status:* labels (synced alongside native workflow states for lossless round-tripping)
    * - User tags (synced as Linear labels)
-   * - sf:priority:* and sf:status:* are filtered out (handled natively)
    *
    * Returns undefined if no label change is needed (avoids unnecessary writes).
    *

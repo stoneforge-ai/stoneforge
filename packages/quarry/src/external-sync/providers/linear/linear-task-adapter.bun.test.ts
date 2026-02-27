@@ -1556,7 +1556,7 @@ describe('Label Sync — Type Labels and User Tags', () => {
   });
 
   describe('createIssue with mixed labels', () => {
-    test('syncs type labels, user tags, and blocked — filters out priority and status', async () => {
+    test('syncs all label types including priority and status for lossless round-tripping', async () => {
       const api = createMockApiClient();
       const adapter = new LinearTaskAdapter(api);
 
@@ -1565,8 +1565,8 @@ describe('Label Sync — Type Labels and User Tags', () => {
         state: 'open',
         labels: [
           'sf:type:bug',           // should be synced
-          'sf:priority:high',      // should be filtered out (native priority)
-          'sf:status:in-progress', // should be filtered out (native workflow state)
+          'sf:priority:high',      // should be synced (lossless round-tripping)
+          'sf:status:in-progress', // should be synced (lossless round-tripping)
           'blocked',               // should be synced
           'my-user-tag',           // should be synced
         ],
@@ -1576,11 +1576,11 @@ describe('Label Sync — Type Labels and User Tags', () => {
       const createCall = (api.createIssue as ReturnType<typeof mock>).mock.calls[0] as [unknown];
       const input = createCall[0] as { labelIds?: readonly string[] };
       expect(input.labelIds).toBeDefined();
-      // Should have 3 labels: sf:type:bug, blocked, my-user-tag
-      expect(input.labelIds).toHaveLength(3);
+      // All 5 labels should be synced
+      expect(input.labelIds).toHaveLength(5);
     });
 
-    test('sf:priority:* labels are not synced as Linear labels', async () => {
+    test('sf:priority:* labels are synced as Linear labels for round-tripping', async () => {
       const api = createMockApiClient();
       const adapter = new LinearTaskAdapter(api);
 
@@ -1593,11 +1593,12 @@ describe('Label Sync — Type Labels and User Tags', () => {
 
       const createCall = (api.createIssue as ReturnType<typeof mock>).mock.calls[0] as [unknown];
       const input = createCall[0] as { labelIds?: readonly string[] };
-      // No syncable labels → labelIds should not be set
-      expect(input.labelIds).toBeUndefined();
+      // Both priority labels should be synced
+      expect(input.labelIds).toBeDefined();
+      expect(input.labelIds).toHaveLength(2);
     });
 
-    test('sf:status:* labels are not synced as Linear labels', async () => {
+    test('sf:status:* labels are synced as Linear labels for round-tripping', async () => {
       const api = createMockApiClient();
       const adapter = new LinearTaskAdapter(api);
 
@@ -1610,8 +1611,9 @@ describe('Label Sync — Type Labels and User Tags', () => {
 
       const createCall = (api.createIssue as ReturnType<typeof mock>).mock.calls[0] as [unknown];
       const input = createCall[0] as { labelIds?: readonly string[] };
-      // No syncable labels → labelIds should not be set
-      expect(input.labelIds).toBeUndefined();
+      // Both status labels should be synced
+      expect(input.labelIds).toBeDefined();
+      expect(input.labelIds).toHaveLength(2);
     });
   });
 
@@ -1767,7 +1769,7 @@ describe('Label Sync — Type Labels and User Tags', () => {
       expect(input.labelIds).toBeUndefined();
     });
 
-    test('filters out sf:priority:* labels on update', async () => {
+    test('syncs sf:priority:* labels on update for round-tripping', async () => {
       const api = createMockApiClient();
       // Current issue has no labels
       const issue = createMockIssue({
@@ -1778,7 +1780,7 @@ describe('Label Sync — Type Labels and User Tags', () => {
       );
       const adapter = new LinearTaskAdapter(api);
 
-      // Update with only priority labels — should be filtered
+      // Update with priority label — should be synced
       await adapter.updateIssue('ENG', 'issue-uuid-1', {
         labels: ['sf:priority:high'],
       });
@@ -1788,8 +1790,9 @@ describe('Label Sync — Type Labels and User Tags', () => {
         unknown,
       ];
       const input = updateCall[1] as { labelIds?: readonly string[] };
-      // Both are empty → no change → undefined
-      expect(input.labelIds).toBeUndefined();
+      // Priority label should be synced
+      expect(input.labelIds).toBeDefined();
+      expect(input.labelIds).toHaveLength(1);
     });
 
     test('does not send labelIds when labels field is not in update', async () => {
@@ -1826,9 +1829,8 @@ describe('Label Sync — Type Labels and User Tags', () => {
       const createCall = (api.createIssue as ReturnType<typeof mock>).mock.calls[0] as [unknown];
       const input = createCall[0] as { labelIds?: readonly string[]; stateId?: string };
       expect(input.labelIds).toBeDefined();
-      // 3 syncable labels: blocked, sf:type:bug, my-tag
-      // sf:priority:high and sf:status:blocked are filtered out
-      expect(input.labelIds).toHaveLength(3);
+      // All 5 labels are synced: blocked, sf:type:bug, my-tag, sf:priority:high, sf:status:blocked
+      expect(input.labelIds).toHaveLength(5);
       // Blocked task should map to 'started' state type
       expect(input.stateId).toBe('state-uuid-started');
     });

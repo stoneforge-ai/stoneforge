@@ -298,9 +298,9 @@ export function createLinearFieldMapConfig(): TaskFieldMapConfig {
  * Creates the Linear-specific TaskSyncFieldMapConfig used by the shared
  * task-sync-adapter utilities (taskToExternalTask, externalTaskToTaskUpdates).
  *
- * Linear has native priority, so priorityLabels are set to empty strings
- * (priority is mapped directly via the numeric field, not via labels).
- * The adapter handles priority conversion separately.
+ * Priority labels are emitted alongside Linear's native priority field for
+ * lossless round-tripping. This ensures the exact Stoneforge priority value
+ * is preserved (e.g., P5 "minimal" is distinct from Linear's "No priority").
  *
  * Status mapping uses adapter-injected sf:status:* labels. The Linear adapter
  * injects these labels based on the workflow state type (e.g., started →
@@ -309,14 +309,15 @@ export function createLinearFieldMapConfig(): TaskFieldMapConfig {
  */
 export function createLinearSyncFieldMapConfig(): TaskSyncFieldMapConfig {
   return {
-    // Linear has native priority — we don't use label-based priority.
-    // These are set to empty strings; the adapter maps priority directly.
+    // Priority labels for lossless round-tripping. These are synced as Linear
+    // labels alongside the native priority field, so the exact Stoneforge
+    // priority value is preserved on round-trip.
     priorityLabels: {
-      1: '',
-      2: '',
-      3: '',
-      4: '',
-      5: '',
+      1: 'priority:critical',
+      2: 'priority:high',
+      3: 'priority:medium',
+      4: 'priority:low',
+      5: 'priority:minimal',
     } as Record<Priority, string>,
 
     taskTypeLabels: {
