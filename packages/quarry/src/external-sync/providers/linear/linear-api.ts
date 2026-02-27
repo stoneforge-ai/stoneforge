@@ -70,6 +70,8 @@ export interface CreateIssueInput {
   stateId?: string;
   /** Assignee user ID */
   assigneeId?: string;
+  /** Label IDs to attach to the issue */
+  labelIds?: readonly string[];
 }
 
 /**
@@ -86,6 +88,8 @@ export interface UpdateIssueInput {
   stateId?: string;
   /** Updated assignee user ID */
   assigneeId?: string;
+  /** Label IDs to set on the issue (replaces all existing labels) */
+  labelIds?: readonly string[];
 }
 
 // ============================================================================
@@ -444,6 +448,75 @@ export class LinearApiClient {
     }>(query, { teamId });
 
     return data.team.states.nodes;
+  }
+
+  /**
+   * Fetch all labels (issue labels) in the workspace.
+   * Labels in Linear are workspace-scoped and can be filtered by team.
+   *
+   * @returns Array of all labels with id and name.
+   */
+  async getLabels(): Promise<{ id: string; name: string }[]> {
+    const query = `
+      query IssueLabels {
+        issueLabels {
+          nodes {
+            id
+            name
+          }
+        }
+      }
+    `;
+
+    const data = await this.graphql<{
+      issueLabels: { nodes: { id: string; name: string }[] };
+    }>(query);
+
+    return data.issueLabels.nodes;
+  }
+
+  /**
+   * Create a new label in the workspace, optionally associated with a team.
+   *
+   * @param name - Label name (e.g., "blocked")
+   * @param teamId - Optional team ID to associate the label with
+   * @returns The created label with id and name.
+   */
+  async createLabel(
+    name: string,
+    teamId?: string
+  ): Promise<{ id: string; name: string }> {
+    const query = `
+      mutation CreateLabel($input: IssueLabelCreateInput!) {
+        issueLabelCreate(input: $input) {
+          success
+          issueLabel {
+            id
+            name
+          }
+        }
+      }
+    `;
+
+    const input: Record<string, string> = { name };
+    if (teamId) {
+      input.teamId = teamId;
+    }
+
+    const data = await this.graphql<{
+      issueLabelCreate: { success: boolean; issueLabel: { id: string; name: string } };
+    }>(query, { input });
+
+    if (!data.issueLabelCreate.success) {
+      throw new LinearApiError(
+        `Linear issueLabelCreate mutation returned success: false for label "${name}"`,
+        200,
+        [],
+        this.lastRateLimit
+      );
+    }
+
+    return data.issueLabelCreate.issueLabel;
   }
 
   /**

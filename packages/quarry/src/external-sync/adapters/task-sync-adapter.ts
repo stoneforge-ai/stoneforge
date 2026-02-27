@@ -275,6 +275,15 @@ export function buildExternalLabels(
     }
   }
 
+  // Add "blocked" label for providers without status labels (e.g., Linear).
+  // Providers like Linear map status to workflow state types but have no native
+  // "blocked" concept. This unprefixed label ensures blocked tasks are visibly
+  // marked on the external system. When statusLabels IS present (e.g., GitHub),
+  // the blocked status is already encoded via the sf:status:* label above.
+  if (!config.statusLabels && task.status === ('blocked' as TaskStatus)) {
+    labels.push('blocked');
+  }
+
   // Add user tags (not prefixed — these are user-managed)
   for (const tag of task.tags) {
     labels.push(tag);

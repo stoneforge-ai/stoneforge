@@ -1124,6 +1124,58 @@ describe('buildExternalLabels — status labels (push path)', () => {
     // Should still have priority and type labels
     expect(labels).toHaveLength(2);
   });
+
+  test('blocked task adds "blocked" label when config has no statusLabels (Linear)', () => {
+    const configWithoutStatusLabels: TaskSyncFieldMapConfig = {
+      ...createTestConfig(),
+      // No statusLabels — simulates Linear config
+    };
+
+    // Verify no statusLabels
+    expect(configWithoutStatusLabels.statusLabels).toBeUndefined();
+
+    const task = createTestTask({
+      status: 'blocked' as TaskStatus,
+      tags: [],
+    });
+
+    const labels = buildExternalLabels(task, configWithoutStatusLabels);
+
+    // Should have priority + type + "blocked" label
+    expect(labels).toContain('blocked');
+    expect(labels).toHaveLength(3);
+  });
+
+  test('non-blocked task does NOT add "blocked" label when config has no statusLabels', () => {
+    const configWithoutStatusLabels: TaskSyncFieldMapConfig = {
+      ...createTestConfig(),
+    };
+
+    const nonBlockedStatuses: TaskStatus[] = [
+      'open', 'in_progress', 'deferred', 'backlog', 'review', 'closed', 'tombstone',
+    ] as TaskStatus[];
+
+    for (const status of nonBlockedStatuses) {
+      const task = createTestTask({ status, tags: [] });
+      const labels = buildExternalLabels(task, configWithoutStatusLabels);
+
+      expect(labels).not.toContain('blocked');
+    }
+  });
+
+  test('blocked task does NOT add "blocked" label when config HAS statusLabels (GitHub)', () => {
+    // GitHub config has statusLabels — "blocked" status is encoded as sf:status:blocked
+    const task = createTestTask({
+      status: 'blocked' as TaskStatus,
+      tags: [],
+    });
+
+    const labels = buildExternalLabels(task, GITHUB_FIELD_MAP_CONFIG);
+
+    // Should have sf:status:blocked (from statusLabels), NOT the plain "blocked" label
+    expect(labels).toContain('sf:status:blocked');
+    expect(labels).not.toContain('blocked');
+  });
 });
 
 // ============================================================================
