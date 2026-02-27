@@ -791,6 +791,234 @@ describe('Error classification', () => {
 });
 
 // ============================================================================
+// Closed/Tombstone Task Filtering Tests
+// ============================================================================
+
+describe('SyncEngine closed/tombstone task filtering', () => {
+  // --- Push path ---
+
+  test('push skips closed tasks', async () => {
+    const syncState = createTestSyncState({
+      lastPushedHash: 'old-hash-that-differs',
+      lastPushedAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+    });
+    const element = {
+      ...createTestElement({ _syncState: syncState }),
+      status: 'closed',
+    } as unknown as Element;
+
+    let updateCalled = false;
+    const engine = buildEngine({
+      elements: [element],
+      events: [
+        { elementId: element.id, eventType: 'updated', createdAt: '2024-01-05T00:00:00.000Z' as Timestamp },
+      ],
+      onUpdateIssue: () => {
+        updateCalled = true;
+      },
+    });
+
+    const result = await engine.push({ all: true });
+    expect(updateCalled).toBe(false);
+    expect(result.pushed).toBe(0);
+    expect(result.skipped).toBe(1);
+  });
+
+  test('push skips tombstone tasks', async () => {
+    const syncState = createTestSyncState({
+      lastPushedHash: 'old-hash-that-differs',
+      lastPushedAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+    });
+    const element = {
+      ...createTestElement({ _syncState: syncState }),
+      status: 'tombstone',
+    } as unknown as Element;
+
+    let updateCalled = false;
+    const engine = buildEngine({
+      elements: [element],
+      events: [
+        { elementId: element.id, eventType: 'updated', createdAt: '2024-01-05T00:00:00.000Z' as Timestamp },
+      ],
+      onUpdateIssue: () => {
+        updateCalled = true;
+      },
+    });
+
+    const result = await engine.push({ all: true });
+    expect(updateCalled).toBe(false);
+    expect(result.pushed).toBe(0);
+    expect(result.skipped).toBe(1);
+  });
+
+  test('push processes open/in_progress tasks normally', async () => {
+    const syncState = createTestSyncState({
+      lastPushedHash: 'old-hash-that-differs',
+      lastPushedAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+    });
+
+    const openElement = {
+      ...createTestElement({ _syncState: syncState }),
+      id: 'el-open1' as ElementId,
+      status: 'open',
+    } as unknown as Element;
+
+    const inProgressElement = {
+      ...createTestElement({
+        _syncState: createTestSyncState({
+          lastPushedHash: 'old-hash-that-differs-2',
+          lastPushedAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+          externalId: '43',
+        }),
+      }),
+      id: 'el-prog1' as ElementId,
+      status: 'in_progress',
+    } as unknown as Element;
+
+    let pushCount = 0;
+    const engine = buildEngine({
+      elements: [openElement, inProgressElement],
+      events: [
+        { elementId: 'el-open1' as ElementId, eventType: 'updated', createdAt: '2024-01-05T00:00:00.000Z' as Timestamp },
+        { elementId: 'el-prog1' as ElementId, eventType: 'updated', createdAt: '2024-01-05T00:00:00.000Z' as Timestamp },
+      ],
+      onUpdateIssue: () => {
+        pushCount++;
+      },
+    });
+
+    const result = await engine.push({ all: true });
+    expect(pushCount).toBe(2);
+    expect(result.pushed).toBe(2);
+    expect(result.skipped).toBe(0);
+  });
+
+  // --- Pull path ---
+
+  test('pull skips updates to closed tasks when external is also closed', async () => {
+    const syncState = createTestSyncState({
+      externalId: '42',
+      lastPulledHash: 'old-remote-hash',
+      direction: 'bidirectional',
+    });
+    const element = {
+      ...createTestElement({ _syncState: syncState }),
+      status: 'closed',
+    } as unknown as Element;
+
+    const externalIssue = createTestExternalTask({
+      externalId: '42',
+      title: 'Updated Closed Issue',
+      state: 'closed',
+    });
+
+    let updateCalled = false;
+    const engine = buildEngine({
+      elements: [element],
+      issues: [externalIssue],
+      onUpdate: () => {
+        updateCalled = true;
+      },
+    });
+
+    const result = await engine.pull({ all: true });
+    expect(updateCalled).toBe(false);
+    expect(result.pulled).toBe(0);
+    expect(result.skipped).toBe(1);
+  });
+
+  test('pull applies updates to closed tasks when external is open (reopened)', async () => {
+    const syncState = createTestSyncState({
+      externalId: '42',
+      lastPulledHash: 'old-remote-hash',
+      direction: 'bidirectional',
+    });
+    const element = {
+      ...createTestElement({ _syncState: syncState }),
+      status: 'closed',
+    } as unknown as Element;
+
+    const externalIssue = createTestExternalTask({
+      externalId: '42',
+      title: 'Reopened Issue',
+      state: 'open',
+    });
+
+    let updatedId: ElementId | undefined;
+    const engine = buildEngine({
+      elements: [element],
+      issues: [externalIssue],
+      onUpdate: (id) => {
+        updatedId = id;
+      },
+    });
+
+    const result = await engine.pull({ all: true });
+    expect(updatedId).toBe(element.id);
+    expect(result.pulled).toBe(1);
+  });
+
+  test('pull skips updates to tombstone tasks when external is closed', async () => {
+    const syncState = createTestSyncState({
+      externalId: '42',
+      lastPulledHash: 'old-remote-hash',
+      direction: 'bidirectional',
+    });
+    const element = {
+      ...createTestElement({ _syncState: syncState }),
+      status: 'tombstone',
+    } as unknown as Element;
+
+    const externalIssue = createTestExternalTask({
+      externalId: '42',
+      title: 'Updated Tombstone Issue',
+      state: 'closed',
+    });
+
+    let updateCalled = false;
+    const engine = buildEngine({
+      elements: [element],
+      issues: [externalIssue],
+      onUpdate: () => {
+        updateCalled = true;
+      },
+    });
+
+    const result = await engine.pull({ all: true });
+    expect(updateCalled).toBe(false);
+    expect(result.pulled).toBe(0);
+    expect(result.skipped).toBe(1);
+  });
+
+  test('push resumes syncing when task is reopened (status no longer closed/tombstone)', async () => {
+    // A task that was previously closed but is now open again
+    const syncState = createTestSyncState({
+      lastPushedHash: 'old-hash-that-differs',
+      lastPushedAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+    });
+    const element = {
+      ...createTestElement({ _syncState: syncState }),
+      status: 'open', // Was closed, now reopened
+    } as unknown as Element;
+
+    let updateCalled = false;
+    const engine = buildEngine({
+      elements: [element],
+      events: [
+        { elementId: element.id, eventType: 'reopened', createdAt: '2024-01-05T00:00:00.000Z' as Timestamp },
+      ],
+      onUpdateIssue: () => {
+        updateCalled = true;
+      },
+    });
+
+    const result = await engine.push({ all: true });
+    expect(updateCalled).toBe(true);
+    expect(result.pushed).toBe(1);
+  });
+});
+
+// ============================================================================
 // Factory Function Tests
 // ============================================================================
 

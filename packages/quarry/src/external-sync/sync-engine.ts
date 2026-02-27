@@ -268,6 +268,15 @@ export class SyncEngine {
         continue;
       }
 
+      // Skip closed/tombstone tasks — they're done and shouldn't sync.
+      // If a task is later reopened (status changes away from closed/tombstone),
+      // it will be picked up again naturally since the filter no longer applies.
+      const elementStatus = (element as unknown as { status: string }).status;
+      if (elementStatus === 'closed' || elementStatus === 'tombstone') {
+        skipped.push(1);
+        continue;
+      }
+
       try {
         const result = await this.pushElement(element, syncState, options, now);
         if (result === 'pushed') {
@@ -552,6 +561,13 @@ export class SyncEngine {
 
     // Skip if direction is push-only
     if (syncState.direction === 'push') {
+      return 'skipped';
+    }
+
+    // Skip updates to closed/tombstone tasks UNLESS the external item is open
+    // (which means someone reopened the issue externally — we should sync that).
+    const localStatus = (localElement as unknown as { status: string }).status;
+    if ((localStatus === 'closed' || localStatus === 'tombstone') && externalItem.state !== 'open') {
       return 'skipped';
     }
 
