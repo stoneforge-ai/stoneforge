@@ -1073,7 +1073,7 @@ app.post('/api/entities', async (c) => {
       createdBy: (createdBy || 'el-0000') as EntityId,
     };
 
-    const entity = await createEntity(entityInput);
+    const entity = await createEntity(entityInput, api.getIdGeneratorConfig());
     const created = await api.create(entity as unknown as Element & Record<string, unknown>);
 
     return c.json(created, 201);
@@ -2555,7 +2555,7 @@ app.post('/api/workflows', async (c) => {
       playbookId: body.playbookId,
     };
 
-    const workflow = await createWorkflow(workflowInput);
+    const workflow = await createWorkflow(workflowInput, api.getIdGeneratorConfig());
     const created = await api.create(workflow as unknown as Element & Record<string, unknown>);
 
     // Now add or create the initial task
@@ -2987,7 +2987,7 @@ app.post('/api/teams', async (c) => {
       ...(descriptionRef !== undefined && { descriptionRef }),
     };
 
-    const team = await createTeam(teamInput);
+    const team = await createTeam(teamInput, api.getIdGeneratorConfig());
     const created = await api.create(team as unknown as Element & Record<string, unknown>);
 
     return c.json(created, 201);
