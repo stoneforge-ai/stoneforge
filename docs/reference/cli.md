@@ -1585,6 +1585,7 @@ Manage bidirectional synchronization between Stoneforge and external services (G
 | `sf external-sync unlink <taskId>`                             | Remove external link         |
 | `sf external-sync push [taskId...]`                            | Push linked task(s)          |
 | `sf external-sync push --all`                                  | Push all linked tasks        |
+| `sf external-sync push --all --force`                          | Force-push all (skip hash check) |
 | `sf external-sync pull`                                        | Pull changes from external   |
 | `sf external-sync sync [--dry-run]`                            | Bidirectional sync           |
 | `sf external-sync status`                                      | Show sync state              |
@@ -1739,11 +1740,13 @@ Push linked tasks to their external service. If specific task IDs are given, pus
 | Option        | Description            |
 | ------------- | ---------------------- |
 | `-a, --all`   | Push all linked tasks  |
+| `-f, --force` | Push all linked tasks regardless of whether they have changed (skips hash comparison) |
 
 ```bash
 sf external-sync push el-abc123
 sf external-sync push el-abc123 el-def456
 sf external-sync push --all
+sf external-sync push --all --force
 ```
 
 **Note:** Push requires a running sync daemon or server to execute the actual sync operations.
