@@ -181,7 +181,8 @@ export async function createHandler(
         contentType: ContentType.MARKDOWN,
         createdBy: actor,
       };
-      const newDoc = await createDocument(docInput);
+      const idConfig = api.getIdGeneratorConfig();
+      const newDoc = await createDocument(docInput, idConfig);
       const createdDoc = await api.create(newDoc as unknown as Element & Record<string, unknown>);
       descriptionRef = createdDoc.id as DocumentId;
     }
@@ -199,7 +200,7 @@ export async function createHandler(
     };
 
     // Create the task
-    const task = await createTask(input);
+    const task = await createTask(input, api.getIdGeneratorConfig());
     // The API's create method expects ElementInput which Task satisfies
     const created = await api.create(task as unknown as Element & Record<string, unknown>);
 

@@ -635,7 +635,7 @@ async function reopenHandler(
           content: reopenLine,
           contentType: ContentType.MARKDOWN,
           createdBy: actor ?? ('operator' as EntityId),
-        });
+        }, api.getIdGeneratorConfig());
         const created = await api.create(newDoc as unknown as Document & Record<string, unknown>);
         await api.update<Task>(
           id as ElementId,
@@ -1127,7 +1127,7 @@ async function describeHandler(
         createdBy: actor ?? ('operator' as EntityId),
       };
 
-      const newDoc = await createDocument(docInput);
+      const newDoc = await createDocument(docInput, api.getIdGeneratorConfig());
       const created = await api.create(newDoc as unknown as Document & Record<string, unknown>);
 
       // Update task with description reference

@@ -88,7 +88,7 @@ async function entityRegisterHandler(
     };
 
     // Create the entity
-    const entity = await createEntity(input);
+    const entity = await createEntity(input, api.getIdGeneratorConfig());
     // Persist to database
     const created = await api.create(entity as unknown as Element & Record<string, unknown>);
 

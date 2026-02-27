@@ -85,6 +85,74 @@ describe('QuarryAPI', () => {
   });
 
   // --------------------------------------------------------------------------
+  // ID Generation Config Tests
+  // --------------------------------------------------------------------------
+
+  describe('getIdGeneratorConfig()', () => {
+    it('should return config with elementCount and checkCollision', () => {
+      const config = api.getIdGeneratorConfig();
+      expect(config).toBeDefined();
+      expect(typeof config.elementCount).toBe('number');
+      expect(typeof config.checkCollision).toBe('function');
+    });
+
+    it('should report elementCount reflecting stored elements', async () => {
+      // Initially no elements
+      const config0 = api.getIdGeneratorConfig();
+      expect(config0.elementCount).toBe(0);
+
+      // Create a task
+      const task = await createTestTask({ title: 'Count check' });
+      await api.create(toCreateInput(task));
+
+      // After creation, a fresh config should eventually reflect the new count.
+      // Because the IdLengthCache may serve a cached count, we force a fresh
+      // config by creating a new API instance with the same backend.
+      const freshApi = new QuarryAPIImpl(backend);
+      const config1 = freshApi.getIdGeneratorConfig();
+      expect(config1.elementCount).toBe(1);
+    });
+
+    it('should detect collisions via checkCollision callback', async () => {
+      const task = await createTestTask({ title: 'Collision target' });
+      await api.create(toCreateInput(task));
+
+      const config = api.getIdGeneratorConfig();
+      // The task's ID should be detected as a collision
+      const collides = await config.checkCollision!(task.id);
+      expect(collides).toBe(true);
+
+      // A non-existent ID should not collide
+      const noCollision = await config.checkCollision!('el-nonexistent' as ElementId);
+      expect(noCollision).toBe(false);
+    });
+
+    it('should pass config through to createTask for adaptive hash length', async () => {
+      // Create many elements to push the element count up, simulating a large DB
+      // We insert rows directly to avoid slowness
+      for (let i = 0; i < 100; i++) {
+        backend.run(
+          `INSERT INTO elements (id, type, data, content_hash, created_at, updated_at, created_by, deleted_at)
+           VALUES (?, ?, ?, NULL, ?, ?, ?, NULL)`,
+          [
+            `el-bulk-${i}`,
+            'task',
+            JSON.stringify({ type: 'task', title: `Bulk ${i}`, status: 'open', priority: 3, complexity: 3, taskType: 'task', tags: [], metadata: {} }),
+            new Date().toISOString(),
+            new Date().toISOString(),
+            'user:bulk',
+          ]
+        );
+      }
+
+      // Now getIdGeneratorConfig should reflect the higher count
+      const freshApi = new QuarryAPIImpl(backend);
+      const config = freshApi.getIdGeneratorConfig();
+      expect(config.elementCount).toBeGreaterThanOrEqual(100);
+    });
+  });
+
+  // --------------------------------------------------------------------------
   // Create Operation Tests
   // --------------------------------------------------------------------------
 

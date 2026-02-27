@@ -134,7 +134,7 @@ async function docsInitHandler(
         name: DOCUMENTATION_LIBRARY_NAME,
         createdBy: actor,
       };
-      const libElement = await createLibrary(input);
+      const libElement = await createLibrary(input, api.getIdGeneratorConfig());
       library = (await api.create(
         libElement as unknown as Element & Record<string, unknown>
       )) as unknown as Library;
@@ -158,7 +158,7 @@ async function docsInitHandler(
         createdBy: actor,
         metadata: { purpose: DOCUMENTATION_DIRECTORY_PURPOSE },
       };
-      const docElement = await createDocument(docInput);
+      const docElement = await createDocument(docInput, api.getIdGeneratorConfig());
       directoryDoc = (await api.create(
         docElement as unknown as Element & Record<string, unknown>
       )) as unknown as Document;
