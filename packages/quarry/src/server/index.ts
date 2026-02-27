@@ -2640,7 +2640,7 @@ app.post('/api/workflows/instantiate', async (c) => {
     };
 
     // Instantiate the workflow from playbook
-    const result = await createWorkflowFromPlaybook(createInput);
+    const result = await createWorkflowFromPlaybook(createInput, { idConfig: api.getIdGeneratorConfig() });
 
     // TB122: Verify at least one task was created (steps may have been filtered by conditions)
     if (result.tasks.length === 0) {
