@@ -70,7 +70,7 @@ const result = depService.detectCycle(blockedId, blockerId, type);
 - Only checked for blocking types (`blocks`, `awaits`, `parent-child`)
 - Self-referential rejected immediately with `CYCLE_DETECTED`
 
-**Note:** `addDependency()` **automatically** checks for cycles on blocking dependency types (`blocks`, `awaits`, `parent-child`). You can also use `detectCycle()` for manual pre-validation.
+**Note:** `DependencyService.addDependency()` **automatically** checks for cycles on blocking dependency types (`blocks`, `awaits`, `parent-child`). You can also use `detectCycle()` for manual pre-validation. However, `QuarryAPI.addDependency()` does **not** check for cycles — API callers using `QuarryAPI` must check cycles via `DependencyService.detectCycle()` manually (see [Critical Gotchas](../gotchas.md)).
 
 ---
 

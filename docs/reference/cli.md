@@ -461,14 +461,12 @@ List backlog tasks.
 
 | Option                 | Description                       |
 | ---------------------- | --------------------------------- |
-| `-t, --type <type>`    | Filter by task type               |
 | `-p, --priority <1-5>` | Filter by priority                |
 | `-l, --limit <n>`      | Maximum results                   |
 
 ```bash
 sf task backlog
 sf task backlog --priority 1 --limit 20
-sf task backlog --type bug
 ```
 
 #### task blocked
