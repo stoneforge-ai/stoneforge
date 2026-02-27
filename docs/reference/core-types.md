@@ -530,6 +530,13 @@ interface HydratedTeam extends Team {
 interface HydratedPlaybook extends Playbook {
   description?: string;
 }
+
+// Inbox item with hydrated references
+interface HydratedInboxItem extends InboxItem {
+  message?: Message;
+  channel?: Channel;
+  sender?: Entity;
+}
 ```
 
 **Note:** `HydratedChannel` is a type alias for `Channel` since channels use a plain `description` string rather than a document reference.
