@@ -139,7 +139,7 @@ Default: `.stoneforge/` directory in project root
 
 ## Schema
 
-Current version: 10
+Current version: 11
 
 ### Key Tables
 

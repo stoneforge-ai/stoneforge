@@ -1704,6 +1704,7 @@ Bulk-link all unlinked tasks to external issues. Finds all tasks that do not hav
 | `-s, --status <status>`   | Only link tasks with this status (repeatable)                |
 | `-n, --dry-run`           | List tasks that would be linked without creating issues      |
 | `-b, --batch-size <n>`    | How many tasks to process concurrently (default: `10`)       |
+| `-f, --force`             | Re-link tasks already linked to a different provider         |
 
 ```bash
 sf external-sync link-all --provider github
@@ -1711,6 +1712,8 @@ sf external-sync link-all --provider github --project my-org/my-repo
 sf external-sync link-all --provider github --status active --status blocked
 sf external-sync link-all --provider github --dry-run
 sf external-sync link-all --provider github --batch-size 5
+sf external-sync link-all --provider linear --force
+sf external-sync link-all --provider linear --force --dry-run
 ```
 
 #### external-sync unlink
