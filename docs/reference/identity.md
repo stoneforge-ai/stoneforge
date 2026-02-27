@@ -198,11 +198,11 @@ const result = checkTimeTolerance(signedAt, 60000);  // 1 minute
 
 ### Resolving Actor
 
+> **Internal API:** `resolveActor` and `ActorSource` are not exported from `@stoneforge/quarry`'s public package index. They are used internally by the CLI and API layer for actor resolution.
+
 ```typescript
-// Note: resolveActor and ActorSource are internal to quarry and not
-// re-exported from the public package index. They are used internally
-// by the CLI and API for actor resolution.
-import { resolveActor, type ActorSource } from '@stoneforge/quarry/src/systems/identity';
+// Internal — import path requires Bun workspace source resolution
+// import { resolveActor, type ActorSource } from 'packages/quarry/src/systems/identity';
 
 const context = resolveActor({
   explicitActor: 'agent-1',     // Highest priority
@@ -228,9 +228,11 @@ const context = resolveActor({
 
 ### Validate Actor
 
+> **Internal API:** `validateSoftActor` is not exported from `@stoneforge/quarry`'s public package index.
+
 ```typescript
-// Note: Internal function, not in public API index
-import { validateSoftActor } from '@stoneforge/quarry/src/systems/identity';
+// Internal — not available via standard package imports
+// See: packages/quarry/src/systems/identity.ts
 
 const result = await validateSoftActor(actor, {
   lookupEntity,
@@ -244,9 +246,11 @@ if (result.valid) {
 
 ## Verification Middleware
 
+> **Internal API:** `createVerificationMiddleware` is not exported from `@stoneforge/quarry`'s public package index.
+
 ```typescript
-// Note: Internal function, not in public API index
-import { createVerificationMiddleware } from '@stoneforge/quarry/src/systems/identity';
+// Internal — not available via standard package imports
+// See: packages/quarry/src/systems/identity.ts
 
 const middleware = createVerificationMiddleware({
   lookupEntity: (actor) => api.lookupEntityByName(actor),

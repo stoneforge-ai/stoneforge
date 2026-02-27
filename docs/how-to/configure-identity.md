@@ -136,9 +136,14 @@ const signedRequest = await createSignedRequest(
 
 ### Using Middleware
 
+> **Internal API:** `createVerificationMiddleware` is not exported from `@stoneforge/quarry`'s public package index — it is used internally by the CLI and server layer. The example below shows how it works conceptually. For request verification in your own code, use the public `verifySignature` function instead (see [Manual Verification](#manual-verification) below).
+
 ```typescript
 import { IdentityMode } from '@stoneforge/quarry';
-import { createVerificationMiddleware } from '@stoneforge/quarry/systems/identity';
+
+// createVerificationMiddleware is an internal API.
+// It is not available via standard package imports.
+// See: packages/quarry/src/systems/identity.ts
 
 const middleware = createVerificationMiddleware({
   lookupEntity: async (actor) => {
