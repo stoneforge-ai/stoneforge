@@ -54,7 +54,7 @@ import { createTimestamp } from '@stoneforge/core';
 import { createHash } from 'crypto';
 import { computeContentHashSync } from '../sync/hash.js';
 import type { ProviderRegistry } from './provider-registry.js';
-import { taskToExternalTask, getFieldMapConfigForProvider } from './adapters/task-sync-adapter.js';
+import { taskToExternalTask, externalTaskToTaskUpdates, getFieldMapConfigForProvider } from './adapters/task-sync-adapter.js';
 
 // ============================================================================
 // Types
@@ -635,17 +635,26 @@ export class SyncEngine {
       return 'pulled';
     }
 
-    // Apply remote changes to local element
-    const updates = this.externalItemToUpdates(externalItem);
+    // Apply remote changes to local element using provider field map config.
+    // Pass the existing task for diff mode (only changed fields are returned).
+    const updates = this.externalItemToUpdates(externalItem, localElement as unknown as Task);
     const updatedSyncState: ExternalSyncState = {
       ...syncState,
       lastPulledAt: now,
       lastPulledHash: remoteContentKey,
     };
 
+    // Merge metadata: preserve existing metadata, add any from updates
+    // (e.g., _pendingAssignee), and set the updated sync state.
+    const updatesMetadata = (updates.metadata ?? {}) as Record<string, unknown>;
+    const mergedMetadata = setExternalSyncState(
+      { ...localElement.metadata, ...updatesMetadata },
+      updatedSyncState
+    );
+
     await this.api.update(localElement.id, {
       ...updates,
-      metadata: setExternalSyncState(localElement.metadata, updatedSyncState),
+      metadata: mergedMetadata,
     } as Partial<Element>);
 
     return 'pulled';
@@ -730,43 +739,18 @@ export class SyncEngine {
 
   /**
    * Convert an ExternalTask to partial updates for applying to a local element.
-   * Maps external fields to Stoneforge task format.
+   *
+   * Delegates to externalTaskToTaskUpdates() from task-sync-adapter.ts, which
+   * uses the provider's TaskSyncFieldMapConfig for correct status, priority,
+   * taskType, and tag mapping. The provider is looked up from item.provider.
+   *
+   * @param item - The external task to convert
+   * @param existingTask - The existing local task (for diff mode), or undefined
+   * @returns Partial<Task> with the mapped fields
    */
-  private externalItemToUpdates(item: ExternalTask): Record<string, unknown> {
-    const updates: Record<string, unknown> = {};
-
-    // Map title
-    if (item.title) {
-      updates.title = item.title;
-    }
-
-    // Map state → status
-    if (item.state === 'closed') {
-      updates.status = 'closed';
-    } else if (item.state === 'open') {
-      // Only set to 'open' if currently in a closed state — don't override in_progress etc.
-      // The caller should handle this nuance; for now we just pass the mapped value
-      updates.status = 'open';
-    }
-
-    // Map labels → tags
-    if (item.labels && item.labels.length > 0) {
-      updates.tags = [...item.labels];
-    }
-
-    // Map external URL
-    if (item.url) {
-      updates.externalRef = item.url;
-    }
-
-    // Map priority from providers with native priority support (e.g., Linear).
-    // The priority value is already in Stoneforge format (1-5), converted by
-    // the adapter when constructing the ExternalTask.
-    if (item.priority !== undefined) {
-      updates.priority = item.priority;
-    }
-
-    return updates;
+  private externalItemToUpdates(item: ExternalTask, existingTask?: Task): Partial<Task> {
+    const config = getFieldMapConfigForProvider(item.provider);
+    return externalTaskToTaskUpdates(item, existingTask, config);
   }
 
   // --------------------------------------------------------------------------
@@ -793,23 +777,24 @@ export class SyncEngine {
       adapterType: 'task',
     };
 
-    const closedStatuses = ['closed'];
-    const status = closedStatuses.includes(item.state) ? 'closed' : 'open';
+    // Use the provider's field map config for correct status, priority,
+    // taskType, and tag mapping — instead of hardcoded open/closed.
+    const taskUpdates = this.externalItemToUpdates(item);
+
+    // Merge metadata from field mapping (e.g., _pendingAssignee) with sync state
+    const taskMetadata = (taskUpdates.metadata ?? {}) as Record<string, unknown>;
 
     const createInput: Record<string, unknown> = {
       type: 'task',
-      title: item.title,
-      status,
-      tags: [...item.labels],
-      externalRef: item.url,
+      title: taskUpdates.title ?? item.title,
+      status: taskUpdates.status ?? 'open',
+      priority: taskUpdates.priority,
+      taskType: taskUpdates.taskType,
+      tags: taskUpdates.tags ?? [...item.labels],
+      externalRef: taskUpdates.externalRef ?? item.url,
       createdBy: 'system',
-      metadata: { _externalSync: syncState },
+      metadata: { ...taskMetadata, _externalSync: syncState },
     };
-
-    // Include priority from providers with native priority support (e.g., Linear)
-    if (item.priority !== undefined) {
-      createInput.priority = item.priority;
-    }
 
     const element = await this.api.create<Element>(createInput);
 

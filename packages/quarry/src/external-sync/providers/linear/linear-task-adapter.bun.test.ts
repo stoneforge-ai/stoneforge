@@ -334,10 +334,11 @@ describe('Label and Tag Mapping', () => {
       const result = await adapter.getIssue('ENG', 'issue-uuid-1');
 
       expect(result).not.toBeNull();
-      expect(result!.labels).toEqual(['bug', 'type:feature', 'high-priority']);
+      // Labels include adapter-injected sf:status:* label from workflow state type
+      expect(result!.labels).toEqual(['bug', 'type:feature', 'high-priority', 'sf:status:in-progress']);
     });
 
-    test('handles empty labels', async () => {
+    test('handles empty labels (still includes injected status label)', async () => {
       const api = createMockApiClient();
       const issue = createMockIssue({
         labels: { nodes: [] },
@@ -350,7 +351,8 @@ describe('Label and Tag Mapping', () => {
       const result = await adapter.getIssue('ENG', 'issue-uuid-1');
 
       expect(result).not.toBeNull();
-      expect(result!.labels).toEqual([]);
+      // Even with no user labels, the adapter injects sf:status:* from workflow state type
+      expect(result!.labels).toEqual(['sf:status:in-progress']);
     });
   });
 });
@@ -1124,7 +1126,8 @@ describe('LinearTaskAdapter', () => {
       expect(result).not.toBeNull();
       expect(result!.body).toBeUndefined();
       expect(result!.assignees).toEqual([]);
-      expect(result!.labels).toEqual([]);
+      // Still includes adapter-injected sf:status:* label from workflow state type
+      expect(result!.labels).toEqual(['sf:status:in-progress']);
     });
 
     test('issue with all state types preserves state info in raw', async () => {

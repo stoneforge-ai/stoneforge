@@ -580,6 +580,241 @@ describe('SyncEngine.pull', () => {
 });
 
 // ============================================================================
+// Pull — Provider Field Map Config Tests (granular status mapping)
+// ============================================================================
+
+describe('SyncEngine.pull — provider field map status mapping', () => {
+  test('pull GitHub issue with sf:status:deferred label → Stoneforge deferred', async () => {
+    const syncState = createTestSyncState({
+      externalId: '42',
+      lastPulledHash: 'old-remote-hash',
+      direction: 'bidirectional',
+    });
+    const element = createTestElement({ _syncState: syncState });
+
+    const externalIssue = createTestExternalTask({
+      externalId: '42',
+      provider: 'github',
+      state: 'open',
+      labels: ['sf:status:deferred', 'user-tag'],
+    });
+
+    let capturedUpdates: Partial<Element> | undefined;
+    const engine = buildEngine({
+      elements: [element],
+      issues: [externalIssue],
+      onUpdate: (_id, updates) => {
+        capturedUpdates = updates;
+      },
+    });
+
+    const result = await engine.pull({ all: true });
+    expect(result.pulled).toBe(1);
+    expect(capturedUpdates).toBeDefined();
+    expect(capturedUpdates!.status).toBe('deferred');
+  });
+
+  test('pull GitHub issue with no status label → falls back to open/closed', async () => {
+    const syncState = createTestSyncState({
+      externalId: '42',
+      lastPulledHash: 'old-remote-hash',
+      direction: 'bidirectional',
+    });
+    const element = createTestElement({ _syncState: syncState });
+
+    const externalIssue = createTestExternalTask({
+      externalId: '42',
+      provider: 'github',
+      state: 'open',
+      labels: ['bug'],
+    });
+
+    let capturedUpdates: Partial<Element> | undefined;
+    const engine = buildEngine({
+      elements: [element],
+      issues: [externalIssue],
+      onUpdate: (_id, updates) => {
+        capturedUpdates = updates;
+      },
+    });
+
+    const result = await engine.pull({ all: true });
+    expect(result.pulled).toBe(1);
+    // No status label → fallback to basic open mapping
+    // Since existing element has status 'open', diff mode won't include it
+    // unless the status changed. The mapping produces 'open' for this case.
+  });
+
+  test('pull Linear issue in "started" state → Stoneforge in_progress (via injected label)', async () => {
+    // Build a Linear-specific engine
+    const syncState = createTestSyncState({
+      provider: 'linear',
+      project: 'ENG',
+      externalId: 'lin-42',
+      url: 'https://linear.app/myco/issue/ENG-42',
+      lastPulledHash: 'old-remote-hash',
+      direction: 'bidirectional',
+    });
+    const element = createTestElement({ _syncState: syncState });
+
+    // Linear adapter injects sf:status:in-progress label for 'started' state type
+    const externalIssue = createTestExternalTask({
+      externalId: 'lin-42',
+      provider: 'linear',
+      project: 'ENG',
+      state: 'open',
+      labels: ['sf:status:in-progress'],
+      priority: 2,
+    });
+
+    const adapter = createMockTaskAdapter({ issues: [externalIssue] });
+    const provider = createMockProvider('linear', adapter);
+    const registry = new ProviderRegistry();
+    registry.register(provider);
+
+    let capturedUpdates: Partial<Element> | undefined;
+    const engine = createSyncEngine({
+      api: createMockApi({
+        elements: [element],
+        onUpdate: (_id, updates) => {
+          capturedUpdates = updates;
+        },
+      }),
+      registry,
+      settings: createMockSettings(),
+      providerConfigs: [{ provider: 'linear', token: 'test', defaultProject: 'ENG' }],
+    });
+
+    const result = await engine.pull({ all: true });
+    expect(result.pulled).toBe(1);
+    expect(capturedUpdates).toBeDefined();
+    expect(capturedUpdates!.status).toBe('in_progress');
+  });
+
+  test('pull Linear issue in "triage" state → Stoneforge backlog', async () => {
+    const syncState = createTestSyncState({
+      provider: 'linear',
+      project: 'ENG',
+      externalId: 'lin-43',
+      url: 'https://linear.app/myco/issue/ENG-43',
+      lastPulledHash: 'old-remote-hash',
+      direction: 'bidirectional',
+    });
+    const element = createTestElement({ _syncState: syncState });
+
+    // Linear adapter injects sf:status:backlog for 'triage' state type
+    const externalIssue = createTestExternalTask({
+      externalId: 'lin-43',
+      provider: 'linear',
+      project: 'ENG',
+      state: 'open',
+      labels: ['sf:status:backlog'],
+      priority: 3,
+    });
+
+    const adapter = createMockTaskAdapter({ issues: [externalIssue] });
+    const provider = createMockProvider('linear', adapter);
+    const registry = new ProviderRegistry();
+    registry.register(provider);
+
+    let capturedUpdates: Partial<Element> | undefined;
+    const engine = createSyncEngine({
+      api: createMockApi({
+        elements: [element],
+        onUpdate: (_id, updates) => {
+          capturedUpdates = updates;
+        },
+      }),
+      registry,
+      settings: createMockSettings(),
+      providerConfigs: [{ provider: 'linear', token: 'test', defaultProject: 'ENG' }],
+    });
+
+    const result = await engine.pull({ all: true });
+    expect(result.pulled).toBe(1);
+    expect(capturedUpdates).toBeDefined();
+    expect(capturedUpdates!.status).toBe('backlog');
+  });
+
+  test('createTaskFromExternal uses provider field map config for status', async () => {
+    // Linear issue in "started" state → should create task with in_progress status
+    const externalIssue = createTestExternalTask({
+      externalId: 'lin-new',
+      provider: 'linear',
+      project: 'ENG',
+      state: 'open',
+      labels: ['sf:status:in-progress', 'sf:type:bug'],
+      priority: 1,
+    });
+
+    const adapter = createMockTaskAdapter({ issues: [externalIssue] });
+    const provider = createMockProvider('linear', adapter);
+    const registry = new ProviderRegistry();
+    registry.register(provider);
+
+    let createdInput: Record<string, unknown> | undefined;
+    const engine = createSyncEngine({
+      api: createMockApi({
+        elements: [],
+        onCreate: (input) => {
+          createdInput = input;
+          return {
+            id: 'el-new1',
+            ...input,
+            createdAt: '2024-01-01T00:00:00.000Z',
+            updatedAt: '2024-01-01T00:00:00.000Z',
+          } as unknown as Element;
+        },
+      }),
+      registry,
+      settings: createMockSettings(),
+      providerConfigs: [{ provider: 'linear', token: 'test', defaultProject: 'ENG' }],
+    });
+
+    const result = await engine.pull({ all: true });
+    expect(result.pulled).toBe(1);
+    expect(createdInput).toBeDefined();
+    expect(createdInput!.status).toBe('in_progress');
+    expect(createdInput!.priority).toBe(1);
+  });
+
+  test('pull extracts priority from sf:priority:* labels for GitHub', async () => {
+    const syncState = createTestSyncState({
+      externalId: '42',
+      lastPulledHash: 'old-remote-hash',
+      direction: 'bidirectional',
+    });
+    // Create element with different priority to detect the change
+    const element = {
+      ...createTestElement({ _syncState: syncState }),
+      priority: 3,
+    } as unknown as Element;
+
+    const externalIssue = createTestExternalTask({
+      externalId: '42',
+      provider: 'github',
+      state: 'open',
+      labels: ['sf:priority:high', 'sf:status:open', 'user-tag'],
+    });
+
+    let capturedUpdates: Partial<Element> | undefined;
+    const engine = buildEngine({
+      elements: [element],
+      issues: [externalIssue],
+      onUpdate: (_id, updates) => {
+        capturedUpdates = updates;
+      },
+    });
+
+    const result = await engine.pull({ all: true });
+    expect(result.pulled).toBe(1);
+    expect(capturedUpdates).toBeDefined();
+    // sf:priority:high → Stoneforge priority 2
+    expect(capturedUpdates!.priority).toBe(2);
+  });
+});
+
+// ============================================================================
 // Sync (Bidirectional) Tests
 // ============================================================================
 

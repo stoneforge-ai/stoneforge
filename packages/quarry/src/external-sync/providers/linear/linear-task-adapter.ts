@@ -29,6 +29,7 @@ import {
   linearPriorityToStoneforge,
   stoneforgePriorityToLinear,
   linearStateTypeToStatus,
+  linearStateTypeToStatusLabel,
   statusToLinearStateType,
   shouldAddBlockedLabel,
 } from './linear-field-map.js';
@@ -182,6 +183,10 @@ export class LinearTaskAdapter implements TaskSyncAdapter {
 
   /**
    * Converts a Linear issue API response to the normalized ExternalTask format.
+   *
+   * Injects a synthetic sf:status:* label based on the workflow state type.
+   * This allows the generic field mapping system (stateToStatus) to extract
+   * granular statuses without the sync engine needing Linear-specific logic.
    */
   private linearIssueToExternalTask(issue: LinearIssue, project: string): ExternalTask {
     // Map state type to open/closed for ExternalTask's binary state
@@ -190,6 +195,12 @@ export class LinearTaskAdapter implements TaskSyncAdapter {
 
     // Collect labels as string names
     const labels = issue.labels.nodes.map((label) => label.name);
+
+    // Inject a sf:status:* label based on workflow state type.
+    // This communicates the granular Linear state through the generic label-based
+    // field mapping system, keeping the sync engine provider-agnostic.
+    const statusLabel = linearStateTypeToStatusLabel(stateType);
+    labels.push(statusLabel);
 
     // Build assignees list (Linear supports single assignee)
     const assignees: string[] = [];

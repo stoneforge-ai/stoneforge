@@ -29,6 +29,30 @@ import type { TaskSyncFieldMapConfig } from '../../adapters/task-sync-adapter.js
 import type { LinearWorkflowState } from './linear-types.js';
 
 // ============================================================================
+// Status Label Mapping (for adapter-injected status labels)
+// ============================================================================
+
+/**
+ * Maps Stoneforge TaskStatus values to label strings.
+ * Linear doesn't natively use label-based status, but the adapter injects
+ * sf:status:* labels into ExternalTask.labels to communicate granular workflow
+ * state types through the generic field mapping system.
+ *
+ * This keeps the sync engine provider-agnostic — it reads status from labels
+ * the same way for both GitHub (user-managed labels) and Linear (adapter-injected).
+ */
+export const LINEAR_STATUS_LABELS: Record<string, string> = {
+  open: 'status:open',
+  in_progress: 'status:in-progress',
+  blocked: 'status:blocked',
+  deferred: 'status:deferred',
+  backlog: 'status:backlog',
+  review: 'status:review',
+  closed: 'status:closed',
+  tombstone: 'status:tombstone',
+};
+
+// ============================================================================
 // Priority Mapping
 // ============================================================================
 
@@ -170,6 +194,40 @@ export function shouldAddBlockedLabel(status: TaskStatus): boolean {
   return status === 'blocked';
 }
 
+/**
+ * Maps a Linear workflow state type to a sync label string (sf:status:*).
+ *
+ * The Linear adapter injects this label into ExternalTask.labels so the
+ * generic field mapping system (stateToStatus) can extract granular statuses
+ * without the sync engine needing to know about Linear-specific state types.
+ *
+ * Mapping:
+ *   triage    → sf:status:backlog
+ *   backlog   → sf:status:backlog
+ *   unstarted → sf:status:open
+ *   started   → sf:status:in-progress
+ *   completed → sf:status:closed
+ *   canceled  → sf:status:closed
+ */
+export function linearStateTypeToStatusLabel(stateType: LinearStateType): string {
+  switch (stateType) {
+    case 'triage':
+      return 'sf:status:backlog';
+    case 'backlog':
+      return 'sf:status:backlog';
+    case 'unstarted':
+      return 'sf:status:open';
+    case 'started':
+      return 'sf:status:in-progress';
+    case 'completed':
+      return 'sf:status:closed';
+    case 'canceled':
+      return 'sf:status:closed';
+    default:
+      return 'sf:status:open';
+  }
+}
+
 // ============================================================================
 // TaskFieldMapConfig (for TaskSyncAdapter.getFieldMapConfig())
 // ============================================================================
@@ -243,6 +301,11 @@ export function createLinearFieldMapConfig(): TaskFieldMapConfig {
  * Linear has native priority, so priorityLabels are set to empty strings
  * (priority is mapped directly via the numeric field, not via labels).
  * The adapter handles priority conversion separately.
+ *
+ * Status mapping uses adapter-injected sf:status:* labels. The Linear adapter
+ * injects these labels based on the workflow state type (e.g., started →
+ * sf:status:in-progress), allowing the generic stateToStatus function to
+ * extract granular statuses without coupling the sync engine to Linear.
  */
 export function createLinearSyncFieldMapConfig(): TaskSyncFieldMapConfig {
   return {
@@ -263,6 +326,11 @@ export function createLinearSyncFieldMapConfig(): TaskSyncFieldMapConfig {
       chore: 'type:chore',
     } as Record<string, string>,
 
+    // Status labels for reading adapter-injected sf:status:* labels on pull.
+    // The Linear adapter injects these labels based on workflow state type,
+    // so parseExternalLabels() and stateToStatus() can extract granular statuses.
+    statusLabels: LINEAR_STATUS_LABELS,
+
     syncLabelPrefix: 'sf:',
 
     statusToState: (status: TaskStatus): 'open' | 'closed' => {
@@ -277,10 +345,28 @@ export function createLinearSyncFieldMapConfig(): TaskSyncFieldMapConfig {
       }
     },
 
-    stateToStatus: (state: 'open' | 'closed', _labels: string[]): TaskStatus => {
-      // For the shared adapter utility, basic open/closed mapping.
-      // The actual state type mapping is handled by the adapter using
-      // linearStateTypeToStatus() with the workflow state type.
+    stateToStatus: (state: 'open' | 'closed', labels: string[]): TaskStatus => {
+      // Check for adapter-injected sf:status:* labels first.
+      // The Linear adapter injects these based on workflow state type
+      // (e.g., started → sf:status:in-progress), giving us granular status
+      // without coupling the sync engine to Linear-specific state types.
+      const statusByLabel = new Map<string, TaskStatus>();
+      for (const [status, label] of Object.entries(LINEAR_STATUS_LABELS)) {
+        statusByLabel.set(label, status as TaskStatus);
+      }
+
+      const prefix = 'sf:';
+      for (const label of labels) {
+        if (label.startsWith(prefix)) {
+          const value = label.slice(prefix.length);
+          const matchedStatus = statusByLabel.get(value);
+          if (matchedStatus !== undefined) {
+            return matchedStatus;
+          }
+        }
+      }
+
+      // Fallback: basic open/closed mapping when no status label is present
       return state === 'closed' ? ('closed' as TaskStatus) : ('open' as TaskStatus);
     },
   };
