@@ -1330,9 +1330,9 @@ describe('Blocked Label — Label Management', () => {
   });
 
   describe('updateIssue label handling', () => {
-    test('adds "blocked" label to issue that does not have it', async () => {
+    test('adds "blocked" label to issue — replaces full label set', async () => {
       const api = createMockApiClient();
-      // Current issue has NO "blocked" label
+      // Current issue has NO "blocked" label, but has "bug"
       const issueWithoutBlocked = createMockIssue({
         labels: {
           nodes: [
@@ -1345,6 +1345,7 @@ describe('Blocked Label — Label Management', () => {
       );
       const adapter = new LinearTaskAdapter(api);
 
+      // Update with only "blocked" in labels (full desired label set)
       await adapter.updateIssue('ENG', 'issue-uuid-1', {
         state: 'open',
         labels: ['blocked'],
@@ -1356,9 +1357,10 @@ describe('Blocked Label — Label Management', () => {
       ];
       const input = updateCall[1] as { labelIds?: readonly string[] };
       expect(input.labelIds).toBeDefined();
-      // Should include existing label + new "blocked" label
-      expect(input.labelIds).toContain('label-uuid-bug');
+      // Desired labels = ['blocked'] → resolved to ['label-uuid-blocked']
+      // Current labels = ['label-uuid-bug'] → different → full replacement
       expect(input.labelIds).toContain('label-uuid-blocked');
+      expect(input.labelIds).not.toContain('label-uuid-bug');
     });
 
     test('removes "blocked" label when task transitions from blocked to in_progress', async () => {
@@ -1377,7 +1379,7 @@ describe('Blocked Label — Label Management', () => {
       );
       const adapter = new LinearTaskAdapter(api);
 
-      // Update WITHOUT "blocked" in labels (task is now in_progress)
+      // Update WITHOUT "blocked" in labels (task is now in_progress, no labels)
       await adapter.updateIssue('ENG', 'issue-uuid-1', {
         state: 'open',
         labels: [],
@@ -1389,12 +1391,12 @@ describe('Blocked Label — Label Management', () => {
       ];
       const input = updateCall[1] as { labelIds?: readonly string[] };
       expect(input.labelIds).toBeDefined();
-      // Should have "bug" but NOT "blocked"
-      expect(input.labelIds).toContain('label-uuid-bug');
+      // Desired labels = [] → resolved to [] → different from current → send empty
       expect(input.labelIds).not.toContain('label-uuid-blocked');
+      expect(input.labelIds).not.toContain('label-uuid-bug');
     });
 
-    test('does not set labelIds when blocked state has not changed (already blocked)', async () => {
+    test('does not set labelIds when label set has not changed (already blocked)', async () => {
       const api = createMockApiClient();
       // Current issue already HAS the "blocked" label
       const issueWithBlocked = createMockIssue({
@@ -1424,22 +1426,20 @@ describe('Blocked Label — Label Management', () => {
       expect(input.labelIds).toBeUndefined();
     });
 
-    test('does not set labelIds when blocked state has not changed (not blocked)', async () => {
+    test('does not set labelIds when label set has not changed (no labels)', async () => {
       const api = createMockApiClient();
-      // Current issue does NOT have "blocked" label
-      const issueWithoutBlocked = createMockIssue({
+      // Current issue has NO labels
+      const issueWithoutLabels = createMockIssue({
         labels: {
-          nodes: [
-            { id: 'label-uuid-bug', name: 'bug' },
-          ],
+          nodes: [],
         },
       });
       (api.getIssue as ReturnType<typeof mock>).mockImplementation(() =>
-        Promise.resolve(issueWithoutBlocked)
+        Promise.resolve(issueWithoutLabels)
       );
       const adapter = new LinearTaskAdapter(api);
 
-      // Update WITHOUT "blocked" in labels (not blocked)
+      // Update WITHOUT any labels (still no labels)
       await adapter.updateIssue('ENG', 'issue-uuid-1', {
         state: 'open',
         labels: [],
@@ -1452,6 +1452,413 @@ describe('Blocked Label — Label Management', () => {
       const input = updateCall[1] as { labelIds?: readonly string[] };
       // No label change needed — should not include labelIds
       expect(input.labelIds).toBeUndefined();
+    });
+  });
+});
+
+// ============================================================================
+// Label Sync — Type Labels and User Tags
+// ============================================================================
+
+describe('Label Sync — Type Labels and User Tags', () => {
+  describe('createIssue with type labels', () => {
+    test('sf:type:task label is synced as a Linear label', async () => {
+      const api = createMockApiClient();
+      const adapter = new LinearTaskAdapter(api);
+
+      await adapter.createIssue('ENG', {
+        title: 'Task with type',
+        state: 'open',
+        labels: ['sf:type:task'],
+        assignees: [],
+      });
+
+      const createCall = (api.createIssue as ReturnType<typeof mock>).mock.calls[0] as [unknown];
+      const input = createCall[0] as { labelIds?: readonly string[] };
+      expect(input.labelIds).toBeDefined();
+      expect(input.labelIds).toHaveLength(1);
+      // sf:type:task doesn't exist in workspace labels, so it gets auto-created
+      expect(api.createLabel).toHaveBeenCalledWith('sf:type:task', 'team-uuid-1');
+    });
+
+    test('sf:type:bug label is synced as a Linear label', async () => {
+      const api = createMockApiClient();
+      // Add sf:type:bug to workspace labels so it's found in cache
+      (api.getLabels as ReturnType<typeof mock>).mockImplementation(() =>
+        Promise.resolve([
+          ...mockLabels,
+          { id: 'label-uuid-sf-type-bug', name: 'sf:type:bug' },
+        ])
+      );
+      const adapter = new LinearTaskAdapter(api);
+
+      await adapter.createIssue('ENG', {
+        title: 'Bug report',
+        state: 'open',
+        labels: ['sf:type:bug'],
+        assignees: [],
+      });
+
+      const createCall = (api.createIssue as ReturnType<typeof mock>).mock.calls[0] as [unknown];
+      const input = createCall[0] as { labelIds?: readonly string[] };
+      expect(input.labelIds).toBeDefined();
+      expect(input.labelIds).toContain('label-uuid-sf-type-bug');
+      // Should NOT have created a new label (it already exists)
+      expect(api.createLabel).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('createIssue with user tags', () => {
+    test('user tags are synced as Linear labels', async () => {
+      const api = createMockApiClient();
+      const adapter = new LinearTaskAdapter(api);
+
+      await adapter.createIssue('ENG', {
+        title: 'Tagged task',
+        state: 'open',
+        labels: ['my-custom-tag', 'another-tag'],
+        assignees: [],
+      });
+
+      const createCall = (api.createIssue as ReturnType<typeof mock>).mock.calls[0] as [unknown];
+      const input = createCall[0] as { labelIds?: readonly string[] };
+      expect(input.labelIds).toBeDefined();
+      expect(input.labelIds).toHaveLength(2);
+      // Both tags should be auto-created since they don't exist in workspace
+      expect(api.createLabel).toHaveBeenCalledTimes(2);
+      expect(api.createLabel).toHaveBeenCalledWith('my-custom-tag', 'team-uuid-1');
+      expect(api.createLabel).toHaveBeenCalledWith('another-tag', 'team-uuid-1');
+    });
+
+    test('existing user tags resolve from cache without creation', async () => {
+      const api = createMockApiClient();
+      (api.getLabels as ReturnType<typeof mock>).mockImplementation(() =>
+        Promise.resolve([
+          ...mockLabels,
+          { id: 'label-uuid-my-tag', name: 'my-tag' },
+        ])
+      );
+      const adapter = new LinearTaskAdapter(api);
+
+      await adapter.createIssue('ENG', {
+        title: 'Tagged task',
+        state: 'open',
+        labels: ['my-tag'],
+        assignees: [],
+      });
+
+      const createCall = (api.createIssue as ReturnType<typeof mock>).mock.calls[0] as [unknown];
+      const input = createCall[0] as { labelIds?: readonly string[] };
+      expect(input.labelIds).toBeDefined();
+      expect(input.labelIds).toContain('label-uuid-my-tag');
+      expect(api.createLabel).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('createIssue with mixed labels', () => {
+    test('syncs type labels, user tags, and blocked — filters out priority and status', async () => {
+      const api = createMockApiClient();
+      const adapter = new LinearTaskAdapter(api);
+
+      await adapter.createIssue('ENG', {
+        title: 'Mixed labels task',
+        state: 'open',
+        labels: [
+          'sf:type:bug',           // should be synced
+          'sf:priority:high',      // should be filtered out (native priority)
+          'sf:status:in-progress', // should be filtered out (native workflow state)
+          'blocked',               // should be synced
+          'my-user-tag',           // should be synced
+        ],
+        assignees: [],
+      });
+
+      const createCall = (api.createIssue as ReturnType<typeof mock>).mock.calls[0] as [unknown];
+      const input = createCall[0] as { labelIds?: readonly string[] };
+      expect(input.labelIds).toBeDefined();
+      // Should have 3 labels: sf:type:bug, blocked, my-user-tag
+      expect(input.labelIds).toHaveLength(3);
+    });
+
+    test('sf:priority:* labels are not synced as Linear labels', async () => {
+      const api = createMockApiClient();
+      const adapter = new LinearTaskAdapter(api);
+
+      await adapter.createIssue('ENG', {
+        title: 'Priority test',
+        state: 'open',
+        labels: ['sf:priority:high', 'sf:priority:critical'],
+        assignees: [],
+      });
+
+      const createCall = (api.createIssue as ReturnType<typeof mock>).mock.calls[0] as [unknown];
+      const input = createCall[0] as { labelIds?: readonly string[] };
+      // No syncable labels → labelIds should not be set
+      expect(input.labelIds).toBeUndefined();
+    });
+
+    test('sf:status:* labels are not synced as Linear labels', async () => {
+      const api = createMockApiClient();
+      const adapter = new LinearTaskAdapter(api);
+
+      await adapter.createIssue('ENG', {
+        title: 'Status test',
+        state: 'open',
+        labels: ['sf:status:open', 'sf:status:in-progress'],
+        assignees: [],
+      });
+
+      const createCall = (api.createIssue as ReturnType<typeof mock>).mock.calls[0] as [unknown];
+      const input = createCall[0] as { labelIds?: readonly string[] };
+      // No syncable labels → labelIds should not be set
+      expect(input.labelIds).toBeUndefined();
+    });
+  });
+
+  describe('createIssue label auto-creation', () => {
+    test('labels that do not exist in Linear are auto-created', async () => {
+      const api = createMockApiClient();
+      // Empty workspace labels
+      (api.getLabels as ReturnType<typeof mock>).mockImplementation(() =>
+        Promise.resolve([])
+      );
+      const adapter = new LinearTaskAdapter(api);
+
+      await adapter.createIssue('ENG', {
+        title: 'New labels',
+        state: 'open',
+        labels: ['sf:type:task', 'new-tag'],
+        assignees: [],
+      });
+
+      // Both labels should be auto-created
+      expect(api.createLabel).toHaveBeenCalledTimes(2);
+      expect(api.createLabel).toHaveBeenCalledWith('sf:type:task', 'team-uuid-1');
+      expect(api.createLabel).toHaveBeenCalledWith('new-tag', 'team-uuid-1');
+    });
+  });
+
+  describe('updateIssue with type labels and user tags', () => {
+    test('adds a new user tag to an issue', async () => {
+      const api = createMockApiClient();
+      // Current issue has no labels
+      const issue = createMockIssue({
+        labels: { nodes: [] },
+      });
+      (api.getIssue as ReturnType<typeof mock>).mockImplementation(() =>
+        Promise.resolve(issue)
+      );
+      const adapter = new LinearTaskAdapter(api);
+
+      await adapter.updateIssue('ENG', 'issue-uuid-1', {
+        labels: ['new-tag'],
+      });
+
+      const updateCall = (api.updateIssue as ReturnType<typeof mock>).mock.calls[0] as [
+        string,
+        unknown,
+      ];
+      const input = updateCall[1] as { labelIds?: readonly string[] };
+      expect(input.labelIds).toBeDefined();
+      expect(input.labelIds).toHaveLength(1);
+      // new-tag should be auto-created
+      expect(api.createLabel).toHaveBeenCalledWith('new-tag', 'team-uuid-1');
+    });
+
+    test('removes a user tag from an issue', async () => {
+      const api = createMockApiClient();
+      // Current issue has "my-tag" label
+      (api.getLabels as ReturnType<typeof mock>).mockImplementation(() =>
+        Promise.resolve([
+          ...mockLabels,
+          { id: 'label-uuid-my-tag', name: 'my-tag' },
+        ])
+      );
+      const issue = createMockIssue({
+        labels: { nodes: [{ id: 'label-uuid-my-tag', name: 'my-tag' }] },
+      });
+      (api.getIssue as ReturnType<typeof mock>).mockImplementation(() =>
+        Promise.resolve(issue)
+      );
+      const adapter = new LinearTaskAdapter(api);
+
+      // Update with empty labels — removes the tag
+      await adapter.updateIssue('ENG', 'issue-uuid-1', {
+        labels: [],
+      });
+
+      const updateCall = (api.updateIssue as ReturnType<typeof mock>).mock.calls[0] as [
+        string,
+        unknown,
+      ];
+      const input = updateCall[1] as { labelIds?: readonly string[] };
+      expect(input.labelIds).toBeDefined();
+      // Should be empty — the tag was removed
+      expect(input.labelIds).toHaveLength(0);
+    });
+
+    test('replaces labels on update with new set', async () => {
+      const api = createMockApiClient();
+      (api.getLabels as ReturnType<typeof mock>).mockImplementation(() =>
+        Promise.resolve([
+          ...mockLabels,
+          { id: 'label-uuid-old-tag', name: 'old-tag' },
+        ])
+      );
+      // Current issue has "old-tag"
+      const issue = createMockIssue({
+        labels: { nodes: [{ id: 'label-uuid-old-tag', name: 'old-tag' }] },
+      });
+      (api.getIssue as ReturnType<typeof mock>).mockImplementation(() =>
+        Promise.resolve(issue)
+      );
+      const adapter = new LinearTaskAdapter(api);
+
+      // Update with new set of labels
+      await adapter.updateIssue('ENG', 'issue-uuid-1', {
+        labels: ['sf:type:bug', 'new-tag'],
+      });
+
+      const updateCall = (api.updateIssue as ReturnType<typeof mock>).mock.calls[0] as [
+        string,
+        unknown,
+      ];
+      const input = updateCall[1] as { labelIds?: readonly string[] };
+      expect(input.labelIds).toBeDefined();
+      // Should contain the two new labels, not the old one
+      expect(input.labelIds).toHaveLength(2);
+      expect(input.labelIds).not.toContain('label-uuid-old-tag');
+    });
+
+    test('does not set labelIds when labels are unchanged', async () => {
+      const api = createMockApiClient();
+      (api.getLabels as ReturnType<typeof mock>).mockImplementation(() =>
+        Promise.resolve([
+          ...mockLabels,
+          { id: 'label-uuid-my-tag', name: 'my-tag' },
+          { id: 'label-uuid-sf-type-task', name: 'sf:type:task' },
+        ])
+      );
+      // Current issue has "my-tag" and "sf:type:task"
+      const issue = createMockIssue({
+        labels: {
+          nodes: [
+            { id: 'label-uuid-my-tag', name: 'my-tag' },
+            { id: 'label-uuid-sf-type-task', name: 'sf:type:task' },
+          ],
+        },
+      });
+      (api.getIssue as ReturnType<typeof mock>).mockImplementation(() =>
+        Promise.resolve(issue)
+      );
+      const adapter = new LinearTaskAdapter(api);
+
+      // Update with same labels
+      await adapter.updateIssue('ENG', 'issue-uuid-1', {
+        labels: ['sf:type:task', 'my-tag'],
+      });
+
+      const updateCall = (api.updateIssue as ReturnType<typeof mock>).mock.calls[0] as [
+        string,
+        unknown,
+      ];
+      const input = updateCall[1] as { labelIds?: readonly string[] };
+      // No label change needed
+      expect(input.labelIds).toBeUndefined();
+    });
+
+    test('filters out sf:priority:* labels on update', async () => {
+      const api = createMockApiClient();
+      // Current issue has no labels
+      const issue = createMockIssue({
+        labels: { nodes: [] },
+      });
+      (api.getIssue as ReturnType<typeof mock>).mockImplementation(() =>
+        Promise.resolve(issue)
+      );
+      const adapter = new LinearTaskAdapter(api);
+
+      // Update with only priority labels — should be filtered
+      await adapter.updateIssue('ENG', 'issue-uuid-1', {
+        labels: ['sf:priority:high'],
+      });
+
+      const updateCall = (api.updateIssue as ReturnType<typeof mock>).mock.calls[0] as [
+        string,
+        unknown,
+      ];
+      const input = updateCall[1] as { labelIds?: readonly string[] };
+      // Both are empty → no change → undefined
+      expect(input.labelIds).toBeUndefined();
+    });
+
+    test('does not send labelIds when labels field is not in update', async () => {
+      const api = createMockApiClient();
+      const adapter = new LinearTaskAdapter(api);
+
+      // Update title only — no labels field
+      await adapter.updateIssue('ENG', 'issue-uuid-1', {
+        title: 'Updated Title',
+      });
+
+      const updateCall = (api.updateIssue as ReturnType<typeof mock>).mock.calls[0] as [
+        string,
+        unknown,
+      ];
+      const input = updateCall[1] as { labelIds?: readonly string[] };
+      // labels was not in update — should not compute or send labelIds
+      expect(input.labelIds).toBeUndefined();
+    });
+  });
+
+  describe('combined blocked + type + user tag labels', () => {
+    test('createIssue syncs blocked, type label, and user tag together', async () => {
+      const api = createMockApiClient();
+      const adapter = new LinearTaskAdapter(api);
+
+      await adapter.createIssue('ENG', {
+        title: 'Complex labels',
+        state: 'open',
+        labels: ['blocked', 'sf:type:bug', 'my-tag', 'sf:priority:high', 'sf:status:blocked'],
+        assignees: [],
+      });
+
+      const createCall = (api.createIssue as ReturnType<typeof mock>).mock.calls[0] as [unknown];
+      const input = createCall[0] as { labelIds?: readonly string[]; stateId?: string };
+      expect(input.labelIds).toBeDefined();
+      // 3 syncable labels: blocked, sf:type:bug, my-tag
+      // sf:priority:high and sf:status:blocked are filtered out
+      expect(input.labelIds).toHaveLength(3);
+      // Blocked task should map to 'started' state type
+      expect(input.stateId).toBe('state-uuid-started');
+    });
+
+    test('updateIssue syncs all label types on change', async () => {
+      const api = createMockApiClient();
+      // Current issue has only "blocked" label
+      const issue = createMockIssue({
+        labels: { nodes: [{ id: 'label-uuid-blocked', name: 'blocked' }] },
+      });
+      (api.getIssue as ReturnType<typeof mock>).mockImplementation(() =>
+        Promise.resolve(issue)
+      );
+      const adapter = new LinearTaskAdapter(api);
+
+      // Update: remove blocked, add type label and user tag
+      await adapter.updateIssue('ENG', 'issue-uuid-1', {
+        state: 'open',
+        labels: ['sf:type:task', 'my-tag'],
+      });
+
+      const updateCall = (api.updateIssue as ReturnType<typeof mock>).mock.calls[0] as [
+        string,
+        unknown,
+      ];
+      const input = updateCall[1] as { labelIds?: readonly string[] };
+      expect(input.labelIds).toBeDefined();
+      // Should have sf:type:task and my-tag, but NOT blocked
+      expect(input.labelIds).toHaveLength(2);
+      expect(input.labelIds).not.toContain('label-uuid-blocked');
     });
   });
 });
