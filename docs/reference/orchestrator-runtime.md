@@ -215,7 +215,7 @@ if (uwpCheck?.hasReadyTask) {
 }
 ```
 
-### Stopping and Suspending
+### Stopping, Suspending, and Interrupting
 
 ```typescript
 // Stop (terminate)
@@ -226,6 +226,9 @@ await sessionManager.stopSession(sessionId, {
 
 // Suspend (can resume later)
 await sessionManager.suspendSession(sessionId, 'Context overflow');
+
+// Interrupt (cancel current operation, keep session running)
+await sessionManager.interruptSession(sessionId);
 ```
 
 ### Session Queries
@@ -253,6 +256,33 @@ const workerHistory = await sessionManager.getSessionHistoryByRole('worker', 20)
 
 // Get previous session for role
 const previousWorker = await sessionManager.getPreviousSession('worker');
+```
+
+### User Idle Tracking
+
+```typescript
+// Record user input activity (for idle detection)
+sessionManager.recordUserInput(sessionId);
+
+// Check how long the user has been idle in an agent's active session
+const idleMs = sessionManager.getSessionUserIdleMs(agentId);
+if (idleMs !== undefined && idleMs > 300000) {
+  console.log('User idle for 5+ minutes');
+}
+```
+
+### Session Persistence
+
+```typescript
+// Persist session state to database
+await sessionManager.persistSession(sessionId);
+
+// Load session state from database for an agent
+await sessionManager.loadSessionState(agentId);
+
+// Reconcile in-memory state with database on startup
+const { reconciled, errors } = await sessionManager.reconcileOnStartup();
+console.log(`Reconciled ${reconciled} sessions, ${errors.length} errors`);
 ```
 
 ### Session Communication

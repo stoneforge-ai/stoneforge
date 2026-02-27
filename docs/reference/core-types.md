@@ -62,7 +62,7 @@ type Complexity = 1 | 2 | 3 | 4 | 5;
 
 **Key functions:**
 - `createTask(input)` - Factory
-- `updateTaskStatus(task, newStatus)` - Validated status transition
+- `updateTaskStatus(task, input)` - Validated status transition (`input: { status: TaskStatus; closeReason?: string }`)
 - `isTask(element)` - Type guard
 
 **Status transitions:**
