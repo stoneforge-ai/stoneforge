@@ -167,7 +167,7 @@ async function docCreateHandler(
       ...(options.category && { category: options.category as typeof DocumentCategory.OTHER }),
     };
 
-    const doc = await createDocument(input);
+    const doc = await createDocument(input, api.getIdGeneratorConfig());
     const created = await api.create(doc as unknown as Element & Record<string, unknown>);
 
     const mode = getOutputMode(options);

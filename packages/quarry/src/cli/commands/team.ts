@@ -92,7 +92,7 @@ async function teamCreateHandler(
       ...(tags && { tags }),
     };
 
-    const team = await createTeam(input);
+    const team = await createTeam(input, api.getIdGeneratorConfig());
     const created = await api.create(team as unknown as Element & Record<string, unknown>);
 
     const mode = getOutputMode(options);

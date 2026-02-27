@@ -74,7 +74,7 @@ async function libraryCreateHandler(
       ...(tags && { tags }),
     };
 
-    const library = await createLibrary(input);
+    const library = await createLibrary(input, api.getIdGeneratorConfig());
     const created = await api.create(library as unknown as Element & Record<string, unknown>);
 
     const mode = getOutputMode(options);

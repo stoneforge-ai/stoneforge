@@ -36,6 +36,7 @@ import type {
   Entity,
   CreateTaskInput,
   OrgChartNode,
+  IdGeneratorConfig,
 } from '@stoneforge/core';
 import {
   isDocument,
@@ -86,6 +87,7 @@ import {
 import { BlockedCacheService, createBlockedCacheService } from '../services/blocked-cache.js';
 import { PriorityService, createPriorityService } from '../services/priority-service.js';
 import { InboxService, createInboxService } from '../services/inbox.js';
+import { IdLengthCache, createIdLengthCache } from '../services/id-length-cache.js';
 import { SyncService } from '../sync/service.js';
 import { computeContentHashSync } from '../sync/hash.js';
 import type {
@@ -555,11 +557,13 @@ export class QuarryAPIImpl implements QuarryAPI {
   private syncService: SyncService;
   private inboxService: InboxService;
   private embeddingService?: EmbeddingService;
+  private idLengthCache: IdLengthCache;
   constructor(private backend: StorageBackend) {
     this.blockedCache = createBlockedCacheService(backend);
     this.priorityService = createPriorityService(backend);
     this.syncService = new SyncService(backend);
     this.inboxService = createInboxService(backend);
+    this.idLengthCache = createIdLengthCache(backend);
 
     // Set up automatic status transitions for blocked/unblocked states
     this.blockedCache.setStatusTransitionCallback({
@@ -643,6 +647,19 @@ export class QuarryAPIImpl implements QuarryAPI {
 
     // Mark as dirty for sync
     this.backend.markDirty(elementId);
+  }
+
+  /**
+   * Returns an IdGeneratorConfig with adaptive hash length and a collision
+   * checker that queries the database. Pass this to factory functions
+   * (createTask, createDocument, etc.) so generated IDs use the correct
+   * hash length and can detect/retry on collisions.
+   */
+  getIdGeneratorConfig(): IdGeneratorConfig {
+    return {
+      elementCount: this.idLengthCache.getElementCount(),
+      checkCollision: (id: ElementId) => this.get(id).then((r) => r !== null),
+    };
   }
 
   // --------------------------------------------------------------------------
@@ -1258,6 +1275,9 @@ export class QuarryAPIImpl implements QuarryAPI {
     if (isDocument(element)) {
       this.indexDocumentForFTS(element as unknown as Document);
     }
+
+    // Notify IdLengthCache so it can track growth and adjust hash length
+    this.idLengthCache.notifyCreate();
 
     return element;
   }
@@ -2096,10 +2116,12 @@ export class QuarryAPIImpl implements QuarryAPI {
     }
 
     // Create a properly-formed task using the createTask factory
+    // Pass IdGeneratorConfig so the fallback path (non-hierarchical ID)
+    // uses adaptive hash length and collision detection
     const taskElement = await createTask({
       ...taskInput,
       id: taskId,
-    });
+    }, this.getIdGeneratorConfig());
 
     const task = await this.create<T>(taskElement as unknown as Record<string, unknown> & { type: ElementType; createdBy: EntityId });
 
@@ -3896,7 +3918,7 @@ export class QuarryAPIImpl implements QuarryAPI {
       attachments: input.attachments,
       tags: input.tags,
       metadata: input.metadata,
-    });
+    }, this.getIdGeneratorConfig());
 
     // Persist the message (membership validation happens in create)
     const createdMessage = await this.create<Message>(

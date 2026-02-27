@@ -115,7 +115,7 @@ async function workflowCreateHandler(
       // playbookId would be set here when playbook lookup is implemented
     };
 
-    const workflow = await createWorkflow(input);
+    const workflow = await createWorkflow(input, api.getIdGeneratorConfig());
     const created = await api.create(workflow as unknown as Element & Record<string, unknown>);
 
     const mode = getOutputMode(options);

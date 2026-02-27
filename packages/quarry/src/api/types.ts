@@ -34,6 +34,7 @@ import type {
   Team,
   WorkflowStatus,
   OrgChartNode,
+  IdGeneratorConfig,
 } from '@stoneforge/core';
 import type { EmbeddingService } from '../services/embeddings/service.js';
 
@@ -745,6 +746,18 @@ export interface ElementInput {
  * ```
  */
 export interface QuarryAPI {
+  // --------------------------------------------------------------------------
+  // ID Generation
+  // --------------------------------------------------------------------------
+
+  /**
+   * Returns an IdGeneratorConfig with adaptive hash length and a collision
+   * checker that queries the database. Pass this to factory functions
+   * (createTask, createDocument, etc.) so generated IDs use the correct
+   * hash length and can detect/retry on collisions.
+   */
+  getIdGeneratorConfig(): IdGeneratorConfig;
+
   // --------------------------------------------------------------------------
   // CRUD Operations
   // --------------------------------------------------------------------------

@@ -236,7 +236,7 @@ async function msgSendHandler(
       createdBy: actor,
       category: DocumentCategory.MESSAGE_CONTENT,
       immutable: true,
-    });
+    }, api.getIdGeneratorConfig());
     const createdContentDoc = await api.create(contentDoc as unknown as Element & Record<string, unknown>);
 
     // Validate thread parent if specified (and not already set by --reply-to)
@@ -287,7 +287,7 @@ async function msgSendHandler(
       attachments,
       threadId,
       tags,
-    });
+    }, api.getIdGeneratorConfig());
 
     const createdMessage = await api.create<Message>(
       message as unknown as Message & Record<string, unknown>
