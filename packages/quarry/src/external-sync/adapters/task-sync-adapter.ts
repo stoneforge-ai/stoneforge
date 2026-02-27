@@ -27,7 +27,7 @@ import type {
 import type { ExternalTask, ExternalTaskInput } from '@stoneforge/core';
 import type { QuarryAPI } from '../../api/types.js';
 import { GITHUB_FIELD_MAP_CONFIG } from '../providers/github/github-field-map.js';
-import { createLinearSyncFieldMapConfig } from '../providers/linear/linear-field-map.js';
+import { createLinearSyncFieldMapConfig, shouldAddBlockedLabel } from '../providers/linear/linear-field-map.js';
 
 // ============================================================================
 // Minimal API Interface
@@ -275,12 +275,13 @@ export function buildExternalLabels(
     }
   }
 
-  // Add "blocked" label for providers without status labels (e.g., Linear).
-  // Providers like Linear map status to workflow state types but have no native
-  // "blocked" concept. This unprefixed label ensures blocked tasks are visibly
-  // marked on the external system. When statusLabels IS present (e.g., GitHub),
-  // the blocked status is already encoded via the sf:status:* label above.
-  if (!config.statusLabels && task.status === ('blocked' as TaskStatus)) {
+  // Add a plain "blocked" label when the task has blocked status.
+  // This label is used by provider adapters (e.g., LinearTaskAdapter) to detect
+  // blocked tasks and apply provider-specific handling (e.g., adding a native
+  // "blocked" label on Linear, mapping to 'started' state type instead of
+  // 'unstarted'). The label is always added regardless of statusLabels —
+  // adapters need this signal to properly handle blocked tasks.
+  if (shouldAddBlockedLabel(task.status)) {
     labels.push('blocked');
   }
 

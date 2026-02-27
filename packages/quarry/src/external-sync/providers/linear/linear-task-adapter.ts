@@ -22,7 +22,7 @@ import type {
 } from '@stoneforge/core';
 
 import type { LinearApiClient } from './linear-api.js';
-import type { LinearIssue, LinearWorkflowState, LinearTeam, LinearLabel } from './linear-types.js';
+import type { LinearIssue, LinearWorkflowState, LinearTeam } from './linear-types.js';
 import type { LinearStateType } from './linear-field-map.js';
 import {
   createLinearFieldMapConfig,
@@ -31,7 +31,6 @@ import {
   linearStateTypeToStatus,
   linearStateTypeToStatusLabel,
   statusToLinearStateType,
-  shouldAddBlockedLabel,
 } from './linear-field-map.js';
 
 // ============================================================================
