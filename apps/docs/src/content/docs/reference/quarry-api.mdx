@@ -232,7 +232,7 @@ await api.removeApproval(blockedId, blockerId, approverId);
 // Add/remove tasks
 await api.addTaskToPlan(taskId, planId);        // taskId first!
 await api.removeTaskFromPlan(taskId, planId, actor?);
-await api.createTaskInPlan(planId, { title: 'Task', priority: 2 });
+await api.createTaskInPlan(planId, { title: 'Task', priority: 2, createdBy: actorId });
 
 // Query
 const tasks = await api.getTasksInPlan(planId);
@@ -317,7 +317,7 @@ const result = await api.sendDirectMessage(senderEntityId, {
   attachments: [docId1],        // Optional
   tags: ['urgent'],             // Optional
 });
-// result.channel, result.message, result.created
+// result.channel, result.message, result.channelCreated
 ```
 
 <Aside>
@@ -367,7 +367,7 @@ const result = api.reindexAllDocumentsFTS();
 
 ```typescript
 const events = await api.getEvents(elementId);
-const allEvents = await api.listEvents({ type: 'created' });
+const allEvents = await api.listEvents({ eventType: 'created' });
 const count = await api.countEvents({ elementId });
 
 // Document versioning

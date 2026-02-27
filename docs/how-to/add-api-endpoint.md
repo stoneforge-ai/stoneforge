@@ -259,13 +259,13 @@ app.post('/api/features', async (c) => {
 ```typescript
 app.get('/api/search', async (c) => {
   const q = c.req.query('q');
-  const types = c.req.query('types')?.split(',');
+  const type = c.req.query('types')?.split(',');
 
   if (!q) {
     return c.json({ error: 'Query required' }, 400);
   }
 
-  const results = await api.search(q, { types });
+  const results = await api.search(q, { type });
   return c.json(results);
 });
 ```

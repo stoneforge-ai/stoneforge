@@ -408,7 +408,7 @@ import {
 } from '@stoneforge/smithy';
 ```
 
-> **Note:** `CodexAgentProvider` is registered automatically in the provider registry at runtime but is not re-exported from the public `@stoneforge/smithy` API. Access it via `registry.get('codex')` instead of direct import.
+> **Note:** `CodexAgentProvider` is registered automatically in the provider registry at runtime but is not re-exported from the main `@stoneforge/smithy` entry point. You can import it via the sub-path `import { CodexAgentProvider } from '@stoneforge/smithy/providers'`, or access it via `registry.get('codex')`.
 
 ### AgentProviderRegistry
 

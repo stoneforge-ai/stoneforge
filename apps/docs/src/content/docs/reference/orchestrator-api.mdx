@@ -177,9 +177,15 @@ interface OrchestratorTaskMeta {
   mergeFailureReason?: string;
   testRunCount?: number;
   lastTestResult?: TestResult;
+  reconciliationCount?: number;
+  stuckMergeRecoveryCount?: number;
+  stewardRecoveryCount?: number;
+  resumeCount?: number;
+  reportedIssues?: readonly string[];
   // Handoff context
   handoffBranch?: string;
   handoffWorktree?: string;
+  lastSessionId?: string;
   handoffAt?: Timestamp;
   handoffFrom?: EntityId;
   handoffHistory?: HandoffHistoryEntry[];
@@ -191,6 +197,8 @@ interface OrchestratorTaskMeta {
   lastCommitHash?: string;
   // Session history
   sessionHistory?: readonly TaskSessionHistoryEntry[];
+  // Branch sync
+  lastSyncResult?: SyncResultMeta;
 }
 ```
 
@@ -265,6 +273,7 @@ interface StewardMetadata extends BaseAgentMetadata {
   agentRole: 'steward';
   stewardFocus: 'merge' | 'docs' | 'recovery' | 'custom';
   triggers?: StewardTrigger[];
+  playbook?: string;          // @deprecated - use playbookId instead
   playbookId?: string;
   lastExecutedAt?: Timestamp;
   nextScheduledAt?: Timestamp;
