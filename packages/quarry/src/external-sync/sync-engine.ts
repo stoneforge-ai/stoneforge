@@ -72,6 +72,8 @@ export interface SyncOptions {
   readonly taskIds?: readonly string[];
   /** Sync all linked tasks */
   readonly all?: boolean;
+  /** Force push all linked tasks, skipping hash comparison and event query guards */
+  readonly force?: boolean;
 }
 
 /**
@@ -320,14 +322,14 @@ export class SyncEngine {
     options: SyncOptions,
     now: Timestamp
   ): Promise<'pushed' | 'skipped'> {
-    // Check for actual content change via hash
+    // Check for actual content change via hash (skip when force is true)
     const currentHash = computeContentHashSync(element).hash;
-    if (syncState.lastPushedHash && currentHash === syncState.lastPushedHash) {
+    if (!options.force && syncState.lastPushedHash && currentHash === syncState.lastPushedHash) {
       return 'skipped';
     }
 
-    // Verify events have occurred since last push (additional guard)
-    if (syncState.lastPushedAt) {
+    // Verify events have occurred since last push (skip when force is true)
+    if (!options.force && syncState.lastPushedAt) {
       const events = await this.api.listEvents({
         elementId: element.id,
         eventType: ['updated', 'closed', 'reopened'] as unknown as EventType[],

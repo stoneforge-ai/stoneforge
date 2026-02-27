@@ -574,6 +574,7 @@ async function unlinkHandler(
 
 interface PushOptions {
   all?: boolean;
+  force?: boolean;
 }
 
 const pushOptions: CommandOption[] = [
@@ -581,6 +582,11 @@ const pushOptions: CommandOption[] = [
     name: 'all',
     short: 'a',
     description: 'Push all linked tasks',
+  },
+  {
+    name: 'force',
+    short: 'f',
+    description: 'Push all linked tasks regardless of whether they have changed',
   },
 ];
 
@@ -635,7 +641,7 @@ async function pushHandler(
   });
 
   // Build push options
-  const syncPushOptions: { taskIds?: string[]; all?: boolean } = {};
+  const syncPushOptions: { taskIds?: string[]; all?: boolean; force?: boolean } = {};
   if (options.all) {
     syncPushOptions.all = true;
   } else if (args.length > 0) {
@@ -645,6 +651,9 @@ async function pushHandler(
       'Usage: sf external-sync push [taskId...] or sf external-sync push --all',
       ExitCode.INVALID_ARGUMENTS
     );
+  }
+  if (options.force) {
+    syncPushOptions.force = true;
   }
 
   try {
@@ -1939,22 +1948,29 @@ Examples:
 const pushCommand: Command = {
   name: 'push',
   description: 'Push linked tasks to external service',
-  usage: 'sf external-sync push [taskId...] [--all]',
+  usage: 'sf external-sync push [taskId...] [--all] [--force]',
   help: `Push specific linked tasks to their external service, or push all linked tasks.
 
 If specific task IDs are given, pushes only those tasks. With --all,
 pushes every task that has an external link.
 
+Use --force to push all linked tasks regardless of whether their local
+content has changed. This is useful when label generation logic changes
+and the external representation needs to be refreshed.
+
 Arguments:
-  taskId...    One or more task IDs to push (optional with --all)
+  taskId...        One or more task IDs to push (optional with --all)
 
 Options:
-  -a, --all    Push all linked tasks
+  -a, --all        Push all linked tasks
+  -f, --force      Push all linked tasks regardless of whether they have changed
 
 Examples:
   sf external-sync push el-abc123
   sf external-sync push el-abc123 el-def456
-  sf external-sync push --all`,
+  sf external-sync push --all
+  sf external-sync push --all --force
+  sf external-sync push el-abc123 --force`,
   options: pushOptions,
   handler: pushHandler as Command['handler'],
 };
@@ -2072,7 +2088,7 @@ Commands:
   link <taskId> <url-or-issue-number> Link task to external issue
   link-all --provider <name>          Bulk-link all unlinked tasks
   unlink <taskId>                     Remove external link
-  push [taskId...]                    Push linked task(s) to external
+  push [taskId...] [--force]           Push linked task(s) to external
   pull                                Pull changes from external
   sync [--dry-run]                    Bidirectional sync
   status                              Show sync state
@@ -2088,6 +2104,7 @@ Examples:
   sf external-sync link-all --provider github
   sf external-sync link-all --provider github --dry-run
   sf external-sync push --all
+  sf external-sync push --all --force
   sf external-sync pull
   sf external-sync sync --dry-run
   sf external-sync status

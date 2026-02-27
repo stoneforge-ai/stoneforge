@@ -452,6 +452,112 @@ describe('SyncEngine.push', () => {
     // Verify description is hydrated (not just raw descriptionRef ID)
     expect(capturedUpdates!.body).toBe('This is the task description body.');
   });
+
+  test('push --all --force pushes all linked tasks even with no content changes', async () => {
+    const currentHash = (() => {
+      // Compute what computeContentHashSync would return for our test element
+      // so we can set lastPushedHash to match (simulating "no change")
+      const el = createTestElement({
+        _syncState: createTestSyncState(),
+      });
+      // Import not needed — we just use a known hash from a prior push
+      return 'will-be-set-to-match';
+    })();
+
+    // Create an element where lastPushedHash matches current content
+    // (i.e., no content has changed since last push)
+    const syncState = createTestSyncState({
+      lastPushedAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+    });
+    const element = createTestElement({ _syncState: syncState });
+
+    // Compute the actual hash for this element to simulate "already pushed"
+    const { computeContentHashSync } = await import('../sync/hash.js');
+    const matchingHash = computeContentHashSync(element as unknown as Element).hash;
+
+    // Recreate with matching hash so hash comparison would normally skip
+    const syncStateWithHash = createTestSyncState({
+      lastPushedHash: matchingHash,
+      lastPushedAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+    });
+    const elementWithHash = createTestElement({ _syncState: syncStateWithHash });
+
+    let updateCalled = false;
+    const engine = buildEngine({
+      elements: [elementWithHash],
+      events: [], // No events — would normally skip
+      onUpdateIssue: () => {
+        updateCalled = true;
+      },
+    });
+
+    const result = await engine.push({ all: true, force: true });
+    expect(updateCalled).toBe(true);
+    expect(result.pushed).toBe(1);
+    expect(result.skipped).toBe(0);
+  });
+
+  test('push --all without --force still skips unchanged tasks', async () => {
+    const syncState = createTestSyncState({
+      lastPushedAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+    });
+    const element = createTestElement({ _syncState: syncState });
+
+    // Compute the actual hash for this element to simulate "already pushed"
+    const { computeContentHashSync } = await import('../sync/hash.js');
+    const matchingHash = computeContentHashSync(element as unknown as Element).hash;
+
+    const syncStateWithHash = createTestSyncState({
+      lastPushedHash: matchingHash,
+      lastPushedAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+    });
+    const elementWithHash = createTestElement({ _syncState: syncStateWithHash });
+
+    let updateCalled = false;
+    const engine = buildEngine({
+      elements: [elementWithHash],
+      events: [], // No events
+      onUpdateIssue: () => {
+        updateCalled = true;
+      },
+    });
+
+    const result = await engine.push({ all: true }); // No force
+    expect(updateCalled).toBe(false);
+    expect(result.pushed).toBe(0);
+    expect(result.skipped).toBe(1);
+  });
+
+  test('push specific task with --force pushes even if hash matches', async () => {
+    const syncState = createTestSyncState({
+      lastPushedAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+    });
+    const element = createTestElement({ _syncState: syncState });
+
+    // Compute the actual hash for this element to simulate "already pushed"
+    const { computeContentHashSync } = await import('../sync/hash.js');
+    const matchingHash = computeContentHashSync(element as unknown as Element).hash;
+
+    const syncStateWithHash = createTestSyncState({
+      lastPushedHash: matchingHash,
+      lastPushedAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+    });
+    const elementWithHash = createTestElement({ _syncState: syncStateWithHash });
+
+    let updateCalled = false;
+    const engine = buildEngine({
+      elements: [elementWithHash],
+      events: [], // No events
+      onUpdateIssue: () => {
+        updateCalled = true;
+      },
+    });
+
+    const result = await engine.push({ taskIds: ['el-test1'], force: true });
+    expect(updateCalled).toBe(true);
+    expect(result.pushed).toBe(1);
+    expect(result.skipped).toBe(0);
+  });
 });
 
 // ============================================================================
