@@ -636,7 +636,7 @@ export function createWorkflowRoutes(services: Services) {
         title: customTitle,
         ephemeral: ephemeral ?? false,
         tags: [...playbook.tags, 'instantiated'],
-      });
+      }, { idConfig: api.getIdGeneratorConfig() });
 
       // Save the workflow
       const savedWorkflow = await api.create<Workflow>({
