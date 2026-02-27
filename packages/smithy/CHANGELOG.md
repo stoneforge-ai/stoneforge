@@ -1,5 +1,73 @@
 # @stoneforge/smithy
 
+## 1.13.0
+
+### Minor Changes
+
+- 6d8c238: Wire autoLinkTask into HTTP task creation route to auto-create external issues when autoLink is enabled
+- 2c06cfa: Export `parseRateLimitResetTime` utility from package index for use by smithy-server daemon routes
+- e381bed: Add external sync background daemon service with polling-based automation for bidirectional sync with external services (GitHub, Linear, etc.). Includes zero-overhead guarantee for unconfigured workspaces.
+- 18314d8: Add external sync trigger and status HTTP endpoints. Provides POST endpoints for push/pull/sync operations and GET endpoints for sync status and provider listing at /api/external-sync/\*.
+- e9b59ad: Add EXTERNAL_SYNC to settings service with ExternalSyncSettings interface, ProviderConfig type, and helper methods for managing external sync provider configurations and sync cursors.
+- 0995fb6: Handle IANA timezone in rate limit reset time parser. Messages with timezone context like "resets 11pm (Pacific/Honolulu)" now correctly compute the reset time in the specified timezone instead of using server local time. Invalid or missing timezones gracefully fall back to existing behavior.
+- d7fde86: Wire auto-link into workflow/playbook instantiation: tasks created from playbooks get auto-linked to external provider when configured.
+
+### Patch Changes
+
+- 8531ae4: Fix daemon and server external-sync routes to configure real providers from tokens instead of using placeholder providers that always throw.
+- e803c95: Fix race condition where rate limit events emitted immediately after session initialization were lost because the onSessionStarted listener was attached after multiple async database operations. The listener is now attached immediately after startSession()/resumeSession() returns.
+- 174765e: Fix spawner executable path tracking for rate limit events from fallback executables. Session manager now passes the resolved executable path to the spawner so rate limit events identify the correct executable. Dispatch daemon marks all fallback chain entries as rate-limited when any chain entry hits a plan-level limit.
+- 695b3b8: Fix tsconfig types array to use "bun" instead of "bun-types" for robust type resolution via @types/bun
+- 8b831fb: Prevent recovery steward assignment to rate-limited or multi-assigned tasks. Added session history pattern detection to skip recovery steward spawn when task failures indicate rate limiting. Added multi-assignment guard to prevent stewards from being assigned multiple tasks across poll cycles.
+- 39299b8: Improve rapid-exit detector to catch rate limits from assistant messages. Previously only silent rate limits (no assistant events) were detected. Now rate limit messages shown as assistant output (e.g. "You've hit your limit · resets 11pm") are also caught, with reset time parsed from the message content.
+- 0f840b9: Add rate limit guard to session resume path in orphan recovery. Prevents burning resumeCount when all executables are rate-limited by checking limits inside recoverOrphanedTask() before attempting resume or spawn.
+- 456b9fd: Add Phase 3 to orphan recovery for recovery stewards. When a recovery steward's session exits without completing triage, the task is now automatically unassigned and reset for fresh worker dispatch, preventing tasks from becoming permanently stuck.
+- Updated dependencies [a6979b2]
+- Updated dependencies [b110e28]
+- Updated dependencies [6d8c238]
+- Updated dependencies [d7fde86]
+- Updated dependencies [2b9af01]
+- Updated dependencies [b55db0d]
+- Updated dependencies [ee163c2]
+- Updated dependencies [e9b59ad]
+- Updated dependencies [42e996d]
+- Updated dependencies [f056e73]
+- Updated dependencies [b6dbaeb]
+- Updated dependencies [1a52826]
+- Updated dependencies [21f4b95]
+- Updated dependencies [21f4b95]
+- Updated dependencies [aeec6bd]
+- Updated dependencies [15c7b60]
+- Updated dependencies [8531ae4]
+- Updated dependencies [6a29d53]
+- Updated dependencies [8ad678f]
+- Updated dependencies [695b3b8]
+- Updated dependencies [695b3b8]
+- Updated dependencies [695b3b8]
+- Updated dependencies [0db88ca]
+- Updated dependencies [ea9c12c]
+- Updated dependencies [0aa8ab9]
+- Updated dependencies [75a0dd2]
+- Updated dependencies [91a33de]
+- Updated dependencies [1902200]
+- Updated dependencies [e787cb8]
+- Updated dependencies [e787cb8]
+- Updated dependencies [e437527]
+- Updated dependencies [fb43e14]
+- Updated dependencies [f8c8a3f]
+- Updated dependencies [6c5a927]
+- Updated dependencies [2826bb1]
+- Updated dependencies [cb5e20d]
+- Updated dependencies [d0775f3]
+- Updated dependencies [fd6f593]
+- Updated dependencies [7c0a4ee]
+- Updated dependencies [f525584]
+- Updated dependencies [0fad1bc]
+  - @stoneforge/quarry@1.13.0
+  - @stoneforge/core@1.13.0
+  - @stoneforge/storage@1.13.0
+  - @stoneforge/shared-routes@1.13.0
+
 ## 1.12.0
 
 ### Minor Changes

@@ -1,5 +1,16 @@
 # @stoneforge/storage
 
+## 1.13.0
+
+### Patch Changes
+
+- 21f4b95: Add migration 11 to update inbox_items CHECK constraint to include 'thread_reply' source_type. Recreates the table since SQLite does not support ALTER CONSTRAINT.
+- 695b3b8: Fix tsconfig types array to use "bun" instead of "bun-types" for robust type resolution via @types/bun
+- Updated dependencies [f056e73]
+- Updated dependencies [695b3b8]
+- Updated dependencies [e787cb8]
+  - @stoneforge/core@1.13.0
+
 ## 1.12.0
 
 ### Patch Changes

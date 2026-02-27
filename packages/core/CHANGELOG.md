@@ -1,5 +1,16 @@
 # @stoneforge/core
 
+## 1.13.0
+
+### Minor Changes
+
+- f056e73: Add external sync type definitions for bidirectional synchronization with external services (GitHub, Linear, Notion, Slack). Includes provider and adapter interfaces, normalized external item types, sync state tracking, conflict strategies, and type guards.
+- e787cb8: Add optional `priority` field to `ExternalTaskInput` and `ExternalTask` interfaces, enabling providers with native priority support (e.g., Linear) to pass priority values through create/update operations instead of relying on label-based conventions.
+
+### Patch Changes
+
+- 695b3b8: Fix tsconfig types array to use "bun" instead of "bun-types" for robust type resolution via @types/bun
+
 ## 1.12.0
 
 ## 1.11.0

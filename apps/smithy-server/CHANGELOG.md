@@ -1,5 +1,71 @@
 # @stoneforge/smithy-server
 
+## 1.13.0
+
+### Patch Changes
+
+- Updated dependencies [a6979b2]
+- Updated dependencies [b110e28]
+- Updated dependencies [6d8c238]
+- Updated dependencies [6d8c238]
+- Updated dependencies [d7fde86]
+- Updated dependencies [2b9af01]
+- Updated dependencies [b55db0d]
+- Updated dependencies [2c06cfa]
+- Updated dependencies [ee163c2]
+- Updated dependencies [e9b59ad]
+- Updated dependencies [e381bed]
+- Updated dependencies [42e996d]
+- Updated dependencies [18314d8]
+- Updated dependencies [e9b59ad]
+- Updated dependencies [f056e73]
+- Updated dependencies [b6dbaeb]
+- Updated dependencies [1a52826]
+- Updated dependencies [21f4b95]
+- Updated dependencies [21f4b95]
+- Updated dependencies [aeec6bd]
+- Updated dependencies [15c7b60]
+- Updated dependencies [8531ae4]
+- Updated dependencies [8531ae4]
+- Updated dependencies [6a29d53]
+- Updated dependencies [e803c95]
+- Updated dependencies [174765e]
+- Updated dependencies [8ad678f]
+- Updated dependencies [695b3b8]
+- Updated dependencies [695b3b8]
+- Updated dependencies [695b3b8]
+- Updated dependencies [695b3b8]
+- Updated dependencies [0db88ca]
+- Updated dependencies [ea9c12c]
+- Updated dependencies [0aa8ab9]
+- Updated dependencies [75a0dd2]
+- Updated dependencies [91a33de]
+- Updated dependencies [1902200]
+- Updated dependencies [e787cb8]
+- Updated dependencies [e787cb8]
+- Updated dependencies [8b831fb]
+- Updated dependencies [e437527]
+- Updated dependencies [fb43e14]
+- Updated dependencies [f8c8a3f]
+- Updated dependencies [39299b8]
+- Updated dependencies [0f840b9]
+- Updated dependencies [456b9fd]
+- Updated dependencies [6c5a927]
+- Updated dependencies [2826bb1]
+- Updated dependencies [cb5e20d]
+- Updated dependencies [d0775f3]
+- Updated dependencies [fd6f593]
+- Updated dependencies [7c0a4ee]
+- Updated dependencies [f525584]
+- Updated dependencies [0995fb6]
+- Updated dependencies [0fad1bc]
+- Updated dependencies [d7fde86]
+  - @stoneforge/quarry@1.13.0
+  - @stoneforge/smithy@1.13.0
+  - @stoneforge/core@1.13.0
+  - @stoneforge/storage@1.13.0
+  - @stoneforge/shared-routes@1.13.0
+
 ## 1.12.0
 
 ### Patch Changes
