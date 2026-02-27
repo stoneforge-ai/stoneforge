@@ -47,6 +47,26 @@ import {
  */
 const BLOCKED_LABEL = 'blocked';
 
+/**
+ * The sync label prefix used by the Stoneforge ↔ Linear field mapping.
+ * Labels with this prefix are sync-managed (e.g., sf:type:bug, sf:priority:high).
+ */
+const SYNC_LABEL_PREFIX = 'sf:';
+
+/**
+ * Prefix for priority labels (after the sync prefix).
+ * Labels matching sf:priority:* should NOT be synced as Linear labels
+ * because Linear handles priority natively via its numeric field.
+ */
+const PRIORITY_LABEL_PREFIX = `${SYNC_LABEL_PREFIX}priority:`;
+
+/**
+ * Prefix for status labels (after the sync prefix).
+ * Labels matching sf:status:* should NOT be synced as Linear labels
+ * because Linear handles status via native workflow states.
+ */
+const STATUS_LABEL_PREFIX = `${SYNC_LABEL_PREFIX}status:`;
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -157,14 +177,14 @@ export class LinearTaskAdapter implements TaskSyncAdapter {
     // Build create input (handles state type mapping including blocked→started)
     const input = await this.buildCreateInput(team, issue);
 
-    // Handle "blocked" label: if present in input labels, resolve to a Linear
-    // label ID and include in the create mutation
-    const isBlocked = issue.labels?.includes(BLOCKED_LABEL) ?? false;
-    if (isBlocked) {
-      const blockedLabelId = await this.resolveBlockedLabelId(team.id);
-      if (blockedLabelId) {
-        input.labelIds = [blockedLabelId];
-      }
+    // Resolve ALL labels to Linear label IDs:
+    // - "blocked" label (special handling for blocked state)
+    // - sf:type:* labels (task type labels synced as Linear labels)
+    // - User tags (non-prefixed labels synced as Linear labels)
+    // - sf:priority:* and sf:status:* are filtered out (handled natively)
+    const labelIds = await this.resolveInputLabelIds(team.id, issue.labels);
+    if (labelIds.length > 0) {
+      input.labelIds = labelIds;
     }
 
     // Create issue via API
@@ -194,17 +214,18 @@ export class LinearTaskAdapter implements TaskSyncAdapter {
     // Build update input (handles state type mapping including blocked→started)
     const input = await this.buildUpdateInput(team, updates);
 
-    // Handle "blocked" label: add or remove based on whether the task is blocked.
-    // Fetch current issue labels to compute the correct labelIds (preserving
-    // existing labels while adding/removing only the "blocked" label).
-    const shouldBeBlocked = updates.labels?.includes(BLOCKED_LABEL) ?? false;
-    const labelIds = await this.computeBlockedLabelIds(
-      team.id,
-      externalId,
-      shouldBeBlocked
-    );
-    if (labelIds !== undefined) {
-      input.labelIds = labelIds;
+    // Compute the full set of label IDs for the update, comparing the desired
+    // labels against the current issue's labels. Only sends labelIds if the
+    // set actually changed (avoids unnecessary writes).
+    if (updates.labels !== undefined) {
+      const labelIds = await this.computeLabelIds(
+        team.id,
+        externalId,
+        updates.labels
+      );
+      if (labelIds !== undefined) {
+        input.labelIds = labelIds;
+      }
     }
 
     // Update issue via API
@@ -530,20 +551,50 @@ export class LinearTaskAdapter implements TaskSyncAdapter {
   }
 
   // --------------------------------------------------------------------------
-  // Blocked Label Management
+  // Label Management
   // --------------------------------------------------------------------------
 
   /**
-   * Resolves the "blocked" label to a Linear label ID.
-   * Fetches workspace labels on first call and caches the result.
-   * Creates the "blocked" label if it doesn't exist.
+   * Filters input labels to only those that should be synced as Linear labels.
    *
+   * Excludes:
+   * - sf:priority:* labels (Linear has native priority)
+   * - sf:status:* labels (Linear has native workflow states)
+   *
+   * Keeps:
+   * - "blocked" label (synced as a Linear label)
+   * - sf:type:* labels (task type — Linear has no native type concept)
+   * - User tags (non-prefixed labels)
+   */
+  private filterSyncableLabels(labels: readonly string[]): string[] {
+    return labels.filter((label) => {
+      // Filter out priority labels — handled natively
+      if (label.startsWith(PRIORITY_LABEL_PREFIX)) {
+        return false;
+      }
+      // Filter out status labels — handled via workflow states
+      if (label.startsWith(STATUS_LABEL_PREFIX)) {
+        return false;
+      }
+      return true;
+    });
+  }
+
+  /**
+   * Resolves a label name to a Linear label ID.
+   * Uses the label cache, fetching from the API on first call.
+   * Creates the label if it doesn't exist.
+   *
+   * @param labelName - The label name to resolve
    * @param teamId - Team ID to associate with a newly created label
    * @returns The label ID, or undefined if resolution fails
    */
-  private async resolveBlockedLabelId(teamId: string): Promise<string | undefined> {
+  private async resolveLabelId(
+    labelName: string,
+    teamId: string
+  ): Promise<string | undefined> {
     // Check cache first
-    const cached = this.labelsByName.get(BLOCKED_LABEL);
+    const cached = this.labelsByName.get(labelName);
     if (cached) {
       return cached;
     }
@@ -554,72 +605,105 @@ export class LinearTaskAdapter implements TaskSyncAdapter {
     }
 
     // Check again after refresh
-    const labelId = this.labelsByName.get(BLOCKED_LABEL);
+    const labelId = this.labelsByName.get(labelName);
     if (labelId) {
       return labelId;
     }
 
     // Label doesn't exist — create it
     try {
-      const created = await this.api.createLabel(BLOCKED_LABEL, teamId);
+      const created = await this.api.createLabel(labelName, teamId);
       this.labelsByName.set(created.name, created.id);
       return created.id;
     } catch {
       // If label creation fails (e.g., permission issue), log but don't block
       console.warn(
-        `[LinearTaskAdapter] Failed to create "${BLOCKED_LABEL}" label in Linear. ` +
-          'Blocked state will be indicated via workflow state only.'
+        `[LinearTaskAdapter] Failed to create "${labelName}" label in Linear.`
       );
       return undefined;
     }
   }
 
   /**
-   * Computes the new labelIds for an issue update, adding or removing the
-   * "blocked" label while preserving all other existing labels.
+   * Resolves all syncable labels from an ExternalTaskInput to Linear label IDs.
+   * Filters out priority and status labels, then resolves each remaining label
+   * (including blocked, type labels, and user tags) to a Linear label ID,
+   * creating labels that don't exist.
    *
-   * Fetches the current issue to get its existing labels, then:
-   * - If shouldBeBlocked is true: ensures "blocked" label is present
-   * - If shouldBeBlocked is false: ensures "blocked" label is removed
+   * @param teamId - Team ID for label creation
+   * @param labels - Input labels from ExternalTaskInput
+   * @returns Array of resolved Linear label IDs
+   */
+  private async resolveInputLabelIds(
+    teamId: string,
+    labels: readonly string[] | undefined
+  ): Promise<string[]> {
+    if (!labels || labels.length === 0) {
+      return [];
+    }
+
+    const syncableLabels = this.filterSyncableLabels(labels);
+    if (syncableLabels.length === 0) {
+      return [];
+    }
+
+    const labelIds: string[] = [];
+    for (const labelName of syncableLabels) {
+      const labelId = await this.resolveLabelId(labelName, teamId);
+      if (labelId) {
+        labelIds.push(labelId);
+      }
+    }
+
+    return labelIds;
+  }
+
+  /**
+   * Computes the new labelIds for an issue update by comparing the desired
+   * labels against the current issue's labels on Linear.
+   *
+   * Handles all label types:
+   * - "blocked" label (added/removed based on blocked status)
+   * - sf:type:* labels (task type synced as Linear labels)
+   * - User tags (synced as Linear labels)
+   * - sf:priority:* and sf:status:* are filtered out (handled natively)
    *
    * Returns undefined if no label change is needed (avoids unnecessary writes).
    *
    * @param teamId - Team ID (for label creation if needed)
    * @param externalId - Issue UUID to fetch current labels from
-   * @param shouldBeBlocked - Whether the issue should have the "blocked" label
+   * @param desiredLabels - The full set of desired labels from ExternalTaskInput
    * @returns New labelIds array, or undefined if no change needed
    */
-  private async computeBlockedLabelIds(
+  private async computeLabelIds(
     teamId: string,
     externalId: string,
-    shouldBeBlocked: boolean
+    desiredLabels: readonly string[]
   ): Promise<readonly string[] | undefined> {
-    // Resolve the blocked label ID (creates if needed)
-    const blockedLabelId = await this.resolveBlockedLabelId(teamId);
-    if (!blockedLabelId) {
-      // Can't resolve blocked label — skip label management
-      return undefined;
-    }
+    // Resolve desired labels to Linear label IDs
+    const desiredLabelIds = await this.resolveInputLabelIds(teamId, desiredLabels);
 
     // Fetch current issue to get existing label IDs
     const currentIssue = await this.api.getIssue(externalId);
     if (!currentIssue) {
-      return shouldBeBlocked ? [blockedLabelId] : undefined;
+      return desiredLabelIds.length > 0 ? desiredLabelIds : undefined;
     }
 
     const currentLabelIds = currentIssue.labels.nodes.map((l) => l.id);
-    const hasBlockedLabel = currentLabelIds.includes(blockedLabelId);
 
-    if (shouldBeBlocked && !hasBlockedLabel) {
-      // Add "blocked" label
-      return [...currentLabelIds, blockedLabelId];
-    } else if (!shouldBeBlocked && hasBlockedLabel) {
-      // Remove "blocked" label
-      return currentLabelIds.filter((id) => id !== blockedLabelId);
+    // Compare sets: check if they're identical
+    const currentSet = new Set(currentLabelIds);
+    const desiredSet = new Set(desiredLabelIds);
+
+    if (
+      currentSet.size === desiredSet.size &&
+      [...currentSet].every((id) => desiredSet.has(id))
+    ) {
+      // No change needed
+      return undefined;
     }
 
-    // No change needed
-    return undefined;
+    return desiredLabelIds;
   }
 
   /**
