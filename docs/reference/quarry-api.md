@@ -248,7 +248,7 @@ await api.removeApproval(blockedId, blockerId, approverId);
 ```typescript
 await api.addTaskToPlan(taskId, planId, options?);     // taskId first!
 await api.removeTaskFromPlan(taskId, planId, actor?);
-await api.createTaskInPlan(planId, { title: 'Task', priority: 2 });
+await api.createTaskInPlan(planId, { title: 'Task', createdBy: actorId, priority: 2 });
 const tasks = await api.getTasksInPlan(planId, filter?);
 const progress = await api.getPlanProgress(planId);
 
