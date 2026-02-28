@@ -78,3 +78,11 @@ export {
   createLinearPlaceholderProvider,
 } from './providers/linear/index.js';
 export type { CreateLinearProviderOptions } from './providers/linear/index.js';
+
+// Folder provider
+export {
+  createFolderProvider,
+  FolderDocumentAdapter,
+  createFolderDocumentAdapter,
+  slugify,
+} from './providers/folder/index.js';
