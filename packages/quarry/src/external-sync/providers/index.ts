@@ -13,3 +13,11 @@ export {
   createLinearPlaceholderProvider,
 } from './linear/index.js';
 export type { CreateLinearProviderOptions } from './linear/index.js';
+
+// Folder provider
+export { createFolderProvider } from './folder/index.js';
+export {
+  FolderDocumentAdapter,
+  createFolderDocumentAdapter,
+  slugify,
+} from './folder/index.js';
