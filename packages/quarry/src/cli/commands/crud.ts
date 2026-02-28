@@ -11,7 +11,7 @@ import type { Command, GlobalOptions, CommandResult, CommandOption } from '../ty
 import { success, failure, ExitCode } from '../types.js';
 import { getFormatter, getOutputMode, getStatusIcon, formatEventsTable, type EventData } from '../formatter.js';
 import { createTask, createDocument, ContentType, TaskStatus, TaskTypeValue, PlanStatus, type CreateTaskInput, type Priority, type Complexity, type Plan, type DocumentId, type HydratedMessage } from '@stoneforge/core';
-import type { Element, ElementId, EntityId, Task, SyncDirection } from '@stoneforge/core';
+import type { Element, ElementId, EntityId, Task, Document, SyncDirection } from '@stoneforge/core';
 import type { QuarryAPI, TaskFilter } from '../../api/types.js';
 import type { PlanProgress } from '@stoneforge/core';
 import type { StorageBackend } from '@stoneforge/storage';
@@ -748,6 +748,8 @@ interface UpdateOptions {
   complexity?: string;
   status?: string;
   assignee?: string;
+  description?: string;
+  metadata?: string;
   tag?: string[];
   'add-tag'?: string[];
   'remove-tag'?: string[];
@@ -782,6 +784,17 @@ export const updateOptions: CommandOption[] = [
     name: 'assignee',
     short: 'a',
     description: 'New assignee (use empty string to unassign)',
+    hasValue: true,
+  },
+  {
+    name: 'description',
+    short: 'd',
+    description: 'Update description (tasks: updates linked doc; documents: updates content)',
+    hasValue: true,
+  },
+  {
+    name: 'metadata',
+    description: 'JSON metadata to merge into element',
     hasValue: true,
   },
   {
@@ -831,6 +844,9 @@ export async function updateHandler(
     if (elemData.status === 'tombstone' || elemData.deletedAt) {
       return failure(`Element not found: ${id}`, ExitCode.NOT_FOUND);
     }
+
+    // Resolve actor for audit trail
+    const actor = resolveActor(options);
 
     // Build updates object
     const updates: Record<string, unknown> = {};
@@ -888,6 +904,74 @@ export async function updateHandler(
       updates.assignee = options.assignee === '' ? undefined : (options.assignee as EntityId);
     }
 
+    // Handle description
+    let descriptionUpdated = false;
+    if (options.description !== undefined) {
+      if (element.type === 'task') {
+        const task = element as unknown as Task;
+        if (task.descriptionRef) {
+          // Update existing description document
+          const descDoc = await api.get<Document>(task.descriptionRef as unknown as ElementId);
+          if (descDoc) {
+            await api.update<Document>(task.descriptionRef as unknown as ElementId, {
+              content: options.description,
+            } as Partial<Document>);
+          }
+        } else {
+          // Create new description document and link it
+          const docInput = {
+            content: options.description,
+            contentType: ContentType.MARKDOWN,
+            createdBy: actor,
+          };
+          const idConfig = api.getIdGeneratorConfig();
+          const newDoc = await createDocument(docInput, idConfig);
+          const createdDoc = await api.create(newDoc as unknown as Element & Record<string, unknown>);
+          updates.descriptionRef = createdDoc.id as DocumentId;
+        }
+      } else if (element.type === 'document') {
+        // For documents, update content directly
+        updates.content = options.description;
+      } else {
+        // For other element types with a content field, update it directly
+        const elemRecord = element as unknown as Record<string, unknown>;
+        if ('content' in elemRecord) {
+          updates.content = options.description;
+        } else {
+          return failure(
+            `Element type '${element.type}' does not support description updates`,
+            ExitCode.VALIDATION
+          );
+        }
+      }
+      descriptionUpdated = true;
+    }
+
+    // Handle metadata
+    if (options.metadata !== undefined) {
+      let parsed: Record<string, unknown>;
+      try {
+        parsed = JSON.parse(options.metadata);
+      } catch {
+        return failure('Invalid JSON for --metadata flag', ExitCode.VALIDATION);
+      }
+
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+        return failure('Metadata must be a JSON object', ExitCode.VALIDATION);
+      }
+
+      // Merge into existing metadata, removing keys set to null
+      const existingMetadata = { ...(element.metadata ?? {}) };
+      for (const [key, value] of Object.entries(parsed)) {
+        if (value === null) {
+          delete existingMetadata[key];
+        } else {
+          existingMetadata[key] = value;
+        }
+      }
+      updates.metadata = existingMetadata;
+    }
+
     // Handle tag operations
     let currentTags = element.tags ?? [];
 
@@ -920,18 +1004,21 @@ export async function updateHandler(
     }
 
     // Check if there are any updates to apply
-    if (Object.keys(updates).length === 0) {
+    if (Object.keys(updates).length === 0 && !descriptionUpdated) {
       return failure('No updates specified. Use --help for available options.', ExitCode.INVALID_ARGUMENTS);
     }
 
-    // Resolve actor for audit trail
-    const actor = resolveActor(options);
-
-    // Apply the update with optimistic concurrency control
-    const updated = await api.update<Element>(id as ElementId, updates, {
-      actor,
-      expectedUpdatedAt: element.updatedAt,
-    });
+    // Apply the update with optimistic concurrency control (if there are field updates)
+    let updated: Element;
+    if (Object.keys(updates).length > 0) {
+      updated = await api.update<Element>(id as ElementId, updates, {
+        actor,
+        expectedUpdatedAt: element.updatedAt,
+      });
+    } else {
+      // Only side-effect updates (e.g., description on existing linked doc)
+      updated = element;
+    }
 
     // Format output based on mode
     const mode = getOutputMode(options);
@@ -969,6 +1056,8 @@ Options:
   -c, --complexity <1-5>   New complexity (tasks only)
   -s, --status <status>    New status (tasks only: open, in_progress, closed, deferred)
   -a, --assignee <id>      New assignee (tasks only, empty string to unassign)
+  -d, --description <text> Update description (tasks: updates linked doc; documents: updates content)
+      --metadata <json>    JSON metadata to merge into element (null values remove keys)
       --tag <tag>          Replace all tags (can be repeated)
       --add-tag <tag>      Add a tag (can be repeated)
       --remove-tag <tag>   Remove a tag (can be repeated)
@@ -976,6 +1065,8 @@ Options:
 Examples:
   sf update el-abc123 --title "New Title"
   sf update el-abc123 --priority 1 --status in_progress
+  sf update el-abc123 -d "Updated description text"
+  sf update el-abc123 --metadata '{"key": "value"}'
   sf update el-abc123 --add-tag urgent --add-tag frontend
   sf update el-abc123 --remove-tag old-tag
   sf update el-abc123 --assignee ""  # Unassign`,

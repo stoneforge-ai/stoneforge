@@ -787,6 +787,176 @@ describe('update command', () => {
     expect(result.exitCode).toBe(ExitCode.SUCCESS);
     expect(result.data).toBe(taskId);
   });
+
+  test('updates task description when descriptionRef exists', async () => {
+    // Create a task with a description (creates linked document)
+    const createOpts = createTestOptions({
+      title: 'Desc Update Test',
+      description: 'Original description',
+    } as GlobalOptions & { title: string; description: string });
+    const createResult = await createCommand.handler(['task'], createOpts);
+    const taskId = (createResult.data as { id: string }).id;
+    const descRef = (createResult.data as { descriptionRef: string }).descriptionRef;
+    expect(descRef).toBeDefined();
+
+    // Update the description
+    const updateOpts = createTestOptions({
+      description: 'Updated description text',
+    } as GlobalOptions & { description: string });
+    const result = await updateCommand.handler([taskId], updateOpts);
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+
+    // Verify the linked document was updated
+    const showOpts = createTestOptions({ json: true });
+    const descResult = await showCommand.handler([descRef], showOpts);
+    expect(descResult.exitCode).toBe(ExitCode.SUCCESS);
+    expect((descResult.data as { content: string }).content).toBe('Updated description text');
+  });
+
+  test('updates task description when no descriptionRef (creates new doc)', async () => {
+    // Create a task without a description
+    const createOpts = createTestOptions({
+      title: 'No Desc Test',
+    } as GlobalOptions & { title: string });
+    const createResult = await createCommand.handler(['task'], createOpts);
+    const taskId = (createResult.data as { id: string }).id;
+
+    // Verify no descriptionRef initially
+    expect((createResult.data as { descriptionRef?: string }).descriptionRef).toBeUndefined();
+
+    // Update with a description
+    const updateOpts = createTestOptions({
+      description: 'New description added',
+    } as GlobalOptions & { description: string });
+    const result = await updateCommand.handler([taskId], updateOpts);
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+
+    // Verify descriptionRef was set on the task
+    const showOpts = createTestOptions({ json: true });
+    const showResult = await showCommand.handler([taskId], showOpts);
+    const updatedTask = showResult.data as { descriptionRef?: string };
+    expect(updatedTask.descriptionRef).toBeDefined();
+
+    // Verify the linked document has the correct content
+    const descResult = await showCommand.handler([updatedTask.descriptionRef!], showOpts);
+    expect(descResult.exitCode).toBe(ExitCode.SUCCESS);
+    expect((descResult.data as { content: string }).content).toBe('New description added');
+  });
+
+  test('updates document content via -d flag', async () => {
+    // Create a task with description to get a document
+    const createOpts = createTestOptions({
+      title: 'Doc Content Test',
+      description: 'Original content',
+    } as GlobalOptions & { title: string; description: string });
+    const createResult = await createCommand.handler(['task'], createOpts);
+    const descRef = (createResult.data as { descriptionRef: string }).descriptionRef;
+    expect(descRef).toBeDefined();
+
+    // Update the document directly via -d flag
+    const updateOpts = createTestOptions({
+      description: 'Directly updated content',
+    } as GlobalOptions & { description: string });
+    const result = await updateCommand.handler([descRef], updateOpts);
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    expect((result.data as { content: string }).content).toBe('Directly updated content');
+  });
+
+  test('updates metadata with merge semantics', async () => {
+    // Create a task
+    const createOpts = createTestOptions({
+      title: 'Metadata Merge Test',
+    } as GlobalOptions & { title: string });
+    const createResult = await createCommand.handler(['task'], createOpts);
+    const taskId = (createResult.data as { id: string }).id;
+
+    // Set initial metadata
+    const updateOpts1 = createTestOptions({
+      metadata: '{"key1": "value1", "key2": "value2"}',
+    } as GlobalOptions & { metadata: string });
+    const result1 = await updateCommand.handler([taskId], updateOpts1);
+    expect(result1.exitCode).toBe(ExitCode.SUCCESS);
+    const meta1 = (result1.data as { metadata: Record<string, unknown> }).metadata;
+    expect(meta1.key1).toBe('value1');
+    expect(meta1.key2).toBe('value2');
+
+    // Merge additional metadata
+    const updateOpts2 = createTestOptions({
+      metadata: '{"key3": "value3", "key1": "updated"}',
+    } as GlobalOptions & { metadata: string });
+    const result2 = await updateCommand.handler([taskId], updateOpts2);
+    expect(result2.exitCode).toBe(ExitCode.SUCCESS);
+    const meta2 = (result2.data as { metadata: Record<string, unknown> }).metadata;
+    expect(meta2.key1).toBe('updated');
+    expect(meta2.key2).toBe('value2');
+    expect(meta2.key3).toBe('value3');
+  });
+
+  test('metadata null removal', async () => {
+    // Create a task
+    const createOpts = createTestOptions({
+      title: 'Metadata Null Test',
+    } as GlobalOptions & { title: string });
+    const createResult = await createCommand.handler(['task'], createOpts);
+    const taskId = (createResult.data as { id: string }).id;
+
+    // Set initial metadata
+    const updateOpts1 = createTestOptions({
+      metadata: '{"key1": "value1", "key2": "value2", "key3": "value3"}',
+    } as GlobalOptions & { metadata: string });
+    await updateCommand.handler([taskId], updateOpts1);
+
+    // Remove key2 by setting to null
+    const updateOpts2 = createTestOptions({
+      metadata: '{"key2": null}',
+    } as GlobalOptions & { metadata: string });
+    const result = await updateCommand.handler([taskId], updateOpts2);
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    const meta = (result.data as { metadata: Record<string, unknown> }).metadata;
+    expect(meta.key1).toBe('value1');
+    expect(meta.key2).toBeUndefined();
+    expect(meta.key3).toBe('value3');
+  });
+
+  test('invalid JSON metadata rejected', async () => {
+    // Create a task
+    const createOpts = createTestOptions({
+      title: 'Invalid JSON Test',
+    } as GlobalOptions & { title: string });
+    const createResult = await createCommand.handler(['task'], createOpts);
+    const taskId = (createResult.data as { id: string }).id;
+
+    // Try invalid JSON
+    const updateOpts = createTestOptions({
+      metadata: 'not valid json',
+    } as GlobalOptions & { metadata: string });
+    const result = await updateCommand.handler([taskId], updateOpts);
+
+    expect(result.exitCode).toBe(ExitCode.VALIDATION);
+    expect(result.error).toContain('Invalid JSON');
+  });
+
+  test('metadata rejects non-object JSON', async () => {
+    // Create a task
+    const createOpts = createTestOptions({
+      title: 'Array JSON Test',
+    } as GlobalOptions & { title: string });
+    const createResult = await createCommand.handler(['task'], createOpts);
+    const taskId = (createResult.data as { id: string }).id;
+
+    // Try array JSON
+    const updateOpts = createTestOptions({
+      metadata: '["not", "an", "object"]',
+    } as GlobalOptions & { metadata: string });
+    const result = await updateCommand.handler([taskId], updateOpts);
+
+    expect(result.exitCode).toBe(ExitCode.VALIDATION);
+    expect(result.error).toContain('Metadata must be a JSON object');
+  });
 });
 
 // ============================================================================
