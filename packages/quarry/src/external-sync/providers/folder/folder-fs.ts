@@ -376,6 +376,25 @@ export async function listFiles(
   return entries;
 }
 
+/**
+ * Checks whether a file exists at the given relative path within a base directory.
+ *
+ * @param basePath - Absolute path to the base directory
+ * @param relativePath - Path relative to basePath (e.g., 'notes/meeting.md')
+ * @returns True if the file exists, false otherwise
+ */
+export async function fileExists(
+  basePath: string,
+  relativePath: string
+): Promise<boolean> {
+  try {
+    await fs.promises.access(path.join(basePath, relativePath));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // ============================================================================
 // Internal Helpers
 // ============================================================================
