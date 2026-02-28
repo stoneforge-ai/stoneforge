@@ -24,6 +24,7 @@
   <img src="https://img.shields.io/badge/bun-supported-orange.svg" alt="Bun: supported">
   <img src="https://img.shields.io/badge/TypeScript-5.0+-blue.svg" alt="TypeScript: 5.0+">
   <img src="https://img.shields.io/badge/React-19-61dafb.svg" alt="React: 19">
+  <a href="https://discord.gg/NBCaUUv8Vm"><img src="https://img.shields.io/badge/Discord-Join%20us-5865F2?logo=discord&logoColor=white" alt="Discord"></a>
 </p>
 
 ---
