@@ -587,7 +587,7 @@ async function unlinkHandler(
   }
 
   if (element.type !== 'task' && element.type !== 'document') {
-    return failure(`Element ${elementId} is not a task or document (type: ${element.type})`, ExitCode.VALIDATION);
+    return failure(`Element ${elementId} is not a task or document (type: ${(element as any).type})`, ExitCode.VALIDATION);
   }
 
   const hasExternalRef = (element as Task).externalRef;
@@ -1303,7 +1303,7 @@ async function resolveHandler(
   }
 
   if (element.type !== 'task' && element.type !== 'document') {
-    return failure(`Element ${elementId} is not a task or document (type: ${element.type})`, ExitCode.VALIDATION);
+    return failure(`Element ${elementId} is not a task or document (type: ${(element as any).type})`, ExitCode.VALIDATION);
   }
 
   const elementTags = (element as Task).tags;
