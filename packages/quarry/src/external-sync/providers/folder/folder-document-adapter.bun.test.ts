@@ -354,6 +354,84 @@ describe('FolderDocumentAdapter.createPage', () => {
     const parsed = new Date(doc.updatedAt);
     expect(parsed.getTime()).toBeGreaterThan(0);
   });
+
+  test('assigns unique filename when duplicate title exists', async () => {
+    const doc1 = await adapter.createPage(tempDir, {
+      title: 'My Document',
+      content: 'First document',
+    });
+
+    const doc2 = await adapter.createPage(tempDir, {
+      title: 'My Document',
+      content: 'Second document',
+    });
+
+    expect(doc1.externalId).toBe('my-document.md');
+    expect(doc2.externalId).toBe('my-document-2.md');
+
+    // Both files should exist with correct content
+    expect(fs.existsSync(path.join(tempDir, 'my-document.md'))).toBe(true);
+    expect(fs.existsSync(path.join(tempDir, 'my-document-2.md'))).toBe(true);
+
+    const raw1 = fs.readFileSync(path.join(tempDir, 'my-document.md'), 'utf-8');
+    const raw2 = fs.readFileSync(path.join(tempDir, 'my-document-2.md'), 'utf-8');
+    expect(raw1).toContain('First document');
+    expect(raw2).toContain('Second document');
+  });
+
+  test('increments suffix for three or more duplicates', async () => {
+    const doc1 = await adapter.createPage(tempDir, {
+      title: 'Repeated',
+      content: 'First',
+    });
+    const doc2 = await adapter.createPage(tempDir, {
+      title: 'Repeated',
+      content: 'Second',
+    });
+    const doc3 = await adapter.createPage(tempDir, {
+      title: 'Repeated',
+      content: 'Third',
+    });
+
+    expect(doc1.externalId).toBe('repeated.md');
+    expect(doc2.externalId).toBe('repeated-2.md');
+    expect(doc3.externalId).toBe('repeated-3.md');
+
+    expect(fs.existsSync(path.join(tempDir, 'repeated.md'))).toBe(true);
+    expect(fs.existsSync(path.join(tempDir, 'repeated-2.md'))).toBe(true);
+    expect(fs.existsSync(path.join(tempDir, 'repeated-3.md'))).toBe(true);
+  });
+
+  test('handles titles that slugify identically', async () => {
+    const doc1 = await adapter.createPage(tempDir, {
+      title: 'My Doc',
+      content: 'Title with spaces',
+    });
+    const doc2 = await adapter.createPage(tempDir, {
+      title: 'my-doc',
+      content: 'Title already slugified',
+    });
+
+    expect(doc1.externalId).toBe('my-doc.md');
+    expect(doc2.externalId).toBe('my-doc-2.md');
+
+    expect(fs.existsSync(path.join(tempDir, 'my-doc.md'))).toBe(true);
+    expect(fs.existsSync(path.join(tempDir, 'my-doc-2.md'))).toBe(true);
+  });
+
+  test('non-duplicate titles are unaffected', async () => {
+    const doc1 = await adapter.createPage(tempDir, {
+      title: 'Alpha',
+      content: 'First',
+    });
+    const doc2 = await adapter.createPage(tempDir, {
+      title: 'Beta',
+      content: 'Second',
+    });
+
+    expect(doc1.externalId).toBe('alpha.md');
+    expect(doc2.externalId).toBe('beta.md');
+  });
 });
 
 // ============================================================================
@@ -466,6 +544,25 @@ describe('FolderDocumentAdapter.updatePage', () => {
     expect(updated.url).toStartWith('file://');
     expect(updated.updatedAt).toBeTruthy();
     expect(updated.raw).toBeDefined();
+  });
+
+  test('uses existing file path, not generating a new one (no duplicate conflict)', async () => {
+    // Create two files that could conflict if updatePage re-slugified
+    await writeFile(tempDir, 'my-doc.md', 'Original', {});
+    await writeFile(tempDir, 'my-doc-2.md', 'Second doc', {});
+
+    // Update the first doc - should use its externalId, not re-slugify
+    const updated = await adapter.updatePage(tempDir, 'my-doc.md', {
+      title: 'My Doc',
+      content: 'Updated original',
+    });
+
+    expect(updated.externalId).toBe('my-doc.md');
+    expect(updated.content).toBe('Updated original');
+
+    // Verify the second file is untouched
+    const raw2 = fs.readFileSync(path.join(tempDir, 'my-doc-2.md'), 'utf-8');
+    expect(raw2).toContain('Second doc');
   });
 });
 

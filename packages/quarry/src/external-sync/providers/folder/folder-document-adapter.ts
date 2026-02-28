@@ -26,6 +26,7 @@ import {
   readFile,
   writeFile,
   listFiles,
+  fileExists,
   parseFrontmatter,
   type FolderFrontmatter,
 } from './folder-fs.js';
@@ -179,8 +180,15 @@ export class FolderDocumentAdapter implements DocumentSyncAdapter {
     project: string,
     page: ExternalDocumentInput
   ): Promise<ExternalDocument> {
-    const slug = slugify(page.title);
-    const relativePath = `${slug}.md`;
+    const baseSlug = slugify(page.title);
+    let relativePath = `${baseSlug}.md`;
+
+    // Check for existing file and add numeric suffix if needed
+    let counter = 2;
+    while (await fileExists(project, relativePath)) {
+      relativePath = `${baseSlug}-${counter}.md`;
+      counter++;
+    }
 
     const frontmatter: FolderFrontmatter = {
       'synced-at': new Date().toISOString(),
