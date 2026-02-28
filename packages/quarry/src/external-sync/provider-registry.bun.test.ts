@@ -243,6 +243,8 @@ describe('createDefaultProviderRegistry', () => {
     expect(registry).toBeInstanceOf(ProviderRegistry);
     expect(registry.has('github')).toBe(true);
     expect(registry.has('linear')).toBe(true);
+    expect(registry.has('notion')).toBe(true);
+    expect(registry.has('folder')).toBe(true);
   });
 
   test('default providers include task adapter support', () => {
@@ -265,6 +267,32 @@ describe('createDefaultProviderRegistry', () => {
     const adapter = linear.getTaskAdapter!();
     expect(adapter.getIssue('team', '1')).rejects.toThrow(/not.*configured/);
   });
+
+  test('default Notion provider is a placeholder that throws on adapter use', () => {
+    const registry = createDefaultProviderRegistry();
+    const notion = registry.get('notion')!;
+    expect(notion).toBeDefined();
+    expect(notion.supportedAdapters).toContain('document');
+    const adapter = notion.getDocumentAdapter!();
+    expect(adapter.getPage('workspace', 'page-1')).rejects.toThrow(/not.*configured/i);
+  });
+
+  test('default Folder provider is ready to use (not a placeholder)', () => {
+    const registry = createDefaultProviderRegistry();
+    const folder = registry.get('folder')!;
+    expect(folder).toBeDefined();
+    expect(folder.name).toBe('folder');
+    expect(folder.displayName).toBe('Folder');
+    expect(folder.supportedAdapters).toContain('document');
+    // Folder provider should have a document adapter (not throw "not configured")
+    const adapter = folder.getDocumentAdapter!();
+    expect(adapter).toBeDefined();
+  });
+
+  test('registry has four default providers', () => {
+    const registry = createDefaultProviderRegistry();
+    expect(registry.list()).toHaveLength(4);
+  });
 });
 
 // ============================================================================
@@ -272,11 +300,13 @@ describe('createDefaultProviderRegistry', () => {
 // ============================================================================
 
 describe('createConfiguredProviderRegistry', () => {
-  test('creates a registry with both providers when no configs have tokens', () => {
+  test('creates a registry with all default providers when no configs have tokens', () => {
     const registry = createConfiguredProviderRegistry([]);
     expect(registry).toBeInstanceOf(ProviderRegistry);
     expect(registry.has('github')).toBe(true);
     expect(registry.has('linear')).toBe(true);
+    expect(registry.has('notion')).toBe(true);
+    expect(registry.has('folder')).toBe(true);
   });
 
   test('keeps placeholder when config has no token', () => {
@@ -349,5 +379,49 @@ describe('createConfiguredProviderRegistry', () => {
     const github = registry.get('github')!;
     expect(github).toBeDefined();
     expect(github.name).toBe('github');
+  });
+
+  test('replaces Notion placeholder with configured provider when token is set', () => {
+    const registry = createConfiguredProviderRegistry([
+      { provider: 'notion', token: 'ntn_test123' },
+    ]);
+    const notion = registry.get('notion')!;
+    expect(notion).toBeDefined();
+    expect(notion.name).toBe('notion');
+    expect(notion.supportedAdapters).toContain('document');
+    // Configured provider should NOT throw the placeholder message
+    const adapter = notion.getDocumentAdapter!();
+    expect(adapter.getPage('db-id', 'page-1')).rejects.not.toThrow(/not configured/);
+  });
+
+  test('folder provider is always available regardless of token', () => {
+    const registry = createConfiguredProviderRegistry([]);
+    const folder = registry.get('folder')!;
+    expect(folder).toBeDefined();
+    expect(folder.name).toBe('folder');
+    // Folder provider should always be ready — no placeholder pattern
+    const adapter = folder.getDocumentAdapter!();
+    expect(adapter).toBeDefined();
+  });
+
+  test('folder provider config is skipped (no token needed)', () => {
+    // Even when a folder config is passed, it should be skipped (not erroring)
+    const registry = createConfiguredProviderRegistry([
+      { provider: 'folder', defaultProject: '/tmp/docs' },
+    ]);
+    expect(registry.has('folder')).toBe(true);
+    const folder = registry.get('folder')!;
+    expect(folder.name).toBe('folder');
+  });
+
+  test('getAdaptersOfType returns document adapters for notion and folder', () => {
+    const registry = createConfiguredProviderRegistry([
+      { provider: 'notion', token: 'ntn_test123' },
+    ]);
+    const docAdapters = registry.getAdaptersOfType('document');
+    expect(docAdapters.length).toBeGreaterThanOrEqual(2);
+    const names = docAdapters.map((e) => e.provider.name);
+    expect(names).toContain('notion');
+    expect(names).toContain('folder');
   });
 });

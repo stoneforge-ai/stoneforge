@@ -27,6 +27,7 @@ import type {
 import { createGitHubProvider, createGitHubPlaceholderProvider } from './providers/github/index.js';
 import { createLinearProvider, createLinearPlaceholderProvider } from './providers/linear/index.js';
 import { createNotionProvider, createNotionPlaceholderProvider } from './providers/notion/index.js';
+import { createFolderProvider } from './providers/folder/index.js';
 
 // ============================================================================
 // Types
@@ -179,8 +180,9 @@ export function createProviderRegistry(): ProviderRegistry {
 /**
  * Create a ProviderRegistry with default providers registered.
  *
- * Registers placeholder providers for GitHub, Linear, and Notion by default.
- * The actual provider implementations replace these when configured with API keys.
+ * Registers placeholder providers for GitHub, Linear, and Notion by default,
+ * plus the Folder provider (which needs no authentication and is always ready).
+ * The actual provider implementations replace placeholders when configured with API keys.
  *
  * @returns A ProviderRegistry with default providers
  */
@@ -189,17 +191,21 @@ export function createDefaultProviderRegistry(): ProviderRegistry {
   registry.register(createGitHubPlaceholderProvider());
   registry.register(createLinearPlaceholderProvider());
   registry.register(createNotionPlaceholderProvider());
+  registry.register(createFolderProvider());
   return registry;
 }
 
 /**
  * Create a ProviderRegistry with real configured providers.
  *
- * Starts with placeholder providers for all known providers (GitHub, Linear, Notion),
+ * Starts with placeholder providers for all known providers (GitHub, Linear, Notion, Folder),
  * then replaces placeholders with real configured providers for any configs
  * that have a token set. This ensures providers without tokens remain as
  * placeholders (which throw descriptive errors), while configured providers
  * are ready for actual sync operations.
+ *
+ * Note: The Folder provider is always ready (no token needed), so it is
+ * never replaced — it remains as-is from the default registry.
  *
  * @param providerConfigs - Array of provider configurations (from settings)
  * @returns A ProviderRegistry with configured providers replacing placeholders
@@ -210,6 +216,11 @@ export function createConfiguredProviderRegistry(
   const registry = createDefaultProviderRegistry();
 
   for (const config of providerConfigs) {
+    // Folder provider doesn't need a token — it's always ready
+    if (config.provider === 'folder') {
+      continue;
+    }
+
     if (!config.token) {
       continue;
     }

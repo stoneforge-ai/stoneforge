@@ -1569,9 +1569,11 @@ sf import --force
 
 ## External Sync Commands
 
-Manage bidirectional synchronization between Stoneforge and external services (GitHub Issues, Linear, etc.).
+Manage bidirectional synchronization between Stoneforge and external services (GitHub Issues, Linear, Notion, Folder, etc.).
 
 **Source:** `packages/quarry/src/cli/commands/external-sync.ts`
+
+**Supported providers:** `github`, `linear`, `notion`, `folder`
 
 | Command                                                        | Description                  |
 | -------------------------------------------------------------- | ---------------------------- |
@@ -1580,21 +1582,22 @@ Manage bidirectional synchronization between Stoneforge and external services (G
 | `sf external-sync config set-project <provider> <project>`     | Set default project          |
 | `sf external-sync config set-auto-link <provider>`             | Enable auto-link with a provider |
 | `sf external-sync config disable-auto-link`                    | Disable auto-link            |
-| `sf external-sync link <taskId> <url-or-issue-number>`         | Link task to external issue  |
-| `sf external-sync link-all --provider <provider> [options]`    | Bulk-link all unlinked tasks |
-| `sf external-sync unlink <taskId>`                             | Remove external link         |
-| `sf external-sync push [taskId...]`                            | Push linked task(s)          |
-| `sf external-sync push --all`                                  | Push all linked tasks        |
+| `sf external-sync link <elementId> <url-or-id>`                | Link element to external resource |
+| `sf external-sync link-all --provider <provider> [options]`    | Bulk-link all unlinked elements |
+| `sf external-sync unlink <elementId>`                          | Remove external link         |
+| `sf external-sync push [elementId...]`                         | Push linked element(s)       |
+| `sf external-sync push --all`                                  | Push all linked elements     |
 | `sf external-sync push --all --force`                          | Force-push all (skip hash check) |
 | `sf external-sync pull`                                        | Pull changes from external   |
 | `sf external-sync sync [--dry-run]`                            | Bidirectional sync           |
 | `sf external-sync status`                                      | Show sync state              |
-| `sf external-sync resolve <taskId> --keep local\|remote`       | Resolve sync conflict        |
+| `sf external-sync resolve <elementId> --keep local\|remote`    | Resolve sync conflict        |
 
 ```bash
 # Configure a provider
 sf external-sync config set-token github ghp_xxxxxxxxxxxx
 sf external-sync config set-project github my-org/my-repo
+sf external-sync config set-token notion ntn_xxxxxxxxxxxx
 sf external-sync config set-auto-link github
 sf external-sync config disable-auto-link
 
@@ -1602,15 +1605,27 @@ sf external-sync config disable-auto-link
 sf external-sync link el-abc123 https://github.com/org/repo/issues/42
 sf external-sync link el-abc123 42
 
+# Link a document to an external page
+sf external-sync link el-doc456 page-id-123 --type document --provider notion
+
 # Bulk-link all unlinked tasks
 sf external-sync link-all --provider github
 sf external-sync link-all --provider github --dry-run
 
-# Push/pull/sync
+# Bulk-link all unlinked documents
+sf external-sync link-all --provider notion --type document
+sf external-sync link-all --provider folder --type document
+
+# Push/pull/sync (all types)
 sf external-sync push el-abc123
 sf external-sync push --all
 sf external-sync pull
 sf external-sync sync --dry-run
+
+# Push/pull/sync only tasks or documents
+sf external-sync push --all --type task
+sf external-sync pull --type document
+sf external-sync sync --type task
 
 # Check status and resolve conflicts
 sf external-sync status
@@ -1638,6 +1653,7 @@ Store an authentication token for an external sync provider. The token is stored
 ```bash
 sf external-sync config set-token github ghp_xxxxxxxxxxxx
 sf external-sync config set-token linear lin_api_xxxxxxxxxxxx
+sf external-sync config set-token notion ntn_xxxxxxxxxxxx
 ```
 
 #### external-sync config set-project
@@ -1658,13 +1674,14 @@ sf external-sync config set-project linear MY-PROJECT
 
 Enable auto-link for new tasks with the specified provider. When auto-link is enabled, newly created Stoneforge tasks will automatically get a corresponding external issue created and linked. Use the `--no-auto-link` flag on `sf create` to skip auto-linking for individual tasks.
 
-| Argument   | Description                              |
-| ---------- | ---------------------------------------- |
-| `provider` | Provider name (`github` or `linear`)     |
+| Argument   | Description                                              |
+| ---------- | -------------------------------------------------------- |
+| `provider` | Provider name (`github`, `linear`, `notion`, or `folder`) |
 
 ```bash
 sf external-sync config set-auto-link github
 sf external-sync config set-auto-link linear
+sf external-sync config set-auto-link notion
 ```
 
 #### external-sync config disable-auto-link
@@ -1677,126 +1694,151 @@ sf external-sync config disable-auto-link
 
 #### external-sync link
 
-Link a Stoneforge task to an external issue. Sets the task's `externalRef` and `_externalSync` metadata. If given a bare issue number, constructs the URL from the provider's default project.
+Link a Stoneforge element (task or document) to an external resource. Sets the element's `externalRef` and `_externalSync` metadata. For tasks, if given a bare issue number, constructs the URL from the provider's default project. For documents, supply the external page/resource ID directly.
 
-| Argument          | Description                        |
-| ----------------- | ---------------------------------- |
-| `taskId`          | Stoneforge task ID                 |
-| `url-or-number`   | Full URL or bare issue number      |
+| Argument          | Description                                      |
+| ----------------- | ------------------------------------------------ |
+| `elementId`       | Stoneforge element ID (task or document)         |
+| `url-or-id`       | Full URL, bare issue number, or external page ID |
 
-| Option                  | Description                          |
-| ----------------------- | ------------------------------------ |
-| `-p, --provider <name>` | Provider name (default: `github`)   |
+| Option                  | Description                                           |
+| ----------------------- | ----------------------------------------------------- |
+| `-p, --provider <name>` | Provider name (default: `github`)                    |
+| `-t, --type <type>`     | Element type: `task` or `document` (default: `task`) |
 
 ```bash
+# Link a task
 sf external-sync link el-abc123 https://github.com/org/repo/issues/42
 sf external-sync link el-abc123 42
 sf external-sync link el-abc123 42 --provider github
+
+# Link a document
+sf external-sync link el-doc456 page-id-123 --type document --provider notion
+sf external-sync link el-doc456 /path/to/file.md --type document --provider folder
 ```
 
 #### external-sync link-all
 
-Bulk-link all unlinked tasks to external issues. Finds all tasks that do not have external sync metadata and creates a corresponding external issue for each one, then links them. If a rate limit is hit, the command stops gracefully and reports how many tasks were linked — re-run the command to continue.
+Bulk-link all unlinked elements to external resources. By default links tasks; use `--type document` to link documents instead. Finds all elements of the specified type that do not have external sync metadata and creates a corresponding external resource for each one, then links them. If a rate limit is hit, the command stops gracefully and reports how many elements were linked — re-run the command to continue.
+
+When linking documents (`--type document`), system-managed categories (e.g., `task-description`, `message-content`) are automatically excluded.
 
 | Option                    | Description                                                  |
 | ------------------------- | ------------------------------------------------------------ |
 | `-p, --provider <name>`   | Provider to link to (required)                               |
 | `--project <project>`     | Override the default project                                 |
-| `-s, --status <status>`   | Only link tasks with this status (repeatable)                |
-| `-n, --dry-run`           | List tasks that would be linked without creating issues      |
-| `-b, --batch-size <n>`    | How many tasks to process concurrently (default: `10`)       |
-| `-f, --force`             | Re-link tasks already linked to a different provider         |
+| `-t, --type <type>`       | Element type: `task` or `document` (default: `task`)         |
+| `-s, --status <status>`   | Only link tasks with this status (repeatable, task type only)|
+| `-n, --dry-run`           | List elements that would be linked without creating them     |
+| `-b, --batch-size <n>`    | How many elements to process concurrently (default: `10`)    |
+| `-f, --force`             | Re-link elements already linked to a different provider      |
 
 ```bash
+# Bulk-link tasks
 sf external-sync link-all --provider github
 sf external-sync link-all --provider github --project my-org/my-repo
 sf external-sync link-all --provider github --status active --status blocked
 sf external-sync link-all --provider github --dry-run
 sf external-sync link-all --provider github --batch-size 5
 sf external-sync link-all --provider linear --force
-sf external-sync link-all --provider linear --force --dry-run
+
+# Bulk-link documents
+sf external-sync link-all --provider notion --type document
+sf external-sync link-all --provider folder --type document --dry-run
+sf external-sync link-all --provider notion --type document --project db-id-123
 ```
 
 #### external-sync unlink
 
-Remove the external link from a Stoneforge task. Clears the task's `externalRef` field and `_externalSync` metadata.
+Remove the external link from a Stoneforge element (task or document). Clears the element's `externalRef` field and `_externalSync` metadata.
 
-| Argument | Description        |
-| -------- | ------------------ |
-| `taskId` | Stoneforge task ID |
+| Argument    | Description                              |
+| ----------- | ---------------------------------------- |
+| `elementId` | Stoneforge element ID (task or document) |
 
 ```bash
 sf external-sync unlink el-abc123
+sf external-sync unlink el-doc456
 ```
 
 #### external-sync push
 
-Push linked tasks to their external service. If specific task IDs are given, pushes only those tasks. With `--all`, pushes every task that has an external link.
+Push linked elements to their external service. If specific element IDs are given, pushes only those elements. With `--all`, pushes every element that has an external link. Use `--type` to filter by element type.
 
-| Argument    | Description                                      |
-| ----------- | ------------------------------------------------ |
-| `taskId...` | One or more task IDs to push (optional with `--all`) |
+| Argument       | Description                                         |
+| -------------- | --------------------------------------------------- |
+| `elementId...` | One or more element IDs to push (optional with `--all`) |
 
-| Option        | Description            |
-| ------------- | ---------------------- |
-| `-a, --all`   | Push all linked tasks  |
-| `-f, --force` | Push all linked tasks regardless of whether they have changed (skips hash comparison) |
+| Option                | Description                                                    |
+| --------------------- | -------------------------------------------------------------- |
+| `-a, --all`           | Push all linked elements                                       |
+| `-f, --force`         | Push regardless of whether elements have changed (skip hash check) |
+| `-t, --type <type>`   | Filter by type: `task`, `document`, or `all` (default: `all`) |
 
 ```bash
 sf external-sync push el-abc123
 sf external-sync push el-abc123 el-def456
 sf external-sync push --all
 sf external-sync push --all --force
+sf external-sync push --all --type task
+sf external-sync push --all --type document
 ```
 
 **Note:** Push requires a running sync daemon or server to execute the actual sync operations.
 
 #### external-sync pull
 
-Pull changes from external services for all linked tasks. Optionally discover new issues not yet linked to Stoneforge tasks.
+Pull changes from external services for all linked elements. Optionally discover new issues not yet linked to Stoneforge elements. Use `--type` to filter by element type.
 
 | Option                    | Description                                      |
 | ------------------------- | ------------------------------------------------ |
 | `-p, --provider <name>`   | Pull from specific provider (default: all configured) |
 | `-d, --discover`          | Discover new unlinked issues                     |
+| `-t, --type <type>`       | Filter by type: `task`, `document`, or `all` (default: `all`) |
 
 ```bash
 sf external-sync pull
 sf external-sync pull --provider github
 sf external-sync pull --discover
+sf external-sync pull --type task
+sf external-sync pull --type document
 ```
 
 **Note:** Pull requires a running sync daemon or server to execute the actual sync operations.
 
 #### external-sync sync
 
-Run bidirectional sync between Stoneforge and external services. Performs both push and pull operations. In dry-run mode, reports what would change without making any modifications.
+Run bidirectional sync between Stoneforge and external services. Performs both push and pull operations. In dry-run mode, reports what would change without making any modifications. Use `--type` to filter by element type.
 
-| Option          | Description                                      |
-| --------------- | ------------------------------------------------ |
-| `-n, --dry-run` | Show what would change without making changes    |
+| Option                | Description                                                    |
+| --------------------- | -------------------------------------------------------------- |
+| `-n, --dry-run`       | Show what would change without making changes                  |
+| `-t, --type <type>`   | Filter by type: `task`, `document`, or `all` (default: `all`) |
 
 ```bash
 sf external-sync sync
 sf external-sync sync --dry-run
+sf external-sync sync --type task
+sf external-sync sync --type document
 ```
 
 #### external-sync status
 
-Show the current external sync state. Displays linked task count, configured providers, pending conflicts, last sync cursors, and poll interval.
+Show the current external sync state. Displays linked task count, linked document count, configured providers (with per-provider task/document counts), pending conflicts, last sync cursors, and poll interval.
 
 ```bash
 sf external-sync status
 sf external-sync status --json
+sf external-sync status --quiet   # Output format: tasks:documents:conflicts
 ```
 
 #### external-sync resolve
 
-Resolve a sync conflict by choosing which version to keep. Tasks with sync conflicts are tagged with `sync-conflict`. This command resolves the conflict by keeping either the local or remote version, removes the `sync-conflict` tag, and records the resolution in metadata.
+Resolve a sync conflict by choosing which version to keep. Elements with sync conflicts are tagged with `sync-conflict`. This command resolves the conflict by keeping either the local or remote version, removes the `sync-conflict` tag, and records the resolution in metadata. Works with both tasks and documents.
 
-| Argument | Description                     |
-| -------- | ------------------------------- |
-| `taskId` | Task ID with a sync conflict   |
+| Argument    | Description                              |
+| ----------- | ---------------------------------------- |
+| `elementId` | Element ID with a sync conflict          |
 
 | Option                    | Description                                          |
 | ------------------------- | ---------------------------------------------------- |
@@ -1805,6 +1847,7 @@ Resolve a sync conflict by choosing which version to keep. Tasks with sync confl
 ```bash
 sf external-sync resolve el-abc123 --keep local
 sf external-sync resolve el-abc123 --keep remote
+sf external-sync resolve el-doc456 --keep local
 ```
 
 ## Config Commands

@@ -14,6 +14,32 @@ export {
 } from './linear/index.js';
 export type { CreateLinearProviderOptions } from './linear/index.js';
 
+// Notion provider
+export {
+  createNotionProvider,
+  createNotionPlaceholderProvider,
+  NotionDocumentAdapter,
+  createNotionDocumentAdapter,
+  extractTitleFromProperties,
+  buildPageProperties,
+  markdownToNotionBlocks,
+  notionBlocksToMarkdown,
+  NotionApiClient,
+  NotionApiError,
+  isNotionApiError,
+} from './notion/index.js';
+export type {
+  CreateNotionProviderOptions,
+  NotionApiClientOptions,
+  RateLimitState as NotionRateLimitState,
+  NotionPage,
+  NotionBlock,
+  NotionBlockInput,
+  NotionRichText,
+  NotionAnnotations,
+  NotionProperty,
+} from './notion/index.js';
+
 // Folder provider
 export { createFolderProvider } from './folder/index.js';
 export {
