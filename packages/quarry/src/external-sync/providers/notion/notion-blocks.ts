@@ -691,26 +691,79 @@ function createLinkRichText(content: string, url: string): NotionRichText {
 // ============================================================================
 
 /**
- * Map common markdown language identifiers to Notion's supported language names.
- * Notion uses specific language names for code blocks.
+ * The complete set of language identifiers accepted by the Notion API
+ * for code blocks. Any language not in this set will be rejected.
+ * @see https://developers.notion.com/reference/block#code
  */
-const LANGUAGE_MAP: Record<string, string> = {
-  js: 'javascript',
-  ts: 'typescript',
-  py: 'python',
-  rb: 'ruby',
-  sh: 'shell',
-  bash: 'shell',
-  zsh: 'shell',
-  yml: 'yaml',
-  md: 'markdown',
+export const NOTION_LANGUAGES = new Set([
+  'abap', 'abc', 'agda', 'arduino', 'ascii art', 'assembly', 'bash', 'basic',
+  'bnf', 'c', 'c#', 'c++', 'clojure', 'coffeescript', 'coq', 'css', 'dart',
+  'dhall', 'diff', 'docker', 'ebnf', 'elixir', 'elm', 'erlang', 'f#', 'flow',
+  'fortran', 'gherkin', 'glsl', 'go', 'graphql', 'groovy', 'haskell', 'hcl',
+  'html', 'idris', 'java', 'javascript', 'json', 'julia', 'kotlin', 'latex',
+  'less', 'lisp', 'livescript', 'llvm ir', 'lua', 'makefile', 'markdown',
+  'markup', 'matlab', 'mathematica', 'mermaid', 'nix', 'notion formula',
+  'objective-c', 'ocaml', 'pascal', 'perl', 'php', 'plain text', 'powershell',
+  'prolog', 'protobuf', 'purescript', 'python', 'r', 'racket', 'reason',
+  'ruby', 'rust', 'sass', 'scala', 'scheme', 'scss', 'shell', 'smalltalk',
+  'solidity', 'sql', 'swift', 'toml', 'typescript', 'vb.net', 'verilog',
+  'vhdl', 'visual basic', 'webassembly', 'xml', 'yaml', 'java/c/c++/c#',
+]);
+
+/**
+ * Map common code fence language aliases to their Notion-accepted equivalents.
+ * These cover short names, file extensions, and alternate spellings that
+ * markdown authors commonly use but Notion does not recognize.
+ */
+export const LANGUAGE_ALIASES: Record<string, string> = {
+  'tsx': 'typescript',
+  'ts': 'typescript',
+  'jsx': 'javascript',
+  'js': 'javascript',
+  'sh': 'shell',
+  'zsh': 'shell',
+  'yml': 'yaml',
+  'py': 'python',
+  'rb': 'ruby',
+  'rs': 'rust',
+  'cs': 'c#',
+  'cpp': 'c++',
+  'objc': 'objective-c',
+  'dockerfile': 'docker',
+  'tf': 'hcl',
+  'hs': 'haskell',
+  'ex': 'elixir',
+  'exs': 'elixir',
+  'kt': 'kotlin',
+  'fs': 'f#',
+  'fsharp': 'f#',
+  'csharp': 'c#',
+  'jsonc': 'json',
+  'md': 'markdown',
+  'text': 'plain text',
+  'txt': 'plain text',
+  'plaintext': 'plain text',
   '': 'plain text',
 };
 
 /**
+ * Map a code fence language identifier to a Notion-accepted language value.
+ *
+ * 1. If the lowercased input is already in NOTION_LANGUAGES, return it.
+ * 2. If it matches a known alias, return the mapped value.
+ * 3. Otherwise, fall back to 'plain text' (always accepted by Notion).
+ */
+export function mapLanguageToNotion(lang: string): string {
+  const lower = lang.toLowerCase().trim();
+  if (NOTION_LANGUAGES.has(lower)) return lower;
+  if (LANGUAGE_ALIASES[lower]) return LANGUAGE_ALIASES[lower];
+  return 'plain text'; // safe fallback
+}
+
+/**
  * Normalize a language identifier to Notion's format.
+ * Delegates to mapLanguageToNotion for full allowlist validation.
  */
 function normalizeLanguage(lang: string): string {
-  const normalized = lang.toLowerCase().trim();
-  return LANGUAGE_MAP[normalized] ?? normalized;
+  return mapLanguageToNotion(lang);
 }

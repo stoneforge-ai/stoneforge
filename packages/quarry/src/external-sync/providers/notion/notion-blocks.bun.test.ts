@@ -13,7 +13,10 @@ import {
   parseInlineMarkdown,
   richTextToMarkdown,
   chunkRichText,
+  mapLanguageToNotion,
   NOTION_MAX_TEXT_LENGTH,
+  NOTION_LANGUAGES,
+  LANGUAGE_ALIASES,
 } from './notion-blocks.js';
 import type {
   NotionBlock,
@@ -1078,5 +1081,320 @@ describe('markdownToNotionBlocks — rich text chunking', () => {
     // Second block should have multiple rich_text elements (long)
     const secondRt = getRichText(blocks[1]);
     expect(secondRt.length).toBeGreaterThan(1);
+  });
+});
+
+// ============================================================================
+// Language Mapping (mapLanguageToNotion)
+// ============================================================================
+
+describe('mapLanguageToNotion', () => {
+  describe('alias mapping', () => {
+    test('"tsx" maps to "typescript"', () => {
+      expect(mapLanguageToNotion('tsx')).toBe('typescript');
+    });
+
+    test('"ts" maps to "typescript"', () => {
+      expect(mapLanguageToNotion('ts')).toBe('typescript');
+    });
+
+    test('"jsx" maps to "javascript"', () => {
+      expect(mapLanguageToNotion('jsx')).toBe('javascript');
+    });
+
+    test('"js" maps to "javascript"', () => {
+      expect(mapLanguageToNotion('js')).toBe('javascript');
+    });
+
+    test('"sh" maps to "shell"', () => {
+      expect(mapLanguageToNotion('sh')).toBe('shell');
+    });
+
+    test('"zsh" maps to "shell"', () => {
+      expect(mapLanguageToNotion('zsh')).toBe('shell');
+    });
+
+    test('"yml" maps to "yaml"', () => {
+      expect(mapLanguageToNotion('yml')).toBe('yaml');
+    });
+
+    test('"py" maps to "python"', () => {
+      expect(mapLanguageToNotion('py')).toBe('python');
+    });
+
+    test('"rb" maps to "ruby"', () => {
+      expect(mapLanguageToNotion('rb')).toBe('ruby');
+    });
+
+    test('"rs" maps to "rust"', () => {
+      expect(mapLanguageToNotion('rs')).toBe('rust');
+    });
+
+    test('"cs" maps to "c#"', () => {
+      expect(mapLanguageToNotion('cs')).toBe('c#');
+    });
+
+    test('"cpp" maps to "c++"', () => {
+      expect(mapLanguageToNotion('cpp')).toBe('c++');
+    });
+
+    test('"objc" maps to "objective-c"', () => {
+      expect(mapLanguageToNotion('objc')).toBe('objective-c');
+    });
+
+    test('"dockerfile" maps to "docker"', () => {
+      expect(mapLanguageToNotion('dockerfile')).toBe('docker');
+    });
+
+    test('"tf" maps to "hcl"', () => {
+      expect(mapLanguageToNotion('tf')).toBe('hcl');
+    });
+
+    test('"hs" maps to "haskell"', () => {
+      expect(mapLanguageToNotion('hs')).toBe('haskell');
+    });
+
+    test('"ex" maps to "elixir"', () => {
+      expect(mapLanguageToNotion('ex')).toBe('elixir');
+    });
+
+    test('"exs" maps to "elixir"', () => {
+      expect(mapLanguageToNotion('exs')).toBe('elixir');
+    });
+
+    test('"kt" maps to "kotlin"', () => {
+      expect(mapLanguageToNotion('kt')).toBe('kotlin');
+    });
+
+    test('"fs" maps to "f#"', () => {
+      expect(mapLanguageToNotion('fs')).toBe('f#');
+    });
+
+    test('"fsharp" maps to "f#"', () => {
+      expect(mapLanguageToNotion('fsharp')).toBe('f#');
+    });
+
+    test('"csharp" maps to "c#"', () => {
+      expect(mapLanguageToNotion('csharp')).toBe('c#');
+    });
+
+    test('"jsonc" maps to "json"', () => {
+      expect(mapLanguageToNotion('jsonc')).toBe('json');
+    });
+
+    test('"md" maps to "markdown"', () => {
+      expect(mapLanguageToNotion('md')).toBe('markdown');
+    });
+
+    test('"text" maps to "plain text"', () => {
+      expect(mapLanguageToNotion('text')).toBe('plain text');
+    });
+
+    test('"txt" maps to "plain text"', () => {
+      expect(mapLanguageToNotion('txt')).toBe('plain text');
+    });
+
+    test('"plaintext" maps to "plain text"', () => {
+      expect(mapLanguageToNotion('plaintext')).toBe('plain text');
+    });
+  });
+
+  describe('valid Notion languages pass through', () => {
+    test('"python" stays "python"', () => {
+      expect(mapLanguageToNotion('python')).toBe('python');
+    });
+
+    test('"typescript" stays "typescript"', () => {
+      expect(mapLanguageToNotion('typescript')).toBe('typescript');
+    });
+
+    test('"javascript" stays "javascript"', () => {
+      expect(mapLanguageToNotion('javascript')).toBe('javascript');
+    });
+
+    test('"rust" stays "rust"', () => {
+      expect(mapLanguageToNotion('rust')).toBe('rust');
+    });
+
+    test('"go" stays "go"', () => {
+      expect(mapLanguageToNotion('go')).toBe('go');
+    });
+
+    test('"bash" stays "bash"', () => {
+      expect(mapLanguageToNotion('bash')).toBe('bash');
+    });
+
+    test('"sql" stays "sql"', () => {
+      expect(mapLanguageToNotion('sql')).toBe('sql');
+    });
+
+    test('"plain text" stays "plain text"', () => {
+      expect(mapLanguageToNotion('plain text')).toBe('plain text');
+    });
+  });
+
+  describe('unknown and edge cases', () => {
+    test('unknown language falls back to "plain text"', () => {
+      expect(mapLanguageToNotion('brainfuck')).toBe('plain text');
+    });
+
+    test('empty string becomes "plain text"', () => {
+      expect(mapLanguageToNotion('')).toBe('plain text');
+    });
+
+    test('whitespace-only string becomes "plain text"', () => {
+      expect(mapLanguageToNotion('   ')).toBe('plain text');
+    });
+
+    test('case insensitive matching', () => {
+      expect(mapLanguageToNotion('TypeScript')).toBe('typescript');
+      expect(mapLanguageToNotion('PYTHON')).toBe('python');
+      expect(mapLanguageToNotion('TSX')).toBe('typescript');
+      expect(mapLanguageToNotion('JSX')).toBe('javascript');
+    });
+
+    test('trims whitespace', () => {
+      expect(mapLanguageToNotion('  typescript  ')).toBe('typescript');
+      expect(mapLanguageToNotion(' tsx ')).toBe('typescript');
+    });
+  });
+
+  describe('all aliases map to valid Notion languages', () => {
+    test('every alias value is in NOTION_LANGUAGES', () => {
+      for (const [alias, target] of Object.entries(LANGUAGE_ALIASES)) {
+        expect(NOTION_LANGUAGES.has(target)).toBe(true);
+      }
+    });
+  });
+});
+
+// ============================================================================
+// Language Mapping Integration (markdownToNotionBlocks → notionBlocksToMarkdown)
+// ============================================================================
+
+describe('language mapping integration', () => {
+  describe('markdownToNotionBlocks maps languages correctly', () => {
+    test('tsx code fence maps to typescript', () => {
+      const blocks = markdownToNotionBlocks('```tsx\nconst x: React.FC = () => null;\n```');
+      const code = (blocks[0] as { type: 'code'; code: { language: string } }).code;
+      expect(code.language).toBe('typescript');
+    });
+
+    test('jsx code fence maps to javascript', () => {
+      const blocks = markdownToNotionBlocks('```jsx\nconst App = () => <div />;\n```');
+      const code = (blocks[0] as { type: 'code'; code: { language: string } }).code;
+      expect(code.language).toBe('javascript');
+    });
+
+    test('sh code fence maps to shell', () => {
+      const blocks = markdownToNotionBlocks('```sh\necho hello\n```');
+      const code = (blocks[0] as { type: 'code'; code: { language: string } }).code;
+      expect(code.language).toBe('shell');
+    });
+
+    test('yml code fence maps to yaml', () => {
+      const blocks = markdownToNotionBlocks('```yml\nkey: value\n```');
+      const code = (blocks[0] as { type: 'code'; code: { language: string } }).code;
+      expect(code.language).toBe('yaml');
+    });
+
+    test('unknown language falls back to plain text', () => {
+      const blocks = markdownToNotionBlocks('```brainfuck\n++++\n```');
+      const code = (blocks[0] as { type: 'code'; code: { language: string } }).code;
+      expect(code.language).toBe('plain text');
+    });
+
+    test('empty language becomes plain text', () => {
+      const blocks = markdownToNotionBlocks('```\nsome code\n```');
+      const code = (blocks[0] as { type: 'code'; code: { language: string } }).code;
+      expect(code.language).toBe('plain text');
+    });
+
+    test('dockerfile maps to docker', () => {
+      const blocks = markdownToNotionBlocks('```dockerfile\nFROM node:18\n```');
+      const code = (blocks[0] as { type: 'code'; code: { language: string } }).code;
+      expect(code.language).toBe('docker');
+    });
+
+    test('rs maps to rust', () => {
+      const blocks = markdownToNotionBlocks('```rs\nfn main() {}\n```');
+      const code = (blocks[0] as { type: 'code'; code: { language: string } }).code;
+      expect(code.language).toBe('rust');
+    });
+  });
+
+  describe('reverse mapping in notionBlocksToMarkdown', () => {
+    test('plain text language renders as empty fence annotation', () => {
+      const blocks: NotionBlock[] = [
+        { type: 'code', code: { rich_text: [plainRichText('some code')], language: 'plain text' } },
+      ];
+      expect(notionBlocksToMarkdown(blocks)).toBe('```\nsome code\n```');
+    });
+
+    test('typescript language renders as typescript fence', () => {
+      const blocks: NotionBlock[] = [
+        { type: 'code', code: { rich_text: [plainRichText('const x = 1;')], language: 'typescript' } },
+      ];
+      expect(notionBlocksToMarkdown(blocks)).toBe('```typescript\nconst x = 1;\n```');
+    });
+
+    test('javascript language renders as javascript fence', () => {
+      const blocks: NotionBlock[] = [
+        { type: 'code', code: { rich_text: [plainRichText('const x = 1;')], language: 'javascript' } },
+      ];
+      expect(notionBlocksToMarkdown(blocks)).toBe('```javascript\nconst x = 1;\n```');
+    });
+
+    test('shell language renders as shell fence', () => {
+      const blocks: NotionBlock[] = [
+        { type: 'code', code: { rich_text: [plainRichText('echo hello')], language: 'shell' } },
+      ];
+      expect(notionBlocksToMarkdown(blocks)).toBe('```shell\necho hello\n```');
+    });
+  });
+
+  describe('round-trip fidelity with aliased languages', () => {
+    test('tsx → typescript → typescript (aliased input normalizes)', () => {
+      const md = '```tsx\nconst x = 1;\n```';
+      const blocks = markdownToNotionBlocks(md);
+      const result = notionBlocksToMarkdown(blocks);
+      // tsx maps to typescript, so round-trip produces typescript fence
+      expect(result).toBe('```typescript\nconst x = 1;\n```');
+    });
+
+    test('jsx → javascript → javascript (aliased input normalizes)', () => {
+      const md = '```jsx\nconst x = 1;\n```';
+      const blocks = markdownToNotionBlocks(md);
+      const result = notionBlocksToMarkdown(blocks);
+      expect(result).toBe('```javascript\nconst x = 1;\n```');
+    });
+
+    test('sh → shell → shell (aliased input normalizes)', () => {
+      const md = '```sh\necho hello\n```';
+      const blocks = markdownToNotionBlocks(md);
+      const result = notionBlocksToMarkdown(blocks);
+      expect(result).toBe('```shell\necho hello\n```');
+    });
+
+    test('yml → yaml → yaml (aliased input normalizes)', () => {
+      const md = '```yml\nkey: value\n```';
+      const blocks = markdownToNotionBlocks(md);
+      const result = notionBlocksToMarkdown(blocks);
+      expect(result).toBe('```yaml\nkey: value\n```');
+    });
+
+    test('valid Notion language round-trips perfectly', () => {
+      const md = '```python\nprint("hello")\n```';
+      const blocks = markdownToNotionBlocks(md);
+      const result = notionBlocksToMarkdown(blocks);
+      expect(result).toBe(md);
+    });
+
+    test('unknown language normalizes to plain text (empty fence)', () => {
+      const md = '```brainfuck\n++++\n```';
+      const blocks = markdownToNotionBlocks(md);
+      const result = notionBlocksToMarkdown(blocks);
+      expect(result).toBe('```\n++++\n```');
+    });
   });
 });
