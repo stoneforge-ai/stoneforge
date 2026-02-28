@@ -188,6 +188,18 @@ export interface ExternalDocumentInput {
   readonly content: string;
   readonly contentType?: 'markdown' | 'html' | 'text';
   /**
+   * Optional document category (e.g., 'reference', 'spec', 'how-to').
+   * Providers that support category metadata (e.g., Notion select property)
+   * use this to set the document's category.
+   */
+  readonly category?: string;
+  /**
+   * Optional document tags for classification.
+   * Providers that support tag metadata (e.g., Notion multi_select property)
+   * use this to set the document's tags.
+   */
+  readonly tags?: readonly string[];
+  /**
    * Optional library path for organizing documents into subdirectories.
    * Consists of slugified library names joined by '/', representing the
    * document's position in the library hierarchy.

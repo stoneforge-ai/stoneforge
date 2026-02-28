@@ -320,6 +320,66 @@ describe('documentToExternalDocumentInput', () => {
     expect(result.content).toBe(largeContent);
     expect(result.content.length).toBe(100000);
   });
+
+  test('includes category when document has a category', () => {
+    const doc = createTestDocument({
+      title: 'Architecture Doc',
+      category: 'spec' as DocumentCategory,
+    });
+
+    const result = documentToExternalDocumentInput(doc);
+
+    expect(result.category).toBe('spec');
+  });
+
+  test('includes tags when document has non-empty tags', () => {
+    const doc = createTestDocument({
+      title: 'API Reference',
+      tags: ['api', 'docs', 'v2'],
+    });
+
+    const result = documentToExternalDocumentInput(doc);
+
+    expect(result.tags).toEqual(['api', 'docs', 'v2']);
+  });
+
+  test('omits tags when document has empty tags array', () => {
+    const doc = createTestDocument({
+      title: 'Empty Tags Doc',
+      tags: [],
+    });
+
+    const result = documentToExternalDocumentInput(doc);
+
+    expect(result.tags).toBeUndefined();
+  });
+
+  test('includes both category and tags when both present', () => {
+    const doc = createTestDocument({
+      title: 'Full Metadata Doc',
+      category: 'how-to' as DocumentCategory,
+      tags: ['setup', 'guide'],
+    });
+
+    const result = documentToExternalDocumentInput(doc);
+
+    expect(result.category).toBe('how-to');
+    expect(result.tags).toEqual(['setup', 'guide']);
+  });
+
+  test('includes category, tags, and libraryPath together', () => {
+    const doc = createTestDocument({
+      title: 'Nested Doc',
+      category: 'reference' as DocumentCategory,
+      tags: ['api'],
+    });
+
+    const result = documentToExternalDocumentInput(doc, 'documentation/api');
+
+    expect(result.category).toBe('reference');
+    expect(result.tags).toEqual(['api']);
+    expect(result.libraryPath).toBe('documentation/api');
+  });
 });
 
 // ============================================================================
