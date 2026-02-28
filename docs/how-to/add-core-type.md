@@ -172,7 +172,7 @@ export async function createFeature(input: CreateFeatureInput): Promise<Feature>
   const now = new Date().toISOString() as Timestamp;
 
   const feature: Feature = {
-    id: await generateId({ type: 'feature', title: input.title, createdAt: now }) as FeatureId,
+    id: await generateId({ identifier: input.title, createdBy: input.createdBy }) as FeatureId,
     type: 'feature',
     title: input.title.trim(),
     status: input.status ?? FeatureStatus.PROPOSED,
@@ -285,8 +285,8 @@ describe('Feature', () => {
   };
 
   describe('createFeature', () => {
-    it('creates a feature with required fields', () => {
-      const feature = createFeature(validInput);
+    it('creates a feature with required fields', async () => {
+      const feature = await createFeature(validInput);
 
       expect(feature.type).toBe('feature');
       expect(feature.title).toBe('User Authentication');
@@ -295,12 +295,12 @@ describe('Feature', () => {
       expect(feature.id).toBeDefined();
     });
 
-    it('throws on missing title', () => {
-      expect(() => createFeature({ ...validInput, title: '' })).toThrow();
+    it('throws on missing title', async () => {
+      await expect(createFeature({ ...validInput, title: '' })).rejects.toThrow();
     });
 
-    it('uses default status and priority', () => {
-      const feature = createFeature({
+    it('uses default status and priority', async () => {
+      const feature = await createFeature({
         title: 'Test',
         createdBy: 'user-1' as any,
       });
@@ -311,8 +311,8 @@ describe('Feature', () => {
   });
 
   describe('isFeature', () => {
-    it('returns true for valid feature', () => {
-      const feature = createFeature(validInput);
+    it('returns true for valid feature', async () => {
+      const feature = await createFeature(validInput);
       expect(isFeature(feature)).toBe(true);
     });
 
@@ -324,16 +324,16 @@ describe('Feature', () => {
   });
 
   describe('updateFeature', () => {
-    it('updates status', () => {
-      const feature = createFeature(validInput);
+    it('updates status', async () => {
+      const feature = await createFeature(validInput);
       const updated = updateFeature(feature, { status: FeatureStatus.APPROVED });
 
       expect(updated.status).toBe(FeatureStatus.APPROVED);
       expect(updated.updatedAt).not.toBe(feature.updatedAt);
     });
 
-    it('merges metadata', () => {
-      const feature = createFeature({
+    it('merges metadata', async () => {
+      const feature = await createFeature({
         ...validInput,
         metadata: { key1: 'value1' },
       });

@@ -53,6 +53,16 @@ Relationship changes between elements:
 | `dependency_added` | New relationship created |
 | `dependency_removed` | Relationship deleted |
 
+### Comment Events
+
+| Event | Meaning |
+|-------|---------|
+| `comment_added` | Comment added to document |
+| `comment_updated` | Comment content updated |
+| `comment_deleted` | Comment soft-deleted |
+| `comment_resolved` | Comment resolved |
+| `comment_unresolved` | Comment unresolved |
+
 ### Other Events
 
 | Event | Meaning |

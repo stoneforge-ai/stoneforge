@@ -86,7 +86,7 @@ const blockedCache = createBlockedCacheService(storage);
 blockedCache.isBlocked(taskId);  // O(1)
 
 // Get all blocked elements
-blockedCache.getAllBlocked();  // Returns Set<ElementId>
+blockedCache.getAllBlocked();  // Returns BlockingInfo[] (elementId, blockedBy, reason, previousStatus)
 
 // Get what's blocked by a specific element
 blockedCache.getBlockedBy(blockerId);
@@ -98,14 +98,16 @@ When blockers resolve, the cache triggers automatic status transitions:
 
 ```typescript
 // Enable auto-transitions
-blockedCache.setStatusTransitionCallback((elementId, newStatus, reason) => {
-  return api.update(elementId, { status: newStatus });
+blockedCache.setStatusTransitionCallback({
+  onBlock: (elementId, previousStatus) => {
+    // Called when element becomes blocked; previousStatus is saved for restoration
+    api.update(elementId, { status: 'blocked' });
+  },
+  onUnblock: (elementId, statusToRestore) => {
+    // Called when all blockers resolve; statusToRestore is the pre-blocked status
+    api.update(elementId, { status: statusToRestore });
+  },
 });
-
-// When all blockers close, this fires:
-// elementId: the unblocked task
-// newStatus: 'open'
-// reason: 'All blocking dependencies resolved'
 ```
 
 These generate `auto_blocked` and `auto_unblocked` events with actor `'system:blocked-cache'`.
@@ -170,7 +172,7 @@ await api.addDependency({
   metadata: {
     gateType: 'approval',
     requiredApprovers: ['manager-1', 'lead-1'],
-    requiredCount: 1,  // Need 1 of 2
+    approvalCount: 1,  // Need 1 of 2
     currentApprovers: [],
   },
   createdBy: actorId,
@@ -200,14 +202,14 @@ import { createDependencyService } from '@stoneforge/quarry';
 
 const depService = createDependencyService(storage);
 
-// Check BEFORE adding
-const wouldCycle = depService.detectCycle(taskA.id, taskB.id, 'blocks');
-if (wouldCycle) {
-  throw new Error('Would create circular dependency');
+// Check BEFORE adding (returns CycleDetectionResult, not boolean)
+const result = depService.detectCycle(taskA.id, taskB.id, 'blocks');
+if (result.hasCycle) {
+  throw new Error(`Would create circular dependency: ${result.cyclePath?.join(' -> ')}`);
 }
 ```
 
-**Important:** `api.addDependency()` does NOT auto-check cycles. You must check manually.
+**Note:** `api.addDependency()` auto-checks for cycles on blocking dependency types and throws a `ConflictError` with `CYCLE_DETECTED` if a cycle would be created. You can also check manually with `detectCycle()` for more detailed results (cycle path, nodes visited, depth limit status).
 
 Cycle detection:
 - Only applies to blocking dependency types
@@ -307,7 +309,7 @@ await api.addDependency({
   metadata: {
     gateType: 'approval',
     requiredApprovers: ['security-team', 'ops-team'],
-    requiredCount: 2,
+    approvalCount: 2,
     currentApprovers: [],
   },
   createdBy: actorId,
@@ -345,7 +347,7 @@ await api.addDependency({
 
 2. **Direction matters** - For `blocks`, `blockedId` is the waiting task and `blockerId` is what must complete first.
 
-3. **Cycles not auto-checked** - Call `detectCycle()` before adding blocking dependencies.
+3. **Cycles auto-checked** - `api.addDependency()` auto-checks for cycles on blocking types and throws `CYCLE_DETECTED`. Use `detectCycle()` for detailed results.
 
 4. **`relates-to` is normalized** - Always query both directions to find all related elements.
 

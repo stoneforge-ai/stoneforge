@@ -186,6 +186,7 @@ const roleDef = await roleDefService.createRoleDefinition({
   name: 'Frontend Developer',
   systemPrompt: 'You specialize in React and TypeScript...',
   workerMode: 'ephemeral',
+  createdBy: directorId,
   tags: ['frontend', 'senior'],
   behaviors: {
     onStartup: 'Pull latest from main branch',
@@ -203,6 +204,7 @@ const roleDef = await roleDefService.createRoleDefinition({
 | `role` | Base role (director, worker, steward) |
 | `name` | Display name |
 | `systemPrompt` | Custom system prompt |
+| `createdBy` | Entity ID of the creator |
 | `workerMode` | Worker type (`ephemeral` or `persistent`) |
 | `tags` | Classification tags for the role |
 | `behaviors` | Event-driven instructions |
@@ -270,18 +272,17 @@ import { createAgentRegistry } from '@stoneforge/smithy';
 
 const registry = createAgentRegistry(api);
 
-// Register an agent
+// Register a worker agent
 const agent = await registry.registerAgent({
-  entityId: 'worker-1',
   role: 'worker',
-  roleDefinitionId: roleDef.id,
-  sessionId: 'session-abc',
-  status: 'active',
+  name: 'worker-1',
+  workerMode: 'ephemeral',
+  createdBy: directorId,
+  roleDefinitionRef: roleDef.id,
 });
 
-// Find available workers
-const workers = await registry.getAgentsByRole('worker');
-const available = workers.filter(a => a.status === 'active');
+// Find available workers (idle or never started)
+const available = await registry.getAvailableWorkers();
 ```
 
 ## Task Assignment
@@ -337,9 +338,8 @@ const doc = await api.create({
 });
 
 // Director sends to Worker
-await api.sendDirectMessage({
-  senderId: directorId,
-  recipientId: workerId,
+await api.sendDirectMessage(directorId, {
+  recipient: workerId,
   contentRef: doc.id,
 });
 
