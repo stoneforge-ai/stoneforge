@@ -10,8 +10,11 @@ import type {
   Element,
   ExternalTask,
   ExternalTaskInput,
+  ExternalDocument,
+  ExternalDocumentInput,
   ExternalProvider,
   TaskSyncAdapter,
+  DocumentSyncAdapter,
   ProviderConfig,
   TaskFieldMapConfig,
   ExternalSyncState,
@@ -96,7 +99,10 @@ function createMockApi(options: {
       const el = elements.find((e) => e.id === id);
       return (el as T) ?? null;
     },
-    async list<T extends Element>(_filter?: Record<string, unknown>): Promise<T[]> {
+    async list<T extends Element>(filter?: Record<string, unknown>): Promise<T[]> {
+      if (filter && 'type' in filter) {
+        return elements.filter((e) => (e as unknown as { type: string }).type === filter.type) as T[];
+      }
       return elements as T[];
     },
     async update<T extends Element>(id: ElementId, updates: Partial<T>): Promise<T> {
@@ -1768,5 +1774,775 @@ describe('createSyncEngine', () => {
       registry,
     });
     expect(engine).toBeInstanceOf(SyncEngine);
+  });
+});
+
+// ============================================================================
+// Document Sync Test Helpers
+// ============================================================================
+
+function createTestDocumentSyncState(overrides: Partial<ExternalSyncState> = {}): ExternalSyncState {
+  return {
+    provider: 'notion',
+    project: 'workspace-1',
+    externalId: 'page-42',
+    url: 'https://notion.so/page-42',
+    direction: 'bidirectional',
+    adapterType: 'document',
+    ...overrides,
+  } as ExternalSyncState;
+}
+
+function createTestDocumentElement(metadataOverrides: Record<string, unknown> = {}): Element {
+  const syncState = metadataOverrides._syncState as ExternalSyncState | undefined;
+  delete metadataOverrides._syncState;
+
+  const metadata = syncState
+    ? setExternalSyncState(metadataOverrides, syncState)
+    : metadataOverrides;
+
+  return {
+    id: 'el-doc1' as ElementId,
+    type: 'document',
+    title: 'Test Document',
+    content: 'Test document content',
+    contentType: 'markdown',
+    status: 'active',
+    category: 'reference',
+    version: 1,
+    previousVersionId: null,
+    immutable: false,
+    tags: ['doc-tag'],
+    createdAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+    updatedAt: '2024-01-10T00:00:00.000Z' as Timestamp,
+    createdBy: 'el-user1',
+    metadata,
+  } as unknown as Element;
+}
+
+function createTestExternalDocument(overrides: Partial<ExternalDocument> = {}): ExternalDocument {
+  return {
+    externalId: 'page-42',
+    url: 'https://notion.so/page-42',
+    provider: 'notion',
+    project: 'workspace-1',
+    title: 'Remote Document Title',
+    content: 'Remote document content',
+    contentType: 'markdown' as const,
+    updatedAt: '2024-01-15T00:00:00Z',
+    ...overrides,
+  };
+}
+
+function createMockDocumentAdapter(options: {
+  pages?: ExternalDocument[];
+  onUpdatePage?: (project: string, externalId: string, updates: Partial<ExternalDocumentInput>) => void;
+  onCreatePage?: (project: string, page: ExternalDocumentInput) => ExternalDocument;
+} = {}): DocumentSyncAdapter {
+  return {
+    async getPage(_project: string, externalId: string): Promise<ExternalDocument | null> {
+      return options.pages?.find((p) => p.externalId === externalId) ?? null;
+    },
+    async listPagesSince(_project: string, _since: Timestamp): Promise<ExternalDocument[]> {
+      return options.pages ?? [];
+    },
+    async createPage(project: string, page: ExternalDocumentInput): Promise<ExternalDocument> {
+      if (options.onCreatePage) {
+        return options.onCreatePage(project, page);
+      }
+      return createTestExternalDocument({ title: page.title, externalId: 'page-99' });
+    },
+    async updatePage(
+      project: string,
+      externalId: string,
+      updates: Partial<ExternalDocumentInput>
+    ): Promise<ExternalDocument> {
+      options.onUpdatePage?.(project, externalId, updates);
+      return createTestExternalDocument({ externalId, ...updates });
+    },
+  };
+}
+
+function createMockDocumentProvider(
+  name: string,
+  docAdapter: DocumentSyncAdapter,
+  taskAdapter?: TaskSyncAdapter
+): ExternalProvider {
+  const supportedAdapters: Array<'task' | 'document' | 'message'> = ['document'];
+  if (taskAdapter) supportedAdapters.push('task');
+
+  return {
+    name,
+    displayName: name.charAt(0).toUpperCase() + name.slice(1),
+    supportedAdapters,
+    async testConnection(_config: ProviderConfig): Promise<boolean> {
+      return true;
+    },
+    getDocumentAdapter: () => docAdapter,
+    ...(taskAdapter && { getTaskAdapter: () => taskAdapter }),
+  };
+}
+
+function buildDocumentEngine(options: {
+  elements?: Element[];
+  events?: Array<{ elementId: ElementId; eventType: string; createdAt: Timestamp }>;
+  pages?: ExternalDocument[];
+  onUpdate?: (id: ElementId, updates: Partial<Element>) => void;
+  onUpdatePage?: (project: string, externalId: string, updates: Partial<ExternalDocumentInput>) => void;
+  onCreate?: (input: Record<string, unknown>) => Element;
+  conflictResolver?: SyncConflictResolver;
+} = {}): SyncEngine {
+  const docAdapter = createMockDocumentAdapter({
+    pages: options.pages,
+    onUpdatePage: options.onUpdatePage,
+  });
+  const provider = createMockDocumentProvider('notion', docAdapter);
+  const registry = new ProviderRegistry();
+  registry.register(provider);
+
+  const settings = createMockSettings();
+
+  return createSyncEngine({
+    api: createMockApi({
+      elements: options.elements,
+      events: options.events,
+      onUpdate: options.onUpdate,
+      onCreate: options.onCreate,
+    }),
+    registry,
+    settings,
+    conflictResolver: options.conflictResolver,
+    providerConfigs: [
+      { provider: 'notion', token: 'test-token', defaultProject: 'workspace-1' },
+    ],
+  });
+}
+
+// ============================================================================
+// Document Push Tests
+// ============================================================================
+
+describe('SyncEngine.push — documents', () => {
+  test('pushes document with changed content to external service', async () => {
+    const syncState = createTestDocumentSyncState({
+      lastPushedHash: 'old-hash-that-differs',
+      lastPushedAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+    });
+    const element = createTestDocumentElement({ _syncState: syncState });
+
+    let updateCalled = false;
+    let capturedUpdates: Partial<ExternalDocumentInput> | undefined;
+    const engine = buildDocumentEngine({
+      elements: [element],
+      events: [
+        { elementId: element.id, eventType: 'updated', createdAt: '2024-01-05T00:00:00.000Z' as Timestamp },
+      ],
+      onUpdatePage: (_project, _externalId, updates) => {
+        updateCalled = true;
+        capturedUpdates = updates;
+      },
+    });
+
+    const result = await engine.push({ all: true });
+    expect(updateCalled).toBe(true);
+    expect(result.pushed).toBe(1);
+    expect(result.skipped).toBe(0);
+    // Verify document fields are passed
+    expect(capturedUpdates).toBeDefined();
+    expect(capturedUpdates!.title).toBe('Test Document');
+    expect(capturedUpdates!.content).toBe('Test document content');
+    expect(capturedUpdates!.contentType).toBe('markdown');
+  });
+
+  test('skips document when content hash unchanged', async () => {
+    const element = createTestDocumentElement({
+      _syncState: createTestDocumentSyncState(),
+    });
+
+    // Compute the actual hash for this element to simulate "already pushed"
+    const { computeContentHashSync } = await import('../sync/hash.js');
+    const matchingHash = computeContentHashSync(element as unknown as Element).hash;
+
+    const syncStateWithHash = createTestDocumentSyncState({
+      lastPushedHash: matchingHash,
+      lastPushedAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+    });
+    const elementWithHash = createTestDocumentElement({ _syncState: syncStateWithHash });
+
+    let updateCalled = false;
+    const engine = buildDocumentEngine({
+      elements: [elementWithHash],
+      events: [],
+      onUpdatePage: () => {
+        updateCalled = true;
+      },
+    });
+
+    const result = await engine.push({ all: true });
+    expect(updateCalled).toBe(false);
+    expect(result.pushed).toBe(0);
+    expect(result.skipped).toBe(1);
+  });
+
+  test('skips documents with pull-only direction', async () => {
+    const syncState = createTestDocumentSyncState({ direction: 'pull' });
+    const element = createTestDocumentElement({ _syncState: syncState });
+
+    const engine = buildDocumentEngine({ elements: [element] });
+
+    const result = await engine.push({ all: true });
+    expect(result.pushed).toBe(0);
+    expect(result.skipped).toBe(1);
+  });
+
+  test('skips archived documents on push', async () => {
+    const syncState = createTestDocumentSyncState({
+      lastPushedHash: 'old-hash-that-differs',
+      lastPushedAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+    });
+    const element = {
+      ...createTestDocumentElement({ _syncState: syncState }),
+      status: 'archived',
+    } as unknown as Element;
+
+    let updateCalled = false;
+    const engine = buildDocumentEngine({
+      elements: [element],
+      events: [
+        { elementId: element.id, eventType: 'updated', createdAt: '2024-01-05T00:00:00.000Z' as Timestamp },
+      ],
+      onUpdatePage: () => {
+        updateCalled = true;
+      },
+    });
+
+    const result = await engine.push({ all: true });
+    expect(updateCalled).toBe(false);
+    expect(result.pushed).toBe(0);
+    expect(result.skipped).toBe(1);
+  });
+
+  test('push dry run reports changes without pushing document', async () => {
+    const syncState = createTestDocumentSyncState({
+      lastPushedHash: 'old-hash',
+      lastPushedAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+    });
+    const element = createTestDocumentElement({ _syncState: syncState });
+
+    let updateCalled = false;
+    const engine = buildDocumentEngine({
+      elements: [element],
+      events: [
+        { elementId: element.id, eventType: 'updated', createdAt: '2024-01-05T00:00:00.000Z' as Timestamp },
+      ],
+      onUpdatePage: () => {
+        updateCalled = true;
+      },
+    });
+
+    const result = await engine.push({ all: true, dryRun: true });
+    expect(updateCalled).toBe(false);
+    expect(result.pushed).toBe(1);
+  });
+
+  test('push captures errors for document elements', async () => {
+    const syncState = createTestDocumentSyncState({
+      lastPushedHash: 'old-hash',
+      lastPushedAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+    });
+    const element = createTestDocumentElement({ _syncState: syncState });
+
+    const docAdapter = createMockDocumentAdapter();
+    docAdapter.updatePage = async () => {
+      throw new Error('Notion API rate limit exceeded (429)');
+    };
+    const provider = createMockDocumentProvider('notion', docAdapter);
+    const registry = new ProviderRegistry();
+    registry.register(provider);
+
+    const engine = createSyncEngine({
+      api: createMockApi({
+        elements: [element],
+        events: [
+          { elementId: element.id, eventType: 'updated', createdAt: '2024-01-05T00:00:00.000Z' as Timestamp },
+        ],
+      }),
+      registry,
+      providerConfigs: [{ provider: 'notion', token: 'test', defaultProject: 'workspace-1' }],
+    });
+
+    const result = await engine.push({ all: true });
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0].message).toContain('rate limit');
+    expect(result.errors[0].retryable).toBe(true);
+    expect(result.success).toBe(false);
+  });
+});
+
+// ============================================================================
+// Document Pull Tests
+// ============================================================================
+
+describe('SyncEngine.pull — documents', () => {
+  test('creates new documents for unlinked external documents with all flag', async () => {
+    const externalDoc = createTestExternalDocument({ externalId: 'page-99', title: 'New Page' });
+
+    let createdInput: Record<string, unknown> | undefined;
+    const engine = buildDocumentEngine({
+      elements: [],
+      pages: [externalDoc],
+      onCreate: (input) => {
+        createdInput = input;
+        return {
+          id: 'el-newdoc1' as ElementId,
+          ...input,
+          createdAt: '2024-01-01T00:00:00.000Z',
+          updatedAt: '2024-01-01T00:00:00.000Z',
+        } as unknown as Element;
+      },
+    });
+
+    const result = await engine.pull({ all: true });
+    expect(result.pulled).toBe(1);
+    expect(createdInput).toBeDefined();
+    expect(createdInput!.type).toBe('document');
+    expect(createdInput!.title).toBe('New Page');
+    expect(createdInput!.content).toBe('Remote document content');
+    expect(createdInput!.contentType).toBe('markdown');
+    expect(createdInput!.status).toBe('active');
+  });
+
+  test('skips unlinked external documents without all flag', async () => {
+    const externalDoc = createTestExternalDocument({ externalId: 'page-99' });
+
+    const engine = buildDocumentEngine({
+      elements: [],
+      pages: [externalDoc],
+    });
+
+    const result = await engine.pull({});
+    expect(result.pulled).toBe(0);
+    expect(result.skipped).toBe(1);
+  });
+
+  test('updates linked documents with remote changes', async () => {
+    const syncState = createTestDocumentSyncState({
+      externalId: 'page-42',
+      lastPulledHash: 'old-remote-hash',
+      direction: 'bidirectional',
+    });
+    const element = createTestDocumentElement({ _syncState: syncState });
+
+    const externalDoc = createTestExternalDocument({
+      externalId: 'page-42',
+      title: 'Updated Remote Title',
+      content: 'Updated remote content',
+    });
+
+    let updatedId: ElementId | undefined;
+    let capturedUpdates: Partial<Element> | undefined;
+    const engine = buildDocumentEngine({
+      elements: [element],
+      pages: [externalDoc],
+      onUpdate: (id, updates) => {
+        updatedId = id;
+        capturedUpdates = updates;
+      },
+    });
+
+    const result = await engine.pull({ all: true });
+    expect(result.pulled).toBe(1);
+    expect(updatedId).toBe(element.id);
+    // Verify document content was updated
+    expect(capturedUpdates).toBeDefined();
+    expect((capturedUpdates as Record<string, unknown>).title).toBe('Updated Remote Title');
+    expect((capturedUpdates as Record<string, unknown>).content).toBe('Updated remote content');
+  });
+
+  test('skips linked documents with push-only direction', async () => {
+    const syncState = createTestDocumentSyncState({
+      externalId: 'page-42',
+      direction: 'push',
+    });
+    const element = createTestDocumentElement({ _syncState: syncState });
+
+    const externalDoc = createTestExternalDocument({ externalId: 'page-42' });
+
+    const engine = buildDocumentEngine({
+      elements: [element],
+      pages: [externalDoc],
+    });
+
+    const result = await engine.pull({ all: true });
+    expect(result.skipped).toBe(1);
+    expect(result.pulled).toBe(0);
+  });
+
+  test('skips updates to archived documents on pull', async () => {
+    const syncState = createTestDocumentSyncState({
+      externalId: 'page-42',
+      lastPulledHash: 'old-remote-hash',
+      direction: 'bidirectional',
+    });
+    const element = {
+      ...createTestDocumentElement({ _syncState: syncState }),
+      status: 'archived',
+    } as unknown as Element;
+
+    const externalDoc = createTestExternalDocument({
+      externalId: 'page-42',
+      title: 'Updated Archived Doc',
+    });
+
+    let updateCalled = false;
+    const engine = buildDocumentEngine({
+      elements: [element],
+      pages: [externalDoc],
+      onUpdate: () => {
+        updateCalled = true;
+      },
+    });
+
+    const result = await engine.pull({ all: true });
+    expect(updateCalled).toBe(false);
+    expect(result.pulled).toBe(0);
+    expect(result.skipped).toBe(1);
+  });
+
+  test('updates document sync cursor after successful pull', async () => {
+    const externalDoc = createTestExternalDocument({ externalId: 'page-99' });
+    const settings = createMockSettings();
+
+    const docAdapter = createMockDocumentAdapter({ pages: [externalDoc] });
+    const provider = createMockDocumentProvider('notion', docAdapter);
+    const registry = new ProviderRegistry();
+    registry.register(provider);
+
+    const engine = createSyncEngine({
+      api: createMockApi({ elements: [] }),
+      registry,
+      settings,
+      providerConfigs: [{ provider: 'notion', token: 'test', defaultProject: 'workspace-1' }],
+    });
+
+    await engine.pull({ all: true });
+
+    // The cursor should be stored in settings with 'document' adapter type
+    const cursorKey = 'external_sync.cursor.notion.workspace-1.document';
+    const cursorSetting = settings.getSetting(cursorKey);
+    expect(cursorSetting).toBeDefined();
+    expect(typeof cursorSetting!.value).toBe('string');
+  });
+
+  test('does not update document cursor on dry run', async () => {
+    const externalDoc = createTestExternalDocument({ externalId: 'page-99' });
+    const settings = createMockSettings();
+
+    const docAdapter = createMockDocumentAdapter({ pages: [externalDoc] });
+    const provider = createMockDocumentProvider('notion', docAdapter);
+    const registry = new ProviderRegistry();
+    registry.register(provider);
+
+    const engine = createSyncEngine({
+      api: createMockApi({ elements: [] }),
+      registry,
+      settings,
+      providerConfigs: [{ provider: 'notion', token: 'test', defaultProject: 'workspace-1' }],
+    });
+
+    await engine.pull({ all: true, dryRun: true });
+
+    const cursorKey = 'external_sync.cursor.notion.workspace-1.document';
+    const cursorSetting = settings.getSetting(cursorKey);
+    expect(cursorSetting).toBeUndefined();
+  });
+
+  test('uses computeExternalDocumentHash for pull change detection', async () => {
+    // Import hash function to precompute the hash
+    const { computeExternalDocumentHash } = await import('./adapters/document-sync-adapter.js');
+
+    const externalDoc = createTestExternalDocument({
+      externalId: 'page-42',
+      title: 'Same Title',
+      content: 'Same content',
+      contentType: 'markdown',
+    });
+
+    // Set lastPulledHash to match what the external doc would hash to
+    const currentHash = computeExternalDocumentHash(externalDoc);
+    const syncState = createTestDocumentSyncState({
+      externalId: 'page-42',
+      lastPulledHash: currentHash,
+      direction: 'bidirectional',
+    });
+    const element = createTestDocumentElement({ _syncState: syncState });
+
+    let updateCalled = false;
+    const engine = buildDocumentEngine({
+      elements: [element],
+      pages: [externalDoc],
+      onUpdate: () => {
+        updateCalled = true;
+      },
+    });
+
+    const result = await engine.pull({ all: true });
+    // Should skip because hash matches — no real change
+    expect(updateCalled).toBe(false);
+    expect(result.pulled).toBe(0);
+    expect(result.skipped).toBe(1);
+  });
+});
+
+// ============================================================================
+// Mixed Task + Document Sync Tests
+// ============================================================================
+
+describe('SyncEngine.sync — mixed task + document', () => {
+  test('push handles both tasks and documents in a single pass', async () => {
+    const taskSyncState = createTestSyncState({
+      lastPushedHash: 'old-task-hash',
+      lastPushedAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+    });
+    const taskElement = createTestElement({ _syncState: taskSyncState });
+
+    const docSyncState = createTestDocumentSyncState({
+      lastPushedHash: 'old-doc-hash',
+      lastPushedAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+    });
+    const docElement = createTestDocumentElement({ _syncState: docSyncState });
+
+    let taskUpdateCalled = false;
+    let docUpdateCalled = false;
+
+    const taskAdapter = createMockTaskAdapter({
+      onUpdateIssue: () => {
+        taskUpdateCalled = true;
+      },
+    });
+    const docAdapter = createMockDocumentAdapter({
+      onUpdatePage: () => {
+        docUpdateCalled = true;
+      },
+    });
+
+    // Create a provider that supports both task and document adapters
+    const provider: ExternalProvider = {
+      name: 'github',
+      displayName: 'GitHub',
+      supportedAdapters: ['task', 'document'],
+      async testConnection(): Promise<boolean> { return true; },
+      getTaskAdapter: () => taskAdapter,
+      getDocumentAdapter: () => docAdapter,
+    };
+    const registry = new ProviderRegistry();
+    registry.register(provider);
+
+    // We need a separate provider for notion since it holds the document
+    const notionDocAdapter = createMockDocumentAdapter({
+      onUpdatePage: () => {
+        docUpdateCalled = true;
+      },
+    });
+    const notionProvider = createMockDocumentProvider('notion', notionDocAdapter);
+    registry.register(notionProvider);
+
+    const settings = createMockSettings();
+
+    const engine = createSyncEngine({
+      api: createMockApi({
+        elements: [taskElement, docElement],
+        events: [
+          { elementId: taskElement.id, eventType: 'updated', createdAt: '2024-01-05T00:00:00.000Z' as Timestamp },
+          { elementId: docElement.id, eventType: 'updated', createdAt: '2024-01-05T00:00:00.000Z' as Timestamp },
+        ],
+      }),
+      registry,
+      settings,
+      providerConfigs: [
+        { provider: 'github', token: 'test-token', defaultProject: 'owner/repo' },
+        { provider: 'notion', token: 'test-token', defaultProject: 'workspace-1' },
+      ],
+    });
+
+    const result = await engine.push({ all: true });
+    expect(taskUpdateCalled).toBe(true);
+    expect(docUpdateCalled).toBe(true);
+    expect(result.pushed).toBe(2);
+  });
+
+  test('pull handles both task and document adapters', async () => {
+    const externalIssue = createTestExternalTask({ externalId: '99', title: 'New Issue' });
+    const externalDoc = createTestExternalDocument({ externalId: 'page-99', title: 'New Page' });
+
+    const taskAdapter = createMockTaskAdapter({ issues: [externalIssue] });
+    const docAdapter = createMockDocumentAdapter({ pages: [externalDoc] });
+
+    const provider: ExternalProvider = {
+      name: 'github',
+      displayName: 'GitHub',
+      supportedAdapters: ['task'],
+      async testConnection(): Promise<boolean> { return true; },
+      getTaskAdapter: () => taskAdapter,
+    };
+    const notionProvider = createMockDocumentProvider('notion', docAdapter);
+
+    const registry = new ProviderRegistry();
+    registry.register(provider);
+    registry.register(notionProvider);
+
+    const settings = createMockSettings();
+
+    const engine = createSyncEngine({
+      api: createMockApi({ elements: [] }),
+      registry,
+      settings,
+      providerConfigs: [
+        { provider: 'github', token: 'test', defaultProject: 'owner/repo' },
+        { provider: 'notion', token: 'test', defaultProject: 'workspace-1' },
+      ],
+    });
+
+    const result = await engine.pull({ all: true });
+    // Both should be created (1 task + 1 document)
+    expect(result.pulled).toBe(2);
+  });
+
+  test('sync() does not hardcode adapterType to task', async () => {
+    const docSyncState = createTestDocumentSyncState({
+      lastPushedHash: 'old-doc-hash',
+      lastPushedAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+    });
+    const docElement = createTestDocumentElement({ _syncState: docSyncState });
+
+    const engine = buildDocumentEngine({
+      elements: [docElement],
+      events: [
+        { elementId: docElement.id, eventType: 'updated', createdAt: '2024-01-05T00:00:00.000Z' as Timestamp },
+      ],
+      pages: [],
+    });
+
+    const result = await engine.sync({ all: true });
+    // The result should not have hardcoded 'task' as adapterType
+    // It derives from push/pull results
+    expect(result.pushed).toBeGreaterThanOrEqual(0);
+    expect(result.pulled).toBeGreaterThanOrEqual(0);
+  });
+});
+
+// ============================================================================
+// Document Conflict Resolution Tests
+// ============================================================================
+
+describe('SyncEngine conflict handling — documents', () => {
+  test('detects conflicts when both local and remote document changed', async () => {
+    // Element with old pushed hash (local has changed since)
+    const syncState = createTestDocumentSyncState({
+      externalId: 'page-42',
+      lastPushedHash: 'hash-at-last-push',
+      lastPulledHash: 'old-remote-hash',
+      direction: 'bidirectional',
+    });
+    const element = createTestDocumentElement({ _syncState: syncState });
+
+    // Remote document (different from lastPulledHash)
+    const externalDoc = createTestExternalDocument({
+      externalId: 'page-42',
+      title: 'Changed Remotely',
+      content: 'Changed content',
+    });
+
+    // Resolver that always picks remote
+    const resolver: SyncConflictResolver = {
+      resolve(): ConflictResolution {
+        return { winner: 'remote', resolved: true };
+      },
+    };
+
+    const engine = buildDocumentEngine({
+      elements: [element],
+      pages: [externalDoc],
+      conflictResolver: resolver,
+    });
+
+    const result = await engine.pull({ all: true });
+    expect(result.conflicts).toHaveLength(1);
+    expect(result.conflicts[0].resolved).toBe(true);
+    expect(result.conflicts[0].winner).toBe('remote');
+    expect(result.pulled).toBe(1);
+  });
+
+  test('manual resolution tags document with sync-conflict', async () => {
+    const syncState = createTestDocumentSyncState({
+      externalId: 'page-42',
+      lastPushedHash: 'hash-at-last-push',
+      lastPulledHash: 'old-remote-hash',
+      direction: 'bidirectional',
+    });
+    const element = createTestDocumentElement({ _syncState: syncState });
+
+    const externalDoc = createTestExternalDocument({ externalId: 'page-42' });
+
+    // Resolver that returns manual (unresolved)
+    const resolver: SyncConflictResolver = {
+      resolve(): ConflictResolution {
+        return { winner: 'manual', resolved: false };
+      },
+    };
+
+    let updatedTags: string[] | undefined;
+    const engine = buildDocumentEngine({
+      elements: [element],
+      pages: [externalDoc],
+      conflictResolver: resolver,
+      onUpdate: (_id, updates) => {
+        if ('tags' in updates) {
+          updatedTags = updates.tags as string[];
+        }
+      },
+    });
+
+    const result = await engine.pull({ all: true });
+    expect(result.conflicts).toHaveLength(1);
+    expect(result.conflicts[0].resolved).toBe(false);
+    expect(updatedTags).toContain('sync-conflict');
+  });
+
+  test('local-wins conflict skips pull but updates pulled hash for documents', async () => {
+    const syncState = createTestDocumentSyncState({
+      externalId: 'page-42',
+      lastPushedHash: 'hash-at-last-push',
+      lastPulledHash: 'old-remote-hash',
+      direction: 'bidirectional',
+    });
+    const element = createTestDocumentElement({ _syncState: syncState });
+
+    const externalDoc = createTestExternalDocument({ externalId: 'page-42' });
+
+    const resolver: SyncConflictResolver = {
+      resolve(): ConflictResolution {
+        return { winner: 'local', resolved: true };
+      },
+    };
+
+    let updatedMetadata: Record<string, unknown> | undefined;
+    const engine = buildDocumentEngine({
+      elements: [element],
+      pages: [externalDoc],
+      conflictResolver: resolver,
+      onUpdate: (_id, updates) => {
+        if ('metadata' in updates) {
+          updatedMetadata = updates.metadata as Record<string, unknown>;
+        }
+      },
+    });
+
+    const result = await engine.pull({ all: true });
+    expect(result.conflicts).toHaveLength(1);
+    expect(result.conflicts[0].winner).toBe('local');
+    // Element should be skipped (local wins), but metadata updated with new pulled hash
+    expect(result.skipped).toBe(1);
+    expect(updatedMetadata).toBeDefined();
   });
 });

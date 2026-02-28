@@ -32,7 +32,9 @@ import type {
   ExternalSyncError,
   ExternalSyncState,
   ExternalTask,
+  ExternalDocument,
   TaskSyncAdapter,
+  DocumentSyncAdapter,
   ConflictStrategy,
   SyncAdapterType,
   ExternalProvider,
@@ -57,6 +59,7 @@ import { createHash } from 'crypto';
 import { computeContentHashSync } from '../sync/hash.js';
 import type { ProviderRegistry } from './provider-registry.js';
 import { taskToExternalTask, externalTaskToTaskUpdates, getFieldMapConfigForProvider } from './adapters/task-sync-adapter.js';
+import { documentToExternalDocumentInput, externalDocumentToDocumentUpdates, computeExternalDocumentHash } from './adapters/document-sync-adapter.js';
 
 // ============================================================================
 // Types
@@ -114,13 +117,13 @@ export interface SyncConflictResolver {
    * Resolve a conflict between local and remote versions.
    *
    * @param localElement - The local Stoneforge element
-   * @param remoteItem - The external task/item
+   * @param remoteItem - The external task/document/item (must have updatedAt)
    * @param strategy - The conflict strategy to apply
    * @returns Resolution result indicating which side wins, or 'manual' for unresolved
    */
   resolve(
     localElement: Element,
-    remoteItem: ExternalTask,
+    remoteItem: ExternalTask | ExternalDocument,
     strategy: ConflictStrategy
   ): ConflictResolution;
 }
@@ -179,7 +182,7 @@ function buildCursorKey(provider: string, project: string, adapterType: SyncAdap
 const defaultConflictResolver: SyncConflictResolver = {
   resolve(
     localElement: Element,
-    remoteItem: ExternalTask,
+    remoteItem: ExternalTask | ExternalDocument,
     strategy: ConflictStrategy
   ): ConflictResolution {
     switch (strategy) {
@@ -272,17 +275,24 @@ export class SyncEngine {
         continue;
       }
 
-      // Skip closed/tombstone tasks — they're done and shouldn't sync.
-      // If a task is later reopened (status changes away from closed/tombstone),
+      // Skip closed/tombstone tasks and archived documents — they're done
+      // and shouldn't sync. If an element is later reopened/reactivated,
       // it will be picked up again naturally since the filter no longer applies.
       const elementStatus = (element as unknown as { status: string }).status;
-      if (elementStatus === 'closed' || elementStatus === 'tombstone') {
+      if (elementStatus === 'closed' || elementStatus === 'tombstone' || elementStatus === 'archived') {
         skipped.push(1);
         continue;
       }
 
       try {
-        const result = await this.pushElement(element, syncState, options, now);
+        // Route by adapter type: tasks → pushElement(), documents → pushDocument()
+        let result: 'pushed' | 'skipped';
+        if (syncState.adapterType === 'document') {
+          result = await this.pushDocument(element, syncState, options, now);
+        } else {
+          result = await this.pushElement(element, syncState, options, now);
+        }
+
         if (result === 'pushed') {
           pushed.push(1);
         } else if (result === 'skipped') {
@@ -375,6 +385,70 @@ export class SyncEngine {
     return 'pushed';
   }
 
+  /**
+   * Push a single document to its external service.
+   *
+   * Parallel to pushElement(), but uses document-specific conversion
+   * (documentToExternalDocumentInput) and the DocumentSyncAdapter.
+   *
+   * @returns 'pushed' if changes were sent, 'skipped' if no changes detected
+   */
+  private async pushDocument(
+    element: Element,
+    syncState: ExternalSyncState,
+    options: SyncOptions,
+    now: Timestamp
+  ): Promise<'pushed' | 'skipped'> {
+    // Check for actual content change via hash (skip when force is true)
+    const currentHash = computeContentHashSync(element).hash;
+    if (!options.force && syncState.lastPushedHash && currentHash === syncState.lastPushedHash) {
+      return 'skipped';
+    }
+
+    // Verify events have occurred since last push (skip when force is true)
+    if (!options.force && syncState.lastPushedAt) {
+      const events = await this.api.listEvents({
+        elementId: element.id,
+        eventType: ['updated'] as unknown as EventType[],
+        after: syncState.lastPushedAt,
+      } as EventFilter);
+
+      if (events.length === 0) {
+        return 'skipped';
+      }
+    }
+
+    // Dry run — report but don't actually push
+    if (options.dryRun) {
+      return 'pushed';
+    }
+
+    // Get the document adapter for this element's provider
+    const adapter = this.getDocumentAdapter(syncState.provider);
+    if (!adapter) {
+      throw new Error(`No document adapter found for provider '${syncState.provider}'`);
+    }
+
+    // Build external document input using the shared field mapping utilities
+    const docInput = documentToExternalDocumentInput(element as unknown as Document);
+
+    // Push to external service
+    await adapter.updatePage(syncState.project, syncState.externalId, docInput);
+
+    // Update sync state on element
+    const updatedSyncState: ExternalSyncState = {
+      ...syncState,
+      lastPushedAt: now,
+      lastPushedHash: currentHash,
+    };
+
+    await this.api.update(element.id, {
+      metadata: setExternalSyncState(element.metadata, updatedSyncState),
+    } as Partial<Element>);
+
+    return 'pushed';
+  }
+
   // --------------------------------------------------------------------------
   // Pull — pull externally-changed items into Stoneforge
   // --------------------------------------------------------------------------
@@ -402,9 +476,9 @@ export class SyncEngine {
     const now = createTimestamp();
 
     // Get all task adapters from the registry
-    const adapterEntries = this.registry.getAdaptersOfType('task');
+    const taskAdapterEntries = this.registry.getAdaptersOfType('task');
 
-    for (const { provider, adapter } of adapterEntries) {
+    for (const { provider, adapter } of taskAdapterEntries) {
       const taskAdapter = adapter as TaskSyncAdapter;
       const providerConfig = this.getProviderConfig(provider.name);
       const project = providerConfig?.defaultProject;
@@ -418,6 +492,41 @@ export class SyncEngine {
         const result = await this.pullFromProvider(
           provider,
           taskAdapter,
+          project,
+          options,
+          now,
+          conflicts,
+          errors
+        );
+
+        pulled.push(result.pulled);
+        skipped.push(result.skipped);
+      } catch (err) {
+        errors.push({
+          provider: provider.name,
+          project,
+          message: err instanceof Error ? err.message : String(err),
+          retryable: isRetryableError(err),
+        });
+      }
+    }
+
+    // Get all document adapters from the registry
+    const docAdapterEntries = this.registry.getAdaptersOfType('document');
+
+    for (const { provider, adapter } of docAdapterEntries) {
+      const docAdapter = adapter as DocumentSyncAdapter;
+      const providerConfig = this.getProviderConfig(provider.name);
+      const project = providerConfig?.defaultProject;
+
+      if (!project) {
+        continue;
+      }
+
+      try {
+        const result = await this.pullDocumentsFromProvider(
+          provider,
+          docAdapter,
           project,
           options,
           now,
@@ -674,6 +783,276 @@ export class SyncEngine {
   }
 
   // --------------------------------------------------------------------------
+  // Pull — document-specific helpers
+  // --------------------------------------------------------------------------
+
+  /**
+   * Pull document changes from a specific provider.
+   * Parallel to pullFromProvider(), but uses the DocumentSyncAdapter.
+   */
+  private async pullDocumentsFromProvider(
+    provider: ExternalProvider,
+    adapter: DocumentSyncAdapter,
+    project: string,
+    options: SyncOptions,
+    now: Timestamp,
+    conflicts: ExternalSyncConflict[],
+    errors: ExternalSyncError[]
+  ): Promise<{ pulled: number; skipped: number }> {
+    let pulledCount = 0;
+    let skippedCount = 0;
+
+    // Get the sync cursor for this provider+project for documents
+    const syncCursor = this.getSyncCursor(provider.name, project, 'document');
+
+    // Fetch changed documents since cursor
+    const externalDocs = await adapter.listPagesSince(project, syncCursor);
+
+    // Get all locally-linked document elements for matching
+    const linkedElements = await this.findLinkedElementsForProvider(
+      provider.name,
+      project
+    );
+
+    // Filter to only document-type linked elements
+    const linkedDocuments = linkedElements.filter((el) => {
+      const state = getExternalSyncState(el.metadata);
+      return state && state.adapterType === 'document';
+    });
+
+    // Build a map of externalId → local element for fast lookup
+    const linkedByExternalId = new Map<string, Element>();
+    for (const el of linkedDocuments) {
+      const state = getExternalSyncState(el.metadata);
+      if (state) {
+        linkedByExternalId.set(state.externalId, el);
+      }
+    }
+
+    for (const externalDoc of externalDocs) {
+      // If taskIds filter is set (used generically for element IDs), check if this external doc matches
+      if (options.taskIds) {
+        const localEl = linkedByExternalId.get(externalDoc.externalId);
+        if (!localEl || !options.taskIds.includes(localEl.id)) {
+          skippedCount++;
+          continue;
+        }
+      }
+
+      try {
+        const result = await this.pullDocumentItem(
+          provider,
+          project,
+          externalDoc,
+          linkedByExternalId,
+          options,
+          now,
+          conflicts
+        );
+
+        if (result === 'pulled') {
+          pulledCount++;
+        } else if (result === 'skipped') {
+          skippedCount++;
+        } else if (result === 'created') {
+          pulledCount++;
+        }
+      } catch (err) {
+        errors.push({
+          externalId: externalDoc.externalId,
+          provider: provider.name,
+          project,
+          message: err instanceof Error ? err.message : String(err),
+          retryable: isRetryableError(err),
+        });
+      }
+    }
+
+    // Update sync cursor (unless dry run)
+    if (!options.dryRun && externalDocs.length > 0) {
+      this.setSyncCursor(provider.name, project, 'document', now);
+    }
+
+    return { pulled: pulledCount, skipped: skippedCount };
+  }
+
+  /**
+   * Pull a single external document into Stoneforge.
+   * Parallel to pullItem(), but uses document-specific conversion.
+   *
+   * @returns 'pulled' if local element was updated, 'skipped' if no changes,
+   *          'created' if a new document was created
+   */
+  private async pullDocumentItem(
+    provider: ExternalProvider,
+    project: string,
+    externalDoc: ExternalDocument,
+    linkedByExternalId: Map<string, Element>,
+    options: SyncOptions,
+    now: Timestamp,
+    conflicts: ExternalSyncConflict[]
+  ): Promise<'pulled' | 'skipped' | 'created'> {
+    const localElement = linkedByExternalId.get(externalDoc.externalId);
+
+    if (!localElement) {
+      // Unlinked external document — create new document if --all flag is set
+      if (options.all) {
+        if (options.dryRun) {
+          return 'created';
+        }
+        await this.createDocumentFromExternal(provider, project, externalDoc, now);
+        return 'created';
+      }
+      return 'skipped';
+    }
+
+    // Linked element — check for actual change via hash
+    const syncState = getExternalSyncState(localElement.metadata)!;
+
+    // Skip if direction is push-only
+    if (syncState.direction === 'push') {
+      return 'skipped';
+    }
+
+    // Skip updates to archived documents
+    const localStatus = (localElement as unknown as { status: string }).status;
+    if (localStatus === 'archived') {
+      return 'skipped';
+    }
+
+    // Compute a hash of the external document content to detect real changes
+    const remoteContentKey = computeExternalDocumentHash(externalDoc);
+    if (syncState.lastPulledHash && remoteContentKey === syncState.lastPulledHash) {
+      return 'skipped';
+    }
+
+    // Check for conflict: has local also changed since last pull?
+    const localHash = computeContentHashSync(localElement).hash;
+    const localChanged =
+      syncState.lastPushedHash !== undefined && localHash !== syncState.lastPushedHash;
+
+    if (localChanged) {
+      // Both sides changed — use conflict resolver
+      const resolution = this.conflictResolver.resolve(
+        localElement,
+        externalDoc,
+        this.defaultStrategy
+      );
+
+      conflicts.push({
+        elementId: localElement.id,
+        externalId: externalDoc.externalId,
+        provider: provider.name,
+        project,
+        localUpdatedAt: localElement.updatedAt,
+        remoteUpdatedAt: externalDoc.updatedAt,
+        strategy: this.defaultStrategy,
+        resolved: resolution.resolved,
+        winner: resolution.resolved ? resolution.winner as 'local' | 'remote' : undefined,
+      });
+
+      if (!resolution.resolved) {
+        // Manual resolution needed — tag the element
+        if (!options.dryRun) {
+          const tags = localElement.tags.includes('sync-conflict')
+            ? localElement.tags
+            : [...localElement.tags, 'sync-conflict'];
+          await this.api.update(localElement.id, { tags } as Partial<Element>);
+        }
+        return 'skipped';
+      }
+
+      if (resolution.winner === 'local') {
+        // Local wins — skip the pull, but update the pulled hash
+        if (!options.dryRun) {
+          const updatedSyncState: ExternalSyncState = {
+            ...syncState,
+            lastPulledAt: now,
+            lastPulledHash: remoteContentKey,
+          };
+          await this.api.update(localElement.id, {
+            metadata: setExternalSyncState(localElement.metadata, updatedSyncState),
+          } as Partial<Element>);
+        }
+        return 'skipped';
+      }
+      // Remote wins — fall through to apply remote changes
+    }
+
+    // Dry run — report but don't actually apply
+    if (options.dryRun) {
+      return 'pulled';
+    }
+
+    // Apply remote changes to local document using document field mapping.
+    // Pass the existing document for diff mode (only changed fields are returned).
+    const updates = externalDocumentToDocumentUpdates(
+      externalDoc,
+      localElement as unknown as Document
+    );
+    const updatedSyncState: ExternalSyncState = {
+      ...syncState,
+      lastPulledAt: now,
+      lastPulledHash: remoteContentKey,
+    };
+
+    const mergedMetadata = setExternalSyncState(
+      { ...localElement.metadata },
+      updatedSyncState
+    );
+
+    await this.api.update(localElement.id, {
+      ...updates,
+      metadata: mergedMetadata,
+    } as Partial<Element>);
+
+    return 'pulled';
+  }
+
+  /**
+   * Create a new Stoneforge document from an unlinked external document.
+   */
+  private async createDocumentFromExternal(
+    provider: ExternalProvider,
+    project: string,
+    externalDoc: ExternalDocument,
+    now: Timestamp
+  ): Promise<Element> {
+    const syncState: ExternalSyncState = {
+      provider: provider.name,
+      project,
+      externalId: externalDoc.externalId,
+      url: externalDoc.url,
+      lastPulledAt: now,
+      lastPulledHash: computeExternalDocumentHash(externalDoc),
+      direction: 'bidirectional',
+      adapterType: 'document',
+    };
+
+    // Use the document field mapping for conversion
+    const docUpdates = externalDocumentToDocumentUpdates(externalDoc);
+
+    const createInput: Record<string, unknown> = {
+      type: 'document',
+      title: docUpdates.title ?? externalDoc.title,
+      content: docUpdates.content ?? externalDoc.content,
+      contentType: docUpdates.contentType ?? 'markdown',
+      status: 'active',
+      category: 'other',
+      version: 1,
+      previousVersionId: null,
+      immutable: false,
+      tags: [],
+      externalRef: externalDoc.url,
+      createdBy: 'system',
+      metadata: { _externalSync: syncState },
+    };
+
+    const element = await this.api.create<Element>(createInput);
+    return element;
+  }
+
+  // --------------------------------------------------------------------------
   // Sync — bidirectional (push then pull)
   // --------------------------------------------------------------------------
 
@@ -694,7 +1073,7 @@ export class SyncEngine {
       success: pushResult.success && pullResult.success,
       provider: pushResult.provider || pullResult.provider,
       project: pushResult.project || pullResult.project,
-      adapterType: 'task' as SyncAdapterType,
+      adapterType: pushResult.adapterType || pullResult.adapterType,
       pushed: pushResult.pushed,
       pulled: pullResult.pulled,
       skipped: pushResult.skipped + pullResult.skipped,
@@ -716,7 +1095,7 @@ export class SyncEngine {
    */
   private async findLinkedElements(options: SyncOptions): Promise<Element[]> {
     if (options.taskIds && options.taskIds.length > 0) {
-      // Fetch specific tasks
+      // Fetch specific elements (tasks or documents)
       const elements: Element[] = [];
       for (const id of options.taskIds) {
         const element = await this.api.get<Element>(id as ElementId);
@@ -727,9 +1106,12 @@ export class SyncEngine {
       return elements;
     }
 
-    // Fetch all tasks, then filter to those with _externalSync metadata
+    // Fetch all tasks and documents, then filter to those with _externalSync metadata
     const allTasks = await this.api.list<Element>({ type: 'task' });
-    return allTasks.filter((el) => getExternalSyncState(el.metadata) !== undefined);
+    const allDocs = await this.api.list<Element>({ type: 'document' });
+    return [...allTasks, ...allDocs].filter(
+      (el) => getExternalSyncState(el.metadata) !== undefined
+    );
   }
 
   /**
@@ -740,7 +1122,8 @@ export class SyncEngine {
     project: string
   ): Promise<Element[]> {
     const allTasks = await this.api.list<Element>({ type: 'task' });
-    return allTasks.filter((el) => {
+    const allDocs = await this.api.list<Element>({ type: 'document' });
+    return [...allTasks, ...allDocs].filter((el) => {
       const state = getExternalSyncState(el.metadata);
       return state && state.provider === providerName && state.project === project;
     });
@@ -966,6 +1349,15 @@ export class SyncEngine {
     const provider = this.registry.get(providerName);
     if (!provider) return undefined;
     return provider.getTaskAdapter?.();
+  }
+
+  /**
+   * Get a DocumentSyncAdapter for a given provider name.
+   */
+  private getDocumentAdapter(providerName: string): DocumentSyncAdapter | undefined {
+    const provider = this.registry.get(providerName);
+    if (!provider) return undefined;
+    return provider.getDocumentAdapter?.();
   }
 
   /**
