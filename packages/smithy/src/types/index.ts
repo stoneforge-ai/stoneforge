@@ -54,6 +54,7 @@ export {
   isTestResult,
   type HandoffHistoryEntry,
   type TaskSessionHistoryEntry,
+  type SyncResultMeta,
   // Utilities
   getOrchestratorTaskMeta,
   setOrchestratorTaskMeta,
