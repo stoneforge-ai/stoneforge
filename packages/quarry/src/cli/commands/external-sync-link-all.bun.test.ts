@@ -1043,7 +1043,7 @@ describe('external-sync link-all', () => {
     }
   });
 
-  test('--force skips tasks already linked to the same target provider', async () => {
+  test('--force re-links tasks already linked to the same target provider', async () => {
     const options = createTestOptions();
     const taskIds = await createTestTasks(options, [
       { title: 'Already on GitHub 1' },
@@ -1061,7 +1061,7 @@ describe('external-sync link-all', () => {
     const { externalSyncCommand } = await import('./external-sync.js');
     const linkAllCmd = externalSyncCommand.subcommands!['link-all'];
 
-    // Force with same provider — should skip
+    // Force with same provider — should re-link (not skip)
     const result = await linkAllCmd.handler([], {
       ...options,
       provider: 'github',
@@ -1071,9 +1071,24 @@ describe('external-sync link-all', () => {
 
     expect(result.exitCode).toBe(ExitCode.SUCCESS);
     const data = result.data as Record<string, unknown>;
-    expect(data.total).toBe(0);
-    // No issues should have been created
-    expect(issueCounter).toBe(0);
+
+    // Should have re-linked both tasks to the same provider
+    expect(data.linked).toBe(2);
+    expect(data.failed).toBe(0);
+    expect(data.total).toBe(2);
+    expect(data.force).toBe(true);
+    expect(data.relinkCount).toBe(2);
+
+    // Verify tasks are still linked to github with updated sync state
+    const { api } = createAPI(options);
+    for (const taskId of taskIds) {
+      const task = await api!.get<Task>(taskId as ElementId);
+      expect(task).toBeDefined();
+      const metadata = (task!.metadata ?? {}) as Record<string, unknown>;
+      expect(metadata._externalSync).toBeDefined();
+      const syncState = metadata._externalSync as Record<string, unknown>;
+      expect(syncState.provider).toBe('github');
+    }
   });
 
   test('--force --dry-run shows what would be re-linked', async () => {

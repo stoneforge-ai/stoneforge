@@ -1585,6 +1585,7 @@ Manage bidirectional synchronization between Stoneforge and external services (G
 | `sf external-sync link <elementId> <url-or-id>`                | Link element to external resource |
 | `sf external-sync link-all --provider <provider> [options]`    | Bulk-link all unlinked elements |
 | `sf external-sync unlink <elementId>`                          | Remove external link         |
+| `sf external-sync unlink-all [--provider] [--type] [--dry-run]` | Bulk-remove all external links |
 | `sf external-sync push [elementId...]`                         | Push linked element(s)       |
 | `sf external-sync push --all`                                  | Push all linked elements     |
 | `sf external-sync push --all --force`                          | Force-push all (skip hash check) |
@@ -1615,6 +1616,11 @@ sf external-sync link-all --provider github --dry-run
 # Bulk-link all unlinked documents
 sf external-sync link-all --provider notion --type document
 sf external-sync link-all --provider folder --type document
+
+# Bulk-unlink all linked elements
+sf external-sync unlink-all
+sf external-sync unlink-all --provider folder --type document
+sf external-sync unlink-all --dry-run
 
 # Push/pull/sync (all types)
 sf external-sync push el-abc123
@@ -1731,7 +1737,7 @@ When linking documents (`--type document`), system-managed categories (e.g., `ta
 | `-s, --status <status>`   | Only link tasks with this status (repeatable, task type only)|
 | `-n, --dry-run`           | List elements that would be linked without creating them     |
 | `-b, --batch-size <n>`    | How many elements to process concurrently (default: `10`)    |
-| `-f, --force`             | Re-link elements already linked to a different provider      |
+| `-f, --force`             | Re-link elements already linked (including same provider)    |
 
 ```bash
 # Bulk-link tasks
@@ -1759,6 +1765,24 @@ Remove the external link from a Stoneforge element (task or document). Clears th
 ```bash
 sf external-sync unlink el-abc123
 sf external-sync unlink el-doc456
+```
+
+#### external-sync unlink-all
+
+Bulk-remove external links from all linked elements. Clears the `externalRef` field and `_externalSync` metadata from every linked element. Useful for re-syncing from scratch after deleting a synced folder.
+
+| Option                  | Description                                           |
+| ----------------------- | ----------------------------------------------------- |
+| `-p, --provider <name>` | Only unlink elements linked to this provider          |
+| `-t, --type <type>`     | Element type: `task`, `document`, or `all` (default: `all`) |
+| `-n, --dry-run`         | Show what would be unlinked without making changes    |
+
+```bash
+sf external-sync unlink-all
+sf external-sync unlink-all --provider folder
+sf external-sync unlink-all --type document
+sf external-sync unlink-all --provider github --type task
+sf external-sync unlink-all --dry-run
 ```
 
 #### external-sync push

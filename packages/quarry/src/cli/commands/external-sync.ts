@@ -5,7 +5,8 @@
  * - config: Show/set provider configuration (tokens, projects)
  * - link: Link a task/document to an external issue/page
  * - link-all: Bulk-link all unlinked tasks or documents
- * - unlink: Remove external link from a task
+ * - unlink: Remove external link from a task/document
+ * - unlink-all: Bulk-remove external links from all linked elements
  * - push: Push linked elements to external service
  * - pull: Pull changes from external for linked elements
  * - sync: Bidirectional sync (push + pull)
@@ -719,6 +720,196 @@ async function unlinkHandler(
     { elementId, unlinked: true },
     `Unlinked ${element.type} ${elementId} from external service`
   );
+}
+
+// ============================================================================
+// Unlink-All Command
+// ============================================================================
+
+interface UnlinkAllOptions {
+  provider?: string;
+  type?: string;
+  'dry-run'?: boolean;
+}
+
+const unlinkAllOptions: CommandOption[] = [
+  {
+    name: 'provider',
+    short: 'p',
+    description: 'Only unlink elements linked to this provider',
+    hasValue: true,
+  },
+  {
+    name: 'type',
+    short: 't',
+    description: 'Element type to unlink: task, document, or all (default: all)',
+    hasValue: true,
+    defaultValue: 'all',
+  },
+  {
+    name: 'dry-run',
+    short: 'n',
+    description: 'Show what would be unlinked without making changes',
+  },
+];
+
+async function unlinkAllHandler(
+  _args: string[],
+  options: GlobalOptions & UnlinkAllOptions
+): Promise<CommandResult> {
+  const providerFilter = options.provider;
+  const typeFilter = options.type ?? 'all';
+  const isDryRun = options['dry-run'] ?? false;
+
+  if (typeFilter !== 'task' && typeFilter !== 'document' && typeFilter !== 'all') {
+    return failure(
+      `Invalid --type value "${typeFilter}". Must be one of: task, document, all`,
+      ExitCode.INVALID_ARGUMENTS
+    );
+  }
+
+  const { api, error: apiError } = createAPI(options);
+  if (apiError) {
+    return failure(apiError, ExitCode.GENERAL_ERROR);
+  }
+
+  // Gather linked elements based on type filter
+  const linkedElements: Array<{ id: string; type: string; title: string; provider: string }> = [];
+
+  const typesToQuery: string[] = [];
+  if (typeFilter === 'all' || typeFilter === 'task') typesToQuery.push('task');
+  if (typeFilter === 'all' || typeFilter === 'document') typesToQuery.push('document');
+
+  for (const elType of typesToQuery) {
+    try {
+      const results = await api!.list({ type: elType as 'task' | 'document' });
+      for (const el of results) {
+        const metadata = ((el as Task | Document).metadata ?? {}) as Record<string, unknown>;
+        const syncState = metadata._externalSync as ExternalSyncState | undefined;
+        if (!syncState) continue;
+
+        // Apply provider filter if specified
+        if (providerFilter && syncState.provider !== providerFilter) continue;
+
+        linkedElements.push({
+          id: el.id,
+          type: elType,
+          title: (el as Task | Document).title ?? '(untitled)',
+          provider: syncState.provider,
+        });
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return failure(`Failed to list ${elType}s: ${message}`, ExitCode.GENERAL_ERROR);
+    }
+  }
+
+  const mode = getOutputMode(options);
+
+  if (linkedElements.length === 0) {
+    const result = { unlinked: 0, total: 0, dryRun: isDryRun };
+    if (mode === 'json') {
+      return success(result);
+    }
+    const providerHint = providerFilter ? ` linked to "${providerFilter}"` : '';
+    const typeHint = typeFilter !== 'all' ? ` of type "${typeFilter}"` : '';
+    return success(result, `No linked elements${typeHint}${providerHint} found.`);
+  }
+
+  // Dry run — just list elements that would be unlinked
+  if (isDryRun) {
+    const elementList = linkedElements.map((el) => ({
+      id: el.id,
+      type: el.type,
+      title: el.title,
+      provider: el.provider,
+    }));
+
+    const jsonResult: Record<string, unknown> = {
+      dryRun: true,
+      total: linkedElements.length,
+      elements: elementList,
+    };
+    if (providerFilter) jsonResult.provider = providerFilter;
+    if (typeFilter !== 'all') jsonResult.type = typeFilter;
+
+    if (mode === 'json') {
+      return success(jsonResult);
+    }
+
+    if (mode === 'quiet') {
+      return success(String(linkedElements.length));
+    }
+
+    const lines: string[] = [];
+    lines.push(`Dry run: ${linkedElements.length} element(s) would be unlinked`);
+    lines.push('');
+
+    for (const el of linkedElements) {
+      lines.push(`  ${el.id}  ${el.type.padEnd(10)} ${el.provider.padEnd(10)} ${el.title}`);
+    }
+
+    return success(jsonResult, lines.join('\n'));
+  }
+
+  // Actually unlink elements
+  let totalUnlinked = 0;
+  let totalFailed = 0;
+  const progressLines: string[] = [];
+
+  for (const el of linkedElements) {
+    try {
+      const element = await api!.get<Task | Document>(el.id as ElementId);
+      if (!element) {
+        totalFailed++;
+        continue;
+      }
+
+      const existingMetadata = (element.metadata ?? {}) as Record<string, unknown>;
+      const { _externalSync: _, ...restMetadata } = existingMetadata;
+      await api!.update(el.id as ElementId, {
+        externalRef: undefined,
+        metadata: restMetadata,
+      } as Partial<Task | Document>);
+
+      totalUnlinked++;
+
+      if (mode !== 'json' && mode !== 'quiet') {
+        progressLines.push(`  Unlinked ${el.type} ${el.id} (${el.provider}): ${el.title}`);
+      }
+    } catch (err) {
+      totalFailed++;
+      if (mode !== 'json' && mode !== 'quiet') {
+        const message = err instanceof Error ? err.message : String(err);
+        progressLines.push(`  Failed to unlink ${el.type} ${el.id}: ${message}`);
+      }
+    }
+  }
+
+  const result: Record<string, unknown> = {
+    unlinked: totalUnlinked,
+    failed: totalFailed,
+    total: linkedElements.length,
+  };
+  if (providerFilter) result.provider = providerFilter;
+  if (typeFilter !== 'all') result.type = typeFilter;
+
+  if (mode === 'json') {
+    return success(result);
+  }
+
+  if (mode === 'quiet') {
+    return success(String(totalUnlinked));
+  }
+
+  const lines: string[] = [...progressLines, ''];
+  const summaryParts = [`Unlinked ${totalUnlinked} element(s)`];
+  if (totalFailed > 0) {
+    summaryParts.push(`(${totalFailed} failed)`);
+  }
+  lines.push(summaryParts.join(' '));
+
+  return success(result, lines.join('\n'));
 }
 
 // ============================================================================
@@ -1873,7 +2064,7 @@ async function linkAllDocumentsHandler(
   // Filter out system categories and untitled documents
   allDocs = allDocs.filter((doc) => isSyncableDocument(doc));
 
-  // Filter documents: unlinked docs, plus (with --force) docs linked to a DIFFERENT provider
+  // Filter documents: unlinked docs, plus (with --force) docs linked to any provider
   let relinkedFromProvider: string | undefined;
   let relinkCount = 0;
   let docsToLink = allDocs.filter((doc) => {
@@ -1884,8 +2075,11 @@ async function linkAllDocumentsHandler(
       return true;
     }
 
-    if (force && syncState.provider !== providerName) {
-      relinkedFromProvider = syncState.provider;
+    if (force) {
+      // Re-link regardless of current provider
+      if (syncState.provider !== providerName) {
+        relinkedFromProvider = syncState.provider;
+      }
       relinkCount++;
       return true;
     }
@@ -1910,7 +2104,7 @@ async function linkAllDocumentsHandler(
     }
     const hint = force
       ? 'No documents found to re-link matching the specified criteria.'
-      : 'No unlinked documents found. Use --force to re-link documents from a different provider.';
+      : 'No unlinked documents found. Use --force to re-link existing documents.';
     return success(result, hint);
   }
 
@@ -2142,7 +2336,7 @@ async function linkAllHandler(
     return failure(`Failed to list tasks: ${message}`, ExitCode.GENERAL_ERROR);
   }
 
-  // Filter tasks: unlinked tasks, plus (with --force) tasks linked to a DIFFERENT provider
+  // Filter tasks: unlinked tasks, plus (with --force) tasks linked to any provider
   let relinkedFromProvider: string | undefined;
   let relinkCount = 0;
   let tasksToLink = allTasks.filter((task) => {
@@ -2154,14 +2348,16 @@ async function linkAllHandler(
       return true;
     }
 
-    if (force && syncState.provider !== providerName) {
-      // Force mode: include tasks linked to a DIFFERENT provider
-      relinkedFromProvider = syncState.provider;
+    if (force) {
+      // Force mode: re-link regardless of current provider
+      if (syncState.provider !== providerName) {
+        relinkedFromProvider = syncState.provider;
+      }
       relinkCount++;
       return true;
     }
 
-    // Already linked (to same provider, or force not set) — skip
+    // Already linked (force not set) — skip
     return false;
   });
 
@@ -2182,7 +2378,7 @@ async function linkAllHandler(
     }
     const hint = force
       ? 'No tasks found to re-link matching the specified criteria.'
-      : 'No unlinked tasks found. Use --force to re-link tasks from a different provider.';
+      : 'No unlinked tasks found. Use --force to re-link existing tasks.';
     return success(result, hint);
   }
 
@@ -2547,8 +2743,9 @@ Use --type document to link documents instead of tasks. When linking
 documents, system categories (task-description, message-content) are
 automatically excluded.
 
-Use --force to re-link elements that are already linked to a different provider.
-Elements linked to the same target provider are always skipped.
+Use --force to re-link elements that are already linked, including those linked
+to the same provider. This is useful for re-syncing from scratch after deleting
+a synced folder.
 
 Options:
   -p, --provider <name>    Provider to link to (required)
@@ -2557,7 +2754,7 @@ Options:
   -s, --status <status>    Only link elements with this status (can be repeated)
   -n, --dry-run            List elements that would be linked without creating issues/pages
   -b, --batch-size <n>     Elements to process concurrently (default: 10)
-  -f, --force              Re-link elements already linked to a different provider
+  -f, --force              Re-link elements already linked (including same provider)
 
 Rate Limits:
   If a rate limit is hit, the command stops gracefully and reports how
@@ -2597,6 +2794,35 @@ Examples:
   sf external-sync unlink el-abc123`,
   options: [],
   handler: unlinkHandler as Command['handler'],
+};
+
+// ============================================================================
+// Unlink-All Command
+// ============================================================================
+
+const unlinkAllCommand: Command = {
+  name: 'unlink-all',
+  description: 'Bulk-remove external links from all linked elements',
+  usage: 'sf external-sync unlink-all [--provider <name>] [--type task|document|all] [--dry-run]',
+  help: `Remove external links from all linked elements in bulk.
+
+Clears the externalRef field and _externalSync metadata from every
+linked element. Useful for re-syncing from scratch after deleting
+a synced folder.
+
+Options:
+  -p, --provider <name>    Only unlink elements linked to this provider
+  -t, --type <type>        Element type: task, document, or all (default: all)
+  -n, --dry-run            Show what would be unlinked without making changes
+
+Examples:
+  sf external-sync unlink-all
+  sf external-sync unlink-all --provider folder
+  sf external-sync unlink-all --type document
+  sf external-sync unlink-all --provider github --type task
+  sf external-sync unlink-all --dry-run`,
+  options: unlinkAllOptions,
+  handler: unlinkAllHandler as Command['handler'],
 };
 
 // ============================================================================
@@ -2760,7 +2986,8 @@ Commands:
   config disable-auto-link [--type task|document|all]   Disable auto-link
   link <taskId> <url-or-issue-number> Link task to external issue
   link-all --provider <name>          Bulk-link all unlinked tasks
-  unlink <taskId>                     Remove external link
+  unlink <elementId>                  Remove external link
+  unlink-all [--provider] [--type]    Bulk-remove all external links
   push [taskId...] [--force]           Push linked task(s) to external
   pull                                Pull changes from external
   sync [--dry-run]                    Bidirectional sync
@@ -2778,6 +3005,8 @@ Examples:
   sf external-sync link el-abc123 42
   sf external-sync link-all --provider github
   sf external-sync link-all --provider github --dry-run
+  sf external-sync unlink-all
+  sf external-sync unlink-all --provider folder --type document
   sf external-sync push --all
   sf external-sync push --all --force
   sf external-sync pull
@@ -2789,6 +3018,7 @@ Examples:
     link: linkCommand,
     'link-all': linkAllCommand,
     unlink: unlinkCommand,
+    'unlink-all': unlinkAllCommand,
     push: pushCommand,
     pull: pullCommand,
     sync: biSyncCommand,
@@ -2799,11 +3029,11 @@ Examples:
     const mode = getOutputMode(options);
     if (mode === 'json') {
       return success({
-        commands: ['config', 'link', 'link-all', 'unlink', 'push', 'pull', 'sync', 'status', 'resolve'],
+        commands: ['config', 'link', 'link-all', 'unlink', 'unlink-all', 'push', 'pull', 'sync', 'status', 'resolve'],
       });
     }
     return failure(
-      'Usage: sf external-sync <command>\n\nCommands: config, link, link-all, unlink, push, pull, sync, status, resolve\n\nRun "sf external-sync --help" for more information.',
+      'Usage: sf external-sync <command>\n\nCommands: config, link, link-all, unlink, unlink-all, push, pull, sync, status, resolve\n\nRun "sf external-sync --help" for more information.',
       ExitCode.INVALID_ARGUMENTS
     );
   },
