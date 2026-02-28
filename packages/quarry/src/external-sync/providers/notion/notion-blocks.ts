@@ -23,6 +23,99 @@ import type {
 import { DEFAULT_ANNOTATIONS } from './notion-types.js';
 
 // ============================================================================
+// Rich Text Chunking (Notion 2000-character limit)
+// ============================================================================
+
+/**
+ * Maximum length for a single rich_text element's text.content in the Notion API.
+ * @see https://developers.notion.com/reference/block
+ */
+export const NOTION_MAX_TEXT_LENGTH = 2000;
+
+/**
+ * Split a text string into chunks of at most `maxLength` characters,
+ * preferring word boundaries when possible.
+ */
+function splitTextAtWordBoundaries(
+  text: string,
+  maxLength = NOTION_MAX_TEXT_LENGTH
+): string[] {
+  if (text.length <= maxLength) {
+    return [text];
+  }
+
+  const chunks: string[] = [];
+  let remaining = text;
+
+  while (remaining.length > 0) {
+    if (remaining.length <= maxLength) {
+      chunks.push(remaining);
+      break;
+    }
+
+    // Split at last space before maxLength
+    let splitAt = remaining.lastIndexOf(' ', maxLength);
+    if (splitAt <= 0) splitAt = maxLength; // No space found, hard split
+    chunks.push(remaining.slice(0, splitAt));
+    remaining = remaining.slice(splitAt).trimStart();
+  }
+
+  return chunks;
+}
+
+/**
+ * Split a plain text string into multiple NotionRichText elements,
+ * each with text.content at most `maxLength` characters.
+ * Splits at word boundaries when possible.
+ */
+export function chunkRichText(
+  text: string,
+  maxLength = NOTION_MAX_TEXT_LENGTH
+): NotionRichText[] {
+  if (text.length <= maxLength) {
+    return [createPlainRichText(text)];
+  }
+
+  return splitTextAtWordBoundaries(text, maxLength).map((chunk) =>
+    createPlainRichText(chunk)
+  );
+}
+
+/**
+ * Split a single NotionRichText element into multiple elements if its content
+ * exceeds `maxLength`, preserving annotations and link information.
+ */
+function chunkRichTextElement(
+  rt: NotionRichText,
+  maxLength = NOTION_MAX_TEXT_LENGTH
+): NotionRichText[] {
+  const content = rt.text?.content ?? rt.plain_text;
+  if (content.length <= maxLength) {
+    return [rt];
+  }
+
+  const textChunks = splitTextAtWordBoundaries(content, maxLength);
+  return textChunks.map((chunk) => ({
+    type: rt.type,
+    text: rt.text ? { content: chunk, link: rt.text.link } : undefined,
+    annotations: { ...rt.annotations },
+    plain_text: chunk,
+    href: rt.href,
+  } as NotionRichText));
+}
+
+/**
+ * Ensure all elements in a rich_text array respect the Notion 2000-character limit.
+ * Splits any individual element that exceeds the limit, preserving its annotations.
+ */
+function ensureRichTextWithinLimits(
+  richTexts: NotionRichText[],
+  maxLength = NOTION_MAX_TEXT_LENGTH
+): NotionRichText[] {
+  return richTexts.flatMap((rt) => chunkRichTextElement(rt, maxLength));
+}
+
+// ============================================================================
 // Markdown → Notion Blocks
 // ============================================================================
 
@@ -63,7 +156,7 @@ export function markdownToNotionBlocks(markdown: string): NotionBlock[] {
         i++;
       }
 
-      blocks.push(createCodeBlock(codeLines.join('\n'), language));
+      blocks.push(...createCodeBlocks(codeLines.join('\n'), language));
       continue;
     }
 
@@ -201,7 +294,7 @@ function createParagraphBlock(text: string): NotionBlock {
   return {
     type: 'paragraph',
     paragraph: {
-      rich_text: parseInlineMarkdown(text),
+      rich_text: ensureRichTextWithinLimits(parseInlineMarkdown(text)),
     },
   };
 }
@@ -211,7 +304,7 @@ function createHeadingBlock(level: 1 | 2 | 3, text: string): NotionBlock {
   return {
     type,
     [type]: {
-      rich_text: parseInlineMarkdown(text),
+      rich_text: ensureRichTextWithinLimits(parseInlineMarkdown(text)),
     },
   } as NotionBlock;
 }
@@ -220,7 +313,7 @@ function createBulletedListItemBlock(text: string): NotionBlock {
   return {
     type: 'bulleted_list_item',
     bulleted_list_item: {
-      rich_text: parseInlineMarkdown(text),
+      rich_text: ensureRichTextWithinLimits(parseInlineMarkdown(text)),
     },
   };
 }
@@ -229,26 +322,94 @@ function createNumberedListItemBlock(text: string): NotionBlock {
   return {
     type: 'numbered_list_item',
     numbered_list_item: {
-      rich_text: parseInlineMarkdown(text),
+      rich_text: ensureRichTextWithinLimits(parseInlineMarkdown(text)),
     },
   };
 }
 
-function createCodeBlock(code: string, language: string): NotionBlock {
-  return {
-    type: 'code',
+/**
+ * Create one or more code blocks from a code string.
+ * If the code exceeds NOTION_MAX_TEXT_LENGTH, it is split into multiple
+ * consecutive code blocks with the same language annotation.
+ * Code splits prefer line boundaries, then word boundaries.
+ */
+function createCodeBlocks(
+  code: string,
+  language: string
+): NotionBlock[] {
+  const normalizedLang = normalizeLanguage(language);
+
+  if (code.length <= NOTION_MAX_TEXT_LENGTH) {
+    return [
+      {
+        type: 'code',
+        code: {
+          rich_text: [createPlainRichText(code)],
+          language: normalizedLang,
+        },
+      },
+    ];
+  }
+
+  // Split code at line boundaries when possible
+  const chunks = splitCodeAtLineBoundaries(code, NOTION_MAX_TEXT_LENGTH);
+  return chunks.map((chunk) => ({
+    type: 'code' as const,
     code: {
-      rich_text: [createPlainRichText(code)],
-      language: normalizeLanguage(language),
+      rich_text: [createPlainRichText(chunk)],
+      language: normalizedLang,
     },
-  };
+  }));
+}
+
+/**
+ * Split code text into chunks, preferring line boundaries (\n) over word boundaries.
+ */
+function splitCodeAtLineBoundaries(
+  text: string,
+  maxLength: number
+): string[] {
+  if (text.length <= maxLength) {
+    return [text];
+  }
+
+  const chunks: string[] = [];
+  let remaining = text;
+
+  while (remaining.length > 0) {
+    if (remaining.length <= maxLength) {
+      chunks.push(remaining);
+      break;
+    }
+
+    // Prefer splitting at a newline before maxLength
+    let splitAt = remaining.lastIndexOf('\n', maxLength);
+    if (splitAt <= 0) {
+      // No newline found; try word boundary
+      splitAt = remaining.lastIndexOf(' ', maxLength);
+    }
+    if (splitAt <= 0) {
+      // No boundary found; hard split
+      splitAt = maxLength;
+    }
+
+    chunks.push(remaining.slice(0, splitAt));
+    // For newline splits, skip the newline character itself
+    if (remaining[splitAt] === '\n') {
+      remaining = remaining.slice(splitAt + 1);
+    } else {
+      remaining = remaining.slice(splitAt).trimStart();
+    }
+  }
+
+  return chunks;
 }
 
 function createQuoteBlock(text: string): NotionBlock {
   return {
     type: 'quote',
     quote: {
-      rich_text: parseInlineMarkdown(text),
+      rich_text: ensureRichTextWithinLimits(parseInlineMarkdown(text)),
     },
   };
 }
@@ -257,7 +418,7 @@ function createToDoBlock(text: string, checked: boolean): NotionBlock {
   return {
     type: 'to_do',
     to_do: {
-      rich_text: parseInlineMarkdown(text),
+      rich_text: ensureRichTextWithinLimits(parseInlineMarkdown(text)),
       checked,
     },
   };

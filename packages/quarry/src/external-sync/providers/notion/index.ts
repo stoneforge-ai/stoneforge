@@ -30,6 +30,8 @@ export {
   notionBlocksToMarkdown,
   parseInlineMarkdown,
   richTextToMarkdown,
+  chunkRichText,
+  NOTION_MAX_TEXT_LENGTH,
 } from './notion-blocks.js';
 
 // API client

@@ -12,6 +12,8 @@ import {
   notionBlocksToMarkdown,
   parseInlineMarkdown,
   richTextToMarkdown,
+  chunkRichText,
+  NOTION_MAX_TEXT_LENGTH,
 } from './notion-blocks.js';
 import type {
   NotionBlock,
@@ -848,5 +850,233 @@ describe('richTextToMarkdown', () => {
     ]);
     // code should be applied, not bold/italic wrapping
     expect(result).toBe('`code`');
+  });
+});
+
+// ============================================================================
+// Rich Text Chunking (Notion 2000-character limit)
+// ============================================================================
+
+describe('chunkRichText', () => {
+  test('short text (<2000 chars) returns single element unchanged', () => {
+    const result = chunkRichText('Hello world');
+    expect(result).toHaveLength(1);
+    expect(result[0].text!.content).toBe('Hello world');
+    expect(result[0].plain_text).toBe('Hello world');
+    expect(result[0].type).toBe('text');
+  });
+
+  test('text exactly at 2000 chars returns single element', () => {
+    const text = 'a'.repeat(2000);
+    const result = chunkRichText(text);
+    expect(result).toHaveLength(1);
+    expect(result[0].text!.content).toBe(text);
+  });
+
+  test('text >2000 chars is split into multiple elements', () => {
+    const text = 'word '.repeat(500); // 2500 chars
+    const result = chunkRichText(text);
+    expect(result.length).toBeGreaterThan(1);
+    result.forEach((rt) => {
+      expect(rt.text!.content.length).toBeLessThanOrEqual(2000);
+      expect(rt.type).toBe('text');
+    });
+    // Verify all content is preserved (after joining and normalizing whitespace)
+    const joined = result.map((rt) => rt.text!.content).join(' ');
+    expect(joined.replace(/\s+/g, ' ').trim()).toBe(text.trim());
+  });
+
+  test('split happens at word boundaries', () => {
+    // Create text with words, where a space exists before position 2000
+    const words = [];
+    let length = 0;
+    while (length < 2500) {
+      const word = 'testing';
+      words.push(word);
+      length += word.length + 1; // +1 for space
+    }
+    const text = words.join(' ');
+    const result = chunkRichText(text);
+    expect(result.length).toBeGreaterThan(1);
+    // First chunk should end at a word boundary (no partial words)
+    const firstContent = result[0].text!.content;
+    expect(firstContent.length).toBeLessThanOrEqual(2000);
+    // The chunk should end with a complete word (no trailing space, but ends at "testing")
+    expect(firstContent).toMatch(/testing$/);
+    // Verify the split didn't cut a word in half
+    const secondContent = result[1].text!.content;
+    expect(secondContent).toMatch(/^testing/);
+  });
+
+  test('hard split when no word boundary exists', () => {
+    // A single 3000-char "word" with no spaces
+    const text = 'a'.repeat(3000);
+    const result = chunkRichText(text);
+    expect(result.length).toBeGreaterThan(1);
+    expect(result[0].text!.content.length).toBe(2000);
+    expect(result[1].text!.content.length).toBe(1000);
+  });
+
+  test('respects custom maxLength', () => {
+    const text = 'hello world foo bar baz';
+    const result = chunkRichText(text, 11);
+    expect(result.length).toBeGreaterThan(1);
+    result.forEach((rt) => {
+      expect(rt.text!.content.length).toBeLessThanOrEqual(11);
+    });
+  });
+});
+
+describe('markdownToNotionBlocks — rich text chunking', () => {
+  test('paragraph with >2000 chars splits into multiple rich_text elements', () => {
+    const longText = 'word '.repeat(500); // 2500 chars
+    const blocks = markdownToNotionBlocks(longText);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].type).toBe('paragraph');
+    const richText = getRichText(blocks[0]);
+    expect(richText.length).toBeGreaterThan(1);
+    richText.forEach((rt) => {
+      expect(rt.text!.content.length).toBeLessThanOrEqual(NOTION_MAX_TEXT_LENGTH);
+    });
+  });
+
+  test('heading with >2000 chars splits into multiple rich_text elements', () => {
+    const longText = '# ' + 'word '.repeat(500);
+    const blocks = markdownToNotionBlocks(longText);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].type).toBe('heading_1');
+    const richText = getRichText(blocks[0]);
+    expect(richText.length).toBeGreaterThan(1);
+    richText.forEach((rt) => {
+      expect(rt.text!.content.length).toBeLessThanOrEqual(NOTION_MAX_TEXT_LENGTH);
+    });
+  });
+
+  test('bulleted list item with >2000 chars splits into multiple rich_text elements', () => {
+    const longText = '- ' + 'word '.repeat(500);
+    const blocks = markdownToNotionBlocks(longText);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].type).toBe('bulleted_list_item');
+    const richText = getRichText(blocks[0]);
+    expect(richText.length).toBeGreaterThan(1);
+    richText.forEach((rt) => {
+      expect(rt.text!.content.length).toBeLessThanOrEqual(NOTION_MAX_TEXT_LENGTH);
+    });
+  });
+
+  test('numbered list item with >2000 chars splits into multiple rich_text elements', () => {
+    const longText = '1. ' + 'word '.repeat(500);
+    const blocks = markdownToNotionBlocks(longText);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].type).toBe('numbered_list_item');
+    const richText = getRichText(blocks[0]);
+    expect(richText.length).toBeGreaterThan(1);
+    richText.forEach((rt) => {
+      expect(rt.text!.content.length).toBeLessThanOrEqual(NOTION_MAX_TEXT_LENGTH);
+    });
+  });
+
+  test('quote with >2000 chars splits into multiple rich_text elements', () => {
+    const longText = '> ' + 'word '.repeat(500);
+    const blocks = markdownToNotionBlocks(longText);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].type).toBe('quote');
+    const richText = getRichText(blocks[0]);
+    expect(richText.length).toBeGreaterThan(1);
+    richText.forEach((rt) => {
+      expect(rt.text!.content.length).toBeLessThanOrEqual(NOTION_MAX_TEXT_LENGTH);
+    });
+  });
+
+  test('to_do with >2000 chars splits into multiple rich_text elements', () => {
+    const longText = '- [ ] ' + 'word '.repeat(500);
+    const blocks = markdownToNotionBlocks(longText);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].type).toBe('to_do');
+    const richText = getRichText(blocks[0]);
+    expect(richText.length).toBeGreaterThan(1);
+    richText.forEach((rt) => {
+      expect(rt.text!.content.length).toBeLessThanOrEqual(NOTION_MAX_TEXT_LENGTH);
+    });
+  });
+
+  test('code block with >2000 chars splits into multiple code blocks', () => {
+    const longCode = 'x = 1\n'.repeat(500); // ~3000 chars
+    const md = '```python\n' + longCode + '```';
+    const blocks = markdownToNotionBlocks(md);
+    expect(blocks.length).toBeGreaterThan(1);
+    blocks.forEach((block) => {
+      expect(block.type).toBe('code');
+      const code = (block as { type: 'code'; code: { rich_text: readonly NotionRichText[]; language: string } }).code;
+      expect(code.language).toBe('python');
+      expect(code.rich_text[0].text!.content.length).toBeLessThanOrEqual(NOTION_MAX_TEXT_LENGTH);
+    });
+    // Verify content is preserved
+    const allCode = blocks.map((b) => {
+      const code = (b as { type: 'code'; code: { rich_text: readonly NotionRichText[] } }).code;
+      return code.rich_text[0].plain_text;
+    }).join('\n');
+    expect(allCode).toBe(longCode.trimEnd());
+  });
+
+  test('code block with <2000 chars is unchanged (no regression)', () => {
+    const md = '```typescript\nconst x = 1;\n```';
+    const blocks = markdownToNotionBlocks(md);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].type).toBe('code');
+  });
+
+  test('formatting annotations preserved across chunks', () => {
+    // Create a very long bold text that exceeds 2000 chars
+    const longBoldContent = 'word '.repeat(500); // 2500 chars
+    const md = '**' + longBoldContent.trim() + '**';
+    const blocks = markdownToNotionBlocks(md);
+    expect(blocks).toHaveLength(1);
+    const richText = getRichText(blocks[0]);
+    expect(richText.length).toBeGreaterThan(1);
+    // All chunks should preserve the bold annotation
+    richText.forEach((rt) => {
+      expect(rt.annotations.bold).toBe(true);
+      expect(rt.text!.content.length).toBeLessThanOrEqual(NOTION_MAX_TEXT_LENGTH);
+    });
+  });
+
+  test('link annotation preserved across chunks', () => {
+    // Create a very long link text that exceeds 2000 chars
+    const longLinkContent = 'word '.repeat(500); // 2500 chars
+    const md = '[' + longLinkContent.trim() + '](https://example.com)';
+    const blocks = markdownToNotionBlocks(md);
+    expect(blocks).toHaveLength(1);
+    const richText = getRichText(blocks[0]);
+    expect(richText.length).toBeGreaterThan(1);
+    // All chunks should preserve the link
+    richText.forEach((rt) => {
+      expect(rt.href).toBe('https://example.com');
+      expect(rt.text!.link).toEqual({ url: 'https://example.com' });
+      expect(rt.text!.content.length).toBeLessThanOrEqual(NOTION_MAX_TEXT_LENGTH);
+    });
+  });
+
+  test('short text (<2000 chars) is unchanged (no regression)', () => {
+    const blocks = markdownToNotionBlocks('Hello world');
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].type).toBe('paragraph');
+    const richText = getRichText(blocks[0]);
+    expect(richText).toHaveLength(1);
+    expect(richText[0].plain_text).toBe('Hello world');
+  });
+
+  test('mixed short and long blocks handled correctly', () => {
+    const shortParagraph = 'Short text.';
+    const longParagraph = 'word '.repeat(500); // 2500 chars
+    const md = shortParagraph + '\n\n' + longParagraph;
+    const blocks = markdownToNotionBlocks(md);
+    expect(blocks).toHaveLength(2);
+    // First block should have 1 rich_text element (short)
+    const firstRt = getRichText(blocks[0]);
+    expect(firstRt).toHaveLength(1);
+    // Second block should have multiple rich_text elements (long)
+    const secondRt = getRichText(blocks[1]);
+    expect(secondRt.length).toBeGreaterThan(1);
   });
 });
