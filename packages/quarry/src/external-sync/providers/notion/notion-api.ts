@@ -19,6 +19,8 @@ import type {
   NotionDatabaseQueryResponse,
   NotionBlockChildrenResponse,
   NotionErrorResponse,
+  NotionDatabase,
+  NotionUpdateDatabaseInput,
 } from './notion-types.js';
 
 // ============================================================================
@@ -225,6 +227,38 @@ export class NotionApiClient {
    */
   async getPage(pageId: string): Promise<NotionPage> {
     return this.request<NotionPage>('GET', `/pages/${pageId}`);
+  }
+
+  /**
+   * Retrieve a database by ID.
+   *
+   * GET /databases/{database_id}
+   *
+   * Returns the database schema including all property definitions.
+   * Used for discovering the title property name and checking which
+   * properties (Category, Tags) exist before creating pages.
+   *
+   * @see https://developers.notion.com/reference/retrieve-a-database
+   */
+  async getDatabase(databaseId: string): Promise<NotionDatabase> {
+    return this.request<NotionDatabase>('GET', `/databases/${databaseId}`);
+  }
+
+  /**
+   * Update a database schema (add or modify properties).
+   *
+   * PATCH /databases/{database_id}
+   *
+   * Used to auto-create missing properties (e.g., Category as select,
+   * Tags as multi_select) when they don't exist in the database schema.
+   *
+   * @see https://developers.notion.com/reference/update-a-database
+   */
+  async updateDatabase(
+    databaseId: string,
+    updates: NotionUpdateDatabaseInput
+  ): Promise<NotionDatabase> {
+    return this.request<NotionDatabase>('PATCH', `/databases/${databaseId}`, updates);
   }
 
   /**

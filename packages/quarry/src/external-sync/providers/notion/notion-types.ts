@@ -288,6 +288,85 @@ export interface NotionUpdatePageInput {
 }
 
 // ============================================================================
+// Database Types
+// ============================================================================
+
+/**
+ * Schema definition for a database property.
+ *
+ * This represents the database-level schema (from GET /databases/{id}),
+ * not the page-level property values. Each property has a type and
+ * type-specific configuration (e.g., select options, formula expression).
+ */
+export interface NotionDatabaseProperty {
+  /** Unique property ID */
+  readonly id: string;
+  /** Property type (e.g., 'title', 'select', 'multi_select', 'rich_text') */
+  readonly type: string;
+  /** Property name */
+  readonly name: string;
+  /** Select options (present when type === 'select') */
+  readonly select?: { readonly options: readonly { readonly id: string; readonly name: string; readonly color: string }[] };
+  /** Multi-select options (present when type === 'multi_select') */
+  readonly multi_select?: { readonly options: readonly { readonly id: string; readonly name: string; readonly color: string }[] };
+}
+
+/**
+ * Notion database object.
+ *
+ * Represents a database schema retrieved via GET /databases/{id}.
+ * Contains the database properties (schema definitions) which describe
+ * the structure of pages within the database.
+ *
+ * @see https://developers.notion.com/reference/retrieve-a-database
+ */
+export interface NotionDatabase {
+  /** Unique database ID (UUID) */
+  readonly id: string;
+  /** Object type (always "database") */
+  readonly object: 'database';
+  /** Creation timestamp (ISO 8601) */
+  readonly created_time: string;
+  /** Last edit timestamp (ISO 8601) */
+  readonly last_edited_time: string;
+  /** Database title */
+  readonly title: readonly NotionRichText[];
+  /** Database properties schema, keyed by property name */
+  readonly properties: Record<string, NotionDatabaseProperty>;
+  /** Whether the database has been archived */
+  readonly archived: boolean;
+  /** URL to view the database in Notion */
+  readonly url: string;
+}
+
+/**
+ * Input for updating a database schema.
+ *
+ * Used with PATCH /databases/{id} to add or modify properties.
+ *
+ * @see https://developers.notion.com/reference/update-a-database
+ */
+export interface NotionUpdateDatabaseInput {
+  /** Properties to add or update in the database schema */
+  readonly properties?: Record<string, unknown>;
+}
+
+/**
+ * Cached database schema information used by the document adapter.
+ *
+ * Contains the discovered property names for title, category, and tags,
+ * so the adapter doesn't need to query the database schema on every operation.
+ */
+export interface NotionDatabaseSchema {
+  /** The name of the title property (every database has exactly one) */
+  readonly titlePropertyName: string;
+  /** Whether a 'Category' select property exists in the database */
+  readonly hasCategoryProperty: boolean;
+  /** Whether a 'Tags' multi_select property exists in the database */
+  readonly hasTagsProperty: boolean;
+}
+
+// ============================================================================
 // Error Response Types
 // ============================================================================
 

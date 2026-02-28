@@ -15,10 +15,17 @@
  * - `project` = Notion database ID
  * - `externalId` = Notion page ID
  *
- * Notion page property conventions:
- * - Title (type: title) — the page title, mapped to ExternalDocument.title
- * - Category (type: select) — optional, set when creating pages
- * - Tags (type: multi_select) — optional, set when creating pages
+ * Schema discovery:
+ * The adapter discovers the database schema on first use via GET /databases/{id}.
+ * Every Notion database has exactly one property of type "title", but its name
+ * varies (common names: "Name", "Title"). The adapter discovers and caches this
+ * name rather than hardcoding it.
+ *
+ * Optional properties (Category as select, Tags as multi_select) are only
+ * included in page properties when the database schema confirms they exist.
+ * If they don't exist, the adapter attempts to auto-create them via
+ * PATCH /databases/{id}. If that fails (e.g., insufficient permissions),
+ * they are silently skipped.
  */
 
 import type {
@@ -27,7 +34,7 @@ import type {
   ExternalDocumentInput,
 } from '@stoneforge/core';
 import type { Timestamp } from '@stoneforge/core';
-import type { NotionPage, NotionBlockInput, NotionProperty, NotionRichText } from './notion-types.js';
+import type { NotionPage, NotionBlockInput, NotionProperty, NotionRichText, NotionDatabaseSchema } from './notion-types.js';
 import { NotionApiClient } from './notion-api.js';
 import { notionBlocksToMarkdown, markdownToNotionBlocks } from './notion-blocks.js';
 
@@ -56,23 +63,26 @@ export function extractTitleFromProperties(
 }
 
 /**
- * Builds Notion page properties for creating a page.
+ * Builds Notion page properties for creating or updating a page.
  *
- * Creates the Title property (required) and optionally sets Category (select)
- * and Tags (multi_select) if values are provided.
+ * Uses the discovered database schema to:
+ * - Set the title on the correct property (discovered name, not hardcoded)
+ * - Only include Category and Tags if the database schema confirms they exist
  *
  * @param title - The page title
+ * @param schema - The discovered database schema with property availability info
  * @param category - Optional category for the Category select property
  * @param tags - Optional tags for the Tags multi_select property
  * @returns A properties record suitable for the Notion API
  */
 export function buildPageProperties(
   title: string,
+  schema: NotionDatabaseSchema,
   category?: string,
   tags?: readonly string[]
 ): Record<string, unknown> {
   const properties: Record<string, unknown> = {
-    Title: {
+    [schema.titlePropertyName]: {
       title: [
         {
           text: { content: title },
@@ -81,13 +91,13 @@ export function buildPageProperties(
     },
   };
 
-  if (category) {
+  if (category && schema.hasCategoryProperty) {
     properties.Category = {
       select: { name: category },
     };
   }
 
-  if (tags && tags.length > 0) {
+  if (tags && tags.length > 0 && schema.hasTagsProperty) {
     properties.Tags = {
       multi_select: tags.map((tag) => ({ name: tag })),
     };
@@ -132,6 +142,11 @@ function pageToExternalDocument(
  * Uses the NotionApiClient for all API interactions and the
  * blocks ↔ markdown converter for content transformation.
  *
+ * On first use of createPage() or updatePage(), the adapter discovers the
+ * database schema to find the title property name and check which optional
+ * properties exist. The schema is cached per database ID, so only one
+ * getDatabase() call is made per adapter instance per database.
+ *
  * @example
  * ```typescript
  * const api = new NotionApiClient({ token: 'ntn_...' });
@@ -143,7 +158,7 @@ function pageToExternalDocument(
  * // List recently edited pages
  * const docs = await adapter.listPagesSince('database-id', '2024-01-01T00:00:00Z');
  *
- * // Create a new page
+ * // Create a new page (schema is discovered automatically)
  * const newDoc = await adapter.createPage('database-id', {
  *   title: 'New Page',
  *   content: '# Hello\n\nWorld',
@@ -154,8 +169,91 @@ function pageToExternalDocument(
 export class NotionDocumentAdapter implements DocumentSyncAdapter {
   private readonly api: NotionApiClient;
 
+  /** Cached database schemas keyed by database ID */
+  private readonly schemaCache = new Map<string, NotionDatabaseSchema>();
+
   constructor(api: NotionApiClient) {
     this.api = api;
+  }
+
+  /**
+   * Discover and cache the database schema for a given database ID.
+   *
+   * Fetches the database schema from the Notion API, discovers the title
+   * property name (every database has exactly one property of type 'title'),
+   * and checks for the existence of Category (select) and Tags (multi_select)
+   * properties.
+   *
+   * If Category or Tags properties don't exist, attempts to auto-create them
+   * via PATCH /databases/{id}. If the integration lacks permission, the
+   * properties are simply skipped — no error is thrown.
+   *
+   * Results are cached per database ID so only one API call is made per
+   * adapter instance per database.
+   *
+   * @param databaseId - The Notion database ID to discover
+   * @returns The discovered database schema
+   * @throws Error if the database has no title property
+   */
+  async getDatabaseSchema(databaseId: string): Promise<NotionDatabaseSchema> {
+    const cached = this.schemaCache.get(databaseId);
+    if (cached) return cached;
+
+    const db = await this.api.getDatabase(databaseId);
+
+    // Discover the title property name
+    let titlePropertyName: string | null = null;
+    for (const [name, prop] of Object.entries(db.properties)) {
+      if (prop.type === 'title') {
+        titlePropertyName = name;
+        break;
+      }
+    }
+
+    if (!titlePropertyName) {
+      throw new Error(
+        `Notion database ${databaseId} has no title property. ` +
+        'Every Notion database should have exactly one property of type "title".'
+      );
+    }
+
+    // Check if Category and Tags properties exist with the expected types
+    let hasCategoryProperty = db.properties['Category']?.type === 'select';
+    let hasTagsProperty = db.properties['Tags']?.type === 'multi_select';
+
+    // Auto-create missing properties if needed
+    if (!hasCategoryProperty || !hasTagsProperty) {
+      const propertiesToCreate: Record<string, unknown> = {};
+
+      if (!hasCategoryProperty) {
+        propertiesToCreate['Category'] = { select: { options: [] } };
+      }
+      if (!hasTagsProperty) {
+        propertiesToCreate['Tags'] = { multi_select: { options: [] } };
+      }
+
+      try {
+        const updatedDb = await this.api.updateDatabase(databaseId, {
+          properties: propertiesToCreate,
+        });
+
+        // Re-check after creation attempt
+        hasCategoryProperty = updatedDb.properties['Category']?.type === 'select';
+        hasTagsProperty = updatedDb.properties['Tags']?.type === 'multi_select';
+      } catch {
+        // If we lack permission to update the database schema, just skip.
+        // The adapter will omit Category/Tags from page properties.
+      }
+    }
+
+    const schema: NotionDatabaseSchema = {
+      titlePropertyName,
+      hasCategoryProperty,
+      hasTagsProperty,
+    };
+
+    this.schemaCache.set(databaseId, schema);
+    return schema;
   }
 
   /**
@@ -222,8 +320,10 @@ export class NotionDocumentAdapter implements DocumentSyncAdapter {
   /**
    * Create a new page in a Notion database.
    *
-   * Converts the markdown content to Notion blocks, then creates a page
-   * with Title, Category (select), and Tags (multi_select) properties.
+   * Discovers the database schema (if not cached), then converts the markdown
+   * content to Notion blocks and creates a page with the discovered title
+   * property name. Category (select) and Tags (multi_select) properties are
+   * only set if they exist in the database schema.
    *
    * Notion limits POST /pages to 100 children blocks. If the content exceeds
    * this limit, the page is created with the first 100 blocks, and the
@@ -237,10 +337,14 @@ export class NotionDocumentAdapter implements DocumentSyncAdapter {
     project: string,
     page: ExternalDocumentInput
   ): Promise<ExternalDocument> {
+    // Discover the database schema to get the correct title property name
+    // and check which optional properties exist
+    const schema = await this.getDatabaseSchema(project);
+
     // markdownToNotionBlocks returns NotionBlock[] which is structurally
     // compatible with NotionBlockInput[] but needs a cast due to index signature
     const blocks = markdownToNotionBlocks(page.content) as unknown as NotionBlockInput[];
-    const properties = buildPageProperties(page.title);
+    const properties = buildPageProperties(page.title, schema);
 
     // Notion limits POST /pages to 100 children blocks
     const BLOCK_LIMIT = 100;
@@ -263,7 +367,8 @@ export class NotionDocumentAdapter implements DocumentSyncAdapter {
   /**
    * Update an existing page's properties and/or content.
    *
-   * If the updates include a title, the Title property is updated.
+   * If the updates include a title, the title property is updated using the
+   * discovered property name from the database schema.
    * If the updates include content, all existing blocks are replaced
    * with new blocks converted from the updated markdown.
    *
@@ -279,7 +384,8 @@ export class NotionDocumentAdapter implements DocumentSyncAdapter {
   ): Promise<ExternalDocument> {
     // Update properties if title changed
     if (updates.title !== undefined) {
-      const properties = buildPageProperties(updates.title);
+      const schema = await this.getDatabaseSchema(project);
+      const properties = buildPageProperties(updates.title, schema);
       await this.api.updatePage(externalId, properties);
     }
 

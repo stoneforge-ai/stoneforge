@@ -103,6 +103,10 @@ export type {
   NotionRichText,
   NotionAnnotations,
   NotionProperty,
+  NotionDatabase,
+  NotionDatabaseProperty,
+  NotionDatabaseSchema,
+  NotionUpdateDatabaseInput,
 } from './providers/notion/index.js';
 
 // Folder provider
