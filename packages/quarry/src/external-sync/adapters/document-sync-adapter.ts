@@ -291,6 +291,8 @@ export function documentToExternalDocumentInput(
     title: doc.title ?? '',
     content: doc.content,
     contentType: mapContentTypeToExternal(doc.contentType),
+    ...(doc.category !== undefined && { category: doc.category }),
+    ...(doc.tags !== undefined && doc.tags.length > 0 && { tags: doc.tags }),
     ...(libraryPath !== undefined && { libraryPath }),
   };
 }

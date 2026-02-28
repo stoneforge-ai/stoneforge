@@ -857,6 +857,86 @@ describe('NotionDocumentAdapter', () => {
       expect(properties).not.toHaveProperty('Tags');
     });
 
+    test('passes category and tags to page properties when provided', async () => {
+      const input: ExternalDocumentInput = {
+        title: 'Categorized Doc',
+        content: '# Hello',
+        contentType: 'markdown',
+        category: 'reference',
+        tags: ['api', 'docs'],
+      };
+
+      await adapter.createPage('db-uuid-5678', input);
+
+      const [, properties] = mockApi.mocks.createPage.mock.calls[0];
+      expect(properties).toHaveProperty('Title');
+      expect(properties.Category).toEqual({ select: { name: 'reference' } });
+      expect(properties.Tags).toEqual({
+        multi_select: [{ name: 'api' }, { name: 'docs' }],
+      });
+    });
+
+    test('passes category without tags when only category provided', async () => {
+      const input: ExternalDocumentInput = {
+        title: 'Category Only',
+        content: 'Content',
+        category: 'spec',
+      };
+
+      await adapter.createPage('db-uuid-5678', input);
+
+      const [, properties] = mockApi.mocks.createPage.mock.calls[0];
+      expect(properties.Category).toEqual({ select: { name: 'spec' } });
+      expect(properties.Tags).toBeUndefined();
+    });
+
+    test('passes tags without category when only tags provided', async () => {
+      const input: ExternalDocumentInput = {
+        title: 'Tags Only',
+        content: 'Content',
+        tags: ['setup'],
+      };
+
+      await adapter.createPage('db-uuid-5678', input);
+
+      const [, properties] = mockApi.mocks.createPage.mock.calls[0];
+      expect(properties.Category).toBeUndefined();
+      expect(properties.Tags).toEqual({ multi_select: [{ name: 'setup' }] });
+    });
+
+    test('omits category and tags from properties when not provided', async () => {
+      const input: ExternalDocumentInput = {
+        title: 'Plain Doc',
+        content: 'Content',
+      };
+
+      await adapter.createPage('db-uuid-5678', input);
+
+      const [, properties] = mockApi.mocks.createPage.mock.calls[0];
+      expect(properties.Category).toBeUndefined();
+      expect(properties.Tags).toBeUndefined();
+    });
+
+    test('skips category and tags when schema lacks those properties', async () => {
+      const noPropApi = createMockApiClient({ includeCategory: false, includeTags: false });
+      (noPropApi.mocks.updateDatabase as ReturnType<typeof mock>).mockImplementation(() =>
+        Promise.reject(new NotionApiError('Forbidden', 403, 'restricted_resource'))
+      );
+      const noPropAdapter = new NotionDocumentAdapter(noPropApi.client);
+
+      await noPropAdapter.createPage('db-uuid-5678', {
+        title: 'Doc With Meta',
+        content: 'Content',
+        category: 'reference',
+        tags: ['api', 'docs'],
+      });
+
+      const [, properties] = noPropApi.mocks.createPage.mock.calls[0];
+      expect(properties).toHaveProperty('Title');
+      expect(properties).not.toHaveProperty('Category');
+      expect(properties).not.toHaveProperty('Tags');
+    });
+
     test('schema is cached across createPage calls', async () => {
       await adapter.createPage('db-uuid-5678', { title: 'Page 1', content: 'c1' });
       await adapter.createPage('db-uuid-5678', { title: 'Page 2', content: 'c2' });
@@ -947,6 +1027,68 @@ describe('NotionDocumentAdapter', () => {
       expect(mockApi.mocks.updatePageContent).not.toHaveBeenCalled();
       expect(mockApi.mocks.getPage).toHaveBeenCalledTimes(1);
       expect(doc.externalId).toBe('page-uuid-1234');
+    });
+
+    test('updates category property without affecting title', async () => {
+      await adapter.updatePage('db-uuid-5678', 'page-uuid-1234', {
+        category: 'spec',
+      });
+
+      expect(mockApi.mocks.updatePage).toHaveBeenCalledTimes(1);
+      const [, properties] = mockApi.mocks.updatePage.mock.calls[0];
+      expect(properties.Category).toEqual({ select: { name: 'spec' } });
+      // Title should NOT be in the properties when only category changed
+      expect(properties.Title).toBeUndefined();
+    });
+
+    test('updates tags property without affecting title', async () => {
+      await adapter.updatePage('db-uuid-5678', 'page-uuid-1234', {
+        tags: ['api', 'v2'],
+      });
+
+      expect(mockApi.mocks.updatePage).toHaveBeenCalledTimes(1);
+      const [, properties] = mockApi.mocks.updatePage.mock.calls[0];
+      expect(properties.Tags).toEqual({
+        multi_select: [{ name: 'api' }, { name: 'v2' }],
+      });
+      expect(properties.Title).toBeUndefined();
+    });
+
+    test('updates title, category, and tags together', async () => {
+      await adapter.updatePage('db-uuid-5678', 'page-uuid-1234', {
+        title: 'New Title',
+        category: 'how-to',
+        tags: ['guide', 'setup'],
+      });
+
+      expect(mockApi.mocks.updatePage).toHaveBeenCalledTimes(1);
+      const [, properties] = mockApi.mocks.updatePage.mock.calls[0];
+      expect(properties.Title).toEqual({
+        title: [{ text: { content: 'New Title' } }],
+      });
+      expect(properties.Category).toEqual({ select: { name: 'how-to' } });
+      expect(properties.Tags).toEqual({
+        multi_select: [{ name: 'guide' }, { name: 'setup' }],
+      });
+    });
+
+    test('skips category and tags in update when schema lacks them', async () => {
+      const noPropApi = createMockApiClient({ includeCategory: false, includeTags: false });
+      (noPropApi.mocks.updateDatabase as ReturnType<typeof mock>).mockImplementation(() =>
+        Promise.reject(new NotionApiError('Forbidden', 403, 'restricted_resource'))
+      );
+      const noPropAdapter = new NotionDocumentAdapter(noPropApi.client);
+
+      await noPropAdapter.updatePage('db-uuid-5678', 'page-uuid-1234', {
+        title: 'Updated',
+        category: 'reference',
+        tags: ['api'],
+      });
+
+      const [, properties] = noPropApi.mocks.updatePage.mock.calls[0];
+      expect(properties).toHaveProperty('Title');
+      expect(properties).not.toHaveProperty('Category');
+      expect(properties).not.toHaveProperty('Tags');
     });
   });
 });

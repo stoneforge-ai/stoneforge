@@ -344,7 +344,7 @@ export class NotionDocumentAdapter implements DocumentSyncAdapter {
     // markdownToNotionBlocks returns NotionBlock[] which is structurally
     // compatible with NotionBlockInput[] but needs a cast due to index signature
     const blocks = markdownToNotionBlocks(page.content) as unknown as NotionBlockInput[];
-    const properties = buildPageProperties(page.title, schema);
+    const properties = buildPageProperties(page.title, schema, page.category, page.tags);
 
     // Notion limits POST /pages to 100 children blocks
     const BLOCK_LIMIT = 100;
@@ -382,11 +382,41 @@ export class NotionDocumentAdapter implements DocumentSyncAdapter {
     externalId: string,
     updates: Partial<ExternalDocumentInput>
   ): Promise<ExternalDocument> {
-    // Update properties if title changed
-    if (updates.title !== undefined) {
+    // Update properties if title, category, or tags changed
+    const hasPropertyUpdates =
+      updates.title !== undefined ||
+      updates.category !== undefined ||
+      updates.tags !== undefined;
+
+    if (hasPropertyUpdates) {
       const schema = await this.getDatabaseSchema(project);
-      const properties = buildPageProperties(updates.title, schema);
-      await this.api.updatePage(externalId, properties);
+
+      // Build properties selectively — only include fields being updated
+      // to avoid overwriting unchanged properties (e.g., setting title to ''
+      // when only category changed)
+      const properties: Record<string, unknown> = {};
+
+      if (updates.title !== undefined) {
+        properties[schema.titlePropertyName] = {
+          title: [{ text: { content: updates.title } }],
+        };
+      }
+
+      if (updates.category !== undefined && schema.hasCategoryProperty) {
+        properties.Category = {
+          select: { name: updates.category },
+        };
+      }
+
+      if (updates.tags !== undefined && updates.tags.length > 0 && schema.hasTagsProperty) {
+        properties.Tags = {
+          multi_select: updates.tags.map((tag) => ({ name: tag })),
+        };
+      }
+
+      if (Object.keys(properties).length > 0) {
+        await this.api.updatePage(externalId, properties);
+      }
     }
 
     // Update content blocks if content changed
