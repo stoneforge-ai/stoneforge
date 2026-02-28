@@ -23,6 +23,13 @@ import type { Task, Document, ElementId, ExternalProvider, ExternalSyncState, Sy
 import { taskToExternalTask, getFieldMapConfigForProvider } from '../../external-sync/adapters/task-sync-adapter.js';
 import { isSystemCategory, documentToExternalDocumentInput } from '../../external-sync/adapters/document-sync-adapter.js';
 
+/**
+ * Providers that do not require an authentication token.
+ * These providers sync to local resources (e.g., filesystem directories)
+ * and can be used with just a project/path configured.
+ */
+const TOKENLESS_PROVIDERS = new Set(['folder']);
+
 // ============================================================================
 // Type Flag Helper
 // ============================================================================
@@ -331,10 +338,10 @@ async function configSetAutoLinkHandler(
     );
   }
 
-  // Check if provider has a token configured
+  // Check if provider has a token configured (skip for tokenless providers like folder)
   const { settingsService, error: settingsError } = await createSettingsServiceFromOptions(options);
   let tokenWarning: string | undefined;
-  if (!settingsError) {
+  if (!settingsError && !TOKENLESS_PROVIDERS.has(provider)) {
     const providerConfig = settingsService.getProviderConfig(provider);
     if (!providerConfig?.token) {
       tokenWarning = `Warning: Provider "${provider}" has no token configured. Auto-link will not work until a token is set. Run "sf external-sync config set-token ${provider} <token>".`;
@@ -1510,7 +1517,17 @@ async function createProviderFromSettings(
     };
 
     const providerConfig = settingsService.getProviderConfig(providerName);
-    if (!providerConfig?.token) {
+    const isTokenless = TOKENLESS_PROVIDERS.has(providerName);
+
+    // Token-free providers (e.g., folder) only need a config entry — no token required.
+    // All other providers require both a config entry and a token.
+    if (!providerConfig) {
+      if (isTokenless) {
+        return { error: `Provider "${providerName}" is not configured. Run "sf external-sync config set-project ${providerName} <path>" first.` };
+      }
+      return { error: `Provider "${providerName}" has no token configured. Run "sf external-sync config set-token ${providerName} <token>" first.` };
+    }
+    if (!isTokenless && !providerConfig.token) {
       return { error: `Provider "${providerName}" has no token configured. Run "sf external-sync config set-token ${providerName} <token>" first.` };
     }
 
@@ -1521,23 +1538,24 @@ async function createProviderFromSettings(
 
     let provider: ExternalProvider;
 
+    // Token is guaranteed non-undefined for non-tokenless providers (validated above)
     if (providerName === 'github') {
       const { createGitHubProvider } = await import('../../external-sync/providers/github/index.js');
       provider = createGitHubProvider({
         provider: 'github',
-        token: providerConfig.token,
+        token: providerConfig.token!,
         apiBaseUrl: providerConfig.apiBaseUrl,
         defaultProject: project,
       });
     } else if (providerName === 'linear') {
       const { createLinearProvider } = await import('../../external-sync/providers/linear/index.js');
       provider = createLinearProvider({
-        apiKey: providerConfig.token,
+        apiKey: providerConfig.token!,
       });
     } else if (providerName === 'notion') {
       const { createNotionProvider } = await import('../../external-sync/providers/notion/index.js');
       provider = createNotionProvider({
-        token: providerConfig.token,
+        token: providerConfig.token!,
       });
     } else if (providerName === 'folder') {
       const { createFolderProvider } = await import('../../external-sync/providers/folder/index.js');
