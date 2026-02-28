@@ -77,6 +77,12 @@ export interface SyncOptions {
   readonly all?: boolean;
   /** Force push all linked tasks, skipping hash comparison and event query guards */
   readonly force?: boolean;
+  /**
+   * Filter sync operations to specific adapter types.
+   * When set, only elements matching these adapter types will be processed.
+   * When omitted or empty, all adapter types are processed (tasks + documents).
+   */
+  readonly adapterTypes?: readonly SyncAdapterType[];
 }
 
 /**
@@ -474,75 +480,82 @@ export class SyncEngine {
     const conflicts: ExternalSyncConflict[] = [];
     const errors: ExternalSyncError[] = [];
     const now = createTimestamp();
+    const adapterFilter = options.adapterTypes && options.adapterTypes.length > 0
+      ? new Set(options.adapterTypes)
+      : null;
 
-    // Get all task adapters from the registry
-    const taskAdapterEntries = this.registry.getAdaptersOfType('task');
+    // Get all task adapters from the registry (skip if filtered out)
+    if (!adapterFilter || adapterFilter.has('task')) {
+      const taskAdapterEntries = this.registry.getAdaptersOfType('task');
 
-    for (const { provider, adapter } of taskAdapterEntries) {
-      const taskAdapter = adapter as TaskSyncAdapter;
-      const providerConfig = this.getProviderConfig(provider.name);
-      const project = providerConfig?.defaultProject;
+      for (const { provider, adapter } of taskAdapterEntries) {
+        const taskAdapter = adapter as TaskSyncAdapter;
+        const providerConfig = this.getProviderConfig(provider.name);
+        const project = providerConfig?.defaultProject;
 
-      if (!project) {
-        // No project configured for this provider — skip
-        continue;
-      }
+        if (!project) {
+          // No project configured for this provider — skip
+          continue;
+        }
 
-      try {
-        const result = await this.pullFromProvider(
-          provider,
-          taskAdapter,
-          project,
-          options,
-          now,
-          conflicts,
-          errors
-        );
+        try {
+          const result = await this.pullFromProvider(
+            provider,
+            taskAdapter,
+            project,
+            options,
+            now,
+            conflicts,
+            errors
+          );
 
-        pulled.push(result.pulled);
-        skipped.push(result.skipped);
-      } catch (err) {
-        errors.push({
-          provider: provider.name,
-          project,
-          message: err instanceof Error ? err.message : String(err),
-          retryable: isRetryableError(err),
-        });
+          pulled.push(result.pulled);
+          skipped.push(result.skipped);
+        } catch (err) {
+          errors.push({
+            provider: provider.name,
+            project,
+            message: err instanceof Error ? err.message : String(err),
+            retryable: isRetryableError(err),
+          });
+        }
       }
     }
 
-    // Get all document adapters from the registry
-    const docAdapterEntries = this.registry.getAdaptersOfType('document');
+    // Get all document adapters from the registry (skip if filtered out)
+    if (!adapterFilter || adapterFilter.has('document')) {
+      const docAdapterEntries = this.registry.getAdaptersOfType('document');
 
-    for (const { provider, adapter } of docAdapterEntries) {
-      const docAdapter = adapter as DocumentSyncAdapter;
-      const providerConfig = this.getProviderConfig(provider.name);
-      const project = providerConfig?.defaultProject;
+      for (const { provider, adapter } of docAdapterEntries) {
+        const docAdapter = adapter as DocumentSyncAdapter;
+        const providerConfig = this.getProviderConfig(provider.name);
+        const project = providerConfig?.defaultProject;
 
-      if (!project) {
-        continue;
-      }
+        if (!project) {
+          continue;
+        }
 
-      try {
-        const result = await this.pullDocumentsFromProvider(
-          provider,
-          docAdapter,
-          project,
-          options,
-          now,
-          conflicts,
-          errors
-        );
+        try {
+          const result = await this.pullDocumentsFromProvider(
+            provider,
+            docAdapter,
+            project,
+            options,
+            now,
+            conflicts,
+            errors
+          );
 
-        pulled.push(result.pulled);
-        skipped.push(result.skipped);
-      } catch (err) {
-        errors.push({
-          provider: provider.name,
-          project,
-          message: err instanceof Error ? err.message : String(err),
-          retryable: isRetryableError(err),
-        });
+          pulled.push(result.pulled);
+          skipped.push(result.skipped);
+        } catch (err) {
+          errors.push({
+            provider: provider.name,
+            project,
+            message: err instanceof Error ? err.message : String(err),
+            retryable: isRetryableError(err),
+          });
+        }
       }
     }
 
@@ -1094,24 +1107,38 @@ export class SyncEngine {
    * - Otherwise, returns tasks with _externalSync that have been updated
    */
   private async findLinkedElements(options: SyncOptions): Promise<Element[]> {
+    const adapterFilter = options.adapterTypes && options.adapterTypes.length > 0
+      ? new Set(options.adapterTypes)
+      : null;
+
     if (options.taskIds && options.taskIds.length > 0) {
       // Fetch specific elements (tasks or documents)
       const elements: Element[] = [];
       for (const id of options.taskIds) {
         const element = await this.api.get<Element>(id as ElementId);
-        if (element && getExternalSyncState(element.metadata)) {
-          elements.push(element);
+        if (element) {
+          const state = getExternalSyncState(element.metadata);
+          if (state && (!adapterFilter || adapterFilter.has(state.adapterType))) {
+            elements.push(element);
+          }
         }
       }
       return elements;
     }
 
-    // Fetch all tasks and documents, then filter to those with _externalSync metadata
-    const allTasks = await this.api.list<Element>({ type: 'task' });
-    const allDocs = await this.api.list<Element>({ type: 'document' });
-    return [...allTasks, ...allDocs].filter(
-      (el) => getExternalSyncState(el.metadata) !== undefined
-    );
+    // Fetch elements based on adapter type filter
+    const collections: Element[][] = [];
+    if (!adapterFilter || adapterFilter.has('task')) {
+      collections.push(await this.api.list<Element>({ type: 'task' }));
+    }
+    if (!adapterFilter || adapterFilter.has('document')) {
+      collections.push(await this.api.list<Element>({ type: 'document' }));
+    }
+
+    return collections.flat().filter((el) => {
+      const state = getExternalSyncState(el.metadata);
+      return state !== undefined && (!adapterFilter || adapterFilter.has(state.adapterType));
+    });
   }
 
   /**

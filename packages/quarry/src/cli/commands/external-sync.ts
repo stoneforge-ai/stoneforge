@@ -3,11 +3,11 @@
  *
  * Provides CLI commands for external service synchronization:
  * - config: Show/set provider configuration (tokens, projects)
- * - link: Link a task to an external issue
- * - link-all: Bulk-link all unlinked tasks to external issues
+ * - link: Link a task/document to an external issue/page
+ * - link-all: Bulk-link all unlinked tasks or documents
  * - unlink: Remove external link from a task
- * - push: Push linked tasks to external service
- * - pull: Pull changes from external for linked tasks
+ * - push: Push linked elements to external service
+ * - pull: Pull changes from external for linked elements
  * - sync: Bidirectional sync (push + pull)
  * - status: Show sync state overview
  * - resolve: Resolve sync conflicts
@@ -19,8 +19,44 @@ import { getOutputMode } from '../formatter.js';
 import { createAPI, resolveDatabasePath } from '../db.js';
 import { createStorage, initializeSchema } from '@stoneforge/storage';
 import { getValue, setValue, VALID_AUTO_LINK_PROVIDERS } from '../../config/index.js';
-import type { Task, ElementId, ExternalProvider, ExternalSyncState, SyncDirection, TaskSyncAdapter } from '@stoneforge/core';
+import type { Task, Document, ElementId, ExternalProvider, ExternalSyncState, SyncDirection, SyncAdapterType, TaskSyncAdapter, DocumentSyncAdapter } from '@stoneforge/core';
 import { taskToExternalTask, getFieldMapConfigForProvider } from '../../external-sync/adapters/task-sync-adapter.js';
+import { isSystemCategory, documentToExternalDocumentInput } from '../../external-sync/adapters/document-sync-adapter.js';
+
+// ============================================================================
+// Type Flag Helper
+// ============================================================================
+
+/**
+ * Parse the --type flag value into an array of SyncAdapterType values.
+ *
+ * @param typeFlag - The --type flag value: 'task', 'document', or 'all'
+ * @returns Array of adapter types, or undefined for 'all' (no filter)
+ */
+function parseTypeFlag(typeFlag?: string): SyncAdapterType[] | undefined {
+  if (!typeFlag || typeFlag === 'all') {
+    return undefined; // No filter — process all types
+  }
+  if (typeFlag === 'task') {
+    return ['task'];
+  }
+  if (typeFlag === 'document') {
+    return ['document'];
+  }
+  return undefined; // Unknown value — treat as 'all'
+}
+
+/**
+ * Validate the --type flag value.
+ *
+ * @returns Error message if invalid, undefined if valid
+ */
+function validateTypeFlag(typeFlag?: string): string | undefined {
+  if (!typeFlag || typeFlag === 'all' || typeFlag === 'task' || typeFlag === 'document') {
+    return undefined;
+  }
+  return `Invalid --type value "${typeFlag}". Must be one of: task, document, all`;
+}
 
 // ============================================================================
 // Settings Service Helper
@@ -365,6 +401,7 @@ async function configDisableAutoLinkHandler(
 
 interface LinkOptions {
   provider?: string;
+  type?: string;
 }
 
 const linkOptions: CommandOption[] = [
@@ -374,20 +411,35 @@ const linkOptions: CommandOption[] = [
     description: 'Provider name (default: github)',
     hasValue: true,
   },
+  {
+    name: 'type',
+    short: 't',
+    description: 'Element type: task or document (default: task)',
+    hasValue: true,
+    defaultValue: 'task',
+  },
 ];
 
 async function linkHandler(
   args: string[],
   options: GlobalOptions & LinkOptions
 ): Promise<CommandResult> {
-  if (args.length < 2) {
+  const elementType = options.type ?? 'task';
+  if (elementType !== 'task' && elementType !== 'document') {
     return failure(
-      'Usage: sf external-sync link <taskId> <url-or-issue-number>',
+      `Invalid --type value "${elementType}". Must be one of: task, document`,
       ExitCode.INVALID_ARGUMENTS
     );
   }
 
-  const [taskId, urlOrNumber] = args;
+  if (args.length < 2) {
+    return failure(
+      `Usage: sf external-sync link <${elementType}Id> <url-or-external-id>`,
+      ExitCode.INVALID_ARGUMENTS
+    );
+  }
+
+  const [elementId, urlOrExternalId] = args;
   const provider = options.provider ?? 'github';
 
   const { api, error } = createAPI(options);
@@ -395,27 +447,27 @@ async function linkHandler(
     return failure(error, ExitCode.GENERAL_ERROR);
   }
 
-  // Resolve task
-  let task: Task | null;
+  // Resolve the element (task or document)
+  let element: Task | Document | null;
   try {
-    task = await api.get<Task>(taskId as ElementId);
+    element = await api.get<Task | Document>(elementId as ElementId);
   } catch {
-    return failure(`Task not found: ${taskId}`, ExitCode.NOT_FOUND);
+    return failure(`Element not found: ${elementId}`, ExitCode.NOT_FOUND);
   }
 
-  if (!task) {
-    return failure(`Task not found: ${taskId}`, ExitCode.NOT_FOUND);
+  if (!element) {
+    return failure(`Element not found: ${elementId}`, ExitCode.NOT_FOUND);
   }
 
-  if (task.type !== 'task') {
-    return failure(`Element ${taskId} is not a task (type: ${task.type})`, ExitCode.VALIDATION);
+  if (element.type !== elementType) {
+    return failure(`Element ${elementId} is not a ${elementType} (type: ${element.type})`, ExitCode.VALIDATION);
   }
 
-  // Determine the external URL
+  // Determine the external URL and external ID
   let externalUrl: string;
   let externalId: string;
 
-  if (/^\d+$/.test(urlOrNumber)) {
+  if (/^\d+$/.test(urlOrExternalId)) {
     // Bare number — construct URL from default project
     const { settingsService, error: settingsError } = await createSettingsServiceFromOptions(options);
     if (settingsError) {
@@ -426,28 +478,28 @@ async function linkHandler(
     if (!providerConfig?.defaultProject) {
       return failure(
         `No default project configured for provider "${provider}". ` +
-        `Run "sf external-sync config set-project ${provider} <owner/repo>" first, ` +
+        `Run "sf external-sync config set-project ${provider} <project>" first, ` +
         `or provide a full URL.`,
         ExitCode.VALIDATION
       );
     }
 
-    externalId = urlOrNumber;
+    externalId = urlOrExternalId;
     if (provider === 'github') {
       const baseUrl = providerConfig.apiBaseUrl
         ? providerConfig.apiBaseUrl.replace(/\/api\/v3\/?$/, '').replace(/\/$/, '')
         : 'https://github.com';
-      externalUrl = `${baseUrl}/${providerConfig.defaultProject}/issues/${urlOrNumber}`;
+      externalUrl = `${baseUrl}/${providerConfig.defaultProject}/issues/${urlOrExternalId}`;
     } else {
       // Generic URL construction for other providers
-      externalUrl = `${providerConfig.defaultProject}#${urlOrNumber}`;
+      externalUrl = `${providerConfig.defaultProject}#${urlOrExternalId}`;
     }
   } else {
-    // Full URL provided
-    externalUrl = urlOrNumber;
-    // Extract issue number from URL
-    const match = urlOrNumber.match(/\/(\d+)\/?$/);
-    externalId = match ? match[1] : urlOrNumber;
+    // Full URL or external ID provided
+    externalUrl = urlOrExternalId;
+    // Extract issue number from URL if present, otherwise use the full value
+    const match = urlOrExternalId.match(/\/(\d+)\/?$/);
+    externalId = match ? match[1] : urlOrExternalId;
   }
 
   // Extract project from URL if possible
@@ -457,34 +509,37 @@ async function linkHandler(
     project = ghMatch[1];
   }
 
-  // Update task with externalRef and _externalSync metadata
+  // Determine the adapter type based on element type
+  const adapterType: SyncAdapterType = elementType === 'document' ? 'document' : 'task';
+
+  // Update element with externalRef and _externalSync metadata
   const syncMetadata = {
     provider,
     project: project ?? '',
     externalId,
     url: externalUrl,
     direction: getValue('externalSync.defaultDirection'),
-    adapterType: 'task' as const,
+    adapterType,
   };
 
   try {
-    const existingMetadata = (task.metadata ?? {}) as Record<string, unknown>;
-    await api.update<Task>(taskId as ElementId, {
+    const existingMetadata = (element.metadata ?? {}) as Record<string, unknown>;
+    await api.update(elementId as ElementId, {
       externalRef: externalUrl,
       metadata: {
         ...existingMetadata,
         _externalSync: syncMetadata,
       },
-    } as Partial<Task>);
+    } as Partial<Task | Document>);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return failure(`Failed to update task: ${message}`, ExitCode.GENERAL_ERROR);
+    return failure(`Failed to update ${elementType}: ${message}`, ExitCode.GENERAL_ERROR);
   }
 
   const mode = getOutputMode(options);
 
   if (mode === 'json') {
-    return success({ taskId, externalUrl, provider, externalId, project });
+    return success({ elementId, elementType, externalUrl, provider, externalId, project, adapterType });
   }
 
   if (mode === 'quiet') {
@@ -492,8 +547,8 @@ async function linkHandler(
   }
 
   return success(
-    { taskId, externalUrl, provider, externalId },
-    `Linked task ${taskId} to ${externalUrl}`
+    { elementId, elementType, externalUrl, provider, externalId },
+    `Linked ${elementType} ${elementId} to ${externalUrl}`
   );
 }
 
@@ -507,64 +562,66 @@ async function unlinkHandler(
 ): Promise<CommandResult> {
   if (args.length < 1) {
     return failure(
-      'Usage: sf external-sync unlink <taskId>',
+      'Usage: sf external-sync unlink <elementId>',
       ExitCode.INVALID_ARGUMENTS
     );
   }
 
-  const [taskId] = args;
+  const [elementId] = args;
 
   const { api, error } = createAPI(options);
   if (error) {
     return failure(error, ExitCode.GENERAL_ERROR);
   }
 
-  // Resolve task
-  let task: Task | null;
+  // Resolve element (task or document)
+  let element: Task | Document | null;
   try {
-    task = await api.get<Task>(taskId as ElementId);
+    element = await api.get<Task | Document>(elementId as ElementId);
   } catch {
-    return failure(`Task not found: ${taskId}`, ExitCode.NOT_FOUND);
+    return failure(`Element not found: ${elementId}`, ExitCode.NOT_FOUND);
   }
 
-  if (!task) {
-    return failure(`Task not found: ${taskId}`, ExitCode.NOT_FOUND);
+  if (!element) {
+    return failure(`Element not found: ${elementId}`, ExitCode.NOT_FOUND);
   }
 
-  if (task.type !== 'task') {
-    return failure(`Element ${taskId} is not a task (type: ${task.type})`, ExitCode.VALIDATION);
+  if (element.type !== 'task' && element.type !== 'document') {
+    return failure(`Element ${elementId} is not a task or document (type: ${element.type})`, ExitCode.VALIDATION);
   }
 
-  if (!task.externalRef) {
-    return failure(`Task ${taskId} is not linked to an external issue`, ExitCode.VALIDATION);
+  const hasExternalRef = (element as Task).externalRef;
+  const hasExternalSync = (element.metadata as Record<string, unknown>)?._externalSync;
+  if (!hasExternalRef && !hasExternalSync) {
+    return failure(`Element ${elementId} is not linked to an external service`, ExitCode.VALIDATION);
   }
 
   // Clear externalRef and _externalSync metadata
   try {
-    const existingMetadata = (task.metadata ?? {}) as Record<string, unknown>;
+    const existingMetadata = (element.metadata ?? {}) as Record<string, unknown>;
     const { _externalSync: _, ...restMetadata } = existingMetadata;
-    await api.update<Task>(taskId as ElementId, {
+    await api.update(elementId as ElementId, {
       externalRef: undefined,
       metadata: restMetadata,
-    } as Partial<Task>);
+    } as Partial<Task | Document>);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return failure(`Failed to update task: ${message}`, ExitCode.GENERAL_ERROR);
+    return failure(`Failed to update element: ${message}`, ExitCode.GENERAL_ERROR);
   }
 
   const mode = getOutputMode(options);
 
   if (mode === 'json') {
-    return success({ taskId, unlinked: true });
+    return success({ elementId, elementType: element.type, unlinked: true });
   }
 
   if (mode === 'quiet') {
-    return success(taskId);
+    return success(elementId);
   }
 
   return success(
-    { taskId, unlinked: true },
-    `Unlinked task ${taskId} from external issue`
+    { elementId, unlinked: true },
+    `Unlinked ${element.type} ${elementId} from external service`
   );
 }
 
@@ -575,18 +632,26 @@ async function unlinkHandler(
 interface PushOptions {
   all?: boolean;
   force?: boolean;
+  type?: string;
 }
 
 const pushOptions: CommandOption[] = [
   {
     name: 'all',
     short: 'a',
-    description: 'Push all linked tasks',
+    description: 'Push all linked elements',
   },
   {
     name: 'force',
     short: 'f',
-    description: 'Push all linked tasks regardless of whether they have changed',
+    description: 'Push all linked elements regardless of whether they have changed',
+  },
+  {
+    name: 'type',
+    short: 't',
+    description: 'Element type to push: task, document, or all (default: all)',
+    hasValue: true,
+    defaultValue: 'all',
   },
 ];
 
@@ -594,6 +659,12 @@ async function pushHandler(
   args: string[],
   options: GlobalOptions & PushOptions
 ): Promise<CommandResult> {
+  // Validate --type flag
+  const typeError = validateTypeFlag(options.type);
+  if (typeError) {
+    return failure(typeError, ExitCode.INVALID_ARGUMENTS);
+  }
+
   const { api, error } = createAPI(options);
   if (error) {
     return failure(error, ExitCode.GENERAL_ERROR);
@@ -641,14 +712,18 @@ async function pushHandler(
   });
 
   // Build push options
-  const syncPushOptions: { taskIds?: string[]; all?: boolean; force?: boolean } = {};
+  const adapterTypes = parseTypeFlag(options.type);
+  const syncPushOptions: { taskIds?: string[]; all?: boolean; force?: boolean; adapterTypes?: SyncAdapterType[] } = {};
+  if (adapterTypes) {
+    syncPushOptions.adapterTypes = adapterTypes;
+  }
   if (options.all) {
     syncPushOptions.all = true;
   } else if (args.length > 0) {
     syncPushOptions.taskIds = args;
   } else {
     return failure(
-      'Usage: sf external-sync push [taskId...] or sf external-sync push --all',
+      'Usage: sf external-sync push [elementId...] or sf external-sync push --all',
       ExitCode.INVALID_ARGUMENTS
     );
   }
@@ -676,8 +751,9 @@ async function pushHandler(
       return success(String(result.pushed));
     }
 
+    const typeLabel = options.type === 'document' ? 'document(s)' : options.type === 'task' ? 'task(s)' : 'element(s)';
     const lines: string[] = [
-      `Push: ${result.pushed} task(s) pushed successfully`,
+      `Push: ${result.pushed} ${typeLabel} pushed successfully`,
       '',
     ];
 
@@ -715,6 +791,7 @@ async function pushHandler(
 interface PullOptions {
   provider?: string;
   discover?: boolean;
+  type?: string;
 }
 
 const pullOptions: CommandOption[] = [
@@ -729,12 +806,25 @@ const pullOptions: CommandOption[] = [
     short: 'd',
     description: 'Discover new issues not yet linked',
   },
+  {
+    name: 'type',
+    short: 't',
+    description: 'Element type to pull: task, document, or all (default: all)',
+    hasValue: true,
+    defaultValue: 'all',
+  },
 ];
 
 async function pullHandler(
   _args: string[],
   options: GlobalOptions & PullOptions
 ): Promise<CommandResult> {
+  // Validate --type flag
+  const typeError = validateTypeFlag(options.type);
+  if (typeError) {
+    return failure(typeError, ExitCode.INVALID_ARGUMENTS);
+  }
+
   const { api, error } = createAPI(options);
   if (error) {
     return failure(error, ExitCode.GENERAL_ERROR);
@@ -806,7 +896,11 @@ async function pullHandler(
   });
 
   // Build pull options — discover maps to 'all' to create local tasks for unlinked external issues
-  const syncPullOptions: { all?: boolean } = {};
+  const adapterTypes = parseTypeFlag(options.type);
+  const syncPullOptions: { all?: boolean; adapterTypes?: SyncAdapterType[] } = {};
+  if (adapterTypes) {
+    syncPullOptions.adapterTypes = adapterTypes;
+  }
   if (options.discover) {
     syncPullOptions.all = true;
   }
@@ -832,8 +926,9 @@ async function pullHandler(
       return success(String(result.pulled));
     }
 
+    const typeLabel = options.type === 'document' ? 'document(s)' : options.type === 'task' ? 'task(s)' : 'element(s)';
     const lines: string[] = [
-      `Pull: ${result.pulled} task(s) pulled successfully`,
+      `Pull: ${result.pulled} ${typeLabel} pulled successfully`,
       '',
     ];
 
@@ -875,6 +970,7 @@ async function pullHandler(
 
 interface SyncOptions {
   'dry-run'?: boolean;
+  type?: string;
 }
 
 const syncOptions: CommandOption[] = [
@@ -883,12 +979,25 @@ const syncOptions: CommandOption[] = [
     short: 'n',
     description: 'Show what would change without making changes',
   },
+  {
+    name: 'type',
+    short: 't',
+    description: 'Element type to sync: task, document, or all (default: all)',
+    hasValue: true,
+    defaultValue: 'all',
+  },
 ];
 
 async function syncHandler(
   _args: string[],
   options: GlobalOptions & SyncOptions
 ): Promise<CommandResult> {
+  // Validate --type flag
+  const typeError = validateTypeFlag(options.type);
+  if (typeError) {
+    return failure(typeError, ExitCode.INVALID_ARGUMENTS);
+  }
+
   const { api, error: apiError } = createAPI(options);
   if (apiError) {
     return failure(apiError, ExitCode.GENERAL_ERROR);
@@ -937,7 +1046,11 @@ async function syncHandler(
   });
 
   // Build sync options
-  const syncOpts: { dryRun?: boolean } = {};
+  const adapterTypes = parseTypeFlag(options.type);
+  const syncOpts: { dryRun?: boolean; adapterTypes?: SyncAdapterType[] } = {};
+  if (adapterTypes) {
+    syncOpts.adapterTypes = adapterTypes;
+  }
   if (isDryRun) {
     syncOpts.dryRun = true;
   }
@@ -964,11 +1077,12 @@ async function syncHandler(
       return success(`${result.pushed}/${result.pulled}`);
     }
 
+    const typeLabel = options.type === 'document' ? 'document(s)' : options.type === 'task' ? 'task(s)' : 'element(s)';
     const lines: string[] = [
       isDryRun ? 'Sync (dry run) - showing what would change' : 'Bidirectional Sync Complete',
       '',
-      `  Pushed: ${result.pushed} task(s)`,
-      `  Pulled: ${result.pulled} task(s)`,
+      `  Pushed: ${result.pushed} ${typeLabel}`,
+      `  Pulled: ${result.pulled} ${typeLabel}`,
     ];
 
     if (result.skipped > 0) {
@@ -1019,20 +1133,22 @@ async function statusHandler(
   const settings = settingsService.getExternalSyncSettings();
   const enabled = getValue('externalSync.enabled');
 
-  // Count linked tasks and check for conflicts
-  let linkedCount = 0;
+  // Count linked tasks and documents, and check for conflicts
+  let linkedTaskCount = 0;
+  let linkedDocCount = 0;
   let conflictCount = 0;
-  const providerCounts: Record<string, number> = {};
+  const providerTaskCounts: Record<string, number> = {};
+  const providerDocCounts: Record<string, number> = {};
 
   try {
     const allTasks = await api.list({ type: 'task' });
     for (const t of allTasks) {
       const task = t as Task;
       if (task.externalRef && (task.metadata as Record<string, unknown>)?._externalSync) {
-        linkedCount++;
+        linkedTaskCount++;
         const syncMeta = (task.metadata as Record<string, unknown>)._externalSync as Record<string, unknown>;
         const provider = (syncMeta?.provider as string) ?? 'unknown';
-        providerCounts[provider] = (providerCounts[provider] ?? 0) + 1;
+        providerTaskCounts[provider] = (providerTaskCounts[provider] ?? 0) + 1;
       }
       if (task.tags?.includes('sync-conflict')) {
         conflictCount++;
@@ -1041,6 +1157,21 @@ async function statusHandler(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return failure(`Failed to list tasks: ${message}`, ExitCode.GENERAL_ERROR);
+  }
+
+  try {
+    const allDocs = await api.list({ type: 'document' });
+    for (const d of allDocs) {
+      const doc = d as Document;
+      if ((doc.metadata as Record<string, unknown>)?._externalSync) {
+        linkedDocCount++;
+        const syncMeta = (doc.metadata as Record<string, unknown>)._externalSync as Record<string, unknown>;
+        const provider = (syncMeta?.provider as string) ?? 'unknown';
+        providerDocCounts[provider] = (providerDocCounts[provider] ?? 0) + 1;
+      }
+    }
+  } catch {
+    // If listing documents fails, continue with task counts only
   }
 
   // Build cursor info
@@ -1052,9 +1183,11 @@ async function statusHandler(
   const mode = getOutputMode(options);
   const statusData = {
     enabled,
-    linkedTaskCount: linkedCount,
+    linkedTaskCount,
+    linkedDocumentCount: linkedDocCount,
     conflictCount,
-    providerCounts,
+    providerTaskCounts,
+    providerDocumentCounts: providerDocCounts,
     configuredProviders: Object.keys(settings.providers),
     syncCursors: cursors,
     pollIntervalMs: settings.pollIntervalMs,
@@ -1066,14 +1199,15 @@ async function statusHandler(
   }
 
   if (mode === 'quiet') {
-    return success(`${linkedCount}:${conflictCount}`);
+    return success(`${linkedTaskCount}:${linkedDocCount}:${conflictCount}`);
   }
 
   const lines: string[] = [
     'External Sync Status',
     '',
     `  Enabled:             ${enabled ? 'yes' : 'no'}`,
-    `  Linked tasks:        ${linkedCount}`,
+    `  Linked tasks:        ${linkedTaskCount}`,
+    `  Linked documents:    ${linkedDocCount}`,
     `  Pending conflicts:   ${conflictCount}`,
     `  Poll interval:       ${settings.pollIntervalMs}ms`,
     `  Default direction:   ${settings.defaultDirection}`,
@@ -1085,9 +1219,10 @@ async function statusHandler(
   if (providerEntries.length > 0) {
     lines.push('  Providers:');
     for (const [name, config] of providerEntries) {
-      const count = providerCounts[name] ?? 0;
+      const taskCount = providerTaskCounts[name] ?? 0;
+      const docCount = providerDocCounts[name] ?? 0;
       const hasToken = config.token ? 'yes' : 'no';
-      lines.push(`    ${name}: ${count} linked task(s), token: ${hasToken}, project: ${config.defaultProject ?? '(not set)'}`);
+      lines.push(`    ${name}: ${taskCount} linked task(s), ${docCount} linked document(s), token: ${hasToken}, project: ${config.defaultProject ?? '(not set)'}`);
     }
   } else {
     lines.push('  Providers: (none configured)');
@@ -1135,12 +1270,12 @@ async function resolveHandler(
 ): Promise<CommandResult> {
   if (args.length < 1) {
     return failure(
-      'Usage: sf external-sync resolve <taskId> --keep local|remote',
+      'Usage: sf external-sync resolve <elementId> --keep local|remote',
       ExitCode.INVALID_ARGUMENTS
     );
   }
 
-  const [taskId] = args;
+  const [elementId] = args;
   const keep = options.keep;
 
   if (!keep || (keep !== 'local' && keep !== 'remote')) {
@@ -1155,33 +1290,34 @@ async function resolveHandler(
     return failure(error, ExitCode.GENERAL_ERROR);
   }
 
-  // Resolve task
-  let task: Task | null;
+  // Resolve element (task or document)
+  let element: Task | Document | null;
   try {
-    task = await api.get<Task>(taskId as ElementId);
+    element = await api.get<Task | Document>(elementId as ElementId);
   } catch {
-    return failure(`Task not found: ${taskId}`, ExitCode.NOT_FOUND);
+    return failure(`Element not found: ${elementId}`, ExitCode.NOT_FOUND);
   }
 
-  if (!task) {
-    return failure(`Task not found: ${taskId}`, ExitCode.NOT_FOUND);
+  if (!element) {
+    return failure(`Element not found: ${elementId}`, ExitCode.NOT_FOUND);
   }
 
-  if (task.type !== 'task') {
-    return failure(`Element ${taskId} is not a task (type: ${task.type})`, ExitCode.VALIDATION);
+  if (element.type !== 'task' && element.type !== 'document') {
+    return failure(`Element ${elementId} is not a task or document (type: ${element.type})`, ExitCode.VALIDATION);
   }
 
-  if (!task.tags?.includes('sync-conflict')) {
+  const elementTags = (element as Task).tags;
+  if (!elementTags?.includes('sync-conflict')) {
     return failure(
-      `Task ${taskId} does not have a sync conflict. Only tasks tagged with "sync-conflict" can be resolved.`,
+      `Element ${elementId} does not have a sync conflict. Only elements tagged with "sync-conflict" can be resolved.`,
       ExitCode.VALIDATION
     );
   }
 
   // Remove sync-conflict tag and update metadata
   try {
-    const newTags = (task.tags ?? []).filter((t) => t !== 'sync-conflict');
-    const existingMetadata = (task.metadata ?? {}) as Record<string, unknown>;
+    const newTags = (elementTags ?? []).filter((t) => t !== 'sync-conflict');
+    const existingMetadata = (element.metadata ?? {}) as Record<string, unknown>;
     const syncMeta = (existingMetadata._externalSync ?? {}) as Record<string, unknown>;
 
     // Record resolution in metadata
@@ -1196,13 +1332,13 @@ async function resolveHandler(
     // Clear conflict data from metadata
     const { _syncConflict: _, ...restMetadata } = existingMetadata;
 
-    await api.update<Task>(taskId as ElementId, {
+    await api.update(elementId as ElementId, {
       tags: newTags,
       metadata: {
         ...restMetadata,
         _externalSync: updatedSyncMeta,
       },
-    } as Partial<Task>);
+    } as Partial<Task | Document>);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return failure(`Failed to resolve conflict: ${message}`, ExitCode.GENERAL_ERROR);
@@ -1211,16 +1347,16 @@ async function resolveHandler(
   const mode = getOutputMode(options);
 
   if (mode === 'json') {
-    return success({ taskId, resolved: true, kept: keep });
+    return success({ elementId, elementType: element.type, resolved: true, kept: keep });
   }
 
   if (mode === 'quiet') {
-    return success(taskId);
+    return success(elementId);
   }
 
   return success(
-    { taskId, resolved: true, kept: keep },
-    `Resolved sync conflict for task ${taskId} (kept: ${keep})`
+    { elementId, resolved: true, kept: keep },
+    `Resolved sync conflict for ${element.type} ${elementId} (kept: ${keep})`
   );
 }
 
@@ -1235,6 +1371,7 @@ interface LinkAllOptions {
   'dry-run'?: boolean;
   'batch-size'?: string;
   force?: boolean;
+  type?: string;
   /** @internal Dependency injection for testing — overrides createProviderFromSettings */
   _providerFactory?: (
     providerName: string,
@@ -1264,26 +1401,33 @@ const linkAllOptions: CommandOption[] = [
   {
     name: 'status',
     short: 's',
-    description: 'Only link tasks with this status (can be repeated)',
+    description: 'Only link elements with this status (can be repeated)',
     hasValue: true,
     array: true,
   },
   {
     name: 'dry-run',
     short: 'n',
-    description: 'List tasks that would be linked without creating external issues',
+    description: 'List elements that would be linked without creating external issues/pages',
   },
   {
     name: 'batch-size',
     short: 'b',
-    description: 'How many tasks to process concurrently (default: 10)',
+    description: 'How many elements to process concurrently (default: 10)',
     hasValue: true,
     defaultValue: '10',
   },
   {
     name: 'force',
     short: 'f',
-    description: 'Re-link tasks that are already linked to a different provider',
+    description: 'Re-link elements that are already linked to a different provider',
+  },
+  {
+    name: 'type',
+    short: 't',
+    description: 'Element type: task or document (default: task)',
+    hasValue: true,
+    defaultValue: 'task',
   },
 ];
 
@@ -1390,8 +1534,16 @@ async function createProviderFromSettings(
       provider = createLinearProvider({
         apiKey: providerConfig.token,
       });
+    } else if (providerName === 'notion') {
+      const { createNotionProvider } = await import('../../external-sync/providers/notion/index.js');
+      provider = createNotionProvider({
+        token: providerConfig.token,
+      });
+    } else if (providerName === 'folder') {
+      const { createFolderProvider } = await import('../../external-sync/providers/folder/index.js');
+      provider = createFolderProvider();
     } else {
-      return { error: `Unsupported provider: "${providerName}". Supported providers: github, linear` };
+      return { error: `Unsupported provider: "${providerName}". Supported providers: github, linear, notion, folder` };
     }
 
     const direction = (getValue('externalSync.defaultDirection') ?? 'bidirectional') as SyncDirection;
@@ -1485,6 +1637,334 @@ async function processBatch(
   return { succeeded, failed, rateLimited, resetAt };
 }
 
+/**
+ * Process a batch of documents: create external pages and link them.
+ */
+async function processDocumentBatch(
+  docs: Document[],
+  adapter: DocumentSyncAdapter,
+  api: ReturnType<typeof createAPI>['api'],
+  providerName: string,
+  project: string,
+  direction: SyncDirection,
+  progressLines: string[]
+): Promise<{ succeeded: number; failed: number; rateLimited: boolean; resetAt?: number }> {
+  let succeeded = 0;
+  let failed = 0;
+  let rateLimited = false;
+  let resetAt: number | undefined;
+
+  for (const doc of docs) {
+    try {
+      // Convert document to external document input
+      const externalInput = documentToExternalDocumentInput(doc);
+
+      // Create the external page
+      const externalDoc = await adapter.createPage(project, externalInput);
+
+      // Build the ExternalSyncState metadata
+      const syncState: ExternalSyncState = {
+        provider: providerName,
+        project,
+        externalId: externalDoc.externalId,
+        url: externalDoc.url,
+        direction,
+        adapterType: 'document',
+      };
+
+      // Update the document with externalRef and _externalSync metadata
+      const existingMetadata = (doc.metadata ?? {}) as Record<string, unknown>;
+      await api!.update(doc.id as unknown as ElementId, {
+        externalRef: externalDoc.url,
+        metadata: {
+          ...existingMetadata,
+          _externalSync: syncState,
+        },
+      } as Partial<Document>);
+
+      progressLines.push(`Linked ${doc.id} → ${externalDoc.url}`);
+      succeeded++;
+    } catch (err) {
+      // Check for rate limit errors
+      const rlCheck = isRateLimitError(err);
+      if (rlCheck.isRateLimit) {
+        rateLimited = true;
+        resetAt = rlCheck.resetAt;
+        const message = err instanceof Error ? err.message : String(err);
+        progressLines.push(`Rate limit hit while linking ${doc.id}: ${message}`);
+        break;
+      }
+
+      const message = err instanceof Error ? err.message : String(err);
+      const detail = extractValidationDetail(err);
+      progressLines.push(
+        detail
+          ? `Failed to link ${doc.id}: ${message} — ${detail}`
+          : `Failed to link ${doc.id}: ${message}`
+      );
+      failed++;
+    }
+  }
+
+  return { succeeded, failed, rateLimited, resetAt };
+}
+
+/**
+ * Handle link-all for documents.
+ * Queries all documents, filters out system categories and already-linked ones,
+ * then creates external pages for each via the document adapter.
+ */
+async function linkAllDocumentsHandler(
+  options: GlobalOptions & LinkAllOptions
+): Promise<CommandResult> {
+  const providerName = options.provider!;
+  const isDryRun = options['dry-run'] ?? false;
+  const force = options.force ?? false;
+  const batchSize = parseInt(options['batch-size'] ?? '10', 10);
+  if (isNaN(batchSize) || batchSize < 1) {
+    return failure('--batch-size must be a positive integer', ExitCode.INVALID_ARGUMENTS);
+  }
+
+  // Parse status filters
+  const statusFilters: string[] = [];
+  if (options.status) {
+    if (Array.isArray(options.status)) {
+      statusFilters.push(...options.status);
+    } else {
+      statusFilters.push(options.status);
+    }
+  }
+
+  // Get API for querying/updating documents
+  const { api, error: apiError } = createAPI(options);
+  if (apiError) {
+    return failure(apiError, ExitCode.GENERAL_ERROR);
+  }
+
+  // Query all documents
+  let allDocs: Document[];
+  try {
+    const results = await api!.list({ type: 'document' });
+    allDocs = results as Document[];
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return failure(`Failed to list documents: ${message}`, ExitCode.GENERAL_ERROR);
+  }
+
+  // Filter out system categories (task-description, message-content)
+  allDocs = allDocs.filter((doc) => !isSystemCategory(doc.category));
+
+  // Filter documents: unlinked docs, plus (with --force) docs linked to a DIFFERENT provider
+  let relinkedFromProvider: string | undefined;
+  let relinkCount = 0;
+  let docsToLink = allDocs.filter((doc) => {
+    const metadata = (doc.metadata ?? {}) as Record<string, unknown>;
+    const syncState = metadata._externalSync as ExternalSyncState | undefined;
+
+    if (!syncState) {
+      return true;
+    }
+
+    if (force && syncState.provider !== providerName) {
+      relinkedFromProvider = syncState.provider;
+      relinkCount++;
+      return true;
+    }
+
+    return false;
+  });
+
+  // Apply status filter if specified (documents use 'active'/'archived')
+  if (statusFilters.length > 0) {
+    docsToLink = docsToLink.filter((doc) => statusFilters.includes(doc.status));
+  }
+
+  // Skip archived documents by default
+  docsToLink = docsToLink.filter((doc) => doc.status !== 'archived');
+
+  const mode = getOutputMode(options);
+
+  if (docsToLink.length === 0) {
+    const result = { linked: 0, failed: 0, skipped: 0, total: 0, dryRun: isDryRun, type: 'document' };
+    if (mode === 'json') {
+      return success(result);
+    }
+    const hint = force
+      ? 'No documents found to re-link matching the specified criteria.'
+      : 'No unlinked documents found. Use --force to re-link documents from a different provider.';
+    return success(result, hint);
+  }
+
+  // Dry run — just list documents that would be linked
+  if (isDryRun) {
+    const docList = docsToLink.map((d) => ({
+      id: d.id,
+      title: d.title ?? '(untitled)',
+      status: d.status,
+      category: d.category,
+    }));
+
+    const jsonResult: Record<string, unknown> = {
+      dryRun: true,
+      provider: providerName,
+      type: 'document',
+      total: docsToLink.length,
+      documents: docList,
+    };
+    if (force && relinkCount > 0) {
+      jsonResult.force = true;
+      jsonResult.relinkCount = relinkCount;
+      jsonResult.relinkFromProvider = relinkedFromProvider;
+    }
+
+    if (mode === 'json') {
+      return success(jsonResult);
+    }
+
+    if (mode === 'quiet') {
+      return success(String(docsToLink.length));
+    }
+
+    const lines: string[] = [];
+    if (force && relinkCount > 0) {
+      lines.push(
+        `Dry run: Re-linking ${relinkCount} document(s) from ${relinkedFromProvider} to ${providerName} (--force)`
+      );
+      const newCount = docsToLink.length - relinkCount;
+      if (newCount > 0) {
+        lines.push(`  Plus ${newCount} unlinked document(s) to link`);
+      }
+    } else {
+      lines.push(`Dry run: ${docsToLink.length} document(s) would be linked to ${providerName}`);
+    }
+    lines.push('');
+
+    for (const doc of docsToLink) {
+      lines.push(`  ${doc.id}  ${doc.status.padEnd(12)} ${doc.category.padEnd(16)} ${doc.title ?? '(untitled)'}`);
+    }
+
+    return success(jsonResult, lines.join('\n'));
+  }
+
+  // Create provider for actual linking (supports DI for testing)
+  const providerFactory = options._providerFactory ?? createProviderFromSettings;
+  const {
+    provider: externalProvider,
+    project,
+    direction,
+    error: providerError,
+  } = await providerFactory(providerName, options.project, options);
+
+  if (providerError) {
+    return failure(providerError, ExitCode.GENERAL_ERROR);
+  }
+
+  // Get the document adapter
+  const docAdapter = externalProvider!.getDocumentAdapter?.();
+  if (!docAdapter) {
+    return failure(
+      `Provider "${providerName}" does not support document sync`,
+      ExitCode.GENERAL_ERROR
+    );
+  }
+
+  const progressLines: string[] = [];
+
+  // Log re-linking info when using --force
+  if (force && relinkCount > 0 && mode !== 'json' && mode !== 'quiet') {
+    progressLines.push(
+      `Re-linking ${relinkCount} document(s) from ${relinkedFromProvider} to ${providerName} (--force)`
+    );
+    const newCount = docsToLink.length - relinkCount;
+    if (newCount > 0) {
+      progressLines.push(`Linking ${newCount} unlinked document(s)`);
+    }
+    progressLines.push('');
+  }
+
+  // Process documents in batches
+  let totalSucceeded = 0;
+  let totalFailed = 0;
+  let rateLimited = false;
+  let rateLimitResetAt: number | undefined;
+
+  for (let i = 0; i < docsToLink.length; i += batchSize) {
+    const batch = docsToLink.slice(i, i + batchSize);
+
+    const batchResult = await processDocumentBatch(
+      batch,
+      docAdapter,
+      api!,
+      providerName,
+      project!,
+      direction!,
+      progressLines
+    );
+
+    totalSucceeded += batchResult.succeeded;
+    totalFailed += batchResult.failed;
+
+    if (batchResult.rateLimited) {
+      rateLimited = true;
+      rateLimitResetAt = batchResult.resetAt;
+      break;
+    }
+
+    if (i + batchSize < docsToLink.length) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+
+  const skipped = docsToLink.length - totalSucceeded - totalFailed;
+
+  const result: Record<string, unknown> = {
+    provider: providerName,
+    project,
+    type: 'document',
+    linked: totalSucceeded,
+    failed: totalFailed,
+    skipped,
+    total: docsToLink.length,
+    rateLimited,
+    rateLimitResetAt: rateLimitResetAt ? new Date(rateLimitResetAt * 1000).toISOString() : undefined,
+  };
+  if (force && relinkCount > 0) {
+    result.force = true;
+    result.relinkCount = relinkCount;
+    result.relinkFromProvider = relinkedFromProvider;
+  }
+
+  if (mode === 'json') {
+    return success(result);
+  }
+
+  if (mode === 'quiet') {
+    return success(String(totalSucceeded));
+  }
+
+  const lines: string[] = [...progressLines, ''];
+  const summaryParts = [`Linked ${totalSucceeded} documents to ${providerName}`];
+  if (totalFailed > 0) {
+    summaryParts.push(`(${totalFailed} failed)`);
+  }
+  if (skipped > 0) {
+    summaryParts.push(`(${skipped} skipped)`);
+  }
+  lines.push(summaryParts.join(' '));
+
+  if (rateLimited) {
+    lines.push('');
+    if (rateLimitResetAt) {
+      const resetDate = new Date(rateLimitResetAt * 1000);
+      lines.push(`Rate limit reached. Resets at ${resetDate.toISOString()}. Re-run this command after the reset to link remaining documents.`);
+    } else {
+      lines.push('Rate limit reached. Re-run this command later to link remaining documents.');
+    }
+  }
+
+  return success(result, lines.join('\n'));
+}
+
 async function linkAllHandler(
   _args: string[],
   options: GlobalOptions & LinkAllOptions
@@ -1495,6 +1975,19 @@ async function linkAllHandler(
       'The --provider flag is required. Usage: sf external-sync link-all --provider <provider>',
       ExitCode.INVALID_ARGUMENTS
     );
+  }
+
+  const elementType = options.type ?? 'task';
+  if (elementType !== 'task' && elementType !== 'document') {
+    return failure(
+      `Invalid --type value "${elementType}". Must be one of: task, document`,
+      ExitCode.INVALID_ARGUMENTS
+    );
+  }
+
+  // Document linking branch
+  if (elementType === 'document') {
+    return linkAllDocumentsHandler(options);
   }
 
   const isDryRun = options['dry-run'] ?? false;
@@ -1857,24 +2350,28 @@ Examples:
 
 const linkCommand: Command = {
   name: 'link',
-  description: 'Link a task to an external issue',
-  usage: 'sf external-sync link <taskId> <url-or-issue-number>',
-  help: `Link a Stoneforge task to an external issue (e.g., GitHub issue).
+  description: 'Link a task or document to an external issue/page',
+  usage: 'sf external-sync link <elementId> <url-or-external-id> [--type task|document] [--provider <name>]',
+  help: `Link a Stoneforge element (task or document) to an external issue or page.
 
-Sets the task's externalRef and _externalSync metadata. If given a bare
+Sets the element's externalRef and _externalSync metadata. If given a bare
 issue number, constructs the URL from the provider's default project.
 
+Use --type document to link a document element (default: task).
+
 Arguments:
-  taskId           Stoneforge task ID
-  url-or-number    Full URL or bare issue number
+  elementId        Stoneforge element ID (task or document)
+  url-or-id        Full URL, bare issue number, or external ID
 
 Options:
   -p, --provider   Provider name (default: github)
+  -t, --type       Element type: task or document (default: task)
 
 Examples:
   sf external-sync link el-abc123 https://github.com/org/repo/issues/42
   sf external-sync link el-abc123 42
-  sf external-sync link el-abc123 42 --provider github`,
+  sf external-sync link el-abc123 42 --provider github
+  sf external-sync link el-doc456 https://notion.so/page-id --type document --provider notion`,
   options: linkOptions,
   handler: linkHandler as Command['handler'],
 };
@@ -1885,27 +2382,33 @@ Examples:
 
 const linkAllCommand: Command = {
   name: 'link-all',
-  description: 'Bulk-link all unlinked tasks to external issues',
-  usage: 'sf external-sync link-all --provider <provider> [--project <project>] [--status <status>] [--dry-run] [--batch-size <n>] [--force]',
-  help: `Create external issues for all unlinked tasks and link them in bulk.
+  description: 'Bulk-link all unlinked tasks or documents to external issues/pages',
+  usage: 'sf external-sync link-all --provider <provider> [--type task|document] [--project <project>] [--status <status>] [--dry-run] [--batch-size <n>] [--force]',
+  help: `Create external issues/pages for all unlinked elements and link them in bulk.
 
-Finds all tasks that do NOT have external sync metadata and creates
-a corresponding external issue for each one, then links them.
+Finds all tasks (or documents with --type document) that do NOT have
+external sync metadata and creates a corresponding external issue or
+page for each one, then links them.
 
-Use --force to re-link tasks that are already linked to a different provider.
-Tasks linked to the same target provider are always skipped.
+Use --type document to link documents instead of tasks. When linking
+documents, system categories (task-description, message-content) are
+automatically excluded.
+
+Use --force to re-link elements that are already linked to a different provider.
+Elements linked to the same target provider are always skipped.
 
 Options:
   -p, --provider <name>    Provider to link to (required)
+  -t, --type <type>        Element type: task or document (default: task)
       --project <project>  Override the default project
-  -s, --status <status>    Only link tasks with this status (can be repeated)
-  -n, --dry-run            List tasks that would be linked without creating issues
-  -b, --batch-size <n>     Tasks to process concurrently (default: 10)
-  -f, --force              Re-link tasks already linked to a different provider
+  -s, --status <status>    Only link elements with this status (can be repeated)
+  -n, --dry-run            List elements that would be linked without creating issues/pages
+  -b, --batch-size <n>     Elements to process concurrently (default: 10)
+  -f, --force              Re-link elements already linked to a different provider
 
 Rate Limits:
   If a rate limit is hit, the command stops gracefully and reports how
-  many tasks were linked. Re-run the command to continue linking.
+  many elements were linked. Re-run the command to continue linking.
 
 Examples:
   sf external-sync link-all --provider github
@@ -1915,7 +2418,8 @@ Examples:
   sf external-sync link-all --provider github --project my-org/my-repo
   sf external-sync link-all --provider linear --batch-size 5
   sf external-sync link-all --provider linear --force
-  sf external-sync link-all --provider linear --force --dry-run`,
+  sf external-sync link-all --provider notion --type document
+  sf external-sync link-all --provider notion --type document --dry-run`,
   options: linkAllOptions,
   handler: linkAllHandler as Command['handler'],
 };
@@ -1926,14 +2430,15 @@ Examples:
 
 const unlinkCommand: Command = {
   name: 'unlink',
-  description: 'Remove external link from a task',
-  usage: 'sf external-sync unlink <taskId>',
-  help: `Remove the external link from a Stoneforge task.
+  description: 'Remove external link from a task or document',
+  usage: 'sf external-sync unlink <elementId>',
+  help: `Remove the external link from a Stoneforge task or document.
 
-Clears the task's externalRef field and _externalSync metadata.
+Clears the element's externalRef field and _externalSync metadata.
+Works with both tasks and documents.
 
 Arguments:
-  taskId    Stoneforge task ID
+  elementId    Stoneforge element ID (task or document)
 
 Examples:
   sf external-sync unlink el-abc123`,
@@ -1947,29 +2452,34 @@ Examples:
 
 const pushCommand: Command = {
   name: 'push',
-  description: 'Push linked tasks to external service',
-  usage: 'sf external-sync push [taskId...] [--all] [--force]',
-  help: `Push specific linked tasks to their external service, or push all linked tasks.
+  description: 'Push linked elements to external service',
+  usage: 'sf external-sync push [elementId...] [--all] [--force] [--type task|document|all]',
+  help: `Push specific linked elements to their external service, or push all linked elements.
 
-If specific task IDs are given, pushes only those tasks. With --all,
-pushes every task that has an external link.
+If specific element IDs are given, pushes only those elements. With --all,
+pushes every element that has an external link.
 
-Use --force to push all linked tasks regardless of whether their local
+Use --force to push all linked elements regardless of whether their local
 content has changed. This is useful when label generation logic changes
 and the external representation needs to be refreshed.
 
+Use --type to filter by element type (task, document, or all). Default: all.
+
 Arguments:
-  taskId...        One or more task IDs to push (optional with --all)
+  elementId...     One or more element IDs to push (optional with --all)
 
 Options:
-  -a, --all        Push all linked tasks
-  -f, --force      Push all linked tasks regardless of whether they have changed
+  -a, --all                Push all linked elements
+  -f, --force              Push all linked elements regardless of whether they have changed
+  -t, --type <type>        Element type to push: task, document, or all (default: all)
 
 Examples:
   sf external-sync push el-abc123
   sf external-sync push el-abc123 el-def456
   sf external-sync push --all
   sf external-sync push --all --force
+  sf external-sync push --all --type document
+  sf external-sync push --all --type task
   sf external-sync push el-abc123 --force`,
   options: pushOptions,
   handler: pushHandler as Command['handler'],
@@ -1981,20 +2491,25 @@ Examples:
 
 const pullCommand: Command = {
   name: 'pull',
-  description: 'Pull changes from external for linked tasks',
-  usage: 'sf external-sync pull [--provider <name>] [--discover]',
-  help: `Pull changes from external services for all linked tasks.
+  description: 'Pull changes from external for linked elements',
+  usage: 'sf external-sync pull [--provider <name>] [--discover] [--type task|document|all]',
+  help: `Pull changes from external services for all linked elements (tasks and documents).
 
-Optionally discover new issues not yet linked to Stoneforge tasks.
+Optionally discover new issues not yet linked to Stoneforge elements.
+
+Use --type to filter by element type (task, document, or all). Default: all.
 
 Options:
   -p, --provider <name>   Pull from specific provider (default: all configured)
   -d, --discover          Discover new unlinked issues
+  -t, --type <type>       Element type to pull: task, document, or all (default: all)
 
 Examples:
   sf external-sync pull
   sf external-sync pull --provider github
-  sf external-sync pull --discover`,
+  sf external-sync pull --discover
+  sf external-sync pull --type document
+  sf external-sync pull --type task --provider notion`,
   options: pullOptions,
   handler: pullHandler as Command['handler'],
 };
@@ -2006,18 +2521,23 @@ Examples:
 const biSyncCommand: Command = {
   name: 'sync',
   description: 'Bidirectional sync with external services',
-  usage: 'sf external-sync sync [--dry-run]',
+  usage: 'sf external-sync sync [--dry-run] [--type task|document|all]',
   help: `Run bidirectional sync between Stoneforge and external services.
 
-Performs both push and pull operations. In dry-run mode, reports what
-would change without making any modifications.
+Performs both push and pull operations for tasks and documents.
+In dry-run mode, reports what would change without making any modifications.
+
+Use --type to filter by element type (task, document, or all). Default: all.
 
 Options:
-  -n, --dry-run    Show what would change without making changes
+  -n, --dry-run            Show what would change without making changes
+  -t, --type <type>        Element type to sync: task, document, or all (default: all)
 
 Examples:
   sf external-sync sync
-  sf external-sync sync --dry-run`,
+  sf external-sync sync --dry-run
+  sf external-sync sync --type document
+  sf external-sync sync --type task`,
   options: syncOptions,
   handler: syncHandler as Command['handler'],
 };
@@ -2032,8 +2552,8 @@ const extStatusCommand: Command = {
   usage: 'sf external-sync status',
   help: `Show the current external sync state.
 
-Displays linked task count, last sync times, configured providers,
-and pending conflicts.
+Displays linked task and document counts, last sync times, configured
+providers, and pending conflicts.
 
 Examples:
   sf external-sync status
@@ -2049,14 +2569,14 @@ Examples:
 const resolveCommand: Command = {
   name: 'resolve',
   description: 'Resolve a sync conflict',
-  usage: 'sf external-sync resolve <taskId> --keep local|remote',
+  usage: 'sf external-sync resolve <elementId> --keep local|remote',
   help: `Resolve a sync conflict by choosing which version to keep.
 
-Tasks with sync conflicts are tagged with "sync-conflict". This command
-resolves the conflict by keeping either the local or remote version.
+Elements (tasks or documents) with sync conflicts are tagged with "sync-conflict".
+This command resolves the conflict by keeping either the local or remote version.
 
 Arguments:
-  taskId    Task ID with a sync conflict
+  elementId    Element ID with a sync conflict (task or document)
 
 Options:
   -k, --keep <version>   Which version to keep: local or remote (required)

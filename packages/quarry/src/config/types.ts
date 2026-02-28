@@ -131,6 +131,8 @@ export const VALID_SYNC_DIRECTIONS: readonly SyncDirection[] = [
 export const VALID_AUTO_LINK_PROVIDERS: readonly string[] = [
   'github',
   'linear',
+  'notion',
+  'folder',
 ] as const;
 
 /**
