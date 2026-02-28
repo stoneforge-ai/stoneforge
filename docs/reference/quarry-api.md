@@ -556,12 +556,18 @@ call `api.reindexAllDocumentsFTS()` to rebuild the search index.
 ```typescript
 const stats = await api.stats();
 
+// Get ID generation config (adaptive hash length + collision detection)
+const idConfig = api.getIdGeneratorConfig();
+// { elementCount: number, checkCollision: (id: ElementId) => Promise<boolean> }
+
 // Rebuild the blocked cache (useful after import or for recovery)
 // Note: rebuildBlockedCache() is on the QuarryAPIImpl class, not the QuarryAPI interface.
 // It is available at runtime from createQuarryAPI() but not visible through the interface type.
 const result = api.rebuildBlockedCache();
 // { elementsChecked: number, elementsBlocked: number, durationMs: number }
 ```
+
+**`getIdGeneratorConfig()`** — Returns an `IdGeneratorConfig` with the current element count and a collision checker that queries the database. Pass this to factory functions (`createTask`, `createDocument`, etc.) so generated IDs use the correct adaptive hash length and can detect/retry on collisions.
 
 **`rebuildBlockedCache()`** — Rebuilds the in-memory blocked cache by re-evaluating all dependency relationships. Use after bulk imports, or as a recovery step if the cache becomes inconsistent. Note: this method is on the `QuarryAPIImpl` class, not the `QuarryAPI` interface — it is available at runtime via `createQuarryAPI()` but will not appear in interface-typed references.
 

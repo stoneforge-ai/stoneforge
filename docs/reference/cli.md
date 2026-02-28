@@ -1682,24 +1682,35 @@ sf external-sync config set-project linear MY-PROJECT
 
 #### external-sync config set-auto-link
 
-Enable auto-link for new tasks with the specified provider. When auto-link is enabled, newly created Stoneforge tasks will automatically get a corresponding external issue created and linked. Use the `--no-auto-link` flag on `sf create` to skip auto-linking for individual tasks.
+Enable auto-link for new elements with the specified provider. When auto-link is enabled, newly created Stoneforge elements will automatically get a corresponding external resource created and linked. Use the `--no-auto-link` flag on `sf create` to skip auto-linking for individual elements.
 
 | Argument   | Description                                              |
 | ---------- | -------------------------------------------------------- |
 | `provider` | Provider name (`github`, `linear`, `notion`, or `folder`) |
 
+| Option       | Description                                               |
+| ------------ | --------------------------------------------------------- |
+| `--type, -t` | Type of auto-link: `task` or `document` (default: `task`) |
+
 ```bash
 sf external-sync config set-auto-link github
 sf external-sync config set-auto-link linear
-sf external-sync config set-auto-link notion
+sf external-sync config set-auto-link --type document folder
+sf external-sync config set-auto-link --type document notion
 ```
 
 #### external-sync config disable-auto-link
 
-Disable auto-link for new tasks. Clears the auto-link provider and disables automatic external issue creation.
+Disable auto-link for new elements. Clears the auto-link provider and disables automatic external creation.
+
+| Option       | Description                                                          |
+| ------------ | -------------------------------------------------------------------- |
+| `--type, -t` | Type of auto-link to disable: `task`, `document`, or `all` (default: `all`) |
 
 ```bash
 sf external-sync config disable-auto-link
+sf external-sync config disable-auto-link --type task
+sf external-sync config disable-auto-link --type document
 ```
 
 #### external-sync link
