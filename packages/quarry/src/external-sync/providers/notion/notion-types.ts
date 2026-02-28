@@ -1,8 +1,9 @@
 /**
- * Notion API Response Types
+ * Notion API Type Definitions
  *
- * Type definitions for Notion's REST API responses.
- * These types represent the subset of Notion's schema used by the document sync provider.
+ * Type definitions for Notion's REST API responses and block/rich-text objects.
+ * These types represent the subset of Notion's schema used by the document sync
+ * provider and the blocks ↔ markdown converter.
  *
  * Only fields needed for document synchronization are included — this is not a
  * comprehensive representation of the full Notion API.
@@ -13,6 +14,30 @@
 // ============================================================================
 // Rich Text Types
 // ============================================================================
+
+/**
+ * Rich text annotations (formatting) applied to a text span.
+ */
+export interface NotionAnnotations {
+  readonly bold: boolean;
+  readonly italic: boolean;
+  readonly strikethrough: boolean;
+  readonly underline: boolean;
+  readonly code: boolean;
+  readonly color: string;
+}
+
+/**
+ * Default annotations — no formatting applied.
+ */
+export const DEFAULT_ANNOTATIONS: NotionAnnotations = {
+  bold: false,
+  italic: false,
+  strikethrough: false,
+  underline: false,
+  code: false,
+  color: 'default',
+};
 
 /**
  * Notion rich text object — the atomic unit of formatted text.
@@ -33,14 +58,7 @@ export interface NotionRichText {
     readonly link: { readonly url: string } | null;
   };
   /** Inline formatting annotations */
-  readonly annotations: {
-    readonly bold: boolean;
-    readonly italic: boolean;
-    readonly strikethrough: boolean;
-    readonly underline: boolean;
-    readonly code: boolean;
-    readonly color: string;
-  };
+  readonly annotations: NotionAnnotations;
   /** Optional URL for the rich text (e.g. links) */
   readonly href: string | null;
 }
@@ -91,37 +109,69 @@ export interface NotionProperty {
  *
  * Every block has a type discriminator and a corresponding type-specific object.
  * We model the most common block types used in document content.
+ *
+ * Metadata fields (id, has_children, etc.) are optional because they are present
+ * on blocks read from the API but absent on blocks created locally (e.g. by the
+ * markdown → Notion converter).
  */
 export interface NotionBlock {
-  /** Unique block ID (UUID) */
-  readonly id: string;
+  /** Unique block ID (UUID) — present on API responses */
+  readonly id?: string;
   /** Block type discriminator */
   readonly type: string;
-  /** Whether this block has nested children */
-  readonly has_children: boolean;
-  /** Creation timestamp (ISO 8601) */
-  readonly created_time: string;
-  /** Last edit timestamp (ISO 8601) */
-  readonly last_edited_time: string;
-  /** Whether this block has been archived (deleted) */
-  readonly archived: boolean;
+  /** Whether this block has nested children — present on API responses */
+  readonly has_children?: boolean;
+  /** Creation timestamp (ISO 8601) — present on API responses */
+  readonly created_time?: string;
+  /** Last edit timestamp (ISO 8601) — present on API responses */
+  readonly last_edited_time?: string;
+  /** Whether this block has been archived (deleted) — present on API responses */
+  readonly archived?: boolean;
 
   // Block type-specific content — only the type matching `type` field will be present
-  readonly paragraph?: { readonly rich_text: readonly NotionRichText[] };
-  readonly heading_1?: { readonly rich_text: readonly NotionRichText[] };
-  readonly heading_2?: { readonly rich_text: readonly NotionRichText[] };
-  readonly heading_3?: { readonly rich_text: readonly NotionRichText[] };
-  readonly bulleted_list_item?: { readonly rich_text: readonly NotionRichText[] };
-  readonly numbered_list_item?: { readonly rich_text: readonly NotionRichText[] };
-  readonly to_do?: { readonly rich_text: readonly NotionRichText[]; readonly checked: boolean };
+  readonly paragraph?: { readonly rich_text: readonly NotionRichText[]; readonly color?: string };
+  readonly heading_1?: { readonly rich_text: readonly NotionRichText[]; readonly color?: string; readonly is_toggleable?: boolean };
+  readonly heading_2?: { readonly rich_text: readonly NotionRichText[]; readonly color?: string; readonly is_toggleable?: boolean };
+  readonly heading_3?: { readonly rich_text: readonly NotionRichText[]; readonly color?: string; readonly is_toggleable?: boolean };
+  readonly bulleted_list_item?: { readonly rich_text: readonly NotionRichText[]; readonly color?: string };
+  readonly numbered_list_item?: { readonly rich_text: readonly NotionRichText[]; readonly color?: string };
+  readonly to_do?: { readonly rich_text: readonly NotionRichText[]; readonly checked: boolean; readonly color?: string };
   readonly toggle?: { readonly rich_text: readonly NotionRichText[] };
-  readonly code?: { readonly rich_text: readonly NotionRichText[]; readonly language: string };
-  readonly quote?: { readonly rich_text: readonly NotionRichText[] };
+  readonly code?: { readonly rich_text: readonly NotionRichText[]; readonly caption?: readonly NotionRichText[]; readonly language: string };
+  readonly quote?: { readonly rich_text: readonly NotionRichText[]; readonly color?: string };
   readonly callout?: { readonly rich_text: readonly NotionRichText[]; readonly icon?: unknown };
   readonly divider?: Record<string, never>;
   readonly table_of_contents?: Record<string, never>;
   readonly child_page?: { readonly title: string };
   readonly child_database?: { readonly title: string };
+}
+
+// ============================================================================
+// Supported Block Type Constants
+// ============================================================================
+
+/**
+ * Block types that we support for markdown ↔ Notion conversion.
+ */
+export const SUPPORTED_BLOCK_TYPES = [
+  'paragraph',
+  'heading_1',
+  'heading_2',
+  'heading_3',
+  'bulleted_list_item',
+  'numbered_list_item',
+  'code',
+  'quote',
+  'to_do',
+] as const;
+
+export type SupportedBlockType = (typeof SUPPORTED_BLOCK_TYPES)[number];
+
+/**
+ * Check if a block type is supported for conversion.
+ */
+export function isSupportedBlockType(type: string): type is SupportedBlockType {
+  return (SUPPORTED_BLOCK_TYPES as readonly string[]).includes(type);
 }
 
 // ============================================================================
