@@ -435,6 +435,172 @@ describe('FolderDocumentAdapter.createPage', () => {
 });
 
 // ============================================================================
+// createPage — libraryPath Tests
+// ============================================================================
+
+describe('FolderDocumentAdapter.createPage — libraryPath', () => {
+  let tempDir: string;
+  let adapter: FolderDocumentAdapter;
+
+  beforeEach(() => {
+    tempDir = createTempDir();
+    adapter = new FolderDocumentAdapter();
+  });
+
+  afterEach(() => {
+    cleanup(tempDir);
+  });
+
+  test('creates file in library subdirectory', async () => {
+    const doc = await adapter.createPage(tempDir, {
+      title: 'My Doc',
+      content: '# My Doc\n\nContent.',
+      libraryPath: 'documentation',
+    });
+
+    expect(doc.externalId).toBe('documentation/my-doc.md');
+    expect(fs.existsSync(path.join(tempDir, 'documentation', 'my-doc.md'))).toBe(true);
+  });
+
+  test('creates file in nested library subdirectory', async () => {
+    const doc = await adapter.createPage(tempDir, {
+      title: 'My Doc',
+      content: '# My Doc\n\nContent.',
+      libraryPath: 'documentation/api',
+    });
+
+    expect(doc.externalId).toBe('documentation/api/my-doc.md');
+    expect(fs.existsSync(path.join(tempDir, 'documentation', 'api', 'my-doc.md'))).toBe(true);
+  });
+
+  test('creates intermediate directories automatically', async () => {
+    const doc = await adapter.createPage(tempDir, {
+      title: 'Deep Doc',
+      content: 'Content.',
+      libraryPath: 'level1/level2/level3',
+    });
+
+    expect(doc.externalId).toBe('level1/level2/level3/deep-doc.md');
+    expect(fs.existsSync(path.join(tempDir, 'level1', 'level2', 'level3', 'deep-doc.md'))).toBe(true);
+  });
+
+  test('handles duplicate titles within library subdirectory', async () => {
+    const doc1 = await adapter.createPage(tempDir, {
+      title: 'My Doc',
+      content: 'First',
+      libraryPath: 'docs',
+    });
+
+    const doc2 = await adapter.createPage(tempDir, {
+      title: 'My Doc',
+      content: 'Second',
+      libraryPath: 'docs',
+    });
+
+    expect(doc1.externalId).toBe('docs/my-doc.md');
+    expect(doc2.externalId).toBe('docs/my-doc-2.md');
+
+    expect(fs.existsSync(path.join(tempDir, 'docs', 'my-doc.md'))).toBe(true);
+    expect(fs.existsSync(path.join(tempDir, 'docs', 'my-doc-2.md'))).toBe(true);
+  });
+
+  test('documents in root vs library are separate', async () => {
+    const docRoot = await adapter.createPage(tempDir, {
+      title: 'My Doc',
+      content: 'Root doc',
+    });
+
+    const docLib = await adapter.createPage(tempDir, {
+      title: 'My Doc',
+      content: 'Library doc',
+      libraryPath: 'documentation',
+    });
+
+    expect(docRoot.externalId).toBe('my-doc.md');
+    expect(docLib.externalId).toBe('documentation/my-doc.md');
+
+    // Both files should exist independently
+    expect(fs.existsSync(path.join(tempDir, 'my-doc.md'))).toBe(true);
+    expect(fs.existsSync(path.join(tempDir, 'documentation', 'my-doc.md'))).toBe(true);
+  });
+
+  test('returns correct URL for file in subdirectory', async () => {
+    const doc = await adapter.createPage(tempDir, {
+      title: 'URL Test',
+      content: 'Body',
+      libraryPath: 'documentation',
+    });
+
+    expect(doc.url).toStartWith('file://');
+    expect(doc.url).toContain('documentation/url-test.md');
+  });
+
+  test('document without libraryPath goes to project root (existing behavior)', async () => {
+    const doc = await adapter.createPage(tempDir, {
+      title: 'Root Doc',
+      content: 'Root content',
+    });
+
+    expect(doc.externalId).toBe('root-doc.md');
+    expect(fs.existsSync(path.join(tempDir, 'root-doc.md'))).toBe(true);
+  });
+});
+
+// ============================================================================
+// listPagesSince — subdirectory Tests
+// ============================================================================
+
+describe('FolderDocumentAdapter.listPagesSince — subdirectories', () => {
+  let tempDir: string;
+  let adapter: FolderDocumentAdapter;
+
+  beforeEach(() => {
+    tempDir = createTempDir();
+    adapter = new FolderDocumentAdapter();
+  });
+
+  afterEach(() => {
+    cleanup(tempDir);
+  });
+
+  test('lists files from subdirectories with correct relative paths', async () => {
+    const recentDate = new Date('2025-06-15T00:00:00Z');
+
+    // Create file in subdirectory
+    writeRawFile(tempDir, 'documentation/api/my-doc.md', '# API Doc');
+    setMtime(tempDir, 'documentation/api/my-doc.md', recentDate);
+
+    // Create file in root
+    writeRawFile(tempDir, 'root-doc.md', '# Root Doc');
+    setMtime(tempDir, 'root-doc.md', recentDate);
+
+    const docs = await adapter.listPagesSince(tempDir, '2024-01-01T00:00:00Z');
+
+    expect(docs).toHaveLength(2);
+    const ids = docs.map((d) => d.externalId).sort();
+    expect(ids).toEqual(['documentation/api/my-doc.md', 'root-doc.md']);
+  });
+
+  test('correctly reads file content from subdirectory', async () => {
+    const recentDate = new Date('2025-06-15T00:00:00Z');
+
+    writeRawFile(
+      tempDir,
+      'docs/guide.md',
+      '---\ntitle: User Guide\n---\n# Guide\n\nContent here.'
+    );
+    setMtime(tempDir, 'docs/guide.md', recentDate);
+
+    const docs = await adapter.listPagesSince(tempDir, '2024-01-01T00:00:00Z');
+
+    expect(docs).toHaveLength(1);
+    expect(docs[0].externalId).toBe('docs/guide.md');
+    expect(docs[0].title).toBe('User Guide');
+    expect(docs[0].content).toBe('# Guide\n\nContent here.');
+  });
+});
+
+// ============================================================================
 // updatePage Tests
 // ============================================================================
 

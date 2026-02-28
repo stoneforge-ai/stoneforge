@@ -187,6 +187,16 @@ export interface ExternalDocumentInput {
   readonly title: string;
   readonly content: string;
   readonly contentType?: 'markdown' | 'html' | 'text';
+  /**
+   * Optional library path for organizing documents into subdirectories.
+   * Consists of slugified library names joined by '/', representing the
+   * document's position in the library hierarchy.
+   * Example: 'documentation/api-reference'
+   *
+   * Providers that support directory-based organization (e.g., folder)
+   * use this to place documents in appropriate subdirectories.
+   */
+  readonly libraryPath?: string;
 }
 
 /**

@@ -21,7 +21,8 @@ import { createStorage, initializeSchema } from '@stoneforge/storage';
 import { getValue, setValue, VALID_AUTO_LINK_PROVIDERS } from '../../config/index.js';
 import type { Task, Document, ElementId, ExternalProvider, ExternalSyncState, SyncDirection, SyncAdapterType, TaskSyncAdapter, DocumentSyncAdapter } from '@stoneforge/core';
 import { taskToExternalTask, getFieldMapConfigForProvider } from '../../external-sync/adapters/task-sync-adapter.js';
-import { isSyncableDocument, documentToExternalDocumentInput } from '../../external-sync/adapters/document-sync-adapter.js';
+import { isSyncableDocument, documentToExternalDocumentInput, resolveDocumentLibraryPath } from '../../external-sync/adapters/document-sync-adapter.js';
+import type { LibraryPathAPI } from '../../external-sync/adapters/document-sync-adapter.js';
 
 /**
  * Providers that do not require an authentication token.
@@ -1762,8 +1763,20 @@ async function processDocumentBatch(
 
   for (const doc of docs) {
     try {
-      // Convert document to external document input
-      const externalInput = documentToExternalDocumentInput(doc);
+      // Resolve library path for directory-based organization
+      let libraryPath: string | undefined;
+      try {
+        libraryPath = await resolveDocumentLibraryPath(
+          api! as unknown as LibraryPathAPI,
+          doc.id as unknown as ElementId
+        );
+      } catch {
+        // If library path resolution fails, continue without it
+        // (document will be placed in project root)
+      }
+
+      // Convert document to external document input (with library path)
+      const externalInput = documentToExternalDocumentInput(doc, libraryPath);
 
       // Create the external page
       const externalDoc = await adapter.createPage(project, externalInput);

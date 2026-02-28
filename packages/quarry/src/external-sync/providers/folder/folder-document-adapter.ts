@@ -172,6 +172,11 @@ export class FolderDocumentAdapter implements DocumentSyncAdapter {
    * Generates a filename from the title using slugification, writes
    * the content with frontmatter, and returns the created document.
    *
+   * If the page has a `libraryPath`, the file is placed in the
+   * corresponding subdirectory. For example, a libraryPath of
+   * 'documentation/api' results in the file being created at
+   * 'documentation/api/my-doc.md'.
+   *
    * @param project - Absolute path to the base directory
    * @param page - Document input with title, content, and optional contentType
    * @returns The created ExternalDocument
@@ -181,12 +186,16 @@ export class FolderDocumentAdapter implements DocumentSyncAdapter {
     page: ExternalDocumentInput
   ): Promise<ExternalDocument> {
     const baseSlug = slugify(page.title);
-    let relativePath = `${baseSlug}.md`;
+
+    // Determine the directory prefix from library path
+    const dirPrefix = page.libraryPath ? `${page.libraryPath}/` : '';
+
+    let relativePath = `${dirPrefix}${baseSlug}.md`;
 
     // Check for existing file and add numeric suffix if needed
     let counter = 2;
     while (await fileExists(project, relativePath)) {
-      relativePath = `${baseSlug}-${counter}.md`;
+      relativePath = `${dirPrefix}${baseSlug}-${counter}.md`;
       counter++;
     }
 

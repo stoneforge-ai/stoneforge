@@ -26,7 +26,10 @@ import {
   isSyncableDocument,
   mapContentTypeToExternal,
   mapContentTypeFromExternal,
+  resolveDocumentLibraryPath,
 } from './document-sync-adapter.js';
+import type { LibraryPathAPI } from './document-sync-adapter.js';
+import type { Element, Dependency, DependencyType } from '@stoneforge/core';
 
 // ============================================================================
 // Test Helpers
@@ -700,5 +703,227 @@ describe('computeExternalDocumentHash', () => {
     const hash2 = computeExternalDocumentHash(doc2);
 
     expect(hash1).not.toBe(hash2);
+  });
+});
+
+// ============================================================================
+// documentToExternalDocumentInput — libraryPath Tests
+// ============================================================================
+
+describe('documentToExternalDocumentInput — libraryPath', () => {
+  test('includes libraryPath when provided', () => {
+    const doc = createTestDocument({ title: 'My Doc' });
+
+    const result = documentToExternalDocumentInput(doc, 'documentation/api');
+
+    expect(result.libraryPath).toBe('documentation/api');
+    expect(result.title).toBe('My Doc');
+  });
+
+  test('omits libraryPath when not provided', () => {
+    const doc = createTestDocument({ title: 'My Doc' });
+
+    const result = documentToExternalDocumentInput(doc);
+
+    expect(result.libraryPath).toBeUndefined();
+  });
+
+  test('omits libraryPath when undefined is passed', () => {
+    const doc = createTestDocument({ title: 'My Doc' });
+
+    const result = documentToExternalDocumentInput(doc, undefined);
+
+    expect(result.libraryPath).toBeUndefined();
+  });
+});
+
+// ============================================================================
+// resolveDocumentLibraryPath Tests
+// ============================================================================
+
+describe('resolveDocumentLibraryPath', () => {
+  /**
+   * Creates a mock API for testing library path resolution.
+   * Supports configurable elements and dependencies.
+   */
+  function createMockAPI(
+    elements: Map<string, Element & { name?: string }>,
+    dependencies: Map<string, Dependency[]>
+  ): LibraryPathAPI {
+    return {
+      async getDependencies(id: ElementId, types?: DependencyType[]): Promise<Dependency[]> {
+        const deps = dependencies.get(id) ?? [];
+        if (types && types.length > 0) {
+          return deps.filter((d) => types.includes(d.type));
+        }
+        return deps;
+      },
+      async get<T extends Element>(id: ElementId): Promise<T | null> {
+        return (elements.get(id) as T) ?? null;
+      },
+    };
+  }
+
+  function makeDep(blockedId: string, blockerId: string): Dependency {
+    return {
+      blockedId: blockedId as ElementId,
+      blockerId: blockerId as ElementId,
+      type: 'parent-child' as DependencyType,
+      createdAt: createTimestamp(),
+      createdBy: 'el-system1' as EntityId,
+      metadata: {},
+    };
+  }
+
+  function makeLibrary(id: string, name: string): Element & { name: string } {
+    return {
+      id: id as ElementId,
+      type: 'library' as any,
+      name,
+      createdAt: createTimestamp(),
+      updatedAt: createTimestamp(),
+      createdBy: 'el-system1' as EntityId,
+      tags: [],
+      metadata: {},
+    };
+  }
+
+  function makeDocument(id: string): Element {
+    return {
+      id: id as ElementId,
+      type: 'document' as any,
+      createdAt: createTimestamp(),
+      updatedAt: createTimestamp(),
+      createdBy: 'el-system1' as EntityId,
+      tags: [],
+      metadata: {},
+    };
+  }
+
+  test('returns undefined for document with no dependencies', async () => {
+    const elements = new Map<string, Element & { name?: string }>();
+    elements.set('el-doc1', makeDocument('el-doc1'));
+
+    const dependencies = new Map<string, Dependency[]>();
+
+    const api = createMockAPI(elements, dependencies);
+    const result = await resolveDocumentLibraryPath(api, 'el-doc1' as ElementId);
+
+    expect(result).toBeUndefined();
+  });
+
+  test('returns single library name for document in one library', async () => {
+    const elements = new Map<string, Element & { name?: string }>();
+    elements.set('el-doc1', makeDocument('el-doc1'));
+    elements.set('el-lib1', makeLibrary('el-lib1', 'Documentation'));
+
+    const dependencies = new Map<string, Dependency[]>();
+    dependencies.set('el-doc1', [makeDep('el-doc1', 'el-lib1')]);
+
+    const api = createMockAPI(elements, dependencies);
+    const result = await resolveDocumentLibraryPath(api, 'el-doc1' as ElementId);
+
+    expect(result).toBe('documentation');
+  });
+
+  test('returns nested path for document in nested library', async () => {
+    const elements = new Map<string, Element & { name?: string }>();
+    elements.set('el-doc1', makeDocument('el-doc1'));
+    elements.set('el-lib1', makeLibrary('el-lib1', 'API Reference'));
+    elements.set('el-lib2', makeLibrary('el-lib2', 'Documentation'));
+
+    const dependencies = new Map<string, Dependency[]>();
+    // Document belongs to 'API Reference' library
+    dependencies.set('el-doc1', [makeDep('el-doc1', 'el-lib1')]);
+    // 'API Reference' is child of 'Documentation' library
+    dependencies.set('el-lib1', [makeDep('el-lib1', 'el-lib2')]);
+
+    const api = createMockAPI(elements, dependencies);
+    const result = await resolveDocumentLibraryPath(api, 'el-doc1' as ElementId);
+
+    expect(result).toBe('documentation/api-reference');
+  });
+
+  test('returns deeply nested path', async () => {
+    const elements = new Map<string, Element & { name?: string }>();
+    elements.set('el-doc1', makeDocument('el-doc1'));
+    elements.set('el-lib1', makeLibrary('el-lib1', 'Endpoints'));
+    elements.set('el-lib2', makeLibrary('el-lib2', 'API'));
+    elements.set('el-lib3', makeLibrary('el-lib3', 'Documentation'));
+
+    const dependencies = new Map<string, Dependency[]>();
+    dependencies.set('el-doc1', [makeDep('el-doc1', 'el-lib1')]);
+    dependencies.set('el-lib1', [makeDep('el-lib1', 'el-lib2')]);
+    dependencies.set('el-lib2', [makeDep('el-lib2', 'el-lib3')]);
+
+    const api = createMockAPI(elements, dependencies);
+    const result = await resolveDocumentLibraryPath(api, 'el-doc1' as ElementId);
+
+    expect(result).toBe('documentation/api/endpoints');
+  });
+
+  test('slugifies library names with special characters', async () => {
+    const elements = new Map<string, Element & { name?: string }>();
+    elements.set('el-doc1', makeDocument('el-doc1'));
+    elements.set('el-lib1', makeLibrary('el-lib1', 'API Reference (v2)'));
+
+    const dependencies = new Map<string, Dependency[]>();
+    dependencies.set('el-doc1', [makeDep('el-doc1', 'el-lib1')]);
+
+    const api = createMockAPI(elements, dependencies);
+    const result = await resolveDocumentLibraryPath(api, 'el-doc1' as ElementId);
+
+    expect(result).toBe('api-reference-v2');
+  });
+
+  test('returns undefined when parent is not a library', async () => {
+    const elements = new Map<string, Element & { name?: string }>();
+    elements.set('el-doc1', makeDocument('el-doc1'));
+    // Parent is a plan, not a library
+    elements.set('el-plan1', {
+      id: 'el-plan1' as ElementId,
+      type: 'plan' as any,
+      createdAt: createTimestamp(),
+      updatedAt: createTimestamp(),
+      createdBy: 'el-system1' as EntityId,
+      tags: [],
+      metadata: {},
+    });
+
+    const dependencies = new Map<string, Dependency[]>();
+    dependencies.set('el-doc1', [makeDep('el-doc1', 'el-plan1')]);
+
+    const api = createMockAPI(elements, dependencies);
+    const result = await resolveDocumentLibraryPath(api, 'el-doc1' as ElementId);
+
+    expect(result).toBeUndefined();
+  });
+
+  test('uses first library when document belongs to multiple libraries', async () => {
+    const elements = new Map<string, Element & { name?: string }>();
+    elements.set('el-doc1', makeDocument('el-doc1'));
+    elements.set('el-lib1', makeLibrary('el-lib1', 'First Library'));
+    elements.set('el-lib2', makeLibrary('el-lib2', 'Second Library'));
+
+    const dependencies = new Map<string, Dependency[]>();
+    dependencies.set('el-doc1', [
+      makeDep('el-doc1', 'el-lib1'),
+      makeDep('el-doc1', 'el-lib2'),
+    ]);
+
+    const api = createMockAPI(elements, dependencies);
+    const result = await resolveDocumentLibraryPath(api, 'el-doc1' as ElementId);
+
+    expect(result).toBe('first-library');
+  });
+
+  test('handles nonexistent document gracefully', async () => {
+    const elements = new Map<string, Element & { name?: string }>();
+    const dependencies = new Map<string, Dependency[]>();
+
+    const api = createMockAPI(elements, dependencies);
+    const result = await resolveDocumentLibraryPath(api, 'el-nonexist' as ElementId);
+
+    expect(result).toBeUndefined();
   });
 });
