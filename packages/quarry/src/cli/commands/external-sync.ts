@@ -21,7 +21,7 @@ import { createStorage, initializeSchema } from '@stoneforge/storage';
 import { getValue, setValue, VALID_AUTO_LINK_PROVIDERS } from '../../config/index.js';
 import type { Task, Document, ElementId, ExternalProvider, ExternalSyncState, SyncDirection, SyncAdapterType, TaskSyncAdapter, DocumentSyncAdapter } from '@stoneforge/core';
 import { taskToExternalTask, getFieldMapConfigForProvider } from '../../external-sync/adapters/task-sync-adapter.js';
-import { isSystemCategory, documentToExternalDocumentInput } from '../../external-sync/adapters/document-sync-adapter.js';
+import { isSyncableDocument, documentToExternalDocumentInput } from '../../external-sync/adapters/document-sync-adapter.js';
 
 /**
  * Providers that do not require an authentication token.
@@ -1857,8 +1857,8 @@ async function linkAllDocumentsHandler(
     return failure(`Failed to list documents: ${message}`, ExitCode.GENERAL_ERROR);
   }
 
-  // Filter out system categories (task-description, message-content)
-  allDocs = allDocs.filter((doc) => !isSystemCategory(doc.category));
+  // Filter out system categories and untitled documents
+  allDocs = allDocs.filter((doc) => isSyncableDocument(doc));
 
   // Filter documents: unlinked docs, plus (with --force) docs linked to a DIFFERENT provider
   let relinkedFromProvider: string | undefined;

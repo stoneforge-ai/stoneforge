@@ -59,7 +59,7 @@ import { createHash } from 'crypto';
 import { computeContentHashSync } from '../sync/hash.js';
 import type { ProviderRegistry } from './provider-registry.js';
 import { taskToExternalTask, externalTaskToTaskUpdates, getFieldMapConfigForProvider } from './adapters/task-sync-adapter.js';
-import { documentToExternalDocumentInput, externalDocumentToDocumentUpdates, computeExternalDocumentHash } from './adapters/document-sync-adapter.js';
+import { documentToExternalDocumentInput, externalDocumentToDocumentUpdates, computeExternalDocumentHash, isSyncableDocument } from './adapters/document-sync-adapter.js';
 
 // ============================================================================
 // Types
@@ -819,7 +819,12 @@ export class SyncEngine {
     const syncCursor = this.getSyncCursor(provider.name, project, 'document');
 
     // Fetch changed documents since cursor
-    const externalDocs = await adapter.listPagesSince(project, syncCursor);
+    const allExternalDocs = await adapter.listPagesSince(project, syncCursor);
+
+    // Skip external documents with empty or whitespace-only titles
+    const externalDocs = allExternalDocs.filter(
+      (doc) => doc.title && doc.title.trim().length > 0
+    );
 
     // Get all locally-linked document elements for matching
     const linkedElements = await this.findLinkedElementsForProvider(

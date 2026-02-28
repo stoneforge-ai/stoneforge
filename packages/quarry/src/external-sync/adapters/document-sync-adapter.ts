@@ -44,6 +44,22 @@ export function isSystemCategory(category: DocumentCategory): boolean {
   return SYSTEM_CATEGORIES.has(category);
 }
 
+/**
+ * Checks whether a document should be included in external sync operations
+ * (link-all, push, pull). A document is syncable if:
+ * - It does not have a system category (task-description, message-content)
+ * - It has a non-empty title (null, undefined, or whitespace-only titles are excluded)
+ *
+ * Documents without titles are typically system-generated (messages, task descriptions)
+ * that happen to not have the system category set, or scratch documents. They all
+ * slugify to "untitled.md" and overwrite each other, so they must be excluded.
+ */
+export function isSyncableDocument(doc: Document): boolean {
+  if (isSystemCategory(doc.category)) return false;
+  if (!doc.title || doc.title.trim().length === 0) return false;
+  return true;
+}
+
 // ============================================================================
 // Content Type Mapping
 // ============================================================================

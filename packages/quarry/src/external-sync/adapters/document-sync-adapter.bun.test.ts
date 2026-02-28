@@ -23,6 +23,7 @@ import {
   computeExternalDocumentHash,
   SYSTEM_CATEGORIES,
   isSystemCategory,
+  isSyncableDocument,
   mapContentTypeToExternal,
   mapContentTypeFromExternal,
 } from './document-sync-adapter.js';
@@ -115,6 +116,102 @@ describe('isSystemCategory', () => {
 
   test('returns false for spec', () => {
     expect(isSystemCategory('spec')).toBe(false);
+  });
+});
+
+// ============================================================================
+// isSyncableDocument
+// ============================================================================
+
+describe('isSyncableDocument', () => {
+  test('returns true for a titled document with non-system category', () => {
+    const doc = createTestDocument({
+      title: 'API Reference',
+      category: 'reference' as DocumentCategory,
+    });
+
+    expect(isSyncableDocument(doc)).toBe(true);
+  });
+
+  test('returns false for a document with system category (task-description)', () => {
+    const doc = createTestDocument({
+      title: 'Some Task',
+      category: 'task-description' as DocumentCategory,
+    });
+
+    expect(isSyncableDocument(doc)).toBe(false);
+  });
+
+  test('returns false for a document with system category (message-content)', () => {
+    const doc = createTestDocument({
+      title: 'Some Message',
+      category: 'message-content' as DocumentCategory,
+    });
+
+    expect(isSyncableDocument(doc)).toBe(false);
+  });
+
+  test('returns false for a document with null title', () => {
+    const doc = createTestDocument({
+      title: null as unknown as string,
+      category: 'other' as DocumentCategory,
+    });
+
+    expect(isSyncableDocument(doc)).toBe(false);
+  });
+
+  test('returns false for a document with undefined title', () => {
+    const doc = createTestDocument({
+      category: 'other' as DocumentCategory,
+    });
+    delete (doc as any).title;
+
+    expect(isSyncableDocument(doc)).toBe(false);
+  });
+
+  test('returns false for a document with empty string title', () => {
+    const doc = createTestDocument({
+      title: '',
+      category: 'reference' as DocumentCategory,
+    });
+
+    expect(isSyncableDocument(doc)).toBe(false);
+  });
+
+  test('returns false for a document with whitespace-only title', () => {
+    const doc = createTestDocument({
+      title: '   ',
+      category: 'reference' as DocumentCategory,
+    });
+
+    expect(isSyncableDocument(doc)).toBe(false);
+  });
+
+  test('returns false for a document with tab/newline whitespace title', () => {
+    const doc = createTestDocument({
+      title: '\t\n  ',
+      category: 'reference' as DocumentCategory,
+    });
+
+    expect(isSyncableDocument(doc)).toBe(false);
+  });
+
+  test('returns true for a document with a non-empty title and spec category', () => {
+    const doc = createTestDocument({
+      title: 'Architecture Spec',
+      category: 'spec' as DocumentCategory,
+    });
+
+    expect(isSyncableDocument(doc)).toBe(true);
+  });
+
+  test('returns true for a document with other category and valid title', () => {
+    const doc = createTestDocument({
+      title: 'Scratch Notes',
+      category: 'other' as DocumentCategory,
+    });
+
+    expect(isSyncableDocument(doc)).toBe(true);
   });
 });
 
