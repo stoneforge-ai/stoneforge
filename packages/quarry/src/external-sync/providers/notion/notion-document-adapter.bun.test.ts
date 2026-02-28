@@ -140,6 +140,7 @@ function createMockApiClient() {
   const mockCreatePage = mock(() => Promise.resolve(createMockPage()));
   const mockUpdatePage = mock(() => Promise.resolve(createMockPage()));
   const mockUpdatePageContent = mock(() => Promise.resolve(createMockBlocks()));
+  const mockAppendBlocks = mock(() => Promise.resolve([] as NotionBlock[]));
   const mockQueryDatabase = mock(() =>
     Promise.resolve({
       object: 'list' as const,
@@ -161,6 +162,7 @@ function createMockApiClient() {
     createPage: mockCreatePage,
     updatePage: mockUpdatePage,
     updatePageContent: mockUpdatePageContent,
+    appendBlocks: mockAppendBlocks,
     queryDatabase: mockQueryDatabase,
     queryDatabaseAll: mockQueryDatabaseAll,
     getRateLimitState: mock(() => ({
@@ -178,6 +180,7 @@ function createMockApiClient() {
       createPage: mockCreatePage,
       updatePage: mockUpdatePage,
       updatePageContent: mockUpdatePageContent,
+      appendBlocks: mockAppendBlocks,
       queryDatabase: mockQueryDatabase,
       queryDatabaseAll: mockQueryDatabaseAll,
     },
@@ -538,6 +541,121 @@ describe('NotionDocumentAdapter', () => {
       const [, , blocks] = mockApi.mocks.createPage.mock.calls[0];
       // markdownToNotionBlocks returns [] for empty content
       expect(blocks).toEqual([]);
+    });
+
+    test('does not call appendBlocks when blocks are under 100', async () => {
+      const input: ExternalDocumentInput = {
+        title: 'Small Page',
+        content: '# Hello\n\nThis is a small page.',
+        contentType: 'markdown',
+      };
+
+      await adapter.createPage('db-uuid-5678', input);
+
+      expect(mockApi.mocks.createPage).toHaveBeenCalledTimes(1);
+      expect(mockApi.mocks.appendBlocks).not.toHaveBeenCalled();
+    });
+
+    test('batches blocks when content exceeds 100 blocks (150 blocks)', async () => {
+      // Generate markdown that produces > 100 blocks (each paragraph = 1 block)
+      const paragraphs = Array.from({ length: 150 }, (_, i) => `Paragraph ${i}`);
+      const markdown = paragraphs.join('\n\n');
+
+      const input: ExternalDocumentInput = {
+        title: 'Large Page',
+        content: markdown,
+        contentType: 'markdown',
+      };
+
+      const createdPage = createMockPage({
+        id: 'large-page-uuid',
+        url: 'https://www.notion.so/Large-Page-large-page-uuid',
+        properties: {
+          Title: {
+            id: 'title-prop',
+            type: 'title',
+            title: [
+              {
+                type: 'text',
+                plain_text: 'Large Page',
+                text: { content: 'Large Page', link: null },
+                annotations: { ...DEFAULT_ANNOTATIONS },
+                href: null,
+              },
+            ],
+          },
+        },
+      });
+      mockApi.mocks.createPage.mockImplementation(() => Promise.resolve(createdPage));
+
+      const doc = await adapter.createPage('db-uuid-5678', input);
+
+      expect(doc.externalId).toBe('large-page-uuid');
+
+      // createPage should be called with first 100 blocks
+      expect(mockApi.mocks.createPage).toHaveBeenCalledTimes(1);
+      const [, , firstBatch] = mockApi.mocks.createPage.mock.calls[0];
+      expect(firstBatch).toHaveLength(100);
+
+      // appendBlocks should be called with remaining 50 blocks
+      expect(mockApi.mocks.appendBlocks).toHaveBeenCalledTimes(1);
+      const [pageId, remaining] = mockApi.mocks.appendBlocks.mock.calls[0];
+      expect(pageId).toBe('large-page-uuid');
+      expect(remaining).toHaveLength(50);
+    });
+
+    test('batches blocks when content exceeds 200 blocks (250 blocks)', async () => {
+      const paragraphs = Array.from({ length: 250 }, (_, i) => `Paragraph ${i}`);
+      const markdown = paragraphs.join('\n\n');
+
+      const input: ExternalDocumentInput = {
+        title: 'Very Large Page',
+        content: markdown,
+        contentType: 'markdown',
+      };
+
+      const createdPage = createMockPage({
+        id: 'very-large-page-uuid',
+        url: 'https://www.notion.so/Very-Large-Page',
+      });
+      mockApi.mocks.createPage.mockImplementation(() => Promise.resolve(createdPage));
+
+      await adapter.createPage('db-uuid-5678', input);
+
+      // createPage should be called with first 100 blocks
+      expect(mockApi.mocks.createPage).toHaveBeenCalledTimes(1);
+      const [, , firstBatch] = mockApi.mocks.createPage.mock.calls[0];
+      expect(firstBatch).toHaveLength(100);
+
+      // appendBlocks should be called with remaining 150 blocks
+      // (appendBlocks handles its own internal batching of 100)
+      expect(mockApi.mocks.appendBlocks).toHaveBeenCalledTimes(1);
+      const [pageId, remaining] = mockApi.mocks.appendBlocks.mock.calls[0];
+      expect(pageId).toBe('very-large-page-uuid');
+      expect(remaining).toHaveLength(150);
+    });
+
+    test('preserves block order when batching', async () => {
+      const paragraphs = Array.from({ length: 110 }, (_, i) => `Block content ${i}`);
+      const markdown = paragraphs.join('\n\n');
+
+      const input: ExternalDocumentInput = {
+        title: 'Ordered Page',
+        content: markdown,
+        contentType: 'markdown',
+      };
+
+      const createdPage = createMockPage({ id: 'ordered-page-uuid' });
+      mockApi.mocks.createPage.mockImplementation(() => Promise.resolve(createdPage));
+
+      await adapter.createPage('db-uuid-5678', input);
+
+      const [, , firstBatch] = mockApi.mocks.createPage.mock.calls[0];
+      const [, remaining] = mockApi.mocks.appendBlocks.mock.calls[0];
+
+      // First batch should have the first 100 blocks, second should have the last 10
+      expect(firstBatch).toHaveLength(100);
+      expect(remaining).toHaveLength(10);
     });
   });
 

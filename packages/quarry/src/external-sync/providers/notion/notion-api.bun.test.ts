@@ -533,6 +533,268 @@ describe('NotionApiClient', () => {
       expect(mockFetch).toHaveBeenCalledTimes(1);
       expect(result).toHaveLength(0);
     });
+
+    test('batches appends when blocks exceed 100', async () => {
+      // Create 150 blocks to append
+      const inputBlocks = Array.from({ length: 150 }, (_, i) => ({
+        type: 'paragraph' as const,
+        paragraph: { rich_text: [{ type: 'text' as const, text: { content: `Block ${i}` } }] },
+      }));
+
+      const batch1Results = Array.from({ length: 100 }, (_, i) =>
+        createMockBlock({ id: `new-${i}` })
+      );
+      const batch2Results = Array.from({ length: 50 }, (_, i) =>
+        createMockBlock({ id: `new-${100 + i}` })
+      );
+
+      let callCount = 0;
+      mockFetch.mockImplementation(() => {
+        callCount++;
+        // Call 1: GET existing blocks (empty page)
+        if (callCount === 1) {
+          return Promise.resolve(
+            createMockResponse({
+              object: 'list',
+              results: [],
+              has_more: false,
+              next_cursor: null,
+              type: 'block',
+            })
+          );
+        }
+        // Call 2: PATCH first batch (100 blocks)
+        if (callCount === 2) {
+          return Promise.resolve(
+            createMockResponse({
+              object: 'list',
+              results: batch1Results,
+              has_more: false,
+              next_cursor: null,
+              type: 'block',
+            })
+          );
+        }
+        // Call 3: PATCH second batch (50 blocks)
+        return Promise.resolve(
+          createMockResponse({
+            object: 'list',
+            results: batch2Results,
+            has_more: false,
+            next_cursor: null,
+            type: 'block',
+          })
+        );
+      });
+
+      const result = await client.updatePageContent('page-id', inputBlocks);
+
+      // 1 GET + 2 PATCH calls (batches of 100 and 50)
+      expect(callCount).toBe(3);
+      expect(result).toHaveLength(150);
+
+      // Verify first batch has 100 blocks
+      const batch1Init = (mockFetch.mock.calls[1] as [string, RequestInit])[1];
+      const batch1Body = JSON.parse(batch1Init.body as string);
+      expect(batch1Body.children).toHaveLength(100);
+
+      // Verify second batch has 50 blocks
+      const batch2Init = (mockFetch.mock.calls[2] as [string, RequestInit])[1];
+      const batch2Body = JSON.parse(batch2Init.body as string);
+      expect(batch2Body.children).toHaveLength(50);
+    });
+
+    test('batches 250 blocks into three appends of 100, 100, and 50', async () => {
+      const inputBlocks = Array.from({ length: 250 }, (_, i) => ({
+        type: 'paragraph' as const,
+        paragraph: { rich_text: [{ type: 'text' as const, text: { content: `Block ${i}` } }] },
+      }));
+
+      let callCount = 0;
+      mockFetch.mockImplementation(() => {
+        callCount++;
+        // Call 1: GET existing blocks (empty page)
+        if (callCount === 1) {
+          return Promise.resolve(
+            createMockResponse({
+              object: 'list',
+              results: [],
+              has_more: false,
+              next_cursor: null,
+              type: 'block',
+            })
+          );
+        }
+        // Subsequent calls: PATCH appends
+        const batchSize = callCount === 4 ? 50 : 100;
+        const results = Array.from({ length: batchSize }, (_, i) =>
+          createMockBlock({ id: `block-${(callCount - 2) * 100 + i}` })
+        );
+        return Promise.resolve(
+          createMockResponse({
+            object: 'list',
+            results,
+            has_more: false,
+            next_cursor: null,
+            type: 'block',
+          })
+        );
+      });
+
+      const result = await client.updatePageContent('page-id', inputBlocks);
+
+      // 1 GET + 3 PATCH calls (100, 100, 50)
+      expect(callCount).toBe(4);
+      expect(result).toHaveLength(250);
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // appendBlocks
+  // --------------------------------------------------------------------------
+
+  describe('appendBlocks', () => {
+    test('appends blocks to a page', async () => {
+      const appendedBlocks = [createMockBlock({ id: 'appended-1' })];
+      setMockFetchResponse({
+        object: 'list',
+        results: appendedBlocks,
+        has_more: false,
+        next_cursor: null,
+        type: 'block',
+      });
+
+      const result = await client.appendBlocks('page-id', [
+        { type: 'paragraph', paragraph: { rich_text: [] } },
+      ]);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe('appended-1');
+
+      const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain('/blocks/page-id/children');
+      expect(init.method).toBe('PATCH');
+      const body = JSON.parse(init.body as string);
+      expect(body.children).toHaveLength(1);
+    });
+
+    test('returns empty array for empty blocks', async () => {
+      const result = await client.appendBlocks('page-id', []);
+
+      expect(result).toHaveLength(0);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    test('batches appends when blocks exceed 100', async () => {
+      const inputBlocks = Array.from({ length: 150 }, (_, i) => ({
+        type: 'paragraph' as const,
+        paragraph: { rich_text: [{ type: 'text' as const, text: { content: `Block ${i}` } }] },
+      }));
+
+      let callCount = 0;
+      mockFetch.mockImplementation(() => {
+        callCount++;
+        const batchSize = callCount === 1 ? 100 : 50;
+        const results = Array.from({ length: batchSize }, (_, i) =>
+          createMockBlock({ id: `block-${(callCount - 1) * 100 + i}` })
+        );
+        return Promise.resolve(
+          createMockResponse({
+            object: 'list',
+            results,
+            has_more: false,
+            next_cursor: null,
+            type: 'block',
+          })
+        );
+      });
+
+      const result = await client.appendBlocks('page-id', inputBlocks);
+
+      expect(callCount).toBe(2);
+      expect(result).toHaveLength(150);
+
+      // First batch: 100 blocks
+      const batch1Init = (mockFetch.mock.calls[0] as [string, RequestInit])[1];
+      const batch1Body = JSON.parse(batch1Init.body as string);
+      expect(batch1Body.children).toHaveLength(100);
+
+      // Second batch: 50 blocks
+      const batch2Init = (mockFetch.mock.calls[1] as [string, RequestInit])[1];
+      const batch2Body = JSON.parse(batch2Init.body as string);
+      expect(batch2Body.children).toHaveLength(50);
+    });
+
+    test('sends exactly 100 blocks per batch with no splitting', async () => {
+      const inputBlocks = Array.from({ length: 100 }, (_, i) => ({
+        type: 'paragraph' as const,
+        paragraph: { rich_text: [{ type: 'text' as const, text: { content: `Block ${i}` } }] },
+      }));
+
+      setMockFetchResponse({
+        object: 'list',
+        results: Array.from({ length: 100 }, (_, i) =>
+          createMockBlock({ id: `block-${i}` })
+        ),
+        has_more: false,
+        next_cursor: null,
+        type: 'block',
+      });
+
+      const result = await client.appendBlocks('page-id', inputBlocks);
+
+      // Exactly 100 blocks → 1 request, no batching
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(result).toHaveLength(100);
+    });
+
+    test('preserves block order across batches', async () => {
+      const inputBlocks = Array.from({ length: 150 }, (_, i) => ({
+        type: 'paragraph' as const,
+        paragraph: { rich_text: [{ type: 'text' as const, text: { content: `Content ${i}` } }] },
+      }));
+
+      let callCount = 0;
+      mockFetch.mockImplementation(() => {
+        callCount++;
+        const start = (callCount - 1) * 100;
+        const batchSize = callCount === 1 ? 100 : 50;
+        const results = Array.from({ length: batchSize }, (_, i) =>
+          createMockBlock({ id: `block-${start + i}` })
+        );
+        return Promise.resolve(
+          createMockResponse({
+            object: 'list',
+            results,
+            has_more: false,
+            next_cursor: null,
+            type: 'block',
+          })
+        );
+      });
+
+      const result = await client.appendBlocks('page-id', inputBlocks);
+
+      // Verify order is maintained
+      expect(result[0].id).toBe('block-0');
+      expect(result[99].id).toBe('block-99');
+      expect(result[100].id).toBe('block-100');
+      expect(result[149].id).toBe('block-149');
+
+      // Verify first batch content starts with Block 0
+      const batch1Body = JSON.parse(
+        ((mockFetch.mock.calls[0] as [string, RequestInit])[1].body as string)
+      );
+      expect(batch1Body.children[0].paragraph.rich_text[0].text.content).toBe('Content 0');
+      expect(batch1Body.children[99].paragraph.rich_text[0].text.content).toBe('Content 99');
+
+      // Verify second batch content starts with Block 100
+      const batch2Body = JSON.parse(
+        ((mockFetch.mock.calls[1] as [string, RequestInit])[1].body as string)
+      );
+      expect(batch2Body.children[0].paragraph.rich_text[0].text.content).toBe('Content 100');
+      expect(batch2Body.children[49].paragraph.rich_text[0].text.content).toBe('Content 149');
+    });
   });
 
   // --------------------------------------------------------------------------

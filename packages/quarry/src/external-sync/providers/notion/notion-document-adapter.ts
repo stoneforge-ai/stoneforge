@@ -225,6 +225,10 @@ export class NotionDocumentAdapter implements DocumentSyncAdapter {
    * Converts the markdown content to Notion blocks, then creates a page
    * with Title, Category (select), and Tags (multi_select) properties.
    *
+   * Notion limits POST /pages to 100 children blocks. If the content exceeds
+   * this limit, the page is created with the first 100 blocks, and the
+   * remaining blocks are appended in batches of 100 via PATCH /blocks/{id}/children.
+   *
    * @param project - The Notion database ID
    * @param page - The document input with title and content
    * @returns The created page as an ExternalDocument
@@ -238,7 +242,18 @@ export class NotionDocumentAdapter implements DocumentSyncAdapter {
     const blocks = markdownToNotionBlocks(page.content) as unknown as NotionBlockInput[];
     const properties = buildPageProperties(page.title);
 
-    const createdPage = await this.api.createPage(project, properties, blocks);
+    // Notion limits POST /pages to 100 children blocks
+    const BLOCK_LIMIT = 100;
+    const firstBatch = blocks.slice(0, BLOCK_LIMIT);
+    const remaining = blocks.slice(BLOCK_LIMIT);
+
+    // Create page with up to 100 blocks
+    const createdPage = await this.api.createPage(project, properties, firstBatch);
+
+    // Append remaining blocks in batches of 100
+    if (remaining.length > 0) {
+      await this.api.appendBlocks(createdPage.id, remaining);
+    }
 
     // Return the created page as an ExternalDocument
     // The content is the original markdown (we just sent it as blocks)

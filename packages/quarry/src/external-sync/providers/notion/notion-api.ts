@@ -157,6 +157,9 @@ const DEFAULT_MAX_RETRIES = 3;
 /** Default Retry-After fallback if the header is missing (in seconds) */
 const DEFAULT_RETRY_AFTER_SECONDS = 1;
 
+/** Maximum number of blocks per Notion API request (POST /pages or PATCH /blocks/{id}/children) */
+const NOTION_BLOCK_BATCH_SIZE = 100;
+
 // ============================================================================
 // Client Implementation
 // ============================================================================
@@ -301,9 +304,9 @@ export class NotionApiClient {
    *
    * This is a two-step operation:
    * 1. Delete all existing top-level block children
-   * 2. Append new block children
+   * 2. Append new block children in batches of 100 (Notion's per-request limit)
    *
-   * CAUTION: This is not atomic. If step 2 fails, the page will be empty.
+   * CAUTION: This is not atomic. If step 2 fails, the page may have partial content.
    *
    * @see https://developers.notion.com/reference/delete-a-block
    * @see https://developers.notion.com/reference/patch-block-children
@@ -319,18 +322,61 @@ export class NotionApiClient {
       await this.request<void>('DELETE', `/blocks/${block.id}`);
     }
 
-    // Step 2: Append new blocks
+    // Step 2: Append new blocks in batches of 100
     if (blocks.length === 0) {
       return [];
     }
 
-    const response = await this.request<NotionBlockChildrenResponse>(
-      'PATCH',
-      `/blocks/${pageId}/children`,
-      { children: blocks }
-    );
+    const allResults: NotionBlock[] = [];
 
-    return [...response.results];
+    for (let i = 0; i < blocks.length; i += NOTION_BLOCK_BATCH_SIZE) {
+      const batch = blocks.slice(i, i + NOTION_BLOCK_BATCH_SIZE);
+      const response = await this.request<NotionBlockChildrenResponse>(
+        'PATCH',
+        `/blocks/${pageId}/children`,
+        { children: batch }
+      );
+      allResults.push(...response.results);
+    }
+
+    return allResults;
+  }
+
+  /**
+   * Append block children to a page or block.
+   *
+   * Respects Notion's 100-block-per-request limit by batching automatically.
+   * Block order is preserved across batches.
+   *
+   * PATCH /blocks/{block_id}/children
+   *
+   * @param blockId - The page or block ID to append children to
+   * @param blocks - The blocks to append
+   * @returns All appended blocks
+   *
+   * @see https://developers.notion.com/reference/patch-block-children
+   */
+  async appendBlocks(
+    blockId: string,
+    blocks: readonly NotionBlockInput[]
+  ): Promise<NotionBlock[]> {
+    if (blocks.length === 0) {
+      return [];
+    }
+
+    const allResults: NotionBlock[] = [];
+
+    for (let i = 0; i < blocks.length; i += NOTION_BLOCK_BATCH_SIZE) {
+      const batch = blocks.slice(i, i + NOTION_BLOCK_BATCH_SIZE);
+      const response = await this.request<NotionBlockChildrenResponse>(
+        'PATCH',
+        `/blocks/${blockId}/children`,
+        { children: batch }
+      );
+      allResults.push(...response.results);
+    }
+
+    return allResults;
   }
 
   /**
@@ -567,5 +613,5 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// Export utility functions for testing
-export { sleep, parseRetryAfterFromError };
+// Export utility functions and constants for testing
+export { sleep, parseRetryAfterFromError, NOTION_BLOCK_BATCH_SIZE };
