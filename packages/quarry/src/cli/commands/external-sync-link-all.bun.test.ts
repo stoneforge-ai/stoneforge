@@ -705,6 +705,113 @@ describe('external-sync link-all', () => {
   });
 
   // ==========================================================================
+  // Token-Free Provider Tests (e.g., folder)
+  // ==========================================================================
+
+  test('folder provider works without a token when project is configured', async () => {
+    const options = createTestOptions();
+    await createTestTasks(options, [
+      { title: 'Task for folder sync' },
+    ]);
+
+    // Configure the folder provider with a project (no token needed)
+    const { externalSyncCommand } = await import('./external-sync.js');
+    const configCmd = externalSyncCommand.subcommands!['config'];
+    const setProjectCmd = configCmd.subcommands!['set-project'];
+    await setProjectCmd.handler(['folder', '/tmp/test-sync-output'], options);
+
+    // Create a mock folder provider and inject via _providerFactory
+    const mockProvider = createMockProvider({ providerName: 'folder' });
+    const factory = createMockProviderFactory(mockProvider);
+
+    const linkAllCmd = externalSyncCommand.subcommands!['link-all'];
+    const result = await linkAllCmd.handler([], {
+      ...options,
+      provider: 'folder',
+      _providerFactory: factory,
+    });
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    const data = result.data as Record<string, unknown>;
+    expect(data.linked).toBe(1);
+    expect(data.failed).toBe(0);
+  });
+
+  test('folder provider fails if not configured at all', async () => {
+    const options = createTestOptions();
+    await createTestTasks(options, [
+      { title: 'Task for unconfigured folder' },
+    ]);
+
+    const { externalSyncCommand } = await import('./external-sync.js');
+    const linkAllCmd = externalSyncCommand.subcommands!['link-all'];
+
+    // Attempt linking with folder provider without any configuration
+    const result = await linkAllCmd.handler([], {
+      ...options,
+      provider: 'folder',
+    });
+
+    expect(result.exitCode).not.toBe(ExitCode.SUCCESS);
+    expect(result.error).toBeDefined();
+    // Should mention configuration, not token
+    expect(result.error!.includes('not configured')).toBe(true);
+  });
+
+  test('folder provider fails if no project is configured', async () => {
+    const options = createTestOptions();
+    await createTestTasks(options, [
+      { title: 'Task for folder without project' },
+    ]);
+
+    // Configure the folder provider without a project by setting token
+    // (this creates the providerConfig entry but without defaultProject)
+    const { externalSyncCommand } = await import('./external-sync.js');
+    const configCmd = externalSyncCommand.subcommands!['config'];
+    const setTokenCmd = configCmd.subcommands!['set-token'];
+    // Set a dummy token so the config entry exists (folder doesn't use it)
+    await setTokenCmd.handler(['folder', 'dummy-unused-token'], options);
+
+    const linkAllCmd = externalSyncCommand.subcommands!['link-all'];
+
+    // Attempt linking without project configured and without --project override
+    const result = await linkAllCmd.handler([], {
+      ...options,
+      provider: 'folder',
+    });
+
+    expect(result.exitCode).not.toBe(ExitCode.SUCCESS);
+    expect(result.error).toBeDefined();
+    // Should mention project not configured
+    expect(result.error!.includes('project')).toBe(true);
+  });
+
+  test('github provider still requires a token', async () => {
+    const options = createTestOptions();
+    await createTestTasks(options, [
+      { title: 'Task for github without token' },
+    ]);
+
+    // Configure github provider with only a project (no token)
+    const { externalSyncCommand } = await import('./external-sync.js');
+    const configCmd = externalSyncCommand.subcommands!['config'];
+    const setProjectCmd = configCmd.subcommands!['set-project'];
+    await setProjectCmd.handler(['github', 'my-org/my-repo'], options);
+
+    const linkAllCmd = externalSyncCommand.subcommands!['link-all'];
+
+    // Attempt linking - should fail because github requires a token
+    const result = await linkAllCmd.handler([], {
+      ...options,
+      provider: 'github',
+    });
+
+    expect(result.exitCode).not.toBe(ExitCode.SUCCESS);
+    expect(result.error).toBeDefined();
+    expect(result.error!.includes('token')).toBe(true);
+  });
+
+  // ==========================================================================
   // Field Mapping Tests: Priority, TaskType, Status Labels
   // ==========================================================================
 
