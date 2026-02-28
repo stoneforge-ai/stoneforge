@@ -459,6 +459,22 @@ export function validateConfiguration(config: unknown): Configuration {
       );
     }
   }
+  if (externalSync.autoLinkDocumentProvider !== undefined) {
+    if (typeof externalSync.autoLinkDocumentProvider !== 'string') {
+      throw new ValidationError(
+        'externalSync.autoLinkDocumentProvider must be a string',
+        ErrorCode.INVALID_INPUT,
+        { field: 'externalSync.autoLinkDocumentProvider', value: externalSync.autoLinkDocumentProvider, expected: 'string' }
+      );
+    }
+    if (!VALID_AUTO_LINK_PROVIDERS.includes(externalSync.autoLinkDocumentProvider)) {
+      throw new ValidationError(
+        `externalSync.autoLinkDocumentProvider must be one of: ${VALID_AUTO_LINK_PROVIDERS.join(', ')}`,
+        ErrorCode.INVALID_INPUT,
+        { field: 'externalSync.autoLinkDocumentProvider', value: externalSync.autoLinkDocumentProvider, expected: VALID_AUTO_LINK_PROVIDERS }
+      );
+    }
+  }
 
   return config as Configuration;
 }
@@ -571,6 +587,15 @@ export function validatePartialConfiguration(config: PartialConfiguration): void
         `externalSync.autoLinkProvider must be one of: ${VALID_AUTO_LINK_PROVIDERS.join(', ')}`,
         ErrorCode.INVALID_INPUT,
         { field: 'externalSync.autoLinkProvider', value: config.externalSync.autoLinkProvider, expected: VALID_AUTO_LINK_PROVIDERS }
+      );
+    }
+  }
+  if (config.externalSync?.autoLinkDocumentProvider !== undefined) {
+    if (!VALID_AUTO_LINK_PROVIDERS.includes(config.externalSync.autoLinkDocumentProvider)) {
+      throw new ValidationError(
+        `externalSync.autoLinkDocumentProvider must be one of: ${VALID_AUTO_LINK_PROVIDERS.join(', ')}`,
+        ErrorCode.INVALID_INPUT,
+        { field: 'externalSync.autoLinkDocumentProvider', value: config.externalSync.autoLinkDocumentProvider, expected: VALID_AUTO_LINK_PROVIDERS }
       );
     }
   }

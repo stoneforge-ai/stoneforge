@@ -339,6 +339,9 @@ function createTrackedDefaults(): TrackedConfiguration {
       autoLinkProvider: DEFAULT_CONFIG.externalSync.autoLinkProvider !== undefined
         ? { value: DEFAULT_CONFIG.externalSync.autoLinkProvider, source: ConfigSourceEnum.DEFAULT }
         : undefined,
+      autoLinkDocumentProvider: DEFAULT_CONFIG.externalSync.autoLinkDocumentProvider !== undefined
+        ? { value: DEFAULT_CONFIG.externalSync.autoLinkDocumentProvider, source: ConfigSourceEnum.DEFAULT }
+        : undefined,
     },
   };
 }
@@ -409,6 +412,9 @@ function mergeTrackedConfig(
   }
   if (partial.externalSync?.autoLinkProvider !== undefined) {
     result.externalSync = { ...result.externalSync, autoLinkProvider: { value: partial.externalSync.autoLinkProvider, source } };
+  }
+  if (partial.externalSync?.autoLinkDocumentProvider !== undefined) {
+    result.externalSync = { ...result.externalSync, autoLinkDocumentProvider: { value: partial.externalSync.autoLinkDocumentProvider, source } };
   }
 
   return result;

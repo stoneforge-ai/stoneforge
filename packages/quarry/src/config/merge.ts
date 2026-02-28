@@ -104,6 +104,7 @@ export function mergeConfiguration(
       defaultDirection: partial.externalSync?.defaultDirection !== undefined ? partial.externalSync.defaultDirection : base.externalSync.defaultDirection,
       autoLink: partial.externalSync?.autoLink !== undefined ? partial.externalSync.autoLink : base.externalSync.autoLink,
       autoLinkProvider: partial.externalSync?.autoLinkProvider !== undefined ? partial.externalSync.autoLinkProvider : base.externalSync.autoLinkProvider,
+      autoLinkDocumentProvider: partial.externalSync?.autoLinkDocumentProvider !== undefined ? partial.externalSync.autoLinkDocumentProvider : base.externalSync.autoLinkDocumentProvider,
     },
   };
   return result;
@@ -181,6 +182,7 @@ export function cloneConfiguration(config: Configuration): Configuration {
       defaultDirection: config.externalSync.defaultDirection,
       autoLink: config.externalSync.autoLink,
       autoLinkProvider: config.externalSync.autoLinkProvider,
+      autoLinkDocumentProvider: config.externalSync.autoLinkDocumentProvider,
     },
   };
 }
@@ -282,6 +284,9 @@ export function diffConfigurations(
   if (a.externalSync.autoLinkProvider !== b.externalSync.autoLinkProvider) {
     externalSyncDiff.autoLinkProvider = b.externalSync.autoLinkProvider;
   }
+  if (a.externalSync.autoLinkDocumentProvider !== b.externalSync.autoLinkDocumentProvider) {
+    externalSyncDiff.autoLinkDocumentProvider = b.externalSync.autoLinkDocumentProvider;
+  }
   if (Object.keys(externalSyncDiff).length > 0) {
     diff.externalSync = externalSyncDiff;
   }
@@ -314,6 +319,7 @@ export function configurationsEqual(a: Configuration, b: Configuration): boolean
     a.externalSync.conflictStrategy === b.externalSync.conflictStrategy &&
     a.externalSync.defaultDirection === b.externalSync.defaultDirection &&
     a.externalSync.autoLink === b.externalSync.autoLink &&
-    a.externalSync.autoLinkProvider === b.externalSync.autoLinkProvider
+    a.externalSync.autoLinkProvider === b.externalSync.autoLinkProvider &&
+    a.externalSync.autoLinkDocumentProvider === b.externalSync.autoLinkDocumentProvider
   );
 }

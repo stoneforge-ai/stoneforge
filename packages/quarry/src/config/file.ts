@@ -301,6 +301,17 @@ export function convertYamlToConfig(yamlConfig: YamlConfigFile): PartialConfigur
       }
       result.externalSync.autoLinkProvider = provider;
     }
+    if (yamlConfig.external_sync.auto_link_document_provider !== undefined) {
+      const provider = yamlConfig.external_sync.auto_link_document_provider;
+      if (!VALID_AUTO_LINK_PROVIDERS.includes(provider)) {
+        throw new ValidationError(
+          `Invalid auto-link document provider: '${provider}'. Must be one of: ${VALID_AUTO_LINK_PROVIDERS.join(', ')}`,
+          ErrorCode.INVALID_INPUT,
+          { field: 'externalSync.autoLinkDocumentProvider', value: provider }
+        );
+      }
+      result.externalSync.autoLinkDocumentProvider = provider;
+    }
   }
 
   return result;
@@ -430,6 +441,9 @@ export function convertConfigToYaml(config: Configuration | PartialConfiguration
     }
     if (config.externalSync.autoLinkProvider !== undefined) {
       es.auto_link_provider = config.externalSync.autoLinkProvider;
+    }
+    if (config.externalSync.autoLinkDocumentProvider !== undefined) {
+      es.auto_link_document_provider = config.externalSync.autoLinkDocumentProvider;
     }
     if (Object.keys(es).length > 0) {
       result.external_sync = es;

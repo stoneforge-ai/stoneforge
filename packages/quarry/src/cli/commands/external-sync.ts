@@ -172,6 +172,7 @@ async function configHandler(
   const pollInterval = getValue('externalSync.pollInterval');
   const autoLink = getValue('externalSync.autoLink');
   const autoLinkProvider = getValue('externalSync.autoLinkProvider');
+  const autoLinkDocumentProvider = getValue('externalSync.autoLinkDocumentProvider');
 
   const configData = {
     enabled,
@@ -180,6 +181,7 @@ async function configHandler(
     pollInterval,
     autoLink,
     autoLinkProvider,
+    autoLinkDocumentProvider,
     providers: Object.fromEntries(
       Object.entries(settings.providers).map(([name, config]) => [
         name,
@@ -209,7 +211,8 @@ async function configHandler(
     `  Default direction:  ${defaultDirection}`,
     `  Poll interval:      ${pollInterval}ms`,
     `  Auto-link:          ${autoLink ? 'yes' : 'no'}`,
-    `  Auto-link provider: ${autoLinkProvider ?? '(not set)'}`,
+    `  Auto-link provider (tasks): ${autoLinkProvider ?? '(not set)'}`,
+    `  Auto-link provider (docs):  ${autoLinkDocumentProvider ?? '(not set)'}`,
     '',
   ];
 
@@ -323,12 +326,22 @@ async function configSetAutoLinkHandler(
 ): Promise<CommandResult> {
   if (args.length < 1) {
     return failure(
-      'Usage: sf external-sync config set-auto-link <provider>',
+      'Usage: sf external-sync config set-auto-link <provider> [--type task|document]',
       ExitCode.INVALID_ARGUMENTS
     );
   }
 
   const [provider] = args;
+  const typeFlag = (options as Record<string, unknown>).type as string | undefined;
+  const linkType = typeFlag ?? 'task';
+
+  // Validate --type flag
+  if (linkType !== 'task' && linkType !== 'document') {
+    return failure(
+      `Invalid type "${linkType}". Must be one of: task, document`,
+      ExitCode.VALIDATION
+    );
+  }
 
   // Validate provider name
   if (!VALID_AUTO_LINK_PROVIDERS.includes(provider)) {
@@ -348,7 +361,33 @@ async function configSetAutoLinkHandler(
     }
   }
 
-  // Set both autoLink and autoLinkProvider
+  if (linkType === 'document') {
+    // Set document auto-link provider
+    setValue('externalSync.autoLinkDocumentProvider', provider);
+
+    const mode = getOutputMode(options);
+
+    if (mode === 'json') {
+      return success({ autoLinkDocumentProvider: provider, warning: tokenWarning });
+    }
+
+    if (mode === 'quiet') {
+      return success(provider);
+    }
+
+    const lines = [`Auto-link for documents enabled with provider "${provider}".`];
+    if (tokenWarning) {
+      lines.push('');
+      lines.push(tokenWarning);
+    }
+
+    return success(
+      { autoLinkDocumentProvider: provider },
+      lines.join('\n')
+    );
+  }
+
+  // Default: task auto-link
   setValue('externalSync.autoLink', true);
   setValue('externalSync.autoLinkProvider', provider);
 
@@ -362,7 +401,7 @@ async function configSetAutoLinkHandler(
     return success(provider);
   }
 
-  const lines = [`Auto-link enabled with provider "${provider}".`];
+  const lines = [`Auto-link for tasks enabled with provider "${provider}".`];
   if (tokenWarning) {
     lines.push('');
     lines.push(tokenWarning);
@@ -382,14 +421,63 @@ async function configDisableAutoLinkHandler(
   _args: string[],
   options: GlobalOptions
 ): Promise<CommandResult> {
-  // Set autoLink to false and clear autoLinkProvider
-  setValue('externalSync.autoLink', false);
-  setValue('externalSync.autoLinkProvider', undefined);
+  const typeFlag = (options as Record<string, unknown>).type as string | undefined;
+  const linkType = typeFlag ?? 'all';
+
+  // Validate --type flag
+  if (linkType !== 'task' && linkType !== 'document' && linkType !== 'all') {
+    return failure(
+      `Invalid type "${linkType}". Must be one of: task, document, all`,
+      ExitCode.VALIDATION
+    );
+  }
 
   const mode = getOutputMode(options);
 
+  if (linkType === 'document') {
+    // Only clear document auto-link provider
+    setValue('externalSync.autoLinkDocumentProvider', undefined);
+
+    if (mode === 'json') {
+      return success({ autoLinkDocumentProvider: null });
+    }
+
+    if (mode === 'quiet') {
+      return success('disabled');
+    }
+
+    return success(
+      { autoLinkDocumentProvider: null },
+      'Auto-link for documents disabled.'
+    );
+  }
+
+  if (linkType === 'task') {
+    // Only clear task auto-link
+    setValue('externalSync.autoLink', false);
+    setValue('externalSync.autoLinkProvider', undefined);
+
+    if (mode === 'json') {
+      return success({ autoLink: false, autoLinkProvider: null });
+    }
+
+    if (mode === 'quiet') {
+      return success('disabled');
+    }
+
+    return success(
+      { autoLink: false },
+      'Auto-link for tasks disabled.'
+    );
+  }
+
+  // Default: disable all
+  setValue('externalSync.autoLink', false);
+  setValue('externalSync.autoLinkProvider', undefined);
+  setValue('externalSync.autoLinkDocumentProvider', undefined);
+
   if (mode === 'json') {
-    return success({ autoLink: false, autoLinkProvider: null });
+    return success({ autoLink: false, autoLinkProvider: null, autoLinkDocumentProvider: null });
   }
 
   if (mode === 'quiet') {
@@ -2299,36 +2387,68 @@ Examples:
   handler: configSetProjectHandler as Command['handler'],
 };
 
+const autoLinkTypeOption: CommandOption = {
+  name: 'type',
+  short: 't',
+  description: 'Type of auto-link: task or document (default: task)',
+  hasValue: true,
+};
+
 const configSetAutoLinkCommand: Command = {
   name: 'set-auto-link',
   description: 'Enable auto-link with a provider',
-  usage: 'sf external-sync config set-auto-link <provider>',
-  help: `Enable auto-link for new tasks with the specified provider.
+  usage: 'sf external-sync config set-auto-link <provider> [--type task|document]',
+  help: `Enable auto-link for new elements with the specified provider.
 
-When auto-link is enabled, newly created Stoneforge tasks will automatically
-get a corresponding external issue created and linked.
+When auto-link is enabled, newly created Stoneforge elements will automatically
+get a corresponding external issue or page created and linked.
+
+Use --type to specify whether to configure task or document auto-linking.
+Defaults to task for backwards compatibility.
 
 Arguments:
-  provider    Provider name (github or linear)
+  provider    Provider name (github, linear, notion, or folder)
+
+Options:
+  --type, -t  Type of auto-link: task or document (default: task)
 
 Examples:
   sf external-sync config set-auto-link github
-  sf external-sync config set-auto-link linear`,
-  options: [],
+  sf external-sync config set-auto-link linear
+  sf external-sync config set-auto-link --type document folder
+  sf external-sync config set-auto-link --type document notion`,
+  options: [autoLinkTypeOption],
   handler: configSetAutoLinkHandler as Command['handler'],
+};
+
+const disableAutoLinkTypeOption: CommandOption = {
+  name: 'type',
+  short: 't',
+  description: 'Type of auto-link to disable: task, document, or all (default: all)',
+  hasValue: true,
 };
 
 const configDisableAutoLinkCommand: Command = {
   name: 'disable-auto-link',
   description: 'Disable auto-link',
-  usage: 'sf external-sync config disable-auto-link',
-  help: `Disable auto-link for new tasks.
+  usage: 'sf external-sync config disable-auto-link [--type task|document|all]',
+  help: `Disable auto-link for new elements.
 
-Clears the auto-link provider and disables automatic external issue creation.
+Clears the auto-link provider and disables automatic external creation.
+
+Use --type to specify which auto-link to disable:
+  task      Only disable task auto-link
+  document  Only disable document auto-link
+  all       Disable both task and document auto-link (default)
+
+Options:
+  --type, -t  Type of auto-link to disable: task, document, or all (default: all)
 
 Examples:
-  sf external-sync config disable-auto-link`,
-  options: [],
+  sf external-sync config disable-auto-link
+  sf external-sync config disable-auto-link --type task
+  sf external-sync config disable-auto-link --type document`,
+  options: [disableAutoLinkTypeOption],
   handler: configDisableAutoLinkHandler as Command['handler'],
 };
 
@@ -2343,15 +2463,17 @@ Tokens are masked in output for security.
 Subcommands:
   set-token <provider> <token>     Store auth token
   set-project <provider> <project> Set default project
-  set-auto-link <provider>         Enable auto-link with a provider
-  disable-auto-link                Disable auto-link
+  set-auto-link <provider> [--type task|document]  Enable auto-link with a provider
+  disable-auto-link [--type task|document|all]     Disable auto-link
 
 Examples:
   sf external-sync config
   sf external-sync config set-token github ghp_xxxxxxxxxxxx
   sf external-sync config set-project github my-org/my-repo
   sf external-sync config set-auto-link github
-  sf external-sync config disable-auto-link`,
+  sf external-sync config set-auto-link --type document folder
+  sf external-sync config disable-auto-link
+  sf external-sync config disable-auto-link --type document`,
   subcommands: {
     'set-token': configSetTokenCommand,
     'set-project': configSetProjectCommand,
@@ -2621,8 +2743,8 @@ Commands:
   config                              Show provider configuration
   config set-token <provider> <token> Store auth token
   config set-project <provider> <project> Set default project
-  config set-auto-link <provider>     Enable auto-link with a provider
-  config disable-auto-link            Disable auto-link
+  config set-auto-link <provider> [--type task|document]  Enable auto-link
+  config disable-auto-link [--type task|document|all]   Disable auto-link
   link <taskId> <url-or-issue-number> Link task to external issue
   link-all --provider <name>          Bulk-link all unlinked tasks
   unlink <taskId>                     Remove external link
@@ -2637,7 +2759,9 @@ Examples:
   sf external-sync config set-token github ghp_xxxxxxxxxxxx
   sf external-sync config set-project github my-org/my-repo
   sf external-sync config set-auto-link github
+  sf external-sync config set-auto-link --type document folder
   sf external-sync config disable-auto-link
+  sf external-sync config disable-auto-link --type document
   sf external-sync link el-abc123 42
   sf external-sync link-all --provider github
   sf external-sync link-all --provider github --dry-run

@@ -102,8 +102,10 @@ export interface ExternalSyncConfig {
   defaultDirection: SyncDirection;
   /** Whether to auto-create external issues for new tasks (default: false) */
   autoLink: boolean;
-  /** Which provider to auto-link to (e.g., 'github', 'linear') */
+  /** Which provider to auto-link tasks to (e.g., 'github', 'linear') */
   autoLinkProvider?: string;
+  /** Which provider to auto-link documents to (e.g., 'folder', 'notion') */
+  autoLinkDocumentProvider?: string;
 }
 
 /**
@@ -238,6 +240,7 @@ export interface TrackedConfiguration {
     defaultDirection: TrackedValue<SyncDirection>;
     autoLink: TrackedValue<boolean>;
     autoLinkProvider?: TrackedValue<string>;
+    autoLinkDocumentProvider?: TrackedValue<string>;
   };
 }
 
@@ -280,6 +283,7 @@ export interface YamlConfigFile {
     default_direction?: string;
     auto_link?: boolean;
     auto_link_provider?: string;
+    auto_link_document_provider?: string;
   };
 }
 
@@ -380,6 +384,7 @@ export const VALID_CONFIG_PATHS = [
   'externalSync.defaultDirection',
   'externalSync.autoLink',
   'externalSync.autoLinkProvider',
+  'externalSync.autoLinkDocumentProvider',
 ] as const;
 
 /**
@@ -417,4 +422,5 @@ export interface ConfigPathTypes {
   'externalSync.defaultDirection': SyncDirection;
   'externalSync.autoLink': boolean;
   'externalSync.autoLinkProvider': string | undefined;
+  'externalSync.autoLinkDocumentProvider': string | undefined;
 }

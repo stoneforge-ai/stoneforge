@@ -81,6 +81,7 @@ export const DEFAULT_EXTERNAL_SYNC_CONFIG: ExternalSyncConfig = {
   defaultDirection: 'bidirectional',
   autoLink: false,
   autoLinkProvider: undefined,
+  autoLinkDocumentProvider: undefined,
 };
 
 /**

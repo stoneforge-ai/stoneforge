@@ -1190,3 +1190,202 @@ describe('Auto-Link Configuration', () => {
     });
   });
 });
+
+// ============================================================================
+// Auto-Link Document Provider Configuration Tests
+// ============================================================================
+
+describe('Auto-Link Document Provider Configuration', () => {
+  describe('defaults', () => {
+    test('autoLinkDocumentProvider defaults to undefined', () => {
+      expect(DEFAULT_CONFIG.externalSync.autoLinkDocumentProvider).toBeUndefined();
+    });
+
+    test('getDefaultConfig includes autoLinkDocumentProvider', () => {
+      const config = getDefaultConfig();
+      expect(config.externalSync.autoLinkDocumentProvider).toBeUndefined();
+    });
+  });
+
+  describe('VALID_CONFIG_PATHS', () => {
+    test('includes externalSync.autoLinkDocumentProvider', () => {
+      expect(VALID_CONFIG_PATHS).toContain('externalSync.autoLinkDocumentProvider');
+    });
+  });
+
+  describe('validation', () => {
+    test('accepts valid autoLinkDocumentProvider', () => {
+      const config = createTestConfig();
+      config.externalSync.autoLinkDocumentProvider = 'folder';
+      expect(() => validateConfiguration(config)).not.toThrow();
+    });
+
+    test('accepts undefined autoLinkDocumentProvider', () => {
+      const config = createTestConfig();
+      config.externalSync.autoLinkDocumentProvider = undefined;
+      expect(() => validateConfiguration(config)).not.toThrow();
+    });
+
+    test('rejects invalid autoLinkDocumentProvider', () => {
+      const config = createTestConfig();
+      config.externalSync.autoLinkDocumentProvider = 'invalid_provider';
+      expect(() => validateConfiguration(config)).toThrow(ValidationError);
+    });
+
+    test('partial validation rejects invalid autoLinkDocumentProvider', () => {
+      expect(() =>
+        validatePartialConfiguration({
+          externalSync: { autoLinkDocumentProvider: 'invalid' },
+        })
+      ).toThrow(ValidationError);
+    });
+
+    test('partial validation accepts valid autoLinkDocumentProvider folder', () => {
+      expect(() =>
+        validatePartialConfiguration({
+          externalSync: { autoLinkDocumentProvider: 'folder' },
+        })
+      ).not.toThrow();
+    });
+
+    test('partial validation accepts valid autoLinkDocumentProvider notion', () => {
+      expect(() =>
+        validatePartialConfiguration({
+          externalSync: { autoLinkDocumentProvider: 'notion' },
+        })
+      ).not.toThrow();
+    });
+  });
+
+  describe('merge', () => {
+    test('merges autoLinkDocumentProvider from partial config', () => {
+      const base = getDefaultConfig();
+      const partial: PartialConfiguration = {
+        externalSync: { autoLinkDocumentProvider: 'folder' },
+      };
+      const result = mergeConfiguration(base, partial);
+      expect(result.externalSync.autoLinkDocumentProvider).toBe('folder');
+    });
+
+    test('preserves autoLinkDocumentProvider when not in partial', () => {
+      const base = getDefaultConfig();
+      base.externalSync.autoLinkDocumentProvider = 'folder';
+      const partial: PartialConfiguration = {
+        externalSync: { enabled: true },
+      };
+      const result = mergeConfiguration(base, partial);
+      expect(result.externalSync.autoLinkDocumentProvider).toBe('folder');
+    });
+
+    test('can set both task and document providers independently', () => {
+      const base = getDefaultConfig();
+      const partial: PartialConfiguration = {
+        externalSync: {
+          autoLink: true,
+          autoLinkProvider: 'linear',
+          autoLinkDocumentProvider: 'folder',
+        },
+      };
+      const result = mergeConfiguration(base, partial);
+      expect(result.externalSync.autoLinkProvider).toBe('linear');
+      expect(result.externalSync.autoLinkDocumentProvider).toBe('folder');
+    });
+  });
+
+  describe('clone', () => {
+    test('clones autoLinkDocumentProvider', () => {
+      const config = createTestConfig();
+      config.externalSync.autoLinkDocumentProvider = 'folder';
+      const cloned = cloneConfiguration(config);
+      expect(cloned.externalSync.autoLinkDocumentProvider).toBe('folder');
+    });
+  });
+
+  describe('diff', () => {
+    test('detects autoLinkDocumentProvider changes', () => {
+      const a = createTestConfig();
+      const b = cloneConfiguration(a);
+      b.externalSync.autoLinkDocumentProvider = 'folder';
+      const diff = diffConfigurations(a, b);
+      expect(diff.externalSync?.autoLinkDocumentProvider).toBe('folder');
+    });
+
+    test('no diff when autoLinkDocumentProvider unchanged', () => {
+      const a = createTestConfig();
+      const b = cloneConfiguration(a);
+      const diff = diffConfigurations(a, b);
+      expect(diff.externalSync).toBeUndefined();
+    });
+  });
+
+  describe('configurationsEqual', () => {
+    test('returns true when autoLinkDocumentProvider matches', () => {
+      const a = createTestConfig();
+      a.externalSync.autoLinkDocumentProvider = 'folder';
+      const b = cloneConfiguration(a);
+      expect(configurationsEqual(a, b)).toBe(true);
+    });
+
+    test('returns false when autoLinkDocumentProvider differs', () => {
+      const a = createTestConfig();
+      a.externalSync.autoLinkDocumentProvider = 'folder';
+      const b = cloneConfiguration(a);
+      b.externalSync.autoLinkDocumentProvider = 'notion';
+      expect(configurationsEqual(a, b)).toBe(false);
+    });
+  });
+
+  describe('YAML conversion', () => {
+    test('convertYamlToConfig handles auto_link_document_provider', () => {
+      const yaml = {
+        external_sync: {
+          auto_link_document_provider: 'folder',
+        },
+      };
+      const result = convertYamlToConfig(yaml);
+      expect(result.externalSync?.autoLinkDocumentProvider).toBe('folder');
+    });
+
+    test('convertYamlToConfig rejects invalid auto_link_document_provider', () => {
+      const yaml = {
+        external_sync: {
+          auto_link_document_provider: 'invalid',
+        },
+      };
+      expect(() => convertYamlToConfig(yaml)).toThrow(ValidationError);
+    });
+
+    test('convertConfigToYaml includes auto_link_document_provider', () => {
+      const config = createTestConfig();
+      config.externalSync.autoLinkDocumentProvider = 'folder';
+      const yaml = convertConfigToYaml(config);
+      expect(yaml.external_sync?.auto_link_document_provider).toBe('folder');
+    });
+
+    test('convertConfigToYaml omits undefined autoLinkDocumentProvider', () => {
+      const config = createTestConfig();
+      config.externalSync.autoLinkDocumentProvider = undefined;
+      const yaml = convertConfigToYaml(config);
+      expect(yaml.external_sync?.auto_link_document_provider).toBeUndefined();
+    });
+  });
+
+  describe('getValue', () => {
+    beforeEach(() => {
+      clearConfigCache();
+      loadConfig({ skipEnv: true, skipFile: true });
+    });
+
+    test('gets autoLinkDocumentProvider default value', () => {
+      expect(getValue('externalSync.autoLinkDocumentProvider')).toBeUndefined();
+    });
+  });
+
+  describe('getValueFromConfig', () => {
+    test('gets autoLinkDocumentProvider value from config', () => {
+      const config = createTestConfig();
+      config.externalSync.autoLinkDocumentProvider = 'folder';
+      expect(getValueFromConfig(config, 'externalSync.autoLinkDocumentProvider')).toBe('folder');
+    });
+  });
+});
