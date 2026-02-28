@@ -178,7 +178,18 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for full architecture details.
 | Linear task adapter | `external-sync/providers/linear/linear-task-adapter.ts` | `external-sync/providers/linear/linear-task-adapter.bun.test.ts` |
 | Linear field map | `external-sync/providers/linear/linear-field-map.ts` | - |
 | Linear types | `external-sync/providers/linear/linear-types.ts` | - |
+| Auto-link service | `external-sync/auto-link.ts` | - |
+| Document sync adapter | `external-sync/adapters/document-sync-adapter.ts` | - |
+| Folder provider | `external-sync/providers/folder/folder-provider.ts` | - |
+| Folder document adapter | `external-sync/providers/folder/folder-document-adapter.ts` | `external-sync/providers/folder/folder-document-adapter.bun.test.ts` |
+| Folder filesystem utils | `external-sync/providers/folder/folder-fs.ts` | `external-sync/providers/folder/folder-fs.bun.test.ts` |
+| Notion API client | `external-sync/providers/notion/notion-api.ts` | `external-sync/providers/notion/notion-api.bun.test.ts` |
+| Notion block converter | `external-sync/providers/notion/notion-blocks.ts` | `external-sync/providers/notion/notion-blocks.bun.test.ts` |
+| Notion document adapter | `external-sync/providers/notion/notion-document-adapter.ts` | `external-sync/providers/notion/notion-document-adapter.bun.test.ts` |
+| Notion provider | `external-sync/providers/notion/notion-provider.ts` | - |
+| Notion types | `external-sync/providers/notion/notion-types.ts` | - |
 | CLI external-sync commands | `cli/commands/external-sync.ts` | - |
+| CLI auto-link helper | `cli/commands/auto-link-helper.ts` | - |
 
 ## File Map (@stoneforge/ui)
 
@@ -397,6 +408,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for full architecture details.
 | Route: diagnostics | `server/routes/diagnostics.ts` | - |
 | Route: metrics | `server/routes/metrics.ts` | - |
 | Route: external-sync | `server/routes/external-sync.ts` | - |
+| Route: external-sync helpers | `server/routes/external-sync-helpers.ts` | - |
 | LSP manager service | `server/services/lsp-manager.ts` | - |
 | Session messages service | `server/services/session-messages.ts` | - |
 | **Prompts** | | |
@@ -433,7 +445,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for full architecture details.
 
 | App | Entry | Key Directories |
 |-----|-------|-----------------|
-| `apps/quarry-server/` | `src/index.ts` | `src/ws/` (WebSocket) |
+| `apps/quarry-server/` | `src/index.ts` | `src/ws/` (WebSocket), `src/ws/types.ts` (WebSocket types) |
 | `apps/quarry-web/` | `src/main.tsx` | `src/components/`, `src/routes/`, `src/api/hooks/` |
 | `apps/smithy-server/` | `src/index.ts` | `src/routes/` (route modules), `src/config.ts`, `src/services.ts` |
 | `apps/smithy-web/` | `src/main.tsx` | `src/components/`, `src/routes/`, `src/lib/keyboard.ts`, `src/hooks/useKeyboardShortcuts.ts` |
