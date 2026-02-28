@@ -1,0 +1,316 @@
+/**
+ * Notion Document Sync Adapter
+ *
+ * Implements the DocumentSyncAdapter interface for Notion pages.
+ * Converts between Stoneforge documents and Notion pages using the
+ * Notion API client and the blocks ↔ markdown converter.
+ *
+ * Key operations:
+ * - getPage: Fetch a page's properties and blocks, convert to ExternalDocument
+ * - listPagesSince: Query a database for recently edited pages
+ * - createPage: Convert markdown to Notion blocks, create page with properties
+ * - updatePage: Update page properties and/or replace content blocks
+ *
+ * The adapter expects:
+ * - `project` = Notion database ID
+ * - `externalId` = Notion page ID
+ *
+ * Notion page property conventions:
+ * - Title (type: title) — the page title, mapped to ExternalDocument.title
+ * - Category (type: select) — optional, set when creating pages
+ * - Tags (type: multi_select) — optional, set when creating pages
+ */
+
+import type {
+  DocumentSyncAdapter,
+  ExternalDocument,
+  ExternalDocumentInput,
+} from '@stoneforge/core';
+import type { Timestamp } from '@stoneforge/core';
+import type { NotionPage, NotionBlockInput, NotionProperty, NotionRichText } from './notion-types.js';
+import { NotionApiClient } from './notion-api.js';
+import { notionBlocksToMarkdown, markdownToNotionBlocks } from './notion-blocks.js';
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/**
+ * Extracts the title from a Notion page's properties.
+ *
+ * Searches through all properties for one of type 'title', then
+ * concatenates the plain_text of all rich text elements within it.
+ *
+ * @param properties - The page's properties record
+ * @returns The page title, or empty string if no title property is found
+ */
+export function extractTitleFromProperties(
+  properties: Record<string, NotionProperty>
+): string {
+  for (const prop of Object.values(properties)) {
+    if (prop.type === 'title' && prop.title) {
+      return prop.title.map((rt: NotionRichText) => rt.plain_text).join('');
+    }
+  }
+  return '';
+}
+
+/**
+ * Builds Notion page properties for creating a page.
+ *
+ * Creates the Title property (required) and optionally sets Category (select)
+ * and Tags (multi_select) if values are provided.
+ *
+ * @param title - The page title
+ * @param category - Optional category for the Category select property
+ * @param tags - Optional tags for the Tags multi_select property
+ * @returns A properties record suitable for the Notion API
+ */
+export function buildPageProperties(
+  title: string,
+  category?: string,
+  tags?: readonly string[]
+): Record<string, unknown> {
+  const properties: Record<string, unknown> = {
+    Title: {
+      title: [
+        {
+          text: { content: title },
+        },
+      ],
+    },
+  };
+
+  if (category) {
+    properties.Category = {
+      select: { name: category },
+    };
+  }
+
+  if (tags && tags.length > 0) {
+    properties.Tags = {
+      multi_select: tags.map((tag) => ({ name: tag })),
+    };
+  }
+
+  return properties;
+}
+
+/**
+ * Converts a Notion page and its blocks into an ExternalDocument.
+ *
+ * @param page - The Notion page object
+ * @param markdown - The markdown content converted from page blocks
+ * @param databaseId - The database ID (project)
+ * @returns An ExternalDocument representation
+ */
+function pageToExternalDocument(
+  page: NotionPage,
+  markdown: string,
+  databaseId: string
+): ExternalDocument {
+  return {
+    externalId: page.id,
+    url: page.url,
+    provider: 'notion',
+    project: databaseId,
+    title: extractTitleFromProperties(page.properties),
+    content: markdown,
+    contentType: 'markdown',
+    updatedAt: page.last_edited_time,
+    raw: page as unknown as Record<string, unknown>,
+  };
+}
+
+// ============================================================================
+// NotionDocumentAdapter
+// ============================================================================
+
+/**
+ * DocumentSyncAdapter implementation for Notion.
+ *
+ * Uses the NotionApiClient for all API interactions and the
+ * blocks ↔ markdown converter for content transformation.
+ *
+ * @example
+ * ```typescript
+ * const api = new NotionApiClient({ token: 'ntn_...' });
+ * const adapter = new NotionDocumentAdapter(api);
+ *
+ * // Fetch a page
+ * const doc = await adapter.getPage('database-id', 'page-id');
+ *
+ * // List recently edited pages
+ * const docs = await adapter.listPagesSince('database-id', '2024-01-01T00:00:00Z');
+ *
+ * // Create a new page
+ * const newDoc = await adapter.createPage('database-id', {
+ *   title: 'New Page',
+ *   content: '# Hello\n\nWorld',
+ *   contentType: 'markdown',
+ * });
+ * ```
+ */
+export class NotionDocumentAdapter implements DocumentSyncAdapter {
+  private readonly api: NotionApiClient;
+
+  constructor(api: NotionApiClient) {
+    this.api = api;
+  }
+
+  /**
+   * Fetch a single page by its ID.
+   *
+   * Retrieves the page properties and block children, converts the blocks
+   * to markdown, and returns a normalized ExternalDocument.
+   *
+   * @param project - The Notion database ID
+   * @param externalId - The Notion page ID
+   * @returns The page as an ExternalDocument, or null if not found
+   */
+  async getPage(project: string, externalId: string): Promise<ExternalDocument | null> {
+    try {
+      const [page, blocks] = await Promise.all([
+        this.api.getPage(externalId),
+        this.api.getBlocks(externalId),
+      ]);
+
+      const markdown = notionBlocksToMarkdown(blocks);
+      return pageToExternalDocument(page, markdown, project);
+    } catch (error: unknown) {
+      // Return null for not-found errors (matching adapter contract)
+      if (isNotFoundError(error)) {
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * List pages in a database that have been edited since a given timestamp.
+   *
+   * Queries the database with a `last_edited_time > since` filter and
+   * returns all matching pages as ExternalDocuments. Block content is
+   * fetched for each page to build the full document.
+   *
+   * @param project - The Notion database ID
+   * @param since - ISO 8601 timestamp to filter by last_edited_time
+   * @returns Array of ExternalDocuments edited since the given time
+   */
+  async listPagesSince(project: string, since: Timestamp): Promise<ExternalDocument[]> {
+    const filter = {
+      timestamp: 'last_edited_time',
+      last_edited_time: {
+        after: since,
+      },
+    };
+
+    const pages = await this.api.queryDatabaseAll(project, filter);
+
+    // Fetch blocks for each page and convert to ExternalDocument
+    const documents = await Promise.all(
+      pages.map(async (page) => {
+        const blocks = await this.api.getBlocks(page.id);
+        const markdown = notionBlocksToMarkdown(blocks);
+        return pageToExternalDocument(page, markdown, project);
+      })
+    );
+
+    return documents;
+  }
+
+  /**
+   * Create a new page in a Notion database.
+   *
+   * Converts the markdown content to Notion blocks, then creates a page
+   * with Title, Category (select), and Tags (multi_select) properties.
+   *
+   * @param project - The Notion database ID
+   * @param page - The document input with title and content
+   * @returns The created page as an ExternalDocument
+   */
+  async createPage(
+    project: string,
+    page: ExternalDocumentInput
+  ): Promise<ExternalDocument> {
+    // markdownToNotionBlocks returns NotionBlock[] which is structurally
+    // compatible with NotionBlockInput[] but needs a cast due to index signature
+    const blocks = markdownToNotionBlocks(page.content) as unknown as NotionBlockInput[];
+    const properties = buildPageProperties(page.title);
+
+    const createdPage = await this.api.createPage(project, properties, blocks);
+
+    // Return the created page as an ExternalDocument
+    // The content is the original markdown (we just sent it as blocks)
+    return pageToExternalDocument(createdPage, page.content, project);
+  }
+
+  /**
+   * Update an existing page's properties and/or content.
+   *
+   * If the updates include a title, the Title property is updated.
+   * If the updates include content, all existing blocks are replaced
+   * with new blocks converted from the updated markdown.
+   *
+   * @param project - The Notion database ID
+   * @param externalId - The Notion page ID to update
+   * @param updates - Partial updates to apply
+   * @returns The updated page as an ExternalDocument
+   */
+  async updatePage(
+    project: string,
+    externalId: string,
+    updates: Partial<ExternalDocumentInput>
+  ): Promise<ExternalDocument> {
+    // Update properties if title changed
+    if (updates.title !== undefined) {
+      const properties = buildPageProperties(updates.title);
+      await this.api.updatePage(externalId, properties);
+    }
+
+    // Update content blocks if content changed
+    if (updates.content !== undefined) {
+      const contentBlocks = markdownToNotionBlocks(updates.content) as unknown as NotionBlockInput[];
+      await this.api.updatePageContent(externalId, contentBlocks);
+    }
+
+    // Fetch the updated page to return a complete ExternalDocument
+    const [updatedPage, blocks] = await Promise.all([
+      this.api.getPage(externalId),
+      this.api.getBlocks(externalId),
+    ]);
+
+    const markdown = notionBlocksToMarkdown(blocks);
+    return pageToExternalDocument(updatedPage, markdown, project);
+  }
+}
+
+// ============================================================================
+// Error Helpers
+// ============================================================================
+
+/**
+ * Checks if an error represents a "not found" response from the Notion API.
+ */
+function isNotFoundError(error: unknown): boolean {
+  if (error && typeof error === 'object' && 'isNotFound' in error) {
+    return (error as { isNotFound: boolean }).isNotFound;
+  }
+  return false;
+}
+
+// ============================================================================
+// Factory
+// ============================================================================
+
+/**
+ * Create a NotionDocumentAdapter from a NotionApiClient.
+ *
+ * @param api - A configured NotionApiClient
+ * @returns A DocumentSyncAdapter for Notion
+ */
+export function createNotionDocumentAdapter(
+  api: NotionApiClient
+): NotionDocumentAdapter {
+  return new NotionDocumentAdapter(api);
+}

@@ -26,6 +26,7 @@ import type {
 } from '@stoneforge/core';
 import { createGitHubProvider, createGitHubPlaceholderProvider } from './providers/github/index.js';
 import { createLinearProvider, createLinearPlaceholderProvider } from './providers/linear/index.js';
+import { createNotionProvider, createNotionPlaceholderProvider } from './providers/notion/index.js';
 
 // ============================================================================
 // Types
@@ -178,7 +179,7 @@ export function createProviderRegistry(): ProviderRegistry {
 /**
  * Create a ProviderRegistry with default providers registered.
  *
- * Registers placeholder providers for GitHub and Linear by default.
+ * Registers placeholder providers for GitHub, Linear, and Notion by default.
  * The actual provider implementations replace these when configured with API keys.
  *
  * @returns A ProviderRegistry with default providers
@@ -187,13 +188,14 @@ export function createDefaultProviderRegistry(): ProviderRegistry {
   const registry = new ProviderRegistry();
   registry.register(createGitHubPlaceholderProvider());
   registry.register(createLinearPlaceholderProvider());
+  registry.register(createNotionPlaceholderProvider());
   return registry;
 }
 
 /**
  * Create a ProviderRegistry with real configured providers.
  *
- * Starts with placeholder providers for all known providers (GitHub, Linear),
+ * Starts with placeholder providers for all known providers (GitHub, Linear, Notion),
  * then replaces placeholders with real configured providers for any configs
  * that have a token set. This ensures providers without tokens remain as
  * placeholders (which throw descriptive errors), while configured providers
@@ -230,6 +232,13 @@ export function createConfiguredProviderRegistry(
         registry.register(
           createLinearProvider({
             apiKey: config.token,
+          })
+        );
+        break;
+      case 'notion':
+        registry.register(
+          createNotionProvider({
+            token: config.token,
           })
         );
         break;
