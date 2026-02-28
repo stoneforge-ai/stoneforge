@@ -175,6 +175,8 @@ sf update <id> [options]
 | `--tag <tag>`           | Replace all tags (can be repeated)                 |
 | `--add-tag <tag>`       | Add a tag (can be repeated)                        |
 | `--remove-tag <tag>`    | Remove a tag (can be repeated)                     |
+| `-d, --description <text>` | Update description (tasks: updates linked doc; documents: updates content) |
+| `--metadata <json>`     | JSON metadata to merge into element (null values remove keys) |
 
 ```bash
 sf update el-abc123 --title "New Title"
@@ -182,6 +184,8 @@ sf update el-abc123 --priority 1 --status in_progress
 sf update el-abc123 --add-tag urgent --add-tag frontend
 sf update el-abc123 --remove-tag old-tag
 sf update el-abc123 --assignee ""  # Unassign
+sf update el-abc123 --description "Updated description text"
+sf update el-abc123 --metadata '{"key": "value"}'
 ```
 
 #### delete

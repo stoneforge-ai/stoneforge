@@ -60,7 +60,8 @@ interface Configuration {
     conflictStrategy: ExternalSyncConflictStrategy;  // 'last_write_wins' | 'local_wins' | 'remote_wins' | 'manual'
     defaultDirection: SyncDirection;  // 'push' | 'pull' | 'bidirectional'
     autoLink: boolean;               // Auto-link new tasks to external provider (default: false)
-    autoLinkProvider?: string;       // Provider name for auto-linking (e.g., 'github')
+    autoLinkProvider?: string;       // Provider name for auto-linking tasks (e.g., 'github')
+    autoLinkDocumentProvider?: string; // Provider name for auto-linking documents (e.g., 'folder', 'notion')
   };
 }
 ```
@@ -139,7 +140,8 @@ type ConfigPath =
   | 'externalSync.conflictStrategy'
   | 'externalSync.defaultDirection'
   | 'externalSync.autoLink'
-  | 'externalSync.autoLinkProvider';
+  | 'externalSync.autoLinkProvider'
+  | 'externalSync.autoLinkDocumentProvider';
 ```
 
 ## Modifying Configuration
@@ -238,7 +240,8 @@ external_sync:
   conflict_strategy: last_write_wins
   default_direction: bidirectional
   auto_link: false
-  auto_link_provider: github  # Provider for auto-linking (when auto_link is true)
+  auto_link_provider: github  # Provider for auto-linking tasks (when auto_link is true)
+  auto_link_document_provider: folder  # Provider for auto-linking documents (e.g., 'folder', 'notion')
 ```
 
 ## Duration Strings
