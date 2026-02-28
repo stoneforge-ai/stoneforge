@@ -1,0 +1,258 @@
+/**
+ * Notion API Response Types
+ *
+ * Type definitions for Notion's REST API responses.
+ * These types represent the subset of Notion's schema used by the document sync provider.
+ *
+ * Only fields needed for document synchronization are included — this is not a
+ * comprehensive representation of the full Notion API.
+ *
+ * @see https://developers.notion.com/reference
+ */
+
+// ============================================================================
+// Rich Text Types
+// ============================================================================
+
+/**
+ * Notion rich text object — the atomic unit of formatted text.
+ *
+ * Rich text can be of type "text", "mention", or "equation".
+ * We only model "text" in detail since that's what we produce during sync.
+ */
+export interface NotionRichText {
+  /** The type of rich text object */
+  readonly type: 'text' | 'mention' | 'equation';
+  /** Plain text content without formatting */
+  readonly plain_text: string;
+  /** Text-specific content (present when type === 'text') */
+  readonly text?: {
+    /** The text content */
+    readonly content: string;
+    /** Optional link */
+    readonly link: { readonly url: string } | null;
+  };
+  /** Inline formatting annotations */
+  readonly annotations: {
+    readonly bold: boolean;
+    readonly italic: boolean;
+    readonly strikethrough: boolean;
+    readonly underline: boolean;
+    readonly code: boolean;
+    readonly color: string;
+  };
+  /** Optional URL for the rich text (e.g. links) */
+  readonly href: string | null;
+}
+
+// ============================================================================
+// Property Types
+// ============================================================================
+
+/**
+ * Notion page property value.
+ *
+ * Properties are typed fields on a page. Each property has a type discriminator
+ * and corresponding value field. We model the subset needed for document sync.
+ */
+export interface NotionProperty {
+  /** Unique property ID */
+  readonly id: string;
+  /** Property type discriminator */
+  readonly type: string;
+  /** Title property value (array of rich text) */
+  readonly title?: readonly NotionRichText[];
+  /** Rich text property value */
+  readonly rich_text?: readonly NotionRichText[];
+  /** Select property value */
+  readonly select?: { readonly id: string; readonly name: string; readonly color: string } | null;
+  /** Multi-select property value */
+  readonly multi_select?: readonly { readonly id: string; readonly name: string; readonly color: string }[];
+  /** Checkbox property value */
+  readonly checkbox?: boolean;
+  /** URL property value */
+  readonly url?: string | null;
+  /** Date property value */
+  readonly date?: { readonly start: string; readonly end: string | null } | null;
+  /** Number property value */
+  readonly number?: number | null;
+  /** Last edited time property value (ISO 8601) */
+  readonly last_edited_time?: string;
+  /** Created time property value (ISO 8601) */
+  readonly created_time?: string;
+}
+
+// ============================================================================
+// Block Types
+// ============================================================================
+
+/**
+ * Notion block object — the content building block of a page.
+ *
+ * Every block has a type discriminator and a corresponding type-specific object.
+ * We model the most common block types used in document content.
+ */
+export interface NotionBlock {
+  /** Unique block ID (UUID) */
+  readonly id: string;
+  /** Block type discriminator */
+  readonly type: string;
+  /** Whether this block has nested children */
+  readonly has_children: boolean;
+  /** Creation timestamp (ISO 8601) */
+  readonly created_time: string;
+  /** Last edit timestamp (ISO 8601) */
+  readonly last_edited_time: string;
+  /** Whether this block has been archived (deleted) */
+  readonly archived: boolean;
+
+  // Block type-specific content — only the type matching `type` field will be present
+  readonly paragraph?: { readonly rich_text: readonly NotionRichText[] };
+  readonly heading_1?: { readonly rich_text: readonly NotionRichText[] };
+  readonly heading_2?: { readonly rich_text: readonly NotionRichText[] };
+  readonly heading_3?: { readonly rich_text: readonly NotionRichText[] };
+  readonly bulleted_list_item?: { readonly rich_text: readonly NotionRichText[] };
+  readonly numbered_list_item?: { readonly rich_text: readonly NotionRichText[] };
+  readonly to_do?: { readonly rich_text: readonly NotionRichText[]; readonly checked: boolean };
+  readonly toggle?: { readonly rich_text: readonly NotionRichText[] };
+  readonly code?: { readonly rich_text: readonly NotionRichText[]; readonly language: string };
+  readonly quote?: { readonly rich_text: readonly NotionRichText[] };
+  readonly callout?: { readonly rich_text: readonly NotionRichText[]; readonly icon?: unknown };
+  readonly divider?: Record<string, never>;
+  readonly table_of_contents?: Record<string, never>;
+  readonly child_page?: { readonly title: string };
+  readonly child_database?: { readonly title: string };
+}
+
+// ============================================================================
+// Page Types
+// ============================================================================
+
+/**
+ * Notion page object.
+ *
+ * Pages are the primary content container in Notion. Each page has properties
+ * (metadata fields) and block children (the page content).
+ */
+export interface NotionPage {
+  /** Unique page ID (UUID) */
+  readonly id: string;
+  /** Object type (always "page") */
+  readonly object: 'page';
+  /** Creation timestamp (ISO 8601) */
+  readonly created_time: string;
+  /** Last edit timestamp (ISO 8601) */
+  readonly last_edited_time: string;
+  /** Whether the page has been archived (moved to trash) */
+  readonly archived: boolean;
+  /** URL to view the page in Notion */
+  readonly url: string;
+  /** Public URL if the page is published (null otherwise) */
+  readonly public_url: string | null;
+  /** Page properties keyed by property name */
+  readonly properties: Record<string, NotionProperty>;
+  /** Parent reference */
+  readonly parent:
+    | { readonly type: 'database_id'; readonly database_id: string }
+    | { readonly type: 'page_id'; readonly page_id: string }
+    | { readonly type: 'workspace'; readonly workspace: true };
+}
+
+// ============================================================================
+// Database Query Types
+// ============================================================================
+
+/**
+ * Response from querying a Notion database (POST /databases/{id}/query).
+ *
+ * Uses cursor-based pagination with `has_more` / `next_cursor`.
+ */
+export interface NotionDatabaseQueryResponse {
+  /** Object type (always "list") */
+  readonly object: 'list';
+  /** Array of page objects matching the query */
+  readonly results: readonly NotionPage[];
+  /** Whether there are more results beyond this page */
+  readonly has_more: boolean;
+  /** Cursor for the next page of results (null if no more) */
+  readonly next_cursor: string | null;
+  /** Type of items in the results */
+  readonly type: 'page_or_database';
+}
+
+/**
+ * Paginated response for block children (GET /blocks/{id}/children).
+ */
+export interface NotionBlockChildrenResponse {
+  /** Object type (always "list") */
+  readonly object: 'list';
+  /** Array of block objects */
+  readonly results: readonly NotionBlock[];
+  /** Whether there are more results beyond this page */
+  readonly has_more: boolean;
+  /** Cursor for the next page of results (null if no more) */
+  readonly next_cursor: string | null;
+  /** Type of items in the results */
+  readonly type: 'block';
+}
+
+// ============================================================================
+// Input Types (for creating/updating)
+// ============================================================================
+
+/**
+ * Input for creating a new block.
+ *
+ * When creating blocks, we provide the type and corresponding content object.
+ * This is a simplified version — only the block types we produce are included.
+ */
+export interface NotionBlockInput {
+  /** Block type */
+  readonly type: string;
+  /** Object key matching the type (e.g., 'paragraph', 'heading_1', etc.) */
+  readonly [key: string]: unknown;
+}
+
+/**
+ * Input for creating a page in a database.
+ */
+export interface NotionCreatePageInput {
+  /** Parent database or page reference */
+  readonly parent:
+    | { readonly database_id: string }
+    | { readonly page_id: string };
+  /** Page properties */
+  readonly properties: Record<string, unknown>;
+  /** Optional block children (page content) */
+  readonly children?: readonly NotionBlockInput[];
+}
+
+/**
+ * Input for updating page properties.
+ */
+export interface NotionUpdatePageInput {
+  /** Properties to update */
+  readonly properties?: Record<string, unknown>;
+  /** Whether to archive (trash) the page */
+  readonly archived?: boolean;
+}
+
+// ============================================================================
+// Error Response Types
+// ============================================================================
+
+/**
+ * Notion API error response body.
+ *
+ * @see https://developers.notion.com/reference/errors
+ */
+export interface NotionErrorResponse {
+  /** Object type (always "error") */
+  readonly object: 'error';
+  /** HTTP status code */
+  readonly status: number;
+  /** Notion-specific error code (e.g., "validation_error", "object_not_found") */
+  readonly code: string;
+  /** Human-readable error message */
+  readonly message: string;
+}
