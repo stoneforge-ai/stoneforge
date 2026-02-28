@@ -1619,7 +1619,7 @@ async function createProviderFromSettings(
       return { error: `Provider "${providerName}" has no token configured. Run "sf external-sync config set-token ${providerName} <token>" first.` };
     }
 
-    const project = projectOverride ?? providerConfig.defaultProject;
+    const project = projectOverride ?? providerConfig?.defaultProject;
     if (!project) {
       return { error: `No project specified and provider "${providerName}" has no default project configured. Use --project or run "sf external-sync config set-project ${providerName} <project>" first.` };
     }
