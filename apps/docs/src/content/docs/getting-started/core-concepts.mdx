@@ -65,6 +65,14 @@ Tasks are the primary work unit in Stoneforge. They track what needs to be done,
 
 Valid statuses: `backlog`, `open`, `in_progress`, `blocked`, `deferred`, `review`, `closed`, `tombstone`.
 
+The Tasks page shows task statuses, priorities, and assignments in both list and kanban views:
+
+![The Tasks kanban view organizes tasks into columns by status — Backlog, Unassigned, Assigned, In Progress, and more.](/screenshots/tasks-kanban.png)
+
+Click any task to open its detail panel with status, priority, assignee, dependencies, and description:
+
+![The task detail panel shows all task metadata including status, priority, complexity, assignee, tags, description, attachments, and dependencies.](/screenshots/task-detail.png)
+
 ## Agents
 
 Agents are AI coding assistants that execute tasks. Each agent has a **role** that determines its behavior:
@@ -81,6 +89,8 @@ Agents are AI coding assistants that execute tasks. Each agent has a **role** th
 </Aside>
 
 Agents can use **Claude Code** (default), **OpenCode**, or **OpenAI Codex** as their underlying provider. Authentication is configured within the provider CLI and passes through automatically — no API keys needed in Stoneforge.
+
+![The Agents page groups agents by role — Director, Persistent Workers, and Ephemeral Workers — showing their status and provider.](/screenshots/agents-page.png)
 
 ## Agent pools
 
@@ -109,6 +119,8 @@ Stoneforge manages the full worktree lifecycle: creation, branch setup, and clea
 
 The orchestration loop is the core engine that drives Stoneforge:
 
+![The Director Panel is where you communicate goals to the Director agent.](/screenshots/director-panel.png)
+
 1. You communicate your goal to the **Director** via the Director Panel
 2. Director creates a **plan** with tasks, priorities, and dependencies
 3. **Dispatch daemon** detects ready (unblocked, unassigned) tasks
@@ -128,6 +140,8 @@ When a worker finishes a task:
 4. Steward runs your test command against the branch
 5. **Tests pass** — squash-merge into main, clean up worktree
 6. **Tests fail** — create a fix task, assign to next available worker
+
+![The Merge Requests page tracks merge status for completed work — review, testing, conflicts, and merged.](/screenshots/merge-requests-page.png)
 
 ### Handoff
 

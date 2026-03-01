@@ -105,6 +105,10 @@ The key difference from ephemeral workers: persistent workers use `sf merge` for
   Persistent workers are not auto-dispatched. You start them manually with `sf agent start`, and they stay alive for the duration of your interactive session.
 </Aside>
 
+The Workspaces page provides a terminal multiplexer for viewing and interacting with agent sessions side by side:
+
+![The Workspaces page provides a terminal multiplexer for viewing agent sessions in configurable pane layouts.](/screenshots/workspaces-page.png)
+
 ## The handoff mechanism
 
 When a worker can't complete a task — missing access, context window exhaustion, needs different expertise — it **hands off**. The task returns to the pool with context notes, and the next worker picks it up from the existing code state.

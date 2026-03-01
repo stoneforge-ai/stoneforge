@@ -96,6 +96,8 @@ Stoneforge has two main layers:
                           tests fail? ──▶ task handoff created
 ```
 
+![The Director Panel opens as a sidebar where you describe goals and communicate with the Director agent.](/screenshots/director-panel.png)
+
 1. You communicate your goal to the **Director** via the Director Panel in the web dashboard
 2. Director creates a plan with tasks, priorities, and dependencies
 3. **Dispatch daemon** detects ready (unblocked, unassigned) tasks and assigns them to idle workers
@@ -114,6 +116,12 @@ Stoneforge has two main layers:
 | **Steward** | Handles maintenance workflows — merge review, documentation scanning, recovery of stuck tasks, custom workflows. Runs on triggers or schedules. |
 
 The **dispatch daemon** is a background process (not an agent role) that watches for ready tasks and assigns them to idle workers. Start it with `sf daemon start`.
+
+## The dashboard
+
+The Stoneforge web dashboard gives you real-time visibility into everything happening across your agents:
+
+![The Activity page shows active agents, live status badges, and an event feed of recent orchestration activity.](/screenshots/activity-page.png)
 
 ## What you get
 
