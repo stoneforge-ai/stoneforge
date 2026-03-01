@@ -536,8 +536,8 @@ interface EmbeddingProvider {
 | `indexDocument(docId, content)` | `Promise<void>` | Generate and store embedding for a document |
 | `removeDocument(docId)` | `void` | Remove the embedding for a document |
 | `searchSemantic(query, limit?)` | `Promise<SemanticSearchResult[]>` | Semantic search via cosine similarity |
-| `searchHybrid(query, limit?)` | `Promise<RankedResult[]>` | Combine FTS5 + semantic via reciprocal rank fusion |
-| `reindexAll(contentFn)` | `Promise<{ indexed, skipped, failed }>` | Re-embed all documents |
+| `searchHybrid(query, ftsDocIds, limit?, k?)` | `Promise<{ documentId, score }[]>` | Combine FTS5 + semantic via reciprocal rank fusion |
+| `reindexAll(documents, onProgress?)` | `Promise<{ indexed, errors }>` | Re-embed all documents |
 
 ### Auto-Embedding via API Registration
 
