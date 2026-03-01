@@ -1,5 +1,11 @@
 # @stoneforge/smithy-web
 
+## 1.14.0
+
+### Patch Changes
+
+- @stoneforge/ui@1.14.0
+
 ## 1.13.0
 
 ### Minor Changes
