@@ -1468,17 +1468,20 @@ Arguments:
 
 Options:
   -t, --title <text>       New title
+  -d, --description <text> New description (updates linked document)
   -p, --priority <1-5>     New priority
   -c, --complexity <1-5>   New complexity
-  -s, --status <status>    New status (open, in_progress, closed, deferred)
+  -s, --status <status>    New status (open, in_progress, backlog, review, closed, deferred)
   -a, --assignee <id>      New assignee (empty string to unassign)
+      --metadata <json>    JSON metadata to merge (null values remove keys)
       --tag <tag>          Replace all tags
       --add-tag <tag>      Add a tag
       --remove-tag <tag>   Remove a tag
 
 Examples:
   sf task update el-abc123 --title "New Title"
-  sf task update el-abc123 --priority 1 --status in_progress`,
+  sf task update el-abc123 --priority 1 --status in_progress
+  sf task update el-abc123 -d "Updated description text"`,
   options: updateOptions,
   handler: updateHandler as Command['handler'],
 };

@@ -170,7 +170,7 @@ sf update <id> [options]
 | `-t, --title <text>`    | New title                                          |
 | `-p, --priority <1-5>`  | New priority (tasks only)                          |
 | `-c, --complexity <1-5>`| New complexity (tasks only)                        |
-| `-s, --status <status>` | New status (tasks only: open, in_progress, closed, deferred) |
+| `-s, --status <status>` | New status (tasks only: open, in_progress, backlog, review, closed, deferred) |
 | `-a, --assignee <id>`   | New assignee (tasks only, empty string to unassign) |
 | `-d, --description <text>` | Update description (tasks: updates linked doc; documents: updates content) |
 | `--metadata <json>`    | JSON metadata to merge into element (null values remove keys) |
@@ -1758,7 +1758,7 @@ When linking documents (`--type document`), system-managed categories (e.g., `ta
 # Bulk-link tasks
 sf external-sync link-all --provider github
 sf external-sync link-all --provider github --project my-org/my-repo
-sf external-sync link-all --provider github --status active --status blocked
+sf external-sync link-all --provider github --status open --status in_progress
 sf external-sync link-all --provider github --dry-run
 sf external-sync link-all --provider github --batch-size 5
 sf external-sync link-all --provider linear --force

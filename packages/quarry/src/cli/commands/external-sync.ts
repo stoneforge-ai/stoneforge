@@ -1707,7 +1707,7 @@ const linkAllOptions: CommandOption[] = [
   {
     name: 'force',
     short: 'f',
-    description: 'Re-link elements that are already linked to a different provider',
+    description: 'Re-link elements that are already linked (including same provider)',
   },
   {
     name: 'type',
