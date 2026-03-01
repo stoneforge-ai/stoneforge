@@ -1,5 +1,12 @@
 # @stoneforge/core
 
+## 1.14.0
+
+### Minor Changes
+
+- 7b0894c: Add optional `libraryPath` field to `ExternalDocumentInput` for organizing documents into subdirectories based on library membership
+- 89a73d8: Add optional `category` and `tags` fields to `ExternalDocumentInput` type for passing document metadata through the external sync pipeline
+
 ## 1.13.0
 
 ### Minor Changes

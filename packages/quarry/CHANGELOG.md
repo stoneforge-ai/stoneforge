@@ -1,5 +1,49 @@
 # @stoneforge/quarry
 
+## 1.14.0
+
+### Minor Changes
+
+- a82e4f8: Add --description (-d) and --metadata flags to sf update command. Description flag updates linked description documents for tasks or content for documents. Metadata flag merges JSON into existing element metadata with null-key removal.
+- eb08c40: Add Notion REST API client with types, pagination, rate limit retry, and typed error handling for document sync.
+- 4c78782: Add unlink-all command and fix link-all --force for same provider
+
+  - `sf external-sync unlink-all` command for bulk-removing external links with `--provider`, `--type`, and `--dry-run` options
+  - `link-all --force` now re-links elements already linked to the same provider (previously only re-linked from different providers)
+
+- ff96f34: Add per-type auto-link config for document providers. New `autoLinkDocumentProvider` config key allows configuring a separate auto-link provider for documents, independent of the task auto-link provider. CLI commands `set-auto-link` and `disable-auto-link` now accept a `--type` flag (`task`/`document`/`all`).
+- 0fe35b1: Add document sync adapter utilities for provider-agnostic document sync conversion logic
+- 76f4eec: Add folder document adapter and provider for local filesystem document sync
+- 4613863: Add folder filesystem client for the folder sync provider with readFile, writeFile, listFiles, and YAML frontmatter support
+- 7b0894c: Organize synced documents into library-based folder hierarchy when using the folder provider
+- 940fa7b: Add Notion blocks to markdown bidirectional converter with support for paragraphs, headings, lists, code blocks, blockquotes, checkboxes, and rich text formatting.
+- b75f07f: Add Notion document sync adapter and provider implementing DocumentSyncAdapter for bidirectional page synchronization. Register Notion in the default provider registry.
+- 89a73d8: Pass document category and tags through external sync pipeline to Notion, populating Category (select) and Tags (multi_select) properties on synced pages
+- ed6c56c: Extend sync engine with document push/pull paths alongside existing task sync
+
+### Patch Changes
+
+- 42a2618: Allow token-free providers (e.g., folder) in createProviderFromSettings. The folder provider no longer requires a token to be configured — only a project path is needed.
+- 0497707: Fix Notion page creation and content updates for large documents by batching block appends to respect the 100-block-per-request API limit
+- f52c7bb: Fix Notion API rejection of text blocks longer than 2000 characters by chunking rich text elements at word boundaries and splitting long code blocks into consecutive blocks
+- d973b7b: Fix Notion adapter to discover database schema instead of hardcoding property names. The title property name is now discovered from the database schema (supporting databases where it's called "Name", "Title", or any custom name). Category and Tags properties are auto-created if missing, with graceful fallback when the integration lacks permission.
+- 5e12790: Fix duplicate document titles in folder provider. createPage() now appends numeric suffixes (e.g., my-doc-2.md, my-doc-3.md) when a file with the slugified title already exists, preventing silent overwrites.
+- 3a02a16: Map code fence language identifiers to Notion's allowed values, preventing API rejections for unsupported languages like "tsx". Unknown languages fall back to "plain text".
+- f5af534: Pass IdGeneratorConfig to createEntity, createWorkflow, and createTeam factory functions in quarry-server routes for adaptive hash length and collision detection.
+- 832d362: Pass idConfig to createWorkflowFromPlaybook in quarry server route for adaptive hash length and collision detection.
+- 8794e6a: Pass IdGeneratorConfig to createTask and createDocument factory functions in quarry-server routes for adaptive hash length and collision detection
+- 0f4412d: Skip untitled documents during document link-all and sync pull operations. Documents with no title (null, undefined, or whitespace-only) are now filtered out to prevent them from slugifying to "untitled.md" and overwriting each other.
+- 411cd24: Wire IdLengthCache and checkCollision into QuarryAPI element creation to prevent ID collisions on large databases. QuarryAPI now exposes getIdGeneratorConfig() for adaptive hash length and collision detection.
+- bd19f33: Wire Notion and Folder providers into registry; extend CLI push/pull/sync/link/link-all/status with --type flag for document support
+- Updated dependencies [7b0894c]
+- Updated dependencies [89a73d8]
+- Updated dependencies [832d362]
+- Updated dependencies [c5b5e07]
+  - @stoneforge/core@1.14.0
+  - @stoneforge/smithy@1.14.0
+  - @stoneforge/shared-routes@1.14.0
+  - @stoneforge/storage@1.14.0
+
 ## 1.13.0
 
 ### Minor Changes
