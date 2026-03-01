@@ -209,7 +209,7 @@ if (result.hasCycle) {
 }
 ```
 
-**Note:** `api.addDependency()` auto-checks for cycles on blocking dependency types and throws a `ConflictError` with `CYCLE_DETECTED` if a cycle would be created. You can also check manually with `detectCycle()` for more detailed results (cycle path, nodes visited, depth limit status).
+**Note:** `api.addDependency()` does NOT auto-check for cycles. Use `DependencyService.detectCycle()` manually before adding blocking dependencies for detailed results (cycle path, nodes visited, depth limit status). Self-referential dependencies are rejected immediately with `CYCLE_DETECTED`.
 
 Cycle detection:
 - Only applies to blocking dependency types

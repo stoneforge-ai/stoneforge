@@ -230,7 +230,7 @@ app.get('/api/tasks/:id', async (c) => {
   const hydrate = c.req.query('hydrate') === 'true';
 
   const task = await api.get(id, hydrate ? {
-    hydrate: { description: true, design: true }
+    hydrate: { description: true, content: true }
   } : undefined);
 
   return c.json(task);

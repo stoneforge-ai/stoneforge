@@ -173,8 +173,13 @@ The BlockedCacheService automatically transitions tasks:
 
 ```typescript
 // Enable auto-transitions
-blockedCache.setStatusTransitionCallback((elementId, newStatus, reason) => {
-  return api.update(elementId, { status: newStatus });
+blockedCache.setStatusTransitionCallback({
+  onBlock: (elementId, previousStatus) => {
+    api.update(elementId, { status: 'blocked' });
+  },
+  onUnblock: (elementId, statusToRestore) => {
+    api.update(elementId, { status: statusToRestore });
+  },
 });
 ```
 
@@ -271,9 +276,9 @@ import { createDependencyService } from '@stoneforge/quarry';
 const depService = createDependencyService(storage);
 
 // Check before adding
-const hasCycle = depService.detectCycle(blockedId, blockerId, 'blocks');
-if (hasCycle) {
-  throw new Error('Would create a cycle');
+const result = depService.detectCycle(blockedId, blockerId, 'blocks');
+if (result.hasCycle) {
+  throw new Error(`Would create a cycle: ${result.cyclePath?.join(' -> ')}`);
 }
 
 await api.addDependency({ blockedId, blockerId, type: 'blocks' });
