@@ -595,7 +595,7 @@ export interface PlaybookFilter {
  * Aggregated metrics for a single provider or model group
  */
 export interface AggregatedProviderMetrics {
-  /** Group key (provider name or model name) */
+  /** Group key (provider name, model name, task ID, or agent ID) */
   group: string;
   /** Total input tokens */
   totalInputTokens: number;
@@ -613,6 +613,8 @@ export interface AggregatedProviderMetrics {
   failedCount: number;
   /** Number of rate-limited sessions */
   rateLimitedCount: number;
+  /** Estimated cost in USD */
+  estimatedCost: number;
 }
 
 /**
@@ -631,6 +633,19 @@ export interface ProviderTimeSeriesPoint {
   sessionCount: number;
   /** Average duration in milliseconds for this bucket */
   avgDurationMs: number;
+  /** Estimated cost in USD for this bucket */
+  estimatedCost: number;
+}
+
+/**
+ * Totals across all metrics groups
+ */
+export interface ProviderMetricsTotals {
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalTokens: number;
+  sessionCount: number;
+  estimatedCost: number;
 }
 
 /**
@@ -640,5 +655,6 @@ export interface ProviderMetricsResponse {
   timeRange: { days: number; label: string };
   groupBy: string;
   metrics: AggregatedProviderMetrics[];
+  totals: ProviderMetricsTotals;
   timeSeries?: ProviderTimeSeriesPoint[];
 }

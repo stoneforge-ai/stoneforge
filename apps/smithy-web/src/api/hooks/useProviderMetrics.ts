@@ -37,9 +37,9 @@ async function fetchApi<T>(path: string): Promise<T> {
 export interface UseProviderMetricsOptions {
   /** Time range in days (7, 14, 30) */
   days?: number;
-  /** Group by 'provider' or 'model' */
-  groupBy?: 'provider' | 'model';
-  /** Whether to include time-series data */
+  /** Group by 'provider', 'model', 'task', or 'agent' */
+  groupBy?: 'provider' | 'model' | 'task' | 'agent';
+  /** Whether to include time-series data (only for provider/model groupBy) */
   includeSeries?: boolean;
 }
 

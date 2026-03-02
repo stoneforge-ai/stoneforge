@@ -3,6 +3,8 @@
  *
  * Displays LLM provider usage metrics including token counts,
  * estimated costs, session counts, and error rates.
+ *
+ * Supports grouping by provider, model, task, or agent.
  */
 
 import type { Command, GlobalOptions, CommandResult, CommandOption } from '../types.js';
@@ -23,6 +25,7 @@ interface AggregateRow {
   avg_duration_ms: number;
   failed_count: number;
   rate_limited_count: number;
+  total_estimated_cost: number;
 }
 
 interface MetricsSummary {
@@ -49,6 +52,8 @@ interface MetricsSummary {
   };
 }
 
+type GroupByOption = 'provider' | 'model' | 'task' | 'agent';
+
 // ============================================================================
 // Helpers
 // ============================================================================
@@ -64,16 +69,6 @@ function parseTimeRange(value: string | undefined): number {
     if (days > 0 && days <= 365) return days;
   }
   return 7;
-}
-
-/**
- * Rough cost estimate based on token counts.
- * Uses approximate Claude pricing: $3/MTok input, $15/MTok output.
- */
-function estimateCost(inputTokens: number, outputTokens: number): number {
-  const inputCost = (inputTokens / 1_000_000) * 3;
-  const outputCost = (outputTokens / 1_000_000) * 15;
-  return inputCost + outputCost;
 }
 
 /**
@@ -107,26 +102,61 @@ function formatCost(cost: number): string {
 }
 
 /**
- * Query aggregated metrics directly from the database
+ * Query aggregated metrics directly from the database.
+ * Uses the estimated_cost column stored at recording time.
  */
 function queryMetrics(
   backend: StorageBackend,
   days: number,
-  groupBy: 'provider' | 'model',
-  providerFilter?: string
+  groupBy: GroupByOption,
+  providerFilter?: string,
+  taskFilter?: string,
+  agentFilter?: string
 ): AggregateRow[] {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - days);
   const cutoffStr = cutoff.toISOString();
 
-  const groupExpr = groupBy === 'provider' ? 'provider' : "COALESCE(model, 'unknown')";
+  let groupExpr: string;
+  switch (groupBy) {
+    case 'model':
+      groupExpr = "COALESCE(model, 'unknown')";
+      break;
+    case 'task':
+      groupExpr = "COALESCE(task_id, 'unassigned')";
+      break;
+    case 'agent':
+      groupExpr = "COALESCE(agent_id, 'unknown')";
+      break;
+    default:
+      groupExpr = 'provider';
+  }
+
+  const conditions: string[] = ['timestamp >= ?'];
   const params: unknown[] = [cutoffStr];
 
-  let whereClause = 'WHERE timestamp >= ?';
   if (providerFilter) {
-    whereClause += ' AND provider = ?';
+    conditions.push('provider = ?');
     params.push(providerFilter);
   }
+  if (taskFilter) {
+    conditions.push('task_id = ?');
+    params.push(taskFilter);
+  }
+  if (agentFilter) {
+    conditions.push('agent_id = ?');
+    params.push(agentFilter);
+  }
+
+  // For task/agent views, exclude rows without the relevant ID
+  if (groupBy === 'task') {
+    conditions.push('task_id IS NOT NULL');
+  }
+  if (groupBy === 'agent') {
+    conditions.push('agent_id IS NOT NULL');
+  }
+
+  const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
   return backend.query<AggregateRow>(
     `SELECT
@@ -136,11 +166,12 @@ function queryMetrics(
        COUNT(*) AS session_count,
        COALESCE(AVG(duration_ms), 0) AS avg_duration_ms,
        COALESCE(SUM(CASE WHEN outcome = 'failed' THEN 1 ELSE 0 END), 0) AS failed_count,
-       COALESCE(SUM(CASE WHEN outcome = 'rate_limited' THEN 1 ELSE 0 END), 0) AS rate_limited_count
+       COALESCE(SUM(CASE WHEN outcome = 'rate_limited' THEN 1 ELSE 0 END), 0) AS rate_limited_count,
+       COALESCE(SUM(estimated_cost), 0) AS total_estimated_cost
      FROM provider_metrics
      ${whereClause}
      GROUP BY group_key
-     ORDER BY total_input_tokens + total_output_tokens DESC`,
+     ORDER BY total_estimated_cost DESC`,
     params
   );
 }
@@ -161,9 +192,16 @@ async function metricsHandler(
   try {
     const days = parseTimeRange(options.range as string | undefined);
     const providerFilter = options.provider as string | undefined;
-    const groupBy = (options['group-by'] as string | undefined) === 'model' ? 'model' : 'provider';
+    const taskFilter = options.task as string | undefined;
+    const agentFilter = options.agent as string | undefined;
 
-    const rows = queryMetrics(backend, days, groupBy, providerFilter);
+    const groupByRaw = options['group-by'] as string | undefined;
+    let groupBy: GroupByOption = 'provider';
+    if (groupByRaw === 'model' || groupByRaw === 'task' || groupByRaw === 'agent') {
+      groupBy = groupByRaw;
+    }
+
+    const rows = queryMetrics(backend, days, groupBy, providerFilter, taskFilter, agentFilter);
 
     const metrics = rows.map(row => ({
       group: row.group_key,
@@ -177,7 +215,7 @@ async function metricsHandler(
         : 0,
       failedCount: Number(row.failed_count),
       rateLimitedCount: Number(row.rate_limited_count),
-      estimatedCost: estimateCost(Number(row.total_input_tokens), Number(row.total_output_tokens)),
+      estimatedCost: Number(row.total_estimated_cost),
     }));
 
     const totals = {
@@ -197,11 +235,21 @@ async function metricsHandler(
 
     // Build human-readable output
     const lines: string[] = [];
-    const groupLabel = groupBy === 'provider' ? 'Provider' : 'Model';
+    const groupLabels: Record<GroupByOption, string> = {
+      provider: 'Provider',
+      model: 'Model',
+      task: 'Task',
+      agent: 'Agent',
+    };
+    const groupLabel = groupLabels[groupBy];
 
     lines.push(`Provider Metrics (last ${days} days)`);
-    if (providerFilter) {
-      lines.push(`Filtered by provider: ${providerFilter}`);
+    const filters: string[] = [];
+    if (providerFilter) filters.push(`provider: ${providerFilter}`);
+    if (taskFilter) filters.push(`task: ${taskFilter}`);
+    if (agentFilter) filters.push(`agent: ${agentFilter}`);
+    if (filters.length > 0) {
+      lines.push(`Filtered by ${filters.join(', ')}`);
     }
     lines.push('');
 
@@ -260,7 +308,19 @@ const metricsOptions: CommandOption[] = [
   {
     name: 'group-by',
     short: 'g',
-    description: 'Group by: provider (default) or model',
+    description: 'Group by: provider (default), model, task, or agent',
+    hasValue: true,
+  },
+  {
+    name: 'task',
+    short: 't',
+    description: 'Filter by task ID',
+    hasValue: true,
+  },
+  {
+    name: 'agent',
+    short: 'a',
+    description: 'Filter by agent ID',
     hasValue: true,
   },
 ];
@@ -277,16 +337,22 @@ export const metricsCommand: Command = {
 session counts, average duration, and error rates.
 
 Options:
-  --range, -r    Time range (e.g., 7d, 14d, 30d). Default: 7d
-  --provider, -p Filter by provider name (e.g., claude-code)
-  --group-by, -g Group by: provider (default) or model
+  --range, -r      Time range (e.g., 7d, 14d, 30d). Default: 7d
+  --provider, -p   Filter by provider name (e.g., claude-code)
+  --group-by, -g   Group by: provider (default), model, task, or agent
+  --task, -t       Filter by task ID
+  --agent, -a      Filter by agent ID
 
 Examples:
-  sf metrics                  Show metrics for last 7 days
-  sf metrics --range 30d      Show metrics for last 30 days
+  sf metrics                         Show metrics for last 7 days
+  sf metrics --range 30d             Show metrics for last 30 days
   sf metrics --provider claude-code  Filter by provider
   sf metrics --group-by model        Group by model
-  sf metrics --json           Output as JSON`,
+  sf metrics --group-by task         Show per-task cost breakdown
+  sf metrics --group-by agent        Show per-agent cost breakdown
+  sf metrics --task el-abc123        Show metrics for a specific task
+  sf metrics --agent el-xyz789       Show metrics for a specific agent
+  sf metrics --json                  Output as JSON`,
   handler: metricsHandler,
   options: metricsOptions,
 };

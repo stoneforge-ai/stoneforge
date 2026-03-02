@@ -282,7 +282,13 @@ export {
   type TimeRange,
   type AggregatedMetrics,
   type TimeSeriesPoint,
+  type ModelPricing,
+  type PricingConfig,
   type MetricsService,
+  // Constants
+  DEFAULT_PRICING,
+  // Utilities
+  calculateEstimatedCost,
   // Factory
   createMetricsService,
 } from './metrics-service.js';

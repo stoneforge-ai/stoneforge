@@ -9,8 +9,11 @@ import * as fs from 'fs';
 import { createStorage, initializeSchema } from '@stoneforge/storage';
 import {
   createMetricsService,
+  calculateEstimatedCost,
+  DEFAULT_PRICING,
   type MetricsService,
   type RecordMetricInput,
+  type PricingConfig,
 } from './metrics-service.js';
 
 describe('MetricsService', () => {
@@ -42,6 +45,7 @@ describe('MetricsService', () => {
           model: 'claude-sonnet-4',
           sessionId: 'session-1',
           taskId: 'el-abc1',
+          agentId: 'el-agent1',
           inputTokens: 1000,
           outputTokens: 500,
           durationMs: 5000,
@@ -79,6 +83,38 @@ describe('MetricsService', () => {
       const result = service.aggregateByProvider({ days: 7 });
       expect(result).toHaveLength(1);
       expect(result[0].sessionCount).toBe(5);
+    });
+
+    test('stores estimated cost at recording time', () => {
+      service.record({
+        provider: 'claude-code',
+        model: 'claude-sonnet-4-20250514',
+        sessionId: 'session-cost-1',
+        inputTokens: 1_000_000, // 1M input tokens = $3
+        outputTokens: 1_000_000, // 1M output tokens = $15
+        durationMs: 5000,
+        outcome: 'completed',
+      });
+
+      const result = service.aggregateByProvider({ days: 7 });
+      expect(result).toHaveLength(1);
+      expect(result[0].estimatedCost).toBeCloseTo(18, 1); // $3 + $15
+    });
+
+    test('records agentId when provided', () => {
+      service.record({
+        provider: 'claude-code',
+        sessionId: 'session-agent-1',
+        agentId: 'el-agent1',
+        inputTokens: 1000,
+        outputTokens: 500,
+        durationMs: 5000,
+        outcome: 'completed',
+      });
+
+      const result = service.aggregateByAgent({ days: 7 });
+      expect(result).toHaveLength(1);
+      expect(result[0].group).toBe('el-agent1');
     });
   });
 
@@ -131,6 +167,7 @@ describe('MetricsService', () => {
       expect(claudeMetric!.sessionCount).toBe(2);
       expect(claudeMetric!.avgDurationMs).toBe(7500);
       expect(claudeMetric!.errorRate).toBe(0);
+      expect(claudeMetric!.estimatedCost).toBeGreaterThan(0);
 
       const opencodeMetric = result.find(m => m.group === 'opencode');
       expect(opencodeMetric).toBeDefined();
@@ -196,7 +233,7 @@ describe('MetricsService', () => {
       expect(result7d[0].sessionCount).toBe(1);
     });
 
-    test('orders by total tokens descending', () => {
+    test('orders by estimated cost descending', () => {
       service.record({
         provider: 'small-provider',
         sessionId: 'session-1',
@@ -217,6 +254,22 @@ describe('MetricsService', () => {
       const result = service.aggregateByProvider({ days: 7 });
       expect(result[0].group).toBe('big-provider');
       expect(result[1].group).toBe('small-provider');
+    });
+
+    test('includes estimatedCost in aggregated metrics', () => {
+      service.record({
+        provider: 'claude-code',
+        sessionId: 'session-1',
+        inputTokens: 1000,
+        outputTokens: 500,
+        durationMs: 5000,
+        outcome: 'completed',
+      });
+
+      const result = service.aggregateByProvider({ days: 7 });
+      expect(result[0]).toHaveProperty('estimatedCost');
+      expect(typeof result[0].estimatedCost).toBe('number');
+      expect(result[0].estimatedCost).toBeGreaterThanOrEqual(0);
     });
   });
 
@@ -285,6 +338,122 @@ describe('MetricsService', () => {
   });
 
   // ========================================================================
+  // aggregateByTask()
+  // ========================================================================
+
+  describe('aggregateByTask', () => {
+    test('returns empty array when no metrics have task IDs', () => {
+      service.record({
+        provider: 'claude-code',
+        sessionId: 'session-no-task',
+        inputTokens: 1000,
+        outputTokens: 500,
+        durationMs: 5000,
+        outcome: 'completed',
+      });
+
+      const result = service.aggregateByTask({ days: 7 });
+      expect(result).toEqual([]);
+    });
+
+    test('aggregates metrics by task ID', () => {
+      service.record({
+        provider: 'claude-code',
+        sessionId: 'session-1',
+        taskId: 'el-task1',
+        inputTokens: 1000,
+        outputTokens: 500,
+        durationMs: 5000,
+        outcome: 'completed',
+      });
+      service.record({
+        provider: 'claude-code',
+        sessionId: 'session-2',
+        taskId: 'el-task1',
+        inputTokens: 2000,
+        outputTokens: 1000,
+        durationMs: 8000,
+        outcome: 'completed',
+      });
+      service.record({
+        provider: 'claude-code',
+        sessionId: 'session-3',
+        taskId: 'el-task2',
+        inputTokens: 500,
+        outputTokens: 200,
+        durationMs: 3000,
+        outcome: 'completed',
+      });
+
+      const result = service.aggregateByTask({ days: 7 });
+      expect(result).toHaveLength(2);
+
+      const task1 = result.find(m => m.group === 'el-task1');
+      expect(task1).toBeDefined();
+      expect(task1!.sessionCount).toBe(2);
+      expect(task1!.totalInputTokens).toBe(3000);
+    });
+  });
+
+  // ========================================================================
+  // aggregateByAgent()
+  // ========================================================================
+
+  describe('aggregateByAgent', () => {
+    test('returns empty array when no metrics have agent IDs', () => {
+      service.record({
+        provider: 'claude-code',
+        sessionId: 'session-no-agent',
+        inputTokens: 1000,
+        outputTokens: 500,
+        durationMs: 5000,
+        outcome: 'completed',
+      });
+
+      const result = service.aggregateByAgent({ days: 7 });
+      expect(result).toEqual([]);
+    });
+
+    test('aggregates metrics by agent ID', () => {
+      service.record({
+        provider: 'claude-code',
+        sessionId: 'session-1',
+        agentId: 'el-agent1',
+        inputTokens: 1000,
+        outputTokens: 500,
+        durationMs: 5000,
+        outcome: 'completed',
+      });
+      service.record({
+        provider: 'claude-code',
+        sessionId: 'session-2',
+        agentId: 'el-agent1',
+        inputTokens: 2000,
+        outputTokens: 1000,
+        durationMs: 8000,
+        outcome: 'completed',
+      });
+      service.record({
+        provider: 'claude-code',
+        sessionId: 'session-3',
+        agentId: 'el-agent2',
+        inputTokens: 500,
+        outputTokens: 200,
+        durationMs: 3000,
+        outcome: 'completed',
+      });
+
+      const result = service.aggregateByAgent({ days: 7 });
+      expect(result).toHaveLength(2);
+
+      const agent1 = result.find(m => m.group === 'el-agent1');
+      expect(agent1).toBeDefined();
+      expect(agent1!.sessionCount).toBe(2);
+      expect(agent1!.totalInputTokens).toBe(3000);
+    });
+  });
+
+  // ========================================================================
   // getTimeSeries()
   // ========================================================================
 
@@ -311,6 +480,8 @@ describe('MetricsService', () => {
       expect(result[0].totalOutputTokens).toBe(500);
       expect(result[0].sessionCount).toBe(1);
       expect(result[0].bucket).toBeDefined();
+      expect(result[0]).toHaveProperty('estimatedCost');
+      expect(result[0].estimatedCost).toBeGreaterThanOrEqual(0);
     });
 
     test('returns time-bucketed data grouped by model', () => {
@@ -356,6 +527,98 @@ describe('MetricsService', () => {
   });
 
   // ========================================================================
+  // estimateCost()
+  // ========================================================================
+
+  describe('estimateCost', () => {
+    test('estimates cost using default pricing', () => {
+      const cost = service.estimateCost(1_000_000, 1_000_000);
+      // Default fallback: $3/MTok input + $15/MTok output = $18
+      expect(cost).toBeCloseTo(18, 1);
+    });
+
+    test('estimates cost for known model', () => {
+      const cost = service.estimateCost(1_000_000, 1_000_000, 'claude-opus-4-20250514');
+      // Opus pricing: $15/MTok input + $75/MTok output = $90
+      expect(cost).toBeCloseTo(90, 1);
+    });
+
+    test('falls back to default for unknown model', () => {
+      const cost = service.estimateCost(1_000_000, 1_000_000, 'unknown-model');
+      // Default fallback: $3/MTok input + $15/MTok output = $18
+      expect(cost).toBeCloseTo(18, 1);
+    });
+
+    test('returns 0 for zero tokens', () => {
+      const cost = service.estimateCost(0, 0);
+      expect(cost).toBe(0);
+    });
+  });
+
+  // ========================================================================
+  // calculateEstimatedCost()
+  // ========================================================================
+
+  describe('calculateEstimatedCost', () => {
+    test('uses model-specific pricing when available', () => {
+      const cost = calculateEstimatedCost(1_000_000, 1_000_000, 'claude-sonnet-4-20250514', DEFAULT_PRICING);
+      // Sonnet: $3/MTok input + $15/MTok output = $18
+      expect(cost).toBeCloseTo(18, 1);
+    });
+
+    test('uses default fallback when model not in config', () => {
+      const cost = calculateEstimatedCost(1_000_000, 1_000_000, 'some-other-model', DEFAULT_PRICING);
+      // Default (*): $3/MTok input + $15/MTok output = $18
+      expect(cost).toBeCloseTo(18, 1);
+    });
+
+    test('returns 0 when no pricing configured', () => {
+      const emptyPricing: PricingConfig = { models: {} };
+      const cost = calculateEstimatedCost(1_000_000, 1_000_000, undefined, emptyPricing);
+      expect(cost).toBe(0);
+    });
+
+    test('handles undefined model', () => {
+      const cost = calculateEstimatedCost(1_000_000, 1_000_000, undefined, DEFAULT_PRICING);
+      // Should use '*' fallback
+      expect(cost).toBeCloseTo(18, 1);
+    });
+  });
+
+  // ========================================================================
+  // getPricing()
+  // ========================================================================
+
+  describe('getPricing', () => {
+    test('returns the default pricing configuration', () => {
+      const pricing = service.getPricing();
+      expect(pricing.models).toBeDefined();
+      expect(pricing.models['*']).toBeDefined();
+      expect(pricing.models['*'].inputCostPerMTok).toBe(3);
+      expect(pricing.models['*'].outputCostPerMTok).toBe(15);
+    });
+
+    test('returns custom pricing when provided', () => {
+      const customPricing: PricingConfig = {
+        models: {
+          '*': { inputCostPerMTok: 10, outputCostPerMTok: 30 },
+        },
+      };
+
+      const testDb = `/tmp/metrics-custom-pricing-${Date.now()}.db`;
+      const storage = createStorage({ path: testDb });
+      initializeSchema(storage);
+      const customService = createMetricsService(storage, customPricing);
+
+      const pricing = customService.getPricing();
+      expect(pricing.models['*'].inputCostPerMTok).toBe(10);
+      expect(pricing.models['*'].outputCostPerMTok).toBe(30);
+
+      fs.unlinkSync(testDb);
+    });
+  });
+
+  // ========================================================================
   // Edge cases
   // ========================================================================
 
@@ -374,6 +637,7 @@ describe('MetricsService', () => {
       expect(result).toHaveLength(1);
       expect(result[0].totalTokens).toBe(0);
       expect(result[0].avgDurationMs).toBe(0);
+      expect(result[0].estimatedCost).toBe(0);
     });
 
     test('handles very large token counts', () => {
@@ -388,6 +652,7 @@ describe('MetricsService', () => {
 
       const result = service.aggregateByProvider({ days: 7 });
       expect(result[0].totalTokens).toBe(15_000_000);
+      expect(result[0].estimatedCost).toBeGreaterThan(0);
     });
 
     test('handles all outcome types', () => {

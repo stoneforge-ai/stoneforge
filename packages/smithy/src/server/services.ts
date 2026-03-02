@@ -31,6 +31,7 @@ import {
   createMetricsService,
   createRateLimitTracker,
   createExternalSyncDaemon,
+  createOperationLogService,
   GitRepositoryNotFoundError,
   type OrchestratorAPI,
   type AgentRegistry,
@@ -52,6 +53,7 @@ import {
   type MetricOutcome,
   type OnSessionStartedCallback,
   type ExternalSyncDaemon,
+  type OperationLogService,
   trackListeners,
 } from '../index.js';
 import { createSyncEngine, createConfiguredProviderRegistry } from '@stoneforge/quarry';
@@ -129,7 +131,11 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
   // Create metrics service for provider usage tracking
   const metricsService = createMetricsService(storageBackend);
 
+  // Create operation log service for persistent structured logging
+  const operationLogService = createOperationLogService(storageBackend);
+
   const sessionManager = createSessionManager(spawnerService, api, agentRegistry, settingsService);
+  sessionManager.setOperationLog(operationLogService);
   const sessionInitialPrompts = new Map<string, string>();
 
   // Load session state for all agents to restore session history after restart
@@ -179,7 +185,8 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
     dispatchService,
     agentRegistry,
     { workspaceRoot: projectRoot },
-    worktreeManager
+    worktreeManager,
+    operationLogService
   );
 
   const docsStewardService = createDocsStewardService({
@@ -317,6 +324,7 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
               provider,
               sessionId: session.id,
               taskId,
+              agentId,
               inputTokens: sessionInputTokens,
               outputTokens: sessionOutputTokens,
               durationMs,
@@ -328,6 +336,7 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
             metricsService.record({
               provider,
               sessionId: session.id,
+              agentId,
               inputTokens: sessionInputTokens,
               outputTokens: sessionOutputTokens,
               durationMs,
@@ -390,7 +399,8 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
       inboxService,
       { pollIntervalMs: 5000, onSessionStarted, ...configOverrides },
       poolService,
-      settingsService
+      settingsService,
+      operationLogService
     );
   } else {
     logger.warn('DispatchDaemon disabled - no git repository');

@@ -43,6 +43,7 @@ export const OperationLogCategory = {
   RATE_LIMIT: 'rate-limit',
   STEWARD: 'steward',
   RECOVERY: 'recovery',
+  METRICS: 'metrics',
 } as const;
 
 export type OperationLogCategory = (typeof OperationLogCategory)[keyof typeof OperationLogCategory];

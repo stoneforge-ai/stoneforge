@@ -35,17 +35,17 @@ function createTestOptions(overrides: Partial<GlobalOptions> = {}): GlobalOption
 function seedMetrics(backend: StorageBackend) {
   const now = new Date().toISOString();
   const entries = [
-    { id: 'pm-1', timestamp: now, provider: 'claude-code', model: 'claude-sonnet-4', session_id: 's1', task_id: 'el-abc1', input_tokens: 5000, output_tokens: 2000, duration_ms: 10000, outcome: 'completed' },
-    { id: 'pm-2', timestamp: now, provider: 'claude-code', model: 'claude-sonnet-4', session_id: 's2', task_id: 'el-abc2', input_tokens: 3000, output_tokens: 1500, duration_ms: 8000, outcome: 'completed' },
-    { id: 'pm-3', timestamp: now, provider: 'claude-code', model: 'claude-opus-4', session_id: 's3', task_id: 'el-abc3', input_tokens: 10000, output_tokens: 5000, duration_ms: 30000, outcome: 'failed' },
-    { id: 'pm-4', timestamp: now, provider: 'opencode', model: null, session_id: 's4', task_id: null, input_tokens: 1000, output_tokens: 500, duration_ms: 5000, outcome: 'completed' },
+    { id: 'pm-1', timestamp: now, provider: 'claude-code', model: 'claude-sonnet-4', session_id: 's1', task_id: 'el-abc1', agent_id: 'el-agent1', input_tokens: 5000, output_tokens: 2000, duration_ms: 10000, outcome: 'completed', estimated_cost: 0.045 },
+    { id: 'pm-2', timestamp: now, provider: 'claude-code', model: 'claude-sonnet-4', session_id: 's2', task_id: 'el-abc2', agent_id: 'el-agent1', input_tokens: 3000, output_tokens: 1500, duration_ms: 8000, outcome: 'completed', estimated_cost: 0.0315 },
+    { id: 'pm-3', timestamp: now, provider: 'claude-code', model: 'claude-opus-4', session_id: 's3', task_id: 'el-abc3', agent_id: 'el-agent2', input_tokens: 10000, output_tokens: 5000, duration_ms: 30000, outcome: 'failed', estimated_cost: 0.105 },
+    { id: 'pm-4', timestamp: now, provider: 'opencode', model: null, session_id: 's4', task_id: null, agent_id: null, input_tokens: 1000, output_tokens: 500, duration_ms: 5000, outcome: 'completed', estimated_cost: 0.0105 },
   ];
 
   for (const entry of entries) {
     backend.run(
-      `INSERT INTO provider_metrics (id, timestamp, provider, model, session_id, task_id, input_tokens, output_tokens, duration_ms, outcome)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [entry.id, entry.timestamp, entry.provider, entry.model, entry.session_id, entry.task_id, entry.input_tokens, entry.output_tokens, entry.duration_ms, entry.outcome]
+      `INSERT INTO provider_metrics (id, timestamp, provider, model, session_id, task_id, agent_id, input_tokens, output_tokens, duration_ms, outcome, estimated_cost)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [entry.id, entry.timestamp, entry.provider, entry.model, entry.session_id, entry.task_id, entry.agent_id, entry.input_tokens, entry.output_tokens, entry.duration_ms, entry.outcome, entry.estimated_cost]
     );
   }
 }
@@ -118,6 +118,34 @@ describe('metrics command', () => {
     expect(data.metrics).toHaveLength(1);
   });
 
+  test('filters by task ID', async () => {
+    const backend = createStorage({ path: DB_PATH });
+    initializeSchema(backend);
+    seedMetrics(backend);
+
+    const options = createTestOptions({ task: 'el-abc1' });
+    const result = await metricsCommand.handler([], options);
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    expect(result.message).toContain('Filtered by task: el-abc1');
+    const data = result.data as { metrics: unknown[] };
+    expect(data.metrics).toHaveLength(1);
+  });
+
+  test('filters by agent ID', async () => {
+    const backend = createStorage({ path: DB_PATH });
+    initializeSchema(backend);
+    seedMetrics(backend);
+
+    const options = createTestOptions({ agent: 'el-agent1' });
+    const result = await metricsCommand.handler([], options);
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    expect(result.message).toContain('Filtered by agent: el-agent1');
+    const data = result.data as { metrics: unknown[] };
+    expect(data.metrics).toHaveLength(1);
+  });
+
   test('groups by model', async () => {
     const backend = createStorage({ path: DB_PATH });
     initializeSchema(backend);
@@ -129,6 +157,32 @@ describe('metrics command', () => {
     expect(result.exitCode).toBe(ExitCode.SUCCESS);
     expect(result.message).toContain('By Model');
     expect(result.message).toContain('claude-sonnet-4');
+  });
+
+  test('groups by task', async () => {
+    const backend = createStorage({ path: DB_PATH });
+    initializeSchema(backend);
+    seedMetrics(backend);
+
+    const options = createTestOptions({ 'group-by': 'task' });
+    const result = await metricsCommand.handler([], options);
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    expect(result.message).toContain('By Task');
+    expect(result.message).toContain('el-abc1');
+  });
+
+  test('groups by agent', async () => {
+    const backend = createStorage({ path: DB_PATH });
+    initializeSchema(backend);
+    seedMetrics(backend);
+
+    const options = createTestOptions({ 'group-by': 'agent' });
+    const result = await metricsCommand.handler([], options);
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    expect(result.message).toContain('By Agent');
+    expect(result.message).toContain('el-agent1');
   });
 
   test('accepts range option', async () => {
@@ -232,11 +286,13 @@ describe('metrics command structure', () => {
 
   test('has options defined', () => {
     expect(metricsCommand.options).toBeDefined();
-    expect(metricsCommand.options!.length).toBe(3);
+    expect(metricsCommand.options!.length).toBe(5);
 
     const optionNames = metricsCommand.options!.map(o => o.name);
     expect(optionNames).toContain('range');
     expect(optionNames).toContain('provider');
     expect(optionNames).toContain('group-by');
+    expect(optionNames).toContain('task');
+    expect(optionNames).toContain('agent');
   });
 });

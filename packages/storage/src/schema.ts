@@ -14,7 +14,7 @@ import type { Migration, MigrationResult, StorageBackend } from './index.js';
 /**
  * Current schema version
  */
-export const CURRENT_SCHEMA_VERSION = 11;
+export const CURRENT_SCHEMA_VERSION = 12;
 
 // ============================================================================
 // Migrations
@@ -533,9 +533,92 @@ CREATE INDEX idx_inbox_message ON inbox_items(message_id);
 };
 
 /**
+ * Migration 12: Add cost tracking and agent attribution to provider_metrics
+ *
+ * Adds:
+ * - estimated_cost column for storing calculated costs at recording time
+ * - agent_id column for per-agent cost attribution
+ * - Indexes on task_id and agent_id for efficient filtering
+ * - 'metrics' category to operation_log for metrics-related events
+ *
+ * Also expands the operation_log category CHECK constraint to include 'metrics'.
+ */
+const migration012: Migration = {
+  version: 12,
+  description: 'Add cost tracking and agent attribution to provider_metrics, expand operation_log categories',
+  up: `
+-- Add estimated_cost column for storing calculated costs at recording time
+ALTER TABLE provider_metrics ADD COLUMN estimated_cost REAL DEFAULT 0;
+
+-- Add agent_id column for per-agent cost attribution
+ALTER TABLE provider_metrics ADD COLUMN agent_id TEXT;
+
+-- Add indexes for task_id and agent_id filtering (task_id existed but had no index)
+CREATE INDEX idx_provider_metrics_task_id ON provider_metrics(task_id);
+CREATE INDEX idx_provider_metrics_agent_id ON provider_metrics(agent_id);
+
+-- Recreate operation_log with expanded category CHECK constraint
+CREATE TABLE operation_log_new (
+    id TEXT PRIMARY KEY,
+    timestamp TEXT NOT NULL,
+    level TEXT NOT NULL CHECK (level IN ('error', 'warn', 'info')),
+    category TEXT NOT NULL CHECK (category IN ('dispatch', 'merge', 'session', 'rate-limit', 'steward', 'recovery', 'metrics')),
+    agent_id TEXT,
+    task_id TEXT,
+    message TEXT NOT NULL,
+    details TEXT
+);
+
+INSERT INTO operation_log_new (id, timestamp, level, category, agent_id, task_id, message, details)
+SELECT id, timestamp, level, category, agent_id, task_id, message, details
+FROM operation_log;
+
+DROP TABLE operation_log;
+ALTER TABLE operation_log_new RENAME TO operation_log;
+
+-- Recreate operation_log indexes
+CREATE INDEX idx_operation_log_timestamp ON operation_log(timestamp);
+CREATE INDEX idx_operation_log_category_timestamp ON operation_log(category, timestamp);
+CREATE INDEX idx_operation_log_level_timestamp ON operation_log(level, timestamp);
+`,
+  down: `
+-- Remove indexes
+DROP INDEX IF EXISTS idx_provider_metrics_agent_id;
+DROP INDEX IF EXISTS idx_provider_metrics_task_id;
+
+-- SQLite doesn't support DROP COLUMN in older versions, but Bun's SQLite does
+-- For safety, we just leave the columns (they're nullable with defaults)
+
+-- Recreate operation_log with original CHECK constraint
+CREATE TABLE operation_log_old (
+    id TEXT PRIMARY KEY,
+    timestamp TEXT NOT NULL,
+    level TEXT NOT NULL CHECK (level IN ('error', 'warn', 'info')),
+    category TEXT NOT NULL CHECK (category IN ('dispatch', 'merge', 'session', 'rate-limit', 'steward', 'recovery')),
+    agent_id TEXT,
+    task_id TEXT,
+    message TEXT NOT NULL,
+    details TEXT
+);
+
+INSERT INTO operation_log_old (id, timestamp, level, category, agent_id, task_id, message, details)
+SELECT id, timestamp, level, category, agent_id, task_id, message, details
+FROM operation_log
+WHERE category IN ('dispatch', 'merge', 'session', 'rate-limit', 'steward', 'recovery');
+
+DROP TABLE operation_log;
+ALTER TABLE operation_log_old RENAME TO operation_log;
+
+CREATE INDEX idx_operation_log_timestamp ON operation_log(timestamp);
+CREATE INDEX idx_operation_log_category_timestamp ON operation_log(category, timestamp);
+CREATE INDEX idx_operation_log_level_timestamp ON operation_log(level, timestamp);
+`,
+};
+
+/**
  * All migrations in order
  */
-export const MIGRATIONS: readonly Migration[] = [migration001, migration002, migration003, migration004, migration005, migration006, migration007, migration008, migration009, migration010, migration011];
+export const MIGRATIONS: readonly Migration[] = [migration001, migration002, migration003, migration004, migration005, migration006, migration007, migration008, migration009, migration010, migration011, migration012];
 
 // ============================================================================
 // Schema Functions
