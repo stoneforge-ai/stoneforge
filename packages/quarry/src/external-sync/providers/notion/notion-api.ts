@@ -171,6 +171,9 @@ const DEFAULT_RETRY_AFTER_SECONDS = 1;
 /** Maximum number of blocks per Notion API request (POST /pages or PATCH /blocks/{id}/children) */
 const NOTION_BLOCK_BATCH_SIZE = 100;
 
+/** Number of concurrent block delete requests (kept under Notion's 3 req/s rate limit with headroom) */
+const CONCURRENT_BLOCK_DELETES = 8;
+
 // ============================================================================
 // Client Implementation
 // ============================================================================
@@ -359,11 +362,14 @@ export class NotionApiClient {
     pageId: string,
     blocks: readonly NotionBlockInput[]
   ): Promise<NotionBlock[]> {
-    // Step 1: Get existing blocks and delete them
+    // Step 1: Get existing blocks and delete them concurrently in batches
     const existingBlocks = await this.getBlocks(pageId);
 
-    for (const block of existingBlocks) {
-      await this.request<void>('DELETE', `/blocks/${block.id}`);
+    for (let i = 0; i < existingBlocks.length; i += CONCURRENT_BLOCK_DELETES) {
+      const batch = existingBlocks.slice(i, i + CONCURRENT_BLOCK_DELETES);
+      await Promise.all(
+        batch.map(block => this.request<void>('DELETE', `/blocks/${block.id}`))
+      );
     }
 
     // Step 2: Append new blocks in batches of 100
@@ -671,4 +677,4 @@ function sleep(ms: number): Promise<void> {
 }
 
 // Export utility functions and constants for testing
-export { sleep, parseRetryAfterFromError, NOTION_BLOCK_BATCH_SIZE };
+export { sleep, parseRetryAfterFromError, NOTION_BLOCK_BATCH_SIZE, CONCURRENT_BLOCK_DELETES };

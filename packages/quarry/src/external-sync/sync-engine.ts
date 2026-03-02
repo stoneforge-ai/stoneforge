@@ -169,6 +169,9 @@ export interface SyncEngineConfig {
 /** Key prefix for sync cursor settings */
 const SYNC_CURSOR_KEY_PREFIX = 'external_sync.cursor';
 
+/** Number of documents to push concurrently (balances throughput vs API rate limits) */
+const PUSH_CONCURRENCY = 3;
+
 /**
  * Build a settings key for a sync cursor.
  * Format: external_sync.cursor.<provider>.<project>.<adapterType>
@@ -266,53 +269,36 @@ export class SyncEngine {
     // Step 1: Find elements to push
     const elements = await this.findLinkedElements(options);
 
-    // Step 2: Process each element
-    for (const element of elements) {
-      const syncState = getExternalSyncState(element.metadata);
-      if (!syncState) {
-        // No sync state — shouldn't happen since we filtered for it, but guard
-        skipped.push(1);
-        continue;
-      }
+    // Step 2: Process elements concurrently in batches
+    for (let i = 0; i < elements.length; i += PUSH_CONCURRENCY) {
+      const batch = elements.slice(i, i + PUSH_CONCURRENCY);
+      const results = await Promise.allSettled(
+        batch.map(element => this.pushSingleElement(element, options, now))
+      );
 
-      // Skip if direction is pull-only
-      if (syncState.direction === 'pull') {
-        skipped.push(1);
-        continue;
-      }
-
-      // Skip closed/tombstone tasks and archived documents — they're done
-      // and shouldn't sync. If an element is later reopened/reactivated,
-      // it will be picked up again naturally since the filter no longer applies.
-      const elementStatus = (element as unknown as { status: string }).status;
-      if (elementStatus === 'closed' || elementStatus === 'tombstone' || elementStatus === 'archived') {
-        skipped.push(1);
-        continue;
-      }
-
-      try {
-        // Route by adapter type: tasks → pushElement(), documents → pushDocument()
-        let result: 'pushed' | 'skipped';
-        if (syncState.adapterType === 'document') {
-          result = await this.pushDocument(element, syncState, options, now);
+      for (let j = 0; j < results.length; j++) {
+        const result = results[j];
+        if (result.status === 'fulfilled') {
+          const outcome = result.value;
+          if (outcome === 'pushed') {
+            pushed.push(1);
+          } else if (outcome === 'skipped') {
+            skipped.push(1);
+          }
         } else {
-          result = await this.pushElement(element, syncState, options, now);
+          // rejected — extract error info
+          const element = batch[j];
+          const syncState = getExternalSyncState(element.metadata);
+          const err = result.reason;
+          errors.push({
+            elementId: element.id,
+            externalId: syncState?.externalId ?? '',
+            provider: syncState?.provider ?? 'unknown',
+            project: syncState?.project ?? 'unknown',
+            message: err instanceof Error ? err.message : String(err),
+            retryable: isRetryableError(err),
+          });
         }
-
-        if (result === 'pushed') {
-          pushed.push(1);
-        } else if (result === 'skipped') {
-          skipped.push(1);
-        }
-      } catch (err) {
-        errors.push({
-          elementId: element.id,
-          externalId: syncState.externalId,
-          provider: syncState.provider,
-          project: syncState.project,
-          message: err instanceof Error ? err.message : String(err),
-          retryable: isRetryableError(err),
-        });
       }
     }
 
@@ -325,6 +311,46 @@ export class SyncEngine {
       provider: this.getPrimaryProvider(),
       project: this.getPrimaryProject(),
     });
+  }
+
+  /**
+   * Process a single element for push — validates sync state, checks skip conditions,
+   * and routes to the appropriate push method (pushElement or pushDocument).
+   *
+   * Extracted from the push() loop body to enable concurrent execution via Promise.allSettled.
+   *
+   * @returns 'pushed' if changes were sent, 'skipped' if element was skipped
+   */
+  private async pushSingleElement(
+    element: Element,
+    options: SyncOptions,
+    now: Timestamp
+  ): Promise<'pushed' | 'skipped'> {
+    const syncState = getExternalSyncState(element.metadata);
+    if (!syncState) {
+      // No sync state — shouldn't happen since we filtered for it, but guard
+      return 'skipped';
+    }
+
+    // Skip if direction is pull-only
+    if (syncState.direction === 'pull') {
+      return 'skipped';
+    }
+
+    // Skip closed/tombstone tasks and archived documents — they're done
+    // and shouldn't sync. If an element is later reopened/reactivated,
+    // it will be picked up again naturally since the filter no longer applies.
+    const elementStatus = (element as unknown as { status: string }).status;
+    if (elementStatus === 'closed' || elementStatus === 'tombstone' || elementStatus === 'archived') {
+      return 'skipped';
+    }
+
+    // Route by adapter type: tasks → pushElement(), documents → pushDocument()
+    if (syncState.adapterType === 'document') {
+      return this.pushDocument(element, syncState, options, now);
+    } else {
+      return this.pushElement(element, syncState, options, now);
+    }
   }
 
   /**
@@ -1522,3 +1548,6 @@ function buildResult(params: {
 export function createSyncEngine(config: SyncEngineConfig): SyncEngine {
   return new SyncEngine(config);
 }
+
+// Export constants for testing
+export { PUSH_CONCURRENCY };
