@@ -14,6 +14,7 @@ import {
   richTextToMarkdown,
   chunkRichText,
   mapLanguageToNotion,
+  isValidNotionUrl,
   NOTION_MAX_TEXT_LENGTH,
   NOTION_LANGUAGES,
   LANGUAGE_ALIASES,
@@ -1395,6 +1396,184 @@ describe('language mapping integration', () => {
       const blocks = markdownToNotionBlocks(md);
       const result = notionBlocksToMarkdown(blocks);
       expect(result).toBe('```\n++++\n```');
+    });
+  });
+});
+
+// ============================================================================
+// URL Validation (isValidNotionUrl)
+// ============================================================================
+
+describe('isValidNotionUrl', () => {
+  describe('valid URLs', () => {
+    test('accepts https URLs', () => {
+      expect(isValidNotionUrl('https://example.com')).toBe(true);
+    });
+
+    test('accepts http URLs', () => {
+      expect(isValidNotionUrl('http://example.com')).toBe(true);
+    });
+
+    test('accepts https URLs with paths', () => {
+      expect(isValidNotionUrl('https://example.com/path/to/page')).toBe(true);
+    });
+
+    test('accepts https URLs with query params', () => {
+      expect(isValidNotionUrl('https://example.com?foo=bar&baz=qux')).toBe(true);
+    });
+
+    test('accepts https URLs with fragments', () => {
+      expect(isValidNotionUrl('https://example.com/page#section')).toBe(true);
+    });
+
+    test('accepts https URLs with port', () => {
+      expect(isValidNotionUrl('https://localhost:3000/api')).toBe(true);
+    });
+  });
+
+  describe('invalid URLs', () => {
+    test('rejects empty string', () => {
+      expect(isValidNotionUrl('')).toBe(false);
+    });
+
+    test('rejects relative paths', () => {
+      expect(isValidNotionUrl('/path/to/page')).toBe(false);
+    });
+
+    test('rejects fragment-only references', () => {
+      expect(isValidNotionUrl('#section')).toBe(false);
+    });
+
+    test('rejects workspace element IDs', () => {
+      expect(isValidNotionUrl('el-xxxx')).toBe(false);
+    });
+
+    test('rejects plain text', () => {
+      expect(isValidNotionUrl('not a url')).toBe(false);
+    });
+
+    test('rejects ftp protocol', () => {
+      expect(isValidNotionUrl('ftp://files.example.com/file.txt')).toBe(false);
+    });
+
+    test('rejects mailto protocol', () => {
+      expect(isValidNotionUrl('mailto:user@example.com')).toBe(false);
+    });
+
+    test('rejects javascript protocol', () => {
+      expect(isValidNotionUrl('javascript:alert(1)')).toBe(false);
+    });
+
+    test('rejects file protocol', () => {
+      expect(isValidNotionUrl('file:///etc/passwd')).toBe(false);
+    });
+  });
+});
+
+// ============================================================================
+// URL Validation Integration (parseInlineMarkdown with invalid URLs)
+// ============================================================================
+
+describe('parseInlineMarkdown URL validation', () => {
+  describe('valid URLs produce link rich text', () => {
+    test('https link produces link element', () => {
+      const result = parseInlineMarkdown('[Google](https://google.com)');
+      expect(result).toHaveLength(1);
+      expect(result[0].text.link).toEqual({ url: 'https://google.com' });
+      expect(result[0].plain_text).toBe('Google');
+      expect(result[0].href).toBe('https://google.com');
+    });
+
+    test('http link produces link element', () => {
+      const result = parseInlineMarkdown('[Example](http://example.com)');
+      expect(result).toHaveLength(1);
+      expect(result[0].text.link).toEqual({ url: 'http://example.com' });
+      expect(result[0].plain_text).toBe('Example');
+    });
+  });
+
+  describe('invalid URLs produce plain text instead of links', () => {
+    test('relative path renders as plain text', () => {
+      const result = parseInlineMarkdown('[link](/relative/path)');
+      expect(result).toHaveLength(1);
+      expect(result[0].text.link).toBeNull();
+      expect(result[0].plain_text).toBe('link');
+      expect(result[0].href).toBeNull();
+    });
+
+    test('fragment-only URL renders as plain text', () => {
+      const result = parseInlineMarkdown('[section](#section-id)');
+      expect(result).toHaveLength(1);
+      expect(result[0].text.link).toBeNull();
+      expect(result[0].plain_text).toBe('section');
+    });
+
+    test('element ID renders as plain text', () => {
+      const result = parseInlineMarkdown('[task](el-1234)');
+      expect(result).toHaveLength(1);
+      expect(result[0].text.link).toBeNull();
+      expect(result[0].plain_text).toBe('task');
+    });
+
+    test('malformed URL renders as plain text', () => {
+      const result = parseInlineMarkdown('[broken](not a valid url)');
+      expect(result).toHaveLength(1);
+      expect(result[0].text.link).toBeNull();
+      expect(result[0].plain_text).toBe('broken');
+    });
+
+    test('ftp URL renders as plain text', () => {
+      const result = parseInlineMarkdown('[file](ftp://files.example.com/doc.txt)');
+      expect(result).toHaveLength(1);
+      expect(result[0].text.link).toBeNull();
+      expect(result[0].plain_text).toBe('file');
+    });
+  });
+
+  describe('mixed valid and invalid URLs in same text', () => {
+    test('valid link and invalid link in same line', () => {
+      const result = parseInlineMarkdown(
+        'See [Google](https://google.com) and [section](#top)'
+      );
+      // Should have: "See ", link(Google), " and ", plain(section)
+      expect(result).toHaveLength(4);
+      // The valid link
+      expect(result[1].text.link).toEqual({ url: 'https://google.com' });
+      expect(result[1].plain_text).toBe('Google');
+      // The invalid link rendered as plain text
+      expect(result[3].text.link).toBeNull();
+      expect(result[3].plain_text).toBe('section');
+    });
+  });
+
+  describe('invalid URLs in block-level elements', () => {
+    test('invalid URL in paragraph block produces plain text', () => {
+      const blocks = markdownToNotionBlocks('Click [here](#section) for more');
+      expect(blocks).toHaveLength(1);
+      expect(blocks[0].type).toBe('paragraph');
+      const richText = getRichText(blocks[0]);
+      // "here" should be plain text, not a link
+      const hereElement = richText.find((rt) => rt.plain_text === 'here');
+      expect(hereElement).toBeDefined();
+      expect(hereElement!.text.link).toBeNull();
+    });
+
+    test('invalid URL in bullet list produces plain text', () => {
+      const blocks = markdownToNotionBlocks('- See [task](el-abc123)');
+      expect(blocks).toHaveLength(1);
+      expect(blocks[0].type).toBe('bulleted_list_item');
+      const richText = getRichText(blocks[0]);
+      const taskElement = richText.find((rt) => rt.plain_text === 'task');
+      expect(taskElement).toBeDefined();
+      expect(taskElement!.text.link).toBeNull();
+    });
+
+    test('valid URL in paragraph still works', () => {
+      const blocks = markdownToNotionBlocks('Visit [Google](https://google.com) today');
+      const richText = getRichText(blocks[0]);
+      const linkElement = richText.find((rt) => rt.plain_text === 'Google');
+      expect(linkElement).toBeDefined();
+      expect(linkElement!.text.link).toEqual({ url: 'https://google.com' });
     });
   });
 });

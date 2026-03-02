@@ -500,6 +500,25 @@ function isSameListType(typeA: string, typeB: string): boolean {
 }
 
 // ============================================================================
+// URL Validation
+// ============================================================================
+
+/**
+ * Check whether a URL string is valid for use in a Notion link block.
+ * Notion only accepts absolute http: or https: URLs. Relative paths,
+ * fragment-only references (#section), workspace element IDs (el-xxxx),
+ * empty strings, and malformed URLs are all rejected.
+ */
+export function isValidNotionUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+// ============================================================================
 // Rich Text Parsing (markdown inline → Notion rich text)
 // ============================================================================
 
@@ -549,8 +568,13 @@ export function parseInlineMarkdown(text: string): NotionRichText[] {
       // `inline code`
       richTexts.push(createAnnotatedRichText(match[6], { code: true }));
     } else if (match[7] !== undefined && match[8] !== undefined) {
-      // [link text](url)
-      richTexts.push(createLinkRichText(match[7], match[8]));
+      // [link text](url) — validate URL before creating a link block
+      if (isValidNotionUrl(match[8])) {
+        richTexts.push(createLinkRichText(match[7], match[8]));
+      } else {
+        // Invalid URL — render as plain text to avoid Notion rejection
+        richTexts.push(createPlainRichText(match[7]));
+      }
     }
 
     lastIndex = match.index + fullMatch.length;
