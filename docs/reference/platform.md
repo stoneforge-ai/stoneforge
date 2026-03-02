@@ -374,21 +374,21 @@ Hono-based API server for agent orchestration. Modular architecture with routes 
 
 | File | Prefix | Purpose |
 |------|--------|---------|
-| `routes/health.ts` | `/api/health` | Health check |
-| `routes/tasks.ts` | `/api/tasks` | Task CRUD, dispatch, smart dispatch |
-| `routes/agents.ts` | `/api/agents` | Agent registration, status, workload |
-| `routes/sessions.ts` | `/api/agents/:id/*`, `/api/sessions` | Session lifecycle, streaming |
-| `routes/worktrees.ts` | `/api/worktrees` | Git worktree management |
-| `routes/scheduler.ts` | `/api/scheduler` | Steward scheduling |
-| `routes/plugins.ts` | `/api/plugins` | Plugin execution |
-| `routes/events.ts` | `/api/events` | Activity/events, SSE streaming |
-| `routes/upload.ts` | `/api/terminal/upload` | Terminal file upload |
-| `routes/daemon.ts` | `/api/daemon` | Dispatch daemon lifecycle |
-| `routes/workflows.ts` | `/api/workflows`, `/api/playbooks` | Workflow and playbook management |
-| `routes/pools.ts` | `/api/pools` | Agent pool management |
-| `routes/lsp.ts` | `/api/lsp` | LSP status and configuration |
-| `routes/workspace-files.ts` | `/api/workspace` | Workspace file browsing, reading, writing |
-| `routes/extensions.ts` | `/api/extensions` | OpenVSX marketplace proxy |
+| `src/routes/health.ts` | `/api/health` | Health check |
+| `src/routes/tasks.ts` | `/api/tasks` | Task CRUD, dispatch, smart dispatch |
+| `src/routes/agents.ts` | `/api/agents` | Agent registration, status, workload |
+| `src/routes/sessions.ts` | `/api/agents/:id/*`, `/api/sessions` | Session lifecycle, streaming |
+| `src/routes/worktrees.ts` | `/api/worktrees` | Git worktree management |
+| `src/routes/scheduler.ts` | `/api/scheduler` | Steward scheduling |
+| `src/routes/plugins.ts` | `/api/plugins` | Plugin execution |
+| `src/routes/events.ts` | `/api/events` | Activity/events, SSE streaming |
+| `src/routes/upload.ts` | `/api/terminal/upload` | Terminal file upload |
+| `src/routes/daemon.ts` | `/api/daemon` | Dispatch daemon lifecycle |
+| `src/routes/workflows.ts` | `/api/workflows`, `/api/playbooks` | Workflow and playbook management |
+| `src/routes/pools.ts` | `/api/pools` | Agent pool management |
+| `src/routes/lsp.ts` | `/api/lsp` | LSP status and configuration |
+| `src/routes/workspace-files.ts` | `/api/workspace` | Workspace file browsing, reading, writing |
+| `src/routes/extensions.ts` | `/api/extensions` | OpenVSX marketplace proxy |
 | `routes/settings.ts`* | `/api/settings` | Settings management |
 | `routes/assets.ts`* | `/api/assets` | Asset serving |
 | `routes/metrics.ts`* | `/api/metrics` | Provider metrics |
@@ -488,13 +488,13 @@ app.route('/', createMyFeatureRoutes(services));
 
 | Component | Purpose |
 |-----------|---------|
-| `components/layout/AppShell.tsx` | Main layout |
-| `components/layout/Sidebar.tsx` | Navigation |
-| `components/layout/DirectorPanel.tsx` | Director terminal |
-| `components/terminal/XTerminal.tsx` | Terminal emulator |
-| `components/workspace/WorkspacePane.tsx` | Workspace panes |
-| `components/workspace/StreamViewer.tsx` | Agent output viewer |
-| `components/agent-graph/AgentWorkspaceGraph.tsx` | Agent hierarchy graph visualization |
+| `src/components/layout/AppShell.tsx` | Main layout |
+| `src/components/layout/Sidebar.tsx` | Navigation |
+| `src/components/layout/DirectorPanel.tsx` | Director terminal |
+| `src/components/terminal/XTerminal.tsx` | Terminal emulator |
+| `src/components/workspace/WorkspacePane.tsx` | Workspace panes |
+| `src/components/workspace/StreamViewer.tsx` | Agent output viewer |
+| `src/components/agent-graph/AgentWorkspaceGraph.tsx` | Agent hierarchy graph visualization |
 
 ### Routes
 
@@ -537,9 +537,9 @@ The Documents page supports drag-and-drop for organizing documents and libraries
 
 | File | Purpose |
 |------|---------|
-| `routes/documents/components/LibraryTree.tsx` | Tree sidebar with react-arborist |
-| `routes/documents/components/DocumentListItem.tsx` | Draggable document item |
-| `routes/documents/components/MoveToTopLevelDialog.tsx` | Confirmation for removing from library |
+| `src/routes/documents/components/LibraryTree.tsx` | Tree sidebar with react-arborist |
+| `src/routes/documents/components/DocumentListItem.tsx` | Draggable document item |
+| `src/routes/documents/components/MoveToTopLevelDialog.tsx` | Confirmation for removing from library |
 
 **Key Features:**
 - Drag handle appears on hover for documents
@@ -581,9 +581,9 @@ The orchestrator-web app supports global keyboard shortcuts for navigation and a
 
 | File | Purpose |
 |------|---------|
-| `lib/keyboard.ts` | Default shortcut definitions |
-| `hooks/useKeyboardShortcuts.ts` | React hooks for shortcuts |
-| `components/layout/AppShell.tsx` | Global shortcuts initialization |
+| `src/lib/keyboard.ts` | Default shortcut definitions |
+| `src/hooks/useKeyboardShortcuts.ts` | React hooks for shortcuts |
+| `src/components/layout/AppShell.tsx` | Global shortcuts initialization |
 
 **Adding Custom Shortcuts:**
 
@@ -636,10 +636,10 @@ The `/agents?tab=graph` route displays a graph visualization of the agent hierar
 
 | File | Purpose |
 |------|---------|
-| `components/agent-graph/AgentWorkspaceGraph.tsx` | Main graph container with ReactFlow |
-| `components/agent-graph/AgentNode.tsx` | Custom node renderer for agents |
-| `components/agent-graph/useAgentGraph.ts` | Hook to transform agent data to nodes/edges |
-| `components/agent-graph/types.ts` | TypeScript types for graph data |
+| `src/components/agent-graph/AgentWorkspaceGraph.tsx` | Main graph container with ReactFlow |
+| `src/components/agent-graph/AgentNode.tsx` | Custom node renderer for agents |
+| `src/components/agent-graph/useAgentGraph.ts` | Hook to transform agent data to nodes/edges |
+| `src/components/agent-graph/types.ts` | TypeScript types for graph data |
 
 **Features:**
 
