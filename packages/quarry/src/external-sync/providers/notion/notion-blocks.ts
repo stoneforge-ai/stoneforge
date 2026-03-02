@@ -33,6 +33,14 @@ import { DEFAULT_ANNOTATIONS } from './notion-types.js';
 export const NOTION_MAX_TEXT_LENGTH = 2000;
 
 /**
+ * Maximum number of elements in a single rich_text array in the Notion API.
+ * When a block's rich_text array exceeds this limit, the block must be split
+ * into multiple blocks of the same type.
+ * @see https://developers.notion.com/reference/block
+ */
+export const NOTION_MAX_RICH_TEXT_ARRAY_LENGTH = 100;
+
+/**
  * Split a text string into chunks of at most `maxLength` characters,
  * preferring word boundaries when possible.
  */
@@ -105,14 +113,84 @@ function chunkRichTextElement(
 }
 
 /**
- * Ensure all elements in a rich_text array respect the Notion 2000-character limit.
- * Splits any individual element that exceeds the limit, preserving its annotations.
+ * Check if two NotionRichText elements have identical annotations.
+ */
+function annotationsEqual(a: NotionAnnotations, b: NotionAnnotations): boolean {
+  return (
+    a.bold === b.bold &&
+    a.italic === b.italic &&
+    a.strikethrough === b.strikethrough &&
+    a.underline === b.underline &&
+    a.code === b.code &&
+    a.color === b.color
+  );
+}
+
+/**
+ * Check if two NotionRichText elements can be merged (same annotations and link).
+ */
+function canMergeRichText(a: NotionRichText, b: NotionRichText): boolean {
+  if (a.type !== 'text' || b.type !== 'text') return false;
+  if (!annotationsEqual(a.annotations, b.annotations)) return false;
+  // Both must have same link (both null, or both same URL)
+  const aLink = a.text?.link?.url ?? null;
+  const bLink = b.text?.link?.url ?? null;
+  return aLink === bLink;
+}
+
+/**
+ * Merge consecutive rich_text elements that share the same annotations and link.
+ * This reduces array length when inline-heavy markdown produces many alternating
+ * plain/formatted segments that happen to be adjacent with identical formatting.
+ * Respects the per-element character limit to avoid undoing character chunking.
+ */
+function mergeAdjacentRichText(
+  richTexts: NotionRichText[],
+  maxLength = NOTION_MAX_TEXT_LENGTH
+): NotionRichText[] {
+  if (richTexts.length <= 1) return richTexts;
+
+  const merged: NotionRichText[] = [richTexts[0]];
+
+  for (let i = 1; i < richTexts.length; i++) {
+    const prev = merged[merged.length - 1];
+    const curr = richTexts[i];
+    const prevLen = (prev.text?.content ?? prev.plain_text).length;
+    const currLen = (curr.text?.content ?? curr.plain_text).length;
+
+    if (canMergeRichText(prev, curr) && prevLen + currLen <= maxLength) {
+      // Merge: concatenate content (stays within character limit)
+      const content = (prev.text?.content ?? prev.plain_text) + (curr.text?.content ?? curr.plain_text);
+      merged[merged.length - 1] = {
+        type: prev.type,
+        text: prev.text ? { content, link: prev.text.link } : undefined,
+        annotations: { ...prev.annotations },
+        plain_text: content,
+        href: prev.href,
+      } as NotionRichText;
+    } else {
+      merged.push(curr);
+    }
+  }
+
+  return merged;
+}
+
+/**
+ * Ensure all elements in a rich_text array respect both:
+ * 1. The Notion 2000-character-per-element limit (splits oversized elements)
+ * 2. Reduced array length via merging adjacent same-formatted elements
+ *
+ * Merge first (to reduce count), then chunk (to enforce character limits).
  */
 function ensureRichTextWithinLimits(
   richTexts: NotionRichText[],
   maxLength = NOTION_MAX_TEXT_LENGTH
 ): NotionRichText[] {
-  return richTexts.flatMap((rt) => chunkRichTextElement(rt, maxLength));
+  // First merge adjacent elements with same formatting to reduce count
+  const merged = mergeAdjacentRichText(richTexts, maxLength);
+  // Then split any elements that exceed the character limit
+  return merged.flatMap((rt) => chunkRichTextElement(rt, maxLength));
 }
 
 // ============================================================================
@@ -171,7 +249,7 @@ export function markdownToNotionBlocks(markdown: string): NotionBlock[] {
     if (headingMatch) {
       const level = headingMatch[1].length as 1 | 2 | 3;
       const text = headingMatch[2];
-      blocks.push(createHeadingBlock(level, text));
+      blocks.push(...createHeadingBlock(level, text));
       i++;
       continue;
     }
@@ -181,7 +259,7 @@ export function markdownToNotionBlocks(markdown: string): NotionBlock[] {
     if (checkboxMatch) {
       const checked = checkboxMatch[1].toLowerCase() === 'x';
       const text = checkboxMatch[2];
-      blocks.push(createToDoBlock(text, checked));
+      blocks.push(...createToDoBlock(text, checked));
       i++;
       continue;
     }
@@ -190,7 +268,7 @@ export function markdownToNotionBlocks(markdown: string): NotionBlock[] {
     const bulletMatch = line.match(/^[-*]\s+(.+)$/);
     if (bulletMatch) {
       const text = bulletMatch[1];
-      blocks.push(createBulletedListItemBlock(text));
+      blocks.push(...createBulletedListItemBlock(text));
       i++;
       continue;
     }
@@ -199,7 +277,7 @@ export function markdownToNotionBlocks(markdown: string): NotionBlock[] {
     const numberedMatch = line.match(/^\d+\.\s+(.+)$/);
     if (numberedMatch) {
       const text = numberedMatch[1];
-      blocks.push(createNumberedListItemBlock(text));
+      blocks.push(...createNumberedListItemBlock(text));
       i++;
       continue;
     }
@@ -217,7 +295,7 @@ export function markdownToNotionBlocks(markdown: string): NotionBlock[] {
         }
         i++;
       }
-      blocks.push(createQuoteBlock(quoteLines.join('\n')));
+      blocks.push(...createQuoteBlock(quoteLines.join('\n')));
       continue;
     }
 
@@ -241,7 +319,7 @@ export function markdownToNotionBlocks(markdown: string): NotionBlock[] {
       paragraphLines.push(nextLine);
       i++;
     }
-    blocks.push(createParagraphBlock(paragraphLines.join('\n')));
+    blocks.push(...createParagraphBlock(paragraphLines.join('\n')));
   }
 
   return blocks;
@@ -290,41 +368,66 @@ export function notionBlocksToMarkdown(blocks: readonly NotionBlock[]): string {
 // Block Creation Helpers (markdown → Notion)
 // ============================================================================
 
-function createParagraphBlock(text: string): NotionBlock {
-  return {
-    type: 'paragraph',
-    paragraph: {
-      rich_text: ensureRichTextWithinLimits(parseInlineMarkdown(text)),
-    },
-  };
+/**
+ * Split a rich_text array into chunks respecting the Notion 100-element limit.
+ * Each chunk contains at most NOTION_MAX_RICH_TEXT_ARRAY_LENGTH elements.
+ */
+function splitRichTextArray(
+  richTexts: NotionRichText[],
+  maxArrayLength = NOTION_MAX_RICH_TEXT_ARRAY_LENGTH
+): NotionRichText[][] {
+  if (richTexts.length <= maxArrayLength) {
+    return [richTexts];
+  }
+
+  const chunks: NotionRichText[][] = [];
+  for (let i = 0; i < richTexts.length; i += maxArrayLength) {
+    chunks.push(richTexts.slice(i, i + maxArrayLength));
+  }
+  return chunks;
 }
 
-function createHeadingBlock(level: 1 | 2 | 3, text: string): NotionBlock {
+/**
+ * Prepare rich_text for a block: parse inline markdown, enforce character limits,
+ * merge adjacent elements, and split into chunks if array exceeds 100 elements.
+ */
+function prepareRichTextChunks(text: string): NotionRichText[][] {
+  const richTexts = ensureRichTextWithinLimits(parseInlineMarkdown(text));
+  return splitRichTextArray(richTexts);
+}
+
+function createParagraphBlock(text: string): NotionBlock[] {
+  return prepareRichTextChunks(text).map((richText) => ({
+    type: 'paragraph' as const,
+    paragraph: { rich_text: richText },
+  }));
+}
+
+function createHeadingBlock(level: 1 | 2 | 3, text: string): NotionBlock[] {
   const type = `heading_${level}` as 'heading_1' | 'heading_2' | 'heading_3';
-  return {
-    type,
-    [type]: {
-      rich_text: ensureRichTextWithinLimits(parseInlineMarkdown(text)),
-    },
-  } as NotionBlock;
+  const chunks = prepareRichTextChunks(text);
+  // First chunk keeps the heading type; overflow chunks become paragraphs
+  // (Notion doesn't support multiple consecutive headings for a single logical heading)
+  return chunks.map((richText, i) => {
+    if (i === 0) {
+      return { type, [type]: { rich_text: richText } } as NotionBlock;
+    }
+    return { type: 'paragraph' as const, paragraph: { rich_text: richText } };
+  });
 }
 
-function createBulletedListItemBlock(text: string): NotionBlock {
-  return {
-    type: 'bulleted_list_item',
-    bulleted_list_item: {
-      rich_text: ensureRichTextWithinLimits(parseInlineMarkdown(text)),
-    },
-  };
+function createBulletedListItemBlock(text: string): NotionBlock[] {
+  return prepareRichTextChunks(text).map((richText) => ({
+    type: 'bulleted_list_item' as const,
+    bulleted_list_item: { rich_text: richText },
+  }));
 }
 
-function createNumberedListItemBlock(text: string): NotionBlock {
-  return {
-    type: 'numbered_list_item',
-    numbered_list_item: {
-      rich_text: ensureRichTextWithinLimits(parseInlineMarkdown(text)),
-    },
-  };
+function createNumberedListItemBlock(text: string): NotionBlock[] {
+  return prepareRichTextChunks(text).map((richText) => ({
+    type: 'numbered_list_item' as const,
+    numbered_list_item: { rich_text: richText },
+  }));
 }
 
 /**
@@ -405,23 +508,23 @@ function splitCodeAtLineBoundaries(
   return chunks;
 }
 
-function createQuoteBlock(text: string): NotionBlock {
-  return {
-    type: 'quote',
-    quote: {
-      rich_text: ensureRichTextWithinLimits(parseInlineMarkdown(text)),
-    },
-  };
+function createQuoteBlock(text: string): NotionBlock[] {
+  return prepareRichTextChunks(text).map((richText) => ({
+    type: 'quote' as const,
+    quote: { rich_text: richText },
+  }));
 }
 
-function createToDoBlock(text: string, checked: boolean): NotionBlock {
-  return {
-    type: 'to_do',
+function createToDoBlock(text: string, checked: boolean): NotionBlock[] {
+  const chunks = prepareRichTextChunks(text);
+  return chunks.map((richText, i) => ({
+    type: 'to_do' as const,
     to_do: {
-      rich_text: ensureRichTextWithinLimits(parseInlineMarkdown(text)),
-      checked,
+      rich_text: richText,
+      // Only the first block carries the checked state; overflow blocks are unchecked
+      checked: i === 0 ? checked : false,
     },
-  };
+  }));
 }
 
 // ============================================================================

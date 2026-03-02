@@ -32,6 +32,7 @@ export {
   richTextToMarkdown,
   chunkRichText,
   NOTION_MAX_TEXT_LENGTH,
+  NOTION_MAX_RICH_TEXT_ARRAY_LENGTH,
 } from './notion-blocks.js';
 
 // API client
