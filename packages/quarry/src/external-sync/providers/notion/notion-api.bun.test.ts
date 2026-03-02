@@ -1277,5 +1277,319 @@ describe('NotionApiClient', () => {
       const error = new NotionApiError('Network error', 0, 'network_error', null, cause);
       expect(error.cause).toBe(cause);
     });
+
+    test('isRetryable returns true for 429', () => {
+      const error = new NotionApiError('Rate limited', 429, 'rate_limited');
+      expect(error.isRetryable).toBe(true);
+    });
+
+    test('isRetryable returns true for 502', () => {
+      const error = new NotionApiError('Bad Gateway', 502, 'unknown');
+      expect(error.isRetryable).toBe(true);
+    });
+
+    test('isRetryable returns true for 503', () => {
+      const error = new NotionApiError('Service Unavailable', 503, 'unknown');
+      expect(error.isRetryable).toBe(true);
+    });
+
+    test('isRetryable returns true for 504', () => {
+      const error = new NotionApiError('Gateway Timeout', 504, 'unknown');
+      expect(error.isRetryable).toBe(true);
+    });
+
+    test('isRetryable returns false for 400', () => {
+      const error = new NotionApiError('Bad Request', 400, 'validation_error');
+      expect(error.isRetryable).toBe(false);
+    });
+
+    test('isRetryable returns false for 404', () => {
+      const error = new NotionApiError('Not Found', 404, 'object_not_found');
+      expect(error.isRetryable).toBe(false);
+    });
+
+    test('isRetryable returns false for 500', () => {
+      const error = new NotionApiError('Internal Server Error', 500, 'unknown');
+      expect(error.isRetryable).toBe(false);
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // Transient Error Retry (502/503/504)
+  // --------------------------------------------------------------------------
+
+  describe('transient error retry', () => {
+    let warnSpy: ReturnType<typeof spyOn>;
+
+    beforeEach(() => {
+      warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      warnSpy.mockRestore();
+    });
+
+    test('retries on 502 Bad Gateway and succeeds', async () => {
+      const retryClient = new NotionApiClient({
+        token: 'test',
+        maxRetries: 2,
+        warnOnRateLimit: true,
+      });
+
+      let callCount = 0;
+      mockFetch.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          return Promise.resolve(
+            createMockResponse(
+              createMockErrorBody(502, 'unknown', 'Bad Gateway'),
+              502
+            )
+          );
+        }
+        return Promise.resolve(createMockResponse(createMockPage({ id: 'success-502' })));
+      });
+
+      const result = await retryClient.getPage('page-id');
+
+      expect(result.id).toBe('success-502');
+      expect(callCount).toBe(2);
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+
+      const warnMessage = warnSpy.mock.calls[0][0] as string;
+      expect(warnMessage).toContain('Server error (502)');
+      expect(warnMessage).toContain('attempt 1/2');
+    });
+
+    test('retries on 503 Service Unavailable and succeeds', async () => {
+      const retryClient = new NotionApiClient({
+        token: 'test',
+        maxRetries: 2,
+        warnOnRateLimit: true,
+      });
+
+      let callCount = 0;
+      mockFetch.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          return Promise.resolve(
+            createMockResponse(
+              createMockErrorBody(503, 'unknown', 'Service Unavailable'),
+              503
+            )
+          );
+        }
+        return Promise.resolve(createMockResponse(createMockPage({ id: 'success-503' })));
+      });
+
+      const result = await retryClient.getPage('page-id');
+
+      expect(result.id).toBe('success-503');
+      expect(callCount).toBe(2);
+    });
+
+    test('retries on 504 Gateway Timeout and succeeds', async () => {
+      const retryClient = new NotionApiClient({
+        token: 'test',
+        maxRetries: 2,
+        warnOnRateLimit: true,
+      });
+
+      let callCount = 0;
+      mockFetch.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          return Promise.resolve(
+            createMockResponse(
+              createMockErrorBody(504, 'unknown', 'Gateway Timeout'),
+              504
+            )
+          );
+        }
+        return Promise.resolve(createMockResponse(createMockPage({ id: 'success-504' })));
+      });
+
+      const result = await retryClient.getPage('page-id');
+
+      expect(result.id).toBe('success-504');
+      expect(callCount).toBe(2);
+
+      const warnMessage = warnSpy.mock.calls[0][0] as string;
+      expect(warnMessage).toContain('Server error (504)');
+    });
+
+    test('throws after exhausting all retries on 502', async () => {
+      const retryClient = new NotionApiClient({
+        token: 'test',
+        maxRetries: 2,
+        warnOnRateLimit: false,
+      });
+
+      mockFetch.mockImplementation(() => {
+        return Promise.resolve(
+          createMockResponse(
+            createMockErrorBody(502, 'unknown', 'Bad Gateway'),
+            502
+          )
+        );
+      });
+
+      try {
+        await retryClient.getPage('page-id');
+        throw new Error('Should have thrown');
+      } catch (err) {
+        expect(isNotionApiError(err)).toBe(true);
+        expect((err as NotionApiError).status).toBe(502);
+      }
+
+      // Initial request + 2 retries = 3 calls
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+    });
+
+    test('throws after exhausting all retries on 504', async () => {
+      const retryClient = new NotionApiClient({
+        token: 'test',
+        maxRetries: 1,
+        warnOnRateLimit: false,
+      });
+
+      mockFetch.mockImplementation(() => {
+        return Promise.resolve(
+          createMockResponse(
+            createMockErrorBody(504, 'unknown', 'Gateway Timeout'),
+            504
+          )
+        );
+      });
+
+      try {
+        await retryClient.getPage('page-id');
+        throw new Error('Should have thrown');
+      } catch (err) {
+        expect(isNotionApiError(err)).toBe(true);
+        expect((err as NotionApiError).status).toBe(504);
+      }
+
+      // Initial request + 1 retry = 2 calls
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    test('does not retry non-retryable errors like 400', async () => {
+      const retryClient = new NotionApiClient({
+        token: 'test',
+        maxRetries: 2,
+        warnOnRateLimit: false,
+      });
+
+      mockFetch.mockImplementation(() => {
+        return Promise.resolve(
+          createMockResponse(
+            createMockErrorBody(400, 'validation_error', 'Invalid input'),
+            400
+          )
+        );
+      });
+
+      try {
+        await retryClient.getPage('page-id');
+        throw new Error('Should have thrown');
+      } catch (err) {
+        expect(isNotionApiError(err)).toBe(true);
+        expect((err as NotionApiError).status).toBe(400);
+      }
+
+      // Only 1 call — no retries for 400
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    test('does not retry 500 Internal Server Error', async () => {
+      const retryClient = new NotionApiClient({
+        token: 'test',
+        maxRetries: 2,
+        warnOnRateLimit: false,
+      });
+
+      mockFetch.mockImplementation(() => {
+        return Promise.resolve(
+          new Response('Internal Server Error', {
+            status: 500,
+            statusText: 'Internal Server Error',
+          })
+        );
+      });
+
+      try {
+        await retryClient.getPage('page-id');
+        throw new Error('Should have thrown');
+      } catch (err) {
+        expect(isNotionApiError(err)).toBe(true);
+        expect((err as NotionApiError).status).toBe(500);
+      }
+
+      // Only 1 call — no retries for 500
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    test('429 still uses Retry-After header, not exponential backoff', async () => {
+      const retryClient = new NotionApiClient({
+        token: 'test',
+        maxRetries: 2,
+        warnOnRateLimit: true,
+      });
+
+      let callCount = 0;
+      mockFetch.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          return Promise.resolve(
+            createMockResponse(
+              createMockErrorBody(429, 'rate_limited', 'Rate limited'),
+              429,
+              { 'Retry-After': '0' }
+            )
+          );
+        }
+        return Promise.resolve(createMockResponse(createMockPage({ id: 'success-429' })));
+      });
+
+      const result = await retryClient.getPage('page-id');
+
+      expect(result.id).toBe('success-429');
+      expect(callCount).toBe(2);
+
+      const warnMessage = warnSpy.mock.calls[0][0] as string;
+      expect(warnMessage).toContain('Rate limited');
+      // Should NOT contain "Server error"
+      expect(warnMessage).not.toContain('Server error');
+    });
+
+    test('retries multiple transient errors before succeeding', async () => {
+      const retryClient = new NotionApiClient({
+        token: 'test',
+        maxRetries: 3,
+        warnOnRateLimit: false,
+      });
+
+      let callCount = 0;
+      mockFetch.mockImplementation(() => {
+        callCount++;
+        if (callCount <= 2) {
+          // First two calls: 502 errors
+          return Promise.resolve(
+            createMockResponse(
+              createMockErrorBody(502, 'unknown', 'Bad Gateway'),
+              502
+            )
+          );
+        }
+        // Third call: success
+        return Promise.resolve(createMockResponse(createMockPage({ id: 'eventual-success' })));
+      });
+
+      const result = await retryClient.getPage('page-id');
+
+      expect(result.id).toBe('eventual-success');
+      expect(callCount).toBe(3);
+    });
   });
 });

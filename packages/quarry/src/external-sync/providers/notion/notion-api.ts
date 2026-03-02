@@ -3,6 +3,7 @@
  *
  * Pure fetch-based client for Notion page and block operations.
  * Supports Bearer token authentication, rate limit handling with Retry-After,
+ * automatic retry on transient server errors (502/503/504) with exponential backoff,
  * cursor-based pagination, and typed error responses.
  *
  * No external dependencies — uses only the standard fetch API.
@@ -35,7 +36,7 @@ export interface NotionApiClientOptions {
   token: string;
   /** Notion API version header (default: "2022-06-28") */
   notionVersion?: string;
-  /** Maximum number of automatic retries on 429 responses (default: 3) */
+  /** Maximum number of automatic retries on retryable responses: 429, 502, 503, 504 (default: 3) */
   maxRetries?: number;
   /** Rate limit warning threshold — log a warning after a 429 (default: true) */
   warnOnRateLimit?: boolean;
@@ -96,6 +97,14 @@ export class NotionApiError extends Error {
   }
 
   /**
+   * Whether this error is transient and can be retried.
+   * Includes rate limiting (429) and server errors (502, 503, 504).
+   */
+  get isRetryable(): boolean {
+    return this.status === 429 || this.status === 502 || this.status === 503 || this.status === 504;
+  }
+
+  /**
    * Whether this error is due to authentication failure.
    */
   get isAuthError(): boolean {
@@ -153,7 +162,7 @@ const NOTION_API_BASE = 'https://api.notion.com/v1';
 /** Default Notion API version */
 const DEFAULT_NOTION_VERSION = '2022-06-28';
 
-/** Default maximum retry count for 429 responses */
+/** Default maximum retry count for retryable responses (429, 502, 503, 504) */
 const DEFAULT_MAX_RETRIES = 3;
 
 /** Default Retry-After fallback if the header is missing (in seconds) */
@@ -173,6 +182,7 @@ const NOTION_BLOCK_BATCH_SIZE = 100;
  * - Bearer token authentication (internal integrations or OAuth)
  * - Notion-Version header for API versioning
  * - Automatic retry on 429 (Too Many Requests) with Retry-After
+ * - Automatic retry on 502/503/504 (server errors) with exponential backoff
  * - Cursor-based pagination for list endpoints
  * - Typed errors with Notion error codes
  *
@@ -485,7 +495,11 @@ export class NotionApiClient {
   // --------------------------------------------------------------------------
 
   /**
-   * Performs an HTTP request to the Notion API with automatic retry on 429.
+   * Performs an HTTP request to the Notion API with automatic retry on retryable errors.
+   *
+   * Retry strategy:
+   * - 429 (rate limited): Uses Retry-After header value (existing behavior)
+   * - 502/503/504 (server errors): Uses exponential backoff starting at 1s (1s, 2s, 4s, ...)
    */
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
     let lastError: NotionApiError | undefined;
@@ -494,19 +508,28 @@ export class NotionApiClient {
       try {
         return await this.executeRequest<T>(method, path, body);
       } catch (err) {
-        if (err instanceof NotionApiError && err.isRateLimited && attempt < this.maxRetries) {
-          // Rate limit state is already tracked by handleErrorResponse.
-          // Extract retry delay from the tracked state.
-          const retryAfter = this.rateLimitState.lastRetryAfterSeconds ?? DEFAULT_RETRY_AFTER_SECONDS;
+        if (err instanceof NotionApiError && err.isRetryable && attempt < this.maxRetries) {
+          let retryDelay: number;
+
+          if (err.isRateLimited) {
+            // 429: Use Retry-After header (existing behavior)
+            retryDelay = (this.rateLimitState.lastRetryAfterSeconds ?? DEFAULT_RETRY_AFTER_SECONDS) * 1000;
+          } else {
+            // 502/503/504: Use exponential backoff starting at 1s
+            retryDelay = DEFAULT_RETRY_AFTER_SECONDS * 1000 * Math.pow(2, attempt);
+          }
 
           if (this.warnOnRateLimit) {
+            const reason = err.isRateLimited
+              ? 'Rate limited'
+              : `Server error (${err.status})`;
             console.warn(
-              `[NotionApiClient] Rate limited on ${method} ${path}. ` +
-                `Retrying in ${retryAfter}s (attempt ${attempt + 1}/${this.maxRetries}).`
+              `[NotionApiClient] ${reason} on ${method} ${path}. ` +
+                `Retrying in ${retryDelay / 1000}s (attempt ${attempt + 1}/${this.maxRetries}).`
             );
           }
 
-          await sleep(retryAfter * 1000);
+          await sleep(retryDelay);
           lastError = err;
           continue;
         }

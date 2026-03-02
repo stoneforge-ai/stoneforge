@@ -1454,10 +1454,14 @@ function isRetryableError(err: unknown): boolean {
   return (
     message.includes('rate limit') ||
     message.includes('timeout') ||
+    message.includes('gateway timeout') ||
+    message.includes('bad gateway') ||
     message.includes('econnrefused') ||
     message.includes('enotfound') ||
     message.includes('network') ||
+    message.includes('502') ||
     message.includes('503') ||
+    message.includes('504') ||
     message.includes('429')
   );
 }
