@@ -58,6 +58,7 @@ async function startQuarry(options: GlobalOptions): Promise<CommandResult> {
 async function startSmithy(options: GlobalOptions): Promise<CommandResult> {
   let startSmithyServer: (opts: Record<string, unknown>) => Promise<unknown>;
   try {
+    // @ts-ignore — smithy is an optional runtime dependency, may not be installed
     const mod = await import('@stoneforge/smithy/server');
     startSmithyServer = mod.startSmithyServer;
   } catch {
@@ -110,6 +111,7 @@ export const serveCommand: Command = {
 
       // No target specified — try smithy first, fall back to quarry
       try {
+        // @ts-ignore — smithy is an optional runtime dependency, may not be installed
         await import('@stoneforge/smithy/server');
         return await startSmithy(options);
       } catch {

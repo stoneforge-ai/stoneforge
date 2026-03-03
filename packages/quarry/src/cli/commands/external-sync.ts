@@ -100,6 +100,7 @@ async function createSettingsServiceFromOptions(options: GlobalOptions): Promise
     initializeSchema(backend);
 
     // Dynamic import to handle optional peer dependency
+    // @ts-ignore — smithy is an optional runtime dependency, may not be installed
     const { createSettingsService } = await import('@stoneforge/smithy/services');
     return { settingsService: createSettingsService(backend) as SettingsServiceLike };
   } catch (err) {
@@ -1849,6 +1850,7 @@ async function createProviderFromSettings(
     initializeSchema(backend);
 
     // Dynamic import to handle optional peer dependency
+    // @ts-ignore — smithy is an optional runtime dependency, may not be installed
     const { createSettingsService } = await import('@stoneforge/smithy/services');
     const settingsService = createSettingsService(backend) as {
       getProviderConfig(provider: string): { provider: string; token?: string; apiBaseUrl?: string; defaultProject?: string } | undefined;
