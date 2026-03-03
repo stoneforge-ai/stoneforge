@@ -9,10 +9,36 @@
   --sl-font-mono: var(--sf-font-code);
 }
 
+/* --- Sub-navigation height --- */
+:root {
+  --sf-subnav-height: 2.5rem;
+  --sf-header-total: calc(var(--sl-nav-height) + var(--sf-subnav-height));
+}
+
 /* --- Content width --- */
 :root {
   --sl-content-width: 52rem;
   --sl-sidebar-width: 17rem;
+}
+
+/* --- Offset sidebar, main frame and right sidebar below header+subnav --- */
+.sidebar-pane {
+  inset-block-start: var(--sf-header-total) !important;
+}
+
+.main-frame {
+  padding-top: calc(var(--sf-header-total) + var(--sl-mobile-toc-height, 0rem)) !important;
+}
+
+@media (min-width: 72rem) {
+  .right-sidebar {
+    padding-top: var(--sf-header-total) !important;
+  }
+}
+
+/* --- Scroll padding to account for sticky header + subnav --- */
+html {
+  scroll-padding-top: calc(var(--sf-header-total) + 1rem);
 }
 
 /* --- Border radius --- */

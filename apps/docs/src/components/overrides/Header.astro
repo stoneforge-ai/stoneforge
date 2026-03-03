@@ -1,18 +1,24 @@
 ---
 import type { Props } from '@astrojs/starlight/props';
 import Default from '@astrojs/starlight/components/Header.astro';
+import SubNav from '../custom/SubNav.astro';
 ---
 
 <div class="sf-header-wrap">
   <Default {...Astro.props}><slot /></Default>
+  <SubNav />
 </div>
 
 <style>
+  .sf-header-wrap {
+    position: relative;
+  }
+
   .sf-header-wrap :global(header.header) {
     background: var(--sl-color-bg-nav);
     backdrop-filter: blur(20px) saturate(1.5);
     -webkit-backdrop-filter: blur(20px) saturate(1.5);
-    border-bottom: 1px solid var(--sl-color-hairline);
+    border-bottom: none;
     transition: box-shadow 0.3s ease;
   }
 
@@ -25,15 +31,11 @@ import Default from '@astrojs/starlight/components/Header.astro';
     box-shadow: 0 2px 12px rgba(15, 23, 42, 0.06);
   }
 
-  /* Scroll progress bar */
-  .sf-header-wrap {
-    position: relative;
-  }
-
+  /* Scroll progress bar — sits below the full header+subnav */
   .sf-header-wrap::after {
     content: '';
     position: fixed;
-    top: var(--sl-nav-height);
+    top: var(--sf-header-total);
     left: 0;
     width: var(--sf-scroll-progress, 0%);
     height: 2px;
