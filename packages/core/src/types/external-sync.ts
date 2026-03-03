@@ -411,6 +411,8 @@ export interface ExternalSyncResult {
   readonly conflicts: readonly ExternalSyncConflict[];
   /** Errors that occurred during sync */
   readonly errors: readonly ExternalSyncError[];
+  /** Number of documents skipped because they are not in any library */
+  readonly noLibrarySkipped?: number;
 }
 
 /**

@@ -22,7 +22,7 @@ import { createStorage, initializeSchema } from '@stoneforge/storage';
 import { getValue, setValue, VALID_AUTO_LINK_PROVIDERS } from '../../config/index.js';
 import type { Task, Document, ElementId, ExternalProvider, ExternalSyncState, SyncDirection, SyncAdapterType, TaskSyncAdapter, DocumentSyncAdapter } from '@stoneforge/core';
 import { taskToExternalTask, getFieldMapConfigForProvider } from '../../external-sync/adapters/task-sync-adapter.js';
-import { isSyncableDocument, documentToExternalDocumentInput, resolveDocumentLibraryPath } from '../../external-sync/adapters/document-sync-adapter.js';
+import { isSyncableDocument, documentToExternalDocumentInput, resolveDocumentLibraryPath, resolveDocumentLibraryPaths } from '../../external-sync/adapters/document-sync-adapter.js';
 import type { LibraryPathAPI } from '../../external-sync/adapters/document-sync-adapter.js';
 
 /**
@@ -920,6 +920,7 @@ interface PushOptions {
   all?: boolean;
   force?: boolean;
   type?: string;
+  'no-library'?: boolean;
 }
 
 const pushOptions: CommandOption[] = [
@@ -939,6 +940,10 @@ const pushOptions: CommandOption[] = [
     description: 'Element type to push: task, document, or all (default: all)',
     hasValue: true,
     defaultValue: 'all',
+  },
+  {
+    name: 'no-library',
+    description: 'Include documents that are not in any library (excluded by default)',
   },
 ];
 
@@ -1000,7 +1005,7 @@ async function pushHandler(
 
   // Build push options
   const adapterTypes = parseTypeFlag(options.type);
-  const syncPushOptions: { taskIds?: string[]; all?: boolean; force?: boolean; adapterTypes?: SyncAdapterType[] } = {};
+  const syncPushOptions: { taskIds?: string[]; all?: boolean; force?: boolean; adapterTypes?: SyncAdapterType[]; includeNoLibrary?: boolean } = {};
   if (adapterTypes) {
     syncPushOptions.adapterTypes = adapterTypes;
   }
@@ -1017,18 +1022,24 @@ async function pushHandler(
   if (options.force) {
     syncPushOptions.force = true;
   }
+  if (options['no-library']) {
+    syncPushOptions.includeNoLibrary = true;
+  }
 
   try {
     const result = await engine.push(syncPushOptions);
 
     const mode = getOutputMode(options);
-    const output = {
+    const output: Record<string, unknown> = {
       success: result.success,
       pushed: result.pushed,
       skipped: result.skipped,
       errors: result.errors,
       conflicts: result.conflicts,
     };
+    if (result.noLibrarySkipped && result.noLibrarySkipped > 0) {
+      output.noLibrarySkipped = result.noLibrarySkipped;
+    }
 
     if (mode === 'json') {
       return success(output);
@@ -1046,6 +1057,10 @@ async function pushHandler(
 
     if (result.skipped > 0) {
       lines.push(`Skipped: ${result.skipped}`);
+    }
+
+    if (result.noLibrarySkipped && result.noLibrarySkipped > 0) {
+      lines.push(`Skipped ${result.noLibrarySkipped} document(s) not in any library (use --no-library to include)`);
     }
 
     if (result.errors.length > 0) {
@@ -1659,6 +1674,7 @@ interface LinkAllOptions {
   'batch-size'?: string;
   force?: boolean;
   type?: string;
+  'no-library'?: boolean;
   /** @internal Dependency injection for testing — overrides createProviderFromSettings */
   _providerFactory?: (
     providerName: string,
@@ -1715,6 +1731,10 @@ const linkAllOptions: CommandOption[] = [
     description: 'Element type: task or document (default: task)',
     hasValue: true,
     defaultValue: 'task',
+  },
+  {
+    name: 'no-library',
+    description: 'Include documents that are not in any library (excluded by default)',
   },
 ];
 
@@ -2095,17 +2115,35 @@ async function linkAllDocumentsHandler(
   // Skip archived documents by default
   docsToLink = docsToLink.filter((doc) => doc.status !== 'archived');
 
+  // Filter out documents not in any library (unless --no-library is set)
+  let noLibrarySkipped = 0;
+  if (!options['no-library'] && docsToLink.length > 0) {
+    const libraryPaths = await resolveDocumentLibraryPaths(api!, docsToLink.map(d => d.id));
+    const beforeCount = docsToLink.length;
+    docsToLink = docsToLink.filter((doc) => libraryPaths.has(doc.id));
+    noLibrarySkipped = beforeCount - docsToLink.length;
+  }
+
   const mode = getOutputMode(options);
 
   if (docsToLink.length === 0) {
-    const result = { linked: 0, failed: 0, skipped: 0, total: 0, dryRun: isDryRun, type: 'document' };
+    const result: Record<string, unknown> = { linked: 0, failed: 0, skipped: 0, total: 0, dryRun: isDryRun, type: 'document' };
+    if (noLibrarySkipped > 0) {
+      result.noLibrarySkipped = noLibrarySkipped;
+    }
     if (mode === 'json') {
       return success(result);
     }
-    const hint = force
-      ? 'No documents found to re-link matching the specified criteria.'
-      : 'No unlinked documents found. Use --force to re-link existing documents.';
-    return success(result, hint);
+    const hints: string[] = [];
+    if (force) {
+      hints.push('No documents found to re-link matching the specified criteria.');
+    } else {
+      hints.push('No unlinked documents found. Use --force to re-link existing documents.');
+    }
+    if (noLibrarySkipped > 0) {
+      hints.push(`Skipped ${noLibrarySkipped} document(s) not in any library (use --no-library to include)`);
+    }
+    return success(result, hints.join('\n'));
   }
 
   // Dry run — just list documents that would be linked
@@ -2129,6 +2167,9 @@ async function linkAllDocumentsHandler(
       jsonResult.relinkCount = relinkCount;
       jsonResult.relinkFromProvider = relinkedFromProvider;
     }
+    if (noLibrarySkipped > 0) {
+      jsonResult.noLibrarySkipped = noLibrarySkipped;
+    }
 
     if (mode === 'json') {
       return success(jsonResult);
@@ -2149,6 +2190,9 @@ async function linkAllDocumentsHandler(
       }
     } else {
       lines.push(`Dry run: ${docsToLink.length} document(s) would be linked to ${providerName}`);
+    }
+    if (noLibrarySkipped > 0) {
+      lines.push(`Skipped ${noLibrarySkipped} document(s) not in any library (use --no-library to include)`);
     }
     lines.push('');
 
@@ -2246,6 +2290,9 @@ async function linkAllDocumentsHandler(
     result.relinkCount = relinkCount;
     result.relinkFromProvider = relinkedFromProvider;
   }
+  if (noLibrarySkipped > 0) {
+    result.noLibrarySkipped = noLibrarySkipped;
+  }
 
   if (mode === 'json') {
     return success(result);
@@ -2264,6 +2311,10 @@ async function linkAllDocumentsHandler(
     summaryParts.push(`(${skipped} skipped)`);
   }
   lines.push(summaryParts.join(' '));
+
+  if (noLibrarySkipped > 0) {
+    lines.push(`Skipped ${noLibrarySkipped} document(s) not in any library (use --no-library to include)`);
+  }
 
   if (rateLimited) {
     lines.push('');
@@ -2732,7 +2783,7 @@ Examples:
 const linkAllCommand: Command = {
   name: 'link-all',
   description: 'Bulk-link all unlinked tasks or documents to external issues/pages',
-  usage: 'sf external-sync link-all --provider <provider> [--type task|document] [--project <project>] [--status <status>] [--dry-run] [--batch-size <n>] [--force]',
+  usage: 'sf external-sync link-all --provider <provider> [--type task|document] [--project <project>] [--status <status>] [--dry-run] [--batch-size <n>] [--force] [--no-library]',
   help: `Create external issues/pages for all unlinked elements and link them in bulk.
 
 Finds all tasks (or documents with --type document) that do NOT have
@@ -2741,7 +2792,8 @@ page for each one, then links them.
 
 Use --type document to link documents instead of tasks. When linking
 documents, system categories (task-description, message-content) are
-automatically excluded.
+automatically excluded. Documents not in any library are excluded by
+default; use --no-library to include them.
 
 Use --force to re-link elements that are already linked, including those linked
 to the same provider. This is useful for re-syncing from scratch after deleting
@@ -2755,6 +2807,7 @@ Options:
   -n, --dry-run            List elements that would be linked without creating issues/pages
   -b, --batch-size <n>     Elements to process concurrently (default: 10)
   -f, --force              Re-link elements already linked (including same provider)
+      --no-library         Include documents not in any library (excluded by default)
 
 Rate Limits:
   If a rate limit is hit, the command stops gracefully and reports how
@@ -2769,7 +2822,8 @@ Examples:
   sf external-sync link-all --provider linear --batch-size 5
   sf external-sync link-all --provider linear --force
   sf external-sync link-all --provider notion --type document
-  sf external-sync link-all --provider notion --type document --dry-run`,
+  sf external-sync link-all --provider notion --type document --dry-run
+  sf external-sync link-all --provider notion --type document --no-library`,
   options: linkAllOptions,
   handler: linkAllHandler as Command['handler'],
 };
@@ -2832,7 +2886,7 @@ Examples:
 const pushCommand: Command = {
   name: 'push',
   description: 'Push linked elements to external service',
-  usage: 'sf external-sync push [elementId...] [--all] [--force] [--type task|document|all]',
+  usage: 'sf external-sync push [elementId...] [--all] [--force] [--type task|document|all] [--no-library]',
   help: `Push specific linked elements to their external service, or push all linked elements.
 
 If specific element IDs are given, pushes only those elements. With --all,
@@ -2844,6 +2898,9 @@ and the external representation needs to be refreshed.
 
 Use --type to filter by element type (task, document, or all). Default: all.
 
+Documents not in any library are excluded by default. Use --no-library to
+include them.
+
 Arguments:
   elementId...     One or more element IDs to push (optional with --all)
 
@@ -2851,6 +2908,7 @@ Options:
   -a, --all                Push all linked elements
   -f, --force              Push all linked elements regardless of whether they have changed
   -t, --type <type>        Element type to push: task, document, or all (default: all)
+      --no-library         Include documents not in any library (excluded by default)
 
 Examples:
   sf external-sync push el-abc123
@@ -2859,6 +2917,7 @@ Examples:
   sf external-sync push --all --force
   sf external-sync push --all --type document
   sf external-sync push --all --type task
+  sf external-sync push --all --type document --no-library
   sf external-sync push el-abc123 --force`,
   options: pushOptions,
   handler: pushHandler as Command['handler'],

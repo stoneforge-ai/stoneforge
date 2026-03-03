@@ -1742,7 +1742,7 @@ sf external-sync link el-doc456 /path/to/file.md --type document --provider fold
 
 Bulk-link all unlinked elements to external resources. By default links tasks; use `--type document` to link documents instead. Finds all elements of the specified type that do not have external sync metadata and creates a corresponding external resource for each one, then links them. If a rate limit is hit, the command stops gracefully and reports how many elements were linked — re-run the command to continue.
 
-When linking documents (`--type document`), system-managed categories (e.g., `task-description`, `message-content`) are automatically excluded.
+When linking documents (`--type document`), system-managed categories (e.g., `task-description`, `message-content`) are automatically excluded. Documents not in any library are excluded by default; use `--no-library` to include them.
 
 | Option                    | Description                                                  |
 | ------------------------- | ------------------------------------------------------------ |
@@ -1753,6 +1753,7 @@ When linking documents (`--type document`), system-managed categories (e.g., `ta
 | `-n, --dry-run`           | List elements that would be linked without creating them     |
 | `-b, --batch-size <n>`    | How many elements to process concurrently (default: `10`)    |
 | `-f, --force`             | Re-link elements already linked (including same provider)    |
+| `--no-library`            | Include documents not in any library (excluded by default)   |
 
 ```bash
 # Bulk-link tasks
@@ -1767,6 +1768,7 @@ sf external-sync link-all --provider linear --force
 sf external-sync link-all --provider notion --type document
 sf external-sync link-all --provider folder --type document --dry-run
 sf external-sync link-all --provider notion --type document --project db-id-123
+sf external-sync link-all --provider notion --type document --no-library
 ```
 
 #### external-sync unlink
@@ -1802,7 +1804,7 @@ sf external-sync unlink-all --dry-run
 
 #### external-sync push
 
-Push linked elements to their external service. If specific element IDs are given, pushes only those elements. With `--all`, pushes every element that has an external link. Use `--type` to filter by element type.
+Push linked elements to their external service. If specific element IDs are given, pushes only those elements. With `--all`, pushes every element that has an external link. Use `--type` to filter by element type. Documents not in any library are excluded by default; use `--no-library` to include them.
 
 | Argument       | Description                                         |
 | -------------- | --------------------------------------------------- |
@@ -1813,6 +1815,7 @@ Push linked elements to their external service. If specific element IDs are give
 | `-a, --all`           | Push all linked elements                                       |
 | `-f, --force`         | Push regardless of whether elements have changed (skip hash check) |
 | `-t, --type <type>`   | Filter by type: `task`, `document`, or `all` (default: `all`) |
+| `--no-library`        | Include documents not in any library (excluded by default)     |
 
 ```bash
 sf external-sync push el-abc123
@@ -1821,6 +1824,7 @@ sf external-sync push --all
 sf external-sync push --all --force
 sf external-sync push --all --type task
 sf external-sync push --all --type document
+sf external-sync push --all --type document --no-library
 ```
 
 **Note:** Push requires a running sync daemon or server to execute the actual sync operations.

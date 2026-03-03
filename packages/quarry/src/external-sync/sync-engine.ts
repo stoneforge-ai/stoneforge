@@ -86,6 +86,12 @@ export interface SyncOptions {
    * When omitted or empty, all adapter types are processed (tasks + documents).
    */
   readonly adapterTypes?: readonly SyncAdapterType[];
+  /**
+   * Include documents that are not in any library.
+   * By default, documents without a library parent are excluded from push.
+   * Set to true to include them.
+   */
+  readonly includeNoLibrary?: boolean;
 }
 
 /**
@@ -272,7 +278,7 @@ export class SyncEngine {
     const now = createTimestamp();
 
     // Step 1: Find elements to push
-    const elements = await this.findLinkedElements(options);
+    let elements = await this.findLinkedElements(options);
 
     // Step 1.5: Batch-resolve library paths for all document elements
     // This avoids N+1 queries by resolving all paths upfront
@@ -283,6 +289,18 @@ export class SyncEngine {
     const libraryPaths = documentElements.length > 0
       ? await resolveDocumentLibraryPaths(this.api, documentElements.map(el => el.id))
       : new Map<string, string>();
+
+    // Step 1.6: Filter out documents without a library unless includeNoLibrary is set
+    let noLibrarySkipped = 0;
+    if (!options.includeNoLibrary && documentElements.length > 0) {
+      const beforeCount = elements.length;
+      elements = elements.filter(el => {
+        const syncState = getExternalSyncState(el.metadata);
+        if (syncState?.adapterType !== 'document') return true; // keep non-documents
+        return libraryPaths.has(el.id);
+      });
+      noLibrarySkipped = beforeCount - elements.length;
+    }
 
     // Step 2: Process elements concurrently in batches
     for (let i = 0; i < elements.length; i += PUSH_CONCURRENCY) {
@@ -325,6 +343,7 @@ export class SyncEngine {
       errors,
       provider: this.getPrimaryProvider(),
       project: this.getPrimaryProject(),
+      noLibrarySkipped,
     });
   }
 
@@ -1521,6 +1540,7 @@ function buildResult(params: {
   errors: ExternalSyncError[];
   provider: string;
   project: string;
+  noLibrarySkipped?: number;
 }): ExternalSyncResult {
   return {
     success: params.errors.length === 0,
@@ -1532,6 +1552,9 @@ function buildResult(params: {
     skipped: params.skipped,
     conflicts: params.conflicts,
     errors: params.errors,
+    ...(params.noLibrarySkipped !== undefined && params.noLibrarySkipped > 0
+      ? { noLibrarySkipped: params.noLibrarySkipped }
+      : {}),
   };
 }
 

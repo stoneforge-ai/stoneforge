@@ -92,6 +92,7 @@ function createMockApi(options: {
   events?: Array<{ elementId: ElementId; eventType: string; createdAt: Timestamp }>;
   onUpdate?: (id: ElementId, updates: Partial<Element>) => void;
   onCreate?: (input: Record<string, unknown>) => Element;
+  getDependencies?: (id: ElementId, types?: DependencyType[]) => Promise<Dependency[]>;
 } = {}): SyncEngineAPI {
   const elements = options.elements ?? [];
   return {
@@ -124,7 +125,10 @@ function createMockApi(options: {
     async listEvents(filter?: EventFilter): Promise<Array<{ elementId: ElementId; eventType: string; createdAt: Timestamp }>> {
       return options.events ?? [];
     },
-    async getDependencies(_id: ElementId, _types?: DependencyType[]): Promise<Dependency[]> {
+    async getDependencies(id: ElementId, types?: DependencyType[]): Promise<Dependency[]> {
+      if (options.getDependencies) {
+        return options.getDependencies(id, types);
+      }
       return [];
     },
   };
@@ -1886,6 +1890,24 @@ function createMockDocumentProvider(
   };
 }
 
+/**
+ * Default test library element used to satisfy the no-library filter.
+ * Document elements built with buildDocumentEngine are automatically
+ * associated with this library via getDependencies.
+ */
+const TEST_LIBRARY_ELEMENT = {
+  id: 'el-test-lib' as ElementId,
+  type: 'library',
+  name: 'Test Library',
+  title: 'Test Library',
+  status: 'active',
+  tags: [],
+  createdAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+  updatedAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+  createdBy: 'el-user1',
+  metadata: {},
+} as unknown as Element;
+
 function buildDocumentEngine(options: {
   elements?: Element[];
   events?: Array<{ elementId: ElementId; eventType: string; createdAt: Timestamp }>;
@@ -1894,6 +1916,8 @@ function buildDocumentEngine(options: {
   onUpdatePage?: (project: string, externalId: string, updates: Partial<ExternalDocumentInput>) => void;
   onCreate?: (input: Record<string, unknown>) => Element;
   conflictResolver?: SyncConflictResolver;
+  /** Set to true to omit the default library dependency (simulates documents without a library) */
+  noLibrary?: boolean;
 } = {}): SyncEngine {
   const docAdapter = createMockDocumentAdapter({
     pages: options.pages,
@@ -1905,12 +1929,37 @@ function buildDocumentEngine(options: {
 
   const settings = createMockSettings();
 
+  // By default, include a library element and wire document→library dependencies
+  // so document push tests pass the no-library filter
+  const docElements = (options.elements ?? []).filter(
+    (e) => (e as unknown as { type: string }).type === 'document'
+  );
+  const docIds = new Set(docElements.map(e => e.id));
+  const allElements = options.noLibrary
+    ? options.elements
+    : [...(options.elements ?? []), TEST_LIBRARY_ELEMENT];
+
   return createSyncEngine({
     api: createMockApi({
-      elements: options.elements,
+      elements: allElements,
       events: options.events,
       onUpdate: options.onUpdate,
       onCreate: options.onCreate,
+      getDependencies: options.noLibrary
+        ? undefined
+        : async (id: ElementId) => {
+            // Return parent-child dependency for document → library
+            if (docIds.has(id)) {
+              return [{
+                blockedId: id,
+                blockerId: TEST_LIBRARY_ELEMENT.id,
+                type: 'parent-child' as DependencyType,
+                createdAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+                createdBy: 'el-user1',
+              }];
+            }
+            return [];
+          },
     }),
     registry,
     settings,
@@ -2065,10 +2114,22 @@ describe('SyncEngine.push — documents', () => {
 
     const engine = createSyncEngine({
       api: createMockApi({
-        elements: [element],
+        elements: [element, TEST_LIBRARY_ELEMENT],
         events: [
           { elementId: element.id, eventType: 'updated', createdAt: '2024-01-05T00:00:00.000Z' as Timestamp },
         ],
+        getDependencies: async (id: ElementId) => {
+          if (id === element.id) {
+            return [{
+              blockedId: element.id,
+              blockerId: TEST_LIBRARY_ELEMENT.id,
+              type: 'parent-child' as DependencyType,
+              createdAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+              createdBy: 'el-user1',
+            }];
+          }
+          return [];
+        },
       }),
       registry,
       providerConfigs: [{ provider: 'notion', token: 'test', defaultProject: 'workspace-1' }],
@@ -2354,11 +2415,23 @@ describe('SyncEngine.sync — mixed task + document', () => {
 
     const engine = createSyncEngine({
       api: createMockApi({
-        elements: [taskElement, docElement],
+        elements: [taskElement, docElement, TEST_LIBRARY_ELEMENT],
         events: [
           { elementId: taskElement.id, eventType: 'updated', createdAt: '2024-01-05T00:00:00.000Z' as Timestamp },
           { elementId: docElement.id, eventType: 'updated', createdAt: '2024-01-05T00:00:00.000Z' as Timestamp },
         ],
+        getDependencies: async (id: ElementId) => {
+          if (id === docElement.id) {
+            return [{
+              blockedId: docElement.id,
+              blockerId: TEST_LIBRARY_ELEMENT.id,
+              type: 'parent-child' as DependencyType,
+              createdAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+              createdBy: 'el-user1',
+            }];
+          }
+          return [];
+        },
       }),
       registry,
       settings,
@@ -2547,5 +2620,253 @@ describe('SyncEngine conflict handling — documents', () => {
     // Element should be skipped (local wins), but metadata updated with new pulled hash
     expect(result.skipped).toBe(1);
     expect(updatedMetadata).toBeDefined();
+  });
+});
+
+// ============================================================================
+// No-Library Filtering Tests
+// ============================================================================
+
+describe('SyncEngine.push — no-library filtering', () => {
+  test('push excludes documents without a library by default', async () => {
+    // Use noLibrary: true so getDependencies returns [] → no library parent
+    // Documents should be filtered out by default
+    const syncState = createTestDocumentSyncState({
+      lastPushedHash: 'old-hash-that-differs',
+      lastPushedAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+    });
+    const element = createTestDocumentElement({ _syncState: syncState });
+
+    let updateCalled = false;
+    const engine = buildDocumentEngine({
+      elements: [element],
+      events: [
+        { elementId: element.id, eventType: 'updated', createdAt: '2024-01-05T00:00:00.000Z' as Timestamp },
+      ],
+      onUpdatePage: () => {
+        updateCalled = true;
+      },
+      noLibrary: true,
+    });
+
+    const result = await engine.push({ all: true });
+    // Document should be filtered out (no library), not pushed
+    expect(updateCalled).toBe(false);
+    expect(result.pushed).toBe(0);
+    expect(result.noLibrarySkipped).toBe(1);
+  });
+
+  test('push includes documents without a library when includeNoLibrary is set', async () => {
+    const syncState = createTestDocumentSyncState({
+      lastPushedHash: 'old-hash-that-differs',
+      lastPushedAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+    });
+    const element = createTestDocumentElement({ _syncState: syncState });
+
+    let updateCalled = false;
+    const engine = buildDocumentEngine({
+      elements: [element],
+      events: [
+        { elementId: element.id, eventType: 'updated', createdAt: '2024-01-05T00:00:00.000Z' as Timestamp },
+      ],
+      onUpdatePage: () => {
+        updateCalled = true;
+      },
+      noLibrary: true,
+    });
+
+    const result = await engine.push({ all: true, includeNoLibrary: true });
+    // With includeNoLibrary, the document should be pushed normally
+    expect(updateCalled).toBe(true);
+    expect(result.pushed).toBe(1);
+    expect(result.noLibrarySkipped).toBeUndefined();
+  });
+
+  test('push with documents in a library are not filtered out', async () => {
+    const syncState = createTestDocumentSyncState({
+      lastPushedHash: 'old-hash-that-differs',
+      lastPushedAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+    });
+    const element = createTestDocumentElement({ _syncState: syncState });
+
+    // Create a library element that the document belongs to
+    const libraryElement = {
+      id: 'el-lib1' as ElementId,
+      type: 'library',
+      name: 'Test Library',
+      title: 'Test Library',
+      status: 'active',
+      tags: [],
+      createdAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+      updatedAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+      createdBy: 'el-user1',
+      metadata: {},
+    } as unknown as Element;
+
+    let updateCalled = false;
+    const docAdapter = createMockDocumentAdapter({
+      onUpdatePage: () => {
+        updateCalled = true;
+      },
+    });
+    const provider = createMockDocumentProvider('notion', docAdapter);
+    const registry = new ProviderRegistry();
+    registry.register(provider);
+
+    const settings = createMockSettings();
+    const allElements = [element, libraryElement];
+
+    const engine = createSyncEngine({
+      api: {
+        async get<T extends Element>(id: ElementId): Promise<T | null> {
+          const el = allElements.find((e) => e.id === id);
+          return (el as T) ?? null;
+        },
+        async list<T extends Element>(filter?: Record<string, unknown>): Promise<T[]> {
+          if (filter && 'type' in filter) {
+            return allElements.filter((e) => (e as unknown as { type: string }).type === filter.type) as T[];
+          }
+          return allElements as T[];
+        },
+        async update<T extends Element>(id: ElementId, updates: Partial<T>): Promise<T> {
+          const el = allElements.find((e) => e.id === id);
+          return { ...el, ...updates } as T;
+        },
+        async create<T extends Element>(input: Record<string, unknown>): Promise<T> {
+          return { id: 'el-new1' as ElementId, ...input } as T;
+        },
+        async listEvents(): Promise<Array<{ elementId: ElementId; eventType: string; createdAt: Timestamp }>> {
+          return [
+            { elementId: element.id, eventType: 'updated', createdAt: '2024-01-05T00:00:00.000Z' as Timestamp },
+          ];
+        },
+        async getDependencies(id: ElementId, _types?: DependencyType[]): Promise<Dependency[]> {
+          // Return parent-child dependency for the document → library
+          if (id === element.id) {
+            return [{
+              blockedId: element.id,
+              blockerId: libraryElement.id,
+              type: 'parent-child' as DependencyType,
+              createdAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+              createdBy: 'el-user1',
+            }];
+          }
+          return [];
+        },
+      },
+      registry,
+      settings,
+      providerConfigs: [
+        { provider: 'notion', token: 'test-token', defaultProject: 'workspace-1' },
+      ],
+    });
+
+    const result = await engine.push({ all: true });
+    // Document is in a library, so it should be pushed
+    expect(updateCalled).toBe(true);
+    expect(result.pushed).toBe(1);
+    expect(result.noLibrarySkipped).toBeUndefined();
+  });
+
+  test('push does not filter task elements (only documents)', async () => {
+    // Tasks should never be affected by the no-library filter
+    const syncState = createTestSyncState({
+      lastPushedHash: 'old-hash-that-differs',
+      lastPushedAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+    });
+    const element = createTestElement({ _syncState: syncState });
+
+    let updateCalled = false;
+    const adapter = createMockTaskAdapter({
+      onUpdateIssue: () => {
+        updateCalled = true;
+      },
+    });
+    const provider = createMockProvider('github', adapter);
+    const registry = new ProviderRegistry();
+    registry.register(provider);
+
+    const settings = createMockSettings();
+    const engine = createSyncEngine({
+      api: createMockApi({
+        elements: [element],
+        events: [
+          { elementId: element.id, eventType: 'updated', createdAt: '2024-01-05T00:00:00.000Z' as Timestamp },
+        ],
+      }),
+      registry,
+      settings,
+      providerConfigs: [
+        { provider: 'github', token: 'test-token', defaultProject: 'owner/repo' },
+      ],
+    });
+
+    const result = await engine.push({ all: true });
+    // Task should still be pushed normally (no-library filter is for documents only)
+    expect(updateCalled).toBe(true);
+    expect(result.pushed).toBe(1);
+    expect(result.noLibrarySkipped).toBeUndefined();
+  });
+
+  test('noLibrarySkipped count is correct with mixed elements', async () => {
+    // Create a task element and a document element (document has no library)
+    const taskSyncState = createTestSyncState({
+      lastPushedHash: 'old-hash-that-differs',
+      lastPushedAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+    });
+    const taskElement = createTestElement({ _syncState: taskSyncState });
+
+    const docSyncState = createTestDocumentSyncState({
+      lastPushedHash: 'old-hash-that-differs',
+      lastPushedAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+    });
+    const docElement = createTestDocumentElement({ _syncState: docSyncState });
+
+    let taskUpdateCalled = false;
+    let docUpdateCalled = false;
+
+    const taskAdapter = createMockTaskAdapter({
+      onUpdateIssue: () => {
+        taskUpdateCalled = true;
+      },
+    });
+    const docAdapter = createMockDocumentAdapter({
+      onUpdatePage: () => {
+        docUpdateCalled = true;
+      },
+    });
+
+    // Register both github (for task) and notion (for document) providers
+    const githubProvider = createMockProvider('github', taskAdapter);
+    const notionProvider = createMockDocumentProvider('notion', docAdapter);
+    const registry = new ProviderRegistry();
+    registry.register(githubProvider);
+    registry.register(notionProvider);
+
+    const settings = createMockSettings();
+    const allElements = [taskElement, docElement];
+
+    const engine = createSyncEngine({
+      api: createMockApi({
+        elements: allElements,
+        events: [
+          { elementId: taskElement.id, eventType: 'updated', createdAt: '2024-01-05T00:00:00.000Z' as Timestamp },
+          { elementId: docElement.id, eventType: 'updated', createdAt: '2024-01-05T00:00:00.000Z' as Timestamp },
+        ],
+      }),
+      registry,
+      settings,
+      providerConfigs: [
+        { provider: 'github', token: 'test-token', defaultProject: 'owner/repo' },
+        { provider: 'notion', token: 'test-token', defaultProject: 'workspace-1' },
+      ],
+    });
+
+    const result = await engine.push({ all: true });
+    // Task should be pushed, document should be filtered out (no library)
+    expect(taskUpdateCalled).toBe(true);
+    expect(docUpdateCalled).toBe(false);
+    expect(result.pushed).toBe(1);
+    expect(result.noLibrarySkipped).toBe(1);
   });
 });
