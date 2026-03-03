@@ -132,6 +132,13 @@ export interface ExternalDocument {
   readonly contentType: 'markdown' | 'html' | 'text';
   /** Last update timestamp (ISO 8601) */
   readonly updatedAt: string;
+  /**
+   * Optional library path for organizing documents into subdirectories.
+   * Consists of slugified library names joined by '/', representing the
+   * document's position in the library hierarchy.
+   * Example: 'documentation/api-reference'
+   */
+  readonly libraryPath?: string;
   /** Raw provider response for lossless round-tripping */
   readonly raw?: Record<string, unknown>;
 }

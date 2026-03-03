@@ -21,11 +21,11 @@
  * varies (common names: "Name", "Title"). The adapter discovers and caches this
  * name rather than hardcoding it.
  *
- * Optional properties (Category as select, Tags as multi_select) are only
- * included in page properties when the database schema confirms they exist.
- * If they don't exist, the adapter attempts to auto-create them via
- * PATCH /databases/{id}. If that fails (e.g., insufficient permissions),
- * they are silently skipped.
+ * Optional properties (Category as select, Tags as multi_select, Library as
+ * select) are only included in page properties when the database schema
+ * confirms they exist. If they don't exist, the adapter attempts to auto-create
+ * them via PATCH /databases/{id}. If that fails (e.g., insufficient
+ * permissions), they are silently skipped.
  */
 
 import type {
@@ -67,19 +67,21 @@ export function extractTitleFromProperties(
  *
  * Uses the discovered database schema to:
  * - Set the title on the correct property (discovered name, not hardcoded)
- * - Only include Category and Tags if the database schema confirms they exist
+ * - Only include Category, Tags, and Library if the database schema confirms they exist
  *
  * @param title - The page title
  * @param schema - The discovered database schema with property availability info
  * @param category - Optional category for the Category select property
  * @param tags - Optional tags for the Tags multi_select property
+ * @param libraryPath - Optional library path for the Library select property
  * @returns A properties record suitable for the Notion API
  */
 export function buildPageProperties(
   title: string,
   schema: NotionDatabaseSchema,
   category?: string,
-  tags?: readonly string[]
+  tags?: readonly string[],
+  libraryPath?: string
 ): Record<string, unknown> {
   const properties: Record<string, unknown> = {
     [schema.titlePropertyName]: {
@@ -103,6 +105,12 @@ export function buildPageProperties(
     };
   }
 
+  if (libraryPath && schema.hasLibraryProperty) {
+    properties.Library = {
+      select: { name: libraryPath },
+    };
+  }
+
   return properties;
 }
 
@@ -119,6 +127,13 @@ function pageToExternalDocument(
   markdown: string,
   databaseId: string
 ): ExternalDocument {
+  // Extract the Library select value if present
+  const libraryProp = page.properties['Library'];
+  const libraryPath =
+    libraryProp?.type === 'select' && libraryProp.select
+      ? libraryProp.select.name
+      : undefined;
+
   return {
     externalId: page.id,
     url: page.url,
@@ -128,6 +143,7 @@ function pageToExternalDocument(
     content: markdown,
     contentType: 'markdown',
     updatedAt: page.last_edited_time,
+    ...(libraryPath ? { libraryPath } : {}),
     raw: page as unknown as Record<string, unknown>,
   };
 }
@@ -181,12 +197,12 @@ export class NotionDocumentAdapter implements DocumentSyncAdapter {
    *
    * Fetches the database schema from the Notion API, discovers the title
    * property name (every database has exactly one property of type 'title'),
-   * and checks for the existence of Category (select) and Tags (multi_select)
-   * properties.
+   * and checks for the existence of Category (select), Tags (multi_select),
+   * and Library (select) properties.
    *
-   * If Category or Tags properties don't exist, attempts to auto-create them
-   * via PATCH /databases/{id}. If the integration lacks permission, the
-   * properties are simply skipped — no error is thrown.
+   * If Category, Tags, or Library properties don't exist, attempts to
+   * auto-create them via PATCH /databases/{id}. If the integration lacks
+   * permission, the properties are simply skipped — no error is thrown.
    *
    * Results are cached per database ID so only one API call is made per
    * adapter instance per database.
@@ -217,12 +233,13 @@ export class NotionDocumentAdapter implements DocumentSyncAdapter {
       );
     }
 
-    // Check if Category and Tags properties exist with the expected types
+    // Check if Category, Tags, and Library properties exist with the expected types
     let hasCategoryProperty = db.properties['Category']?.type === 'select';
     let hasTagsProperty = db.properties['Tags']?.type === 'multi_select';
+    let hasLibraryProperty = db.properties['Library']?.type === 'select';
 
     // Auto-create missing properties if needed
-    if (!hasCategoryProperty || !hasTagsProperty) {
+    if (!hasCategoryProperty || !hasTagsProperty || !hasLibraryProperty) {
       const propertiesToCreate: Record<string, unknown> = {};
 
       if (!hasCategoryProperty) {
@@ -230,6 +247,9 @@ export class NotionDocumentAdapter implements DocumentSyncAdapter {
       }
       if (!hasTagsProperty) {
         propertiesToCreate['Tags'] = { multi_select: { options: [] } };
+      }
+      if (!hasLibraryProperty) {
+        propertiesToCreate['Library'] = { select: { options: [] } };
       }
 
       try {
@@ -240,9 +260,10 @@ export class NotionDocumentAdapter implements DocumentSyncAdapter {
         // Re-check after creation attempt
         hasCategoryProperty = updatedDb.properties['Category']?.type === 'select';
         hasTagsProperty = updatedDb.properties['Tags']?.type === 'multi_select';
+        hasLibraryProperty = updatedDb.properties['Library']?.type === 'select';
       } catch {
         // If we lack permission to update the database schema, just skip.
-        // The adapter will omit Category/Tags from page properties.
+        // The adapter will omit Category/Tags/Library from page properties.
       }
     }
 
@@ -250,6 +271,7 @@ export class NotionDocumentAdapter implements DocumentSyncAdapter {
       titlePropertyName,
       hasCategoryProperty,
       hasTagsProperty,
+      hasLibraryProperty,
     };
 
     this.schemaCache.set(databaseId, schema);
@@ -344,7 +366,7 @@ export class NotionDocumentAdapter implements DocumentSyncAdapter {
     // markdownToNotionBlocks returns NotionBlock[] which is structurally
     // compatible with NotionBlockInput[] but needs a cast due to index signature
     const blocks = markdownToNotionBlocks(page.content) as unknown as NotionBlockInput[];
-    const properties = buildPageProperties(page.title, schema, page.category, page.tags);
+    const properties = buildPageProperties(page.title, schema, page.category, page.tags, page.libraryPath);
 
     // Notion limits POST /pages to 100 children blocks
     const BLOCK_LIMIT = 100;
@@ -382,11 +404,12 @@ export class NotionDocumentAdapter implements DocumentSyncAdapter {
     externalId: string,
     updates: Partial<ExternalDocumentInput>
   ): Promise<ExternalDocument> {
-    // Update properties if title, category, or tags changed
+    // Update properties if title, category, tags, or libraryPath changed
     const hasPropertyUpdates =
       updates.title !== undefined ||
       updates.category !== undefined ||
-      updates.tags !== undefined;
+      updates.tags !== undefined ||
+      updates.libraryPath !== undefined;
 
     if (hasPropertyUpdates) {
       const schema = await this.getDatabaseSchema(project);
@@ -411,6 +434,12 @@ export class NotionDocumentAdapter implements DocumentSyncAdapter {
       if (updates.tags !== undefined && updates.tags.length > 0 && schema.hasTagsProperty) {
         properties.Tags = {
           multi_select: updates.tags.map((tag) => ({ name: tag })),
+        };
+      }
+
+      if (updates.libraryPath !== undefined && schema.hasLibraryProperty) {
+        properties.Library = {
+          select: { name: updates.libraryPath },
         };
       }
 

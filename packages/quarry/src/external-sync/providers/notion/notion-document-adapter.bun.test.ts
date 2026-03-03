@@ -135,16 +135,18 @@ function createMockBlocks(): NotionBlock[] {
 
 /**
  * Creates a mock Notion database with the given title property name.
- * Includes Category (select) and Tags (multi_select) by default.
+ * Includes Category (select), Tags (multi_select), and Library (select) by default.
  */
 function createMockDatabase(overrides?: {
   titlePropertyName?: string;
   includeCategory?: boolean;
   includeTags?: boolean;
+  includeLibrary?: boolean;
 }): NotionDatabase {
   const titleName = overrides?.titlePropertyName ?? 'Title';
   const includeCategory = overrides?.includeCategory ?? true;
   const includeTags = overrides?.includeTags ?? true;
+  const includeLibrary = overrides?.includeLibrary ?? true;
 
   const properties: Record<string, NotionDatabaseProperty> = {
     [titleName]: {
@@ -169,6 +171,15 @@ function createMockDatabase(overrides?: {
       type: 'multi_select',
       name: 'Tags',
       multi_select: { options: [{ id: 'opt-2', name: 'api', color: 'green' }] },
+    };
+  }
+
+  if (includeLibrary) {
+    properties.Library = {
+      id: 'lib-prop',
+      type: 'select',
+      name: 'Library',
+      select: { options: [{ id: 'opt-3', name: 'documentation/api-reference', color: 'purple' }] },
     };
   }
 
@@ -339,13 +350,15 @@ describe('buildPageProperties', () => {
     titlePropertyName: 'Name',
     hasCategoryProperty: true,
     hasTagsProperty: true,
+    hasLibraryProperty: true,
   };
 
-  // Schema with no Category or Tags
+  // Schema with no Category, Tags, or Library
   const titleOnlySchema: import('./notion-types.js').NotionDatabaseSchema = {
     titlePropertyName: 'Name',
     hasCategoryProperty: false,
     hasTagsProperty: false,
+    hasLibraryProperty: false,
   };
 
   test('creates title-only properties using schema title name', () => {
@@ -362,6 +375,7 @@ describe('buildPageProperties', () => {
       titlePropertyName: 'Document Title',
       hasCategoryProperty: true,
       hasTagsProperty: true,
+      hasLibraryProperty: true,
     };
     const props = buildPageProperties('My Page', customSchema);
     expect(props).toEqual({
@@ -395,7 +409,7 @@ describe('buildPageProperties', () => {
     });
   });
 
-  test('includes all properties when all provided and schema has them', () => {
+  test('includes category and tags when provided and schema has them', () => {
     const props = buildPageProperties('My Page', fullSchema, 'How-To', ['guide', 'setup']);
     expect(props).toEqual({
       Name: {
@@ -449,10 +463,51 @@ describe('buildPageProperties', () => {
       titlePropertyName: 'Name',
       hasCategoryProperty: true,
       hasTagsProperty: false,
+      hasLibraryProperty: false,
     };
     const props = buildPageProperties('Test', partialSchema, 'Reference', ['api']);
     expect(props.Category).toEqual({ select: { name: 'Reference' } });
     expect(props.Tags).toBeUndefined();
+  });
+
+  test('includes Library when schema has Library property and libraryPath provided', () => {
+    const props = buildPageProperties('My Page', fullSchema, undefined, undefined, 'documentation/api-reference');
+    expect(props).toEqual({
+      Name: {
+        title: [{ text: { content: 'My Page' } }],
+      },
+      Library: {
+        select: { name: 'documentation/api-reference' },
+      },
+    });
+  });
+
+  test('skips Library when schema lacks Library property', () => {
+    const props = buildPageProperties('Test', titleOnlySchema, undefined, undefined, 'documentation/api-reference');
+    expect(props.Library).toBeUndefined();
+  });
+
+  test('skips Library when libraryPath is not provided', () => {
+    const props = buildPageProperties('Test', fullSchema);
+    expect(props.Library).toBeUndefined();
+  });
+
+  test('includes all properties when all provided and schema has them', () => {
+    const props = buildPageProperties('My Page', fullSchema, 'How-To', ['guide', 'setup'], 'documentation/guides');
+    expect(props).toEqual({
+      Name: {
+        title: [{ text: { content: 'My Page' } }],
+      },
+      Category: {
+        select: { name: 'How-To' },
+      },
+      Tags: {
+        multi_select: [{ name: 'guide' }, { name: 'setup' }],
+      },
+      Library: {
+        select: { name: 'documentation/guides' },
+      },
+    });
   });
 });
 
@@ -476,6 +531,7 @@ describe('NotionDocumentAdapter', () => {
       expect(schema.titlePropertyName).toBe('Title');
       expect(schema.hasCategoryProperty).toBe(true);
       expect(schema.hasTagsProperty).toBe(true);
+      expect(schema.hasLibraryProperty).toBe(true);
 
       expect(mockApi.mocks.getDatabase).toHaveBeenCalledTimes(1);
       expect(mockApi.mocks.getDatabase).toHaveBeenCalledWith('db-uuid-5678');
@@ -529,14 +585,16 @@ describe('NotionDocumentAdapter', () => {
       );
     });
 
-    test('auto-creates Category and Tags when missing', async () => {
+    test('auto-creates Category, Tags, and Library when missing', async () => {
       const noPropApi = createMockApiClient({
         includeCategory: false,
         includeTags: false,
+        includeLibrary: false,
       });
       const updatedDb = createMockDatabase({
         includeCategory: true,
         includeTags: true,
+        includeLibrary: true,
       });
       (noPropApi.mocks.updateDatabase as ReturnType<typeof mock>).mockImplementation(() =>
         Promise.resolve(updatedDb)
@@ -550,16 +608,19 @@ describe('NotionDocumentAdapter', () => {
       expect(dbId).toBe('db-uuid-5678');
       expect(updates.properties).toHaveProperty('Category');
       expect(updates.properties).toHaveProperty('Tags');
+      expect(updates.properties).toHaveProperty('Library');
       expect(schema.hasCategoryProperty).toBe(true);
       expect(schema.hasTagsProperty).toBe(true);
+      expect(schema.hasLibraryProperty).toBe(true);
     });
 
-    test('auto-creates only Category when only Tags exists', async () => {
+    test('auto-creates only missing properties (Category missing, Tags and Library exist)', async () => {
       const partialApi = createMockApiClient({
         includeCategory: false,
         includeTags: true,
+        includeLibrary: true,
       });
-      const updatedDb = createMockDatabase({ includeCategory: true, includeTags: true });
+      const updatedDb = createMockDatabase({ includeCategory: true, includeTags: true, includeLibrary: true });
       (partialApi.mocks.updateDatabase as ReturnType<typeof mock>).mockImplementation(() =>
         Promise.resolve(updatedDb)
       );
@@ -571,12 +632,36 @@ describe('NotionDocumentAdapter', () => {
       const [, updates] = partialApi.mocks.updateDatabase.mock.calls[0];
       expect(updates.properties).toHaveProperty('Category');
       expect(updates.properties).not.toHaveProperty('Tags');
+      expect(updates.properties).not.toHaveProperty('Library');
+    });
+
+    test('auto-creates only Library when Category and Tags exist', async () => {
+      const partialApi = createMockApiClient({
+        includeCategory: true,
+        includeTags: true,
+        includeLibrary: false,
+      });
+      const updatedDb = createMockDatabase({ includeCategory: true, includeTags: true, includeLibrary: true });
+      (partialApi.mocks.updateDatabase as ReturnType<typeof mock>).mockImplementation(() =>
+        Promise.resolve(updatedDb)
+      );
+      const partialAdapter = new NotionDocumentAdapter(partialApi.client);
+
+      const schema = await partialAdapter.getDatabaseSchema('db-uuid-5678');
+
+      expect(partialApi.mocks.updateDatabase).toHaveBeenCalledTimes(1);
+      const [, updates] = partialApi.mocks.updateDatabase.mock.calls[0];
+      expect(updates.properties).not.toHaveProperty('Category');
+      expect(updates.properties).not.toHaveProperty('Tags');
+      expect(updates.properties).toHaveProperty('Library');
+      expect(schema.hasLibraryProperty).toBe(true);
     });
 
     test('skips gracefully when updateDatabase fails (permission error)', async () => {
       const noPropApi = createMockApiClient({
         includeCategory: false,
         includeTags: false,
+        includeLibrary: false,
       });
       (noPropApi.mocks.updateDatabase as ReturnType<typeof mock>).mockImplementation(() =>
         Promise.reject(new NotionApiError('Forbidden', 403, 'restricted_resource'))
@@ -588,6 +673,7 @@ describe('NotionDocumentAdapter', () => {
       expect(schema.titlePropertyName).toBe('Title');
       expect(schema.hasCategoryProperty).toBe(false);
       expect(schema.hasTagsProperty).toBe(false);
+      expect(schema.hasLibraryProperty).toBe(false);
     });
   });
 
@@ -639,6 +725,88 @@ describe('NotionDocumentAdapter', () => {
       expect(doc).not.toBeNull();
       expect(doc!.raw).toBeDefined();
       expect((doc!.raw as Record<string, unknown>).id).toBe('page-uuid-1234');
+    });
+
+    test('extracts libraryPath from Library select property', async () => {
+      const pageWithLibrary = createMockPage({
+        properties: {
+          Title: {
+            id: 'title-prop',
+            type: 'title',
+            title: [{
+              type: 'text',
+              plain_text: 'Test Page',
+              text: { content: 'Test Page', link: null },
+              annotations: { ...DEFAULT_ANNOTATIONS },
+              href: null,
+            }],
+          },
+          Library: {
+            id: 'lib-prop',
+            type: 'select',
+            select: { id: 'lib-1', name: 'documentation/api-reference', color: 'purple' },
+          },
+        },
+      });
+      mockApi.mocks.getPage.mockImplementation(() => Promise.resolve(pageWithLibrary));
+
+      const doc = await adapter.getPage('db-uuid-5678', 'page-uuid-1234');
+
+      expect(doc).not.toBeNull();
+      expect(doc!.libraryPath).toBe('documentation/api-reference');
+    });
+
+    test('returns undefined libraryPath when Library property is absent', async () => {
+      const pageWithoutLibrary = createMockPage({
+        properties: {
+          Title: {
+            id: 'title-prop',
+            type: 'title',
+            title: [{
+              type: 'text',
+              plain_text: 'Test Page',
+              text: { content: 'Test Page', link: null },
+              annotations: { ...DEFAULT_ANNOTATIONS },
+              href: null,
+            }],
+          },
+        },
+      });
+      mockApi.mocks.getPage.mockImplementation(() => Promise.resolve(pageWithoutLibrary));
+
+      const doc = await adapter.getPage('db-uuid-5678', 'page-uuid-1234');
+
+      expect(doc).not.toBeNull();
+      expect(doc!.libraryPath).toBeUndefined();
+    });
+
+    test('returns undefined libraryPath when Library select value is null', async () => {
+      const pageWithNullLibrary = createMockPage({
+        properties: {
+          Title: {
+            id: 'title-prop',
+            type: 'title',
+            title: [{
+              type: 'text',
+              plain_text: 'Test Page',
+              text: { content: 'Test Page', link: null },
+              annotations: { ...DEFAULT_ANNOTATIONS },
+              href: null,
+            }],
+          },
+          Library: {
+            id: 'lib-prop',
+            type: 'select',
+            select: null,
+          },
+        },
+      });
+      mockApi.mocks.getPage.mockImplementation(() => Promise.resolve(pageWithNullLibrary));
+
+      const doc = await adapter.getPage('db-uuid-5678', 'page-uuid-1234');
+
+      expect(doc).not.toBeNull();
+      expect(doc!.libraryPath).toBeUndefined();
     });
   });
 
@@ -917,6 +1085,50 @@ describe('NotionDocumentAdapter', () => {
       expect(properties.Tags).toBeUndefined();
     });
 
+    test('passes libraryPath to page properties when provided', async () => {
+      const input: ExternalDocumentInput = {
+        title: 'Library Doc',
+        content: '# Hello',
+        contentType: 'markdown',
+        libraryPath: 'documentation/api-reference',
+      };
+
+      await adapter.createPage('db-uuid-5678', input);
+
+      const [, properties] = mockApi.mocks.createPage.mock.calls[0];
+      expect(properties.Library).toEqual({ select: { name: 'documentation/api-reference' } });
+    });
+
+    test('skips Library when libraryPath not provided', async () => {
+      const input: ExternalDocumentInput = {
+        title: 'No Library Doc',
+        content: 'Content',
+      };
+
+      await adapter.createPage('db-uuid-5678', input);
+
+      const [, properties] = mockApi.mocks.createPage.mock.calls[0];
+      expect(properties.Library).toBeUndefined();
+    });
+
+    test('skips Library when schema lacks Library property', async () => {
+      const noLibApi = createMockApiClient({ includeLibrary: false });
+      (noLibApi.mocks.updateDatabase as ReturnType<typeof mock>).mockImplementation(() =>
+        Promise.reject(new NotionApiError('Forbidden', 403, 'restricted_resource'))
+      );
+      const noLibAdapter = new NotionDocumentAdapter(noLibApi.client);
+
+      await noLibAdapter.createPage('db-uuid-5678', {
+        title: 'Doc With Library',
+        content: 'Content',
+        libraryPath: 'documentation/guides',
+      });
+
+      const [, properties] = noLibApi.mocks.createPage.mock.calls[0];
+      expect(properties).toHaveProperty('Title');
+      expect(properties).not.toHaveProperty('Library');
+    });
+
     test('skips category and tags when schema lacks those properties', async () => {
       const noPropApi = createMockApiClient({ includeCategory: false, includeTags: false });
       (noPropApi.mocks.updateDatabase as ReturnType<typeof mock>).mockImplementation(() =>
@@ -1089,6 +1301,54 @@ describe('NotionDocumentAdapter', () => {
       expect(properties).toHaveProperty('Title');
       expect(properties).not.toHaveProperty('Category');
       expect(properties).not.toHaveProperty('Tags');
+    });
+
+    test('updates libraryPath property without affecting title', async () => {
+      await adapter.updatePage('db-uuid-5678', 'page-uuid-1234', {
+        libraryPath: 'documentation/api-reference',
+      });
+
+      expect(mockApi.mocks.updatePage).toHaveBeenCalledTimes(1);
+      const [, properties] = mockApi.mocks.updatePage.mock.calls[0];
+      expect(properties.Library).toEqual({ select: { name: 'documentation/api-reference' } });
+      expect(properties.Title).toBeUndefined();
+    });
+
+    test('updates title, category, tags, and libraryPath together', async () => {
+      await adapter.updatePage('db-uuid-5678', 'page-uuid-1234', {
+        title: 'New Title',
+        category: 'how-to',
+        tags: ['guide', 'setup'],
+        libraryPath: 'documentation/guides',
+      });
+
+      expect(mockApi.mocks.updatePage).toHaveBeenCalledTimes(1);
+      const [, properties] = mockApi.mocks.updatePage.mock.calls[0];
+      expect(properties.Title).toEqual({
+        title: [{ text: { content: 'New Title' } }],
+      });
+      expect(properties.Category).toEqual({ select: { name: 'how-to' } });
+      expect(properties.Tags).toEqual({
+        multi_select: [{ name: 'guide' }, { name: 'setup' }],
+      });
+      expect(properties.Library).toEqual({ select: { name: 'documentation/guides' } });
+    });
+
+    test('skips Library in update when schema lacks Library property', async () => {
+      const noLibApi = createMockApiClient({ includeLibrary: false });
+      (noLibApi.mocks.updateDatabase as ReturnType<typeof mock>).mockImplementation(() =>
+        Promise.reject(new NotionApiError('Forbidden', 403, 'restricted_resource'))
+      );
+      const noLibAdapter = new NotionDocumentAdapter(noLibApi.client);
+
+      await noLibAdapter.updatePage('db-uuid-5678', 'page-uuid-1234', {
+        title: 'Updated',
+        libraryPath: 'documentation/guides',
+      });
+
+      const [, properties] = noLibApi.mocks.updatePage.mock.calls[0];
+      expect(properties).toHaveProperty('Title');
+      expect(properties).not.toHaveProperty('Library');
     });
   });
 });

@@ -364,6 +364,8 @@ export interface NotionDatabaseSchema {
   readonly hasCategoryProperty: boolean;
   /** Whether a 'Tags' multi_select property exists in the database */
   readonly hasTagsProperty: boolean;
+  /** Whether a 'Library' select property exists in the database */
+  readonly hasLibraryProperty: boolean;
 }
 
 // ============================================================================
