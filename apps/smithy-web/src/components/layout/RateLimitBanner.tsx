@@ -7,7 +7,8 @@
  */
 
 import { useState, useMemo } from 'react';
-import { Clock, X, Loader2 } from 'lucide-react';
+import { Link } from '@tanstack/react-router';
+import { Clock, X, Loader2, Settings } from 'lucide-react';
 import { useDaemonStatus, useWakeDaemon } from '../../api/hooks';
 
 /**
@@ -47,6 +48,7 @@ export function RateLimitBanner() {
 
   const isPaused = status?.rateLimit?.isPaused === true;
   const soonestReset = status?.rateLimit?.soonestReset;
+  const limits = status?.rateLimit?.limits ?? [];
 
   // Determine if the banner was dismissed for the current sleep session
   const isDismissed = useMemo(() => {
@@ -71,6 +73,12 @@ export function RateLimitBanner() {
 
   const wakeTimeText = soonestReset ? formatWakeTime(soonestReset) : 'soon';
 
+  // Build executable names text from limits array
+  const executableNames = limits.map((l) => l.executable);
+  const rateLimitDetail = executableNames.length > 0
+    ? ` — ${executableNames.join(', ')} hit ${executableNames.length === 1 ? 'its' : 'their'} rate limit${executableNames.length === 1 ? '' : 's'}.`
+    : ' — rate limit reached.';
+
   return (
     <div
       className="flex items-center gap-3 px-4 md:px-6 py-2 bg-[var(--color-warning-bg)] border-b border-[var(--color-warning)]/30"
@@ -81,9 +89,24 @@ export function RateLimitBanner() {
 
       <p className="flex-1 text-sm text-[var(--color-warning-text)]">
         <span className="font-medium">Dispatch paused</span>
-        <span className="hidden sm:inline"> — rate limit reached.</span>
+        <span className="hidden sm:inline">{rateLimitDetail}</span>
         {' '}Waking {wakeTimeText}.
       </p>
+
+      <Link
+        to="/settings"
+        search={{ tab: 'preferences' }}
+        className="flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-md
+          text-[var(--color-warning-text)]
+          hover:bg-[var(--color-warning)]/20
+          border border-transparent
+          transition-colors duration-150
+          flex-shrink-0"
+        data-testid="rate-limit-configure-button"
+      >
+        <Settings className="w-3 h-3" />
+        <span className="hidden md:inline">Configure</span>
+      </Link>
 
       <button
         onClick={handleWakeNow}
