@@ -145,7 +145,6 @@ const playbookShowOptions: CommandOption[] = [
   },
   {
     name: 'variables',
-    short: 'v',
     description: 'Include variable definitions',
     hasValue: false,
   },
@@ -607,7 +606,6 @@ const playbookCreateOptions: CommandOption[] = [
   },
   {
     name: 'variable',
-    short: 'v',
     description: 'Add variable (format: name:type[:default][:required], can be repeated)',
     hasValue: true,
     array: true,

@@ -768,7 +768,7 @@ Show document content.
 
 | Option                    | Description                       |
 | ------------------------- | --------------------------------- |
-| `-V, --doc-version <ver>` | Show specific version             |
+| `--doc-version <ver>`     | Show specific version             |
 
 #### document search
 
@@ -1164,7 +1164,7 @@ sf show inbox-abc123
 | `-n, --name <name>`        | Channel name (required for group channels)       |
 | `-D, --description <text>` | Channel description                              |
 | `-t, --type <type>`        | Channel type: group (default) or direct          |
-| `-V, --visibility <vis>`   | Visibility: public or private (default)          |
+| `--visibility <vis>`       | Visibility: public or private (default)          |
 | `-p, --policy <policy>`    | Join policy: open, invite-only (default), or request |
 | `-m, --member <id>`        | Add member (can be repeated)                     |
 | `-d, --direct <entity>`    | Create direct channel with entity (for --type direct) |
@@ -1172,7 +1172,7 @@ sf show inbox-abc123
 
 ```bash
 sf channel create --name general --description "General discussion"
-sf channel create --name private-ops -V private -p invite-only
+sf channel create --name private-ops --visibility private -p invite-only
 sf channel create --type direct --direct el-user123
 sf channel create --name team --member el-a --member el-b
 ```
@@ -1491,7 +1491,7 @@ sf playbook validate deploy --var env=production --var debug=true
 # Create a new playbook
 sf playbook create --name deploy --title "Deployment Process"
 sf playbook create -n deploy -t "Deploy" -s "build:Build app" -s "test:Run tests:build"
-sf playbook create -n deploy -t "Deploy" -v "env:string" -v "debug:boolean:false:false"
+sf playbook create -n deploy -t "Deploy" --variable "env:string" --variable "debug:boolean:false:false"
 ```
 
 #### playbook show
@@ -1499,7 +1499,7 @@ sf playbook create -n deploy -t "Deploy" -v "env:string" -v "debug:boolean:false
 | Option               | Description              |
 | -------------------- | ------------------------ |
 | `-s, --steps`        | Include step definitions |
-| `-v, --variables`    | Include variable definitions |
+| `--variables`        | Include variable definitions |
 
 #### playbook validate
 
@@ -1515,7 +1515,7 @@ sf playbook create -n deploy -t "Deploy" -v "env:string" -v "debug:boolean:false
 | `-n, --name <name>`       | Playbook name (unique identifier, required)               |
 | `-t, --title <title>`     | Playbook title (display name, required)                   |
 | `-s, --step <spec>`       | Add step (format: `id:title[:dependsOn,...]`, repeatable) |
-| `-v, --variable <spec>`   | Add variable (format: `name:type[:default][:required]`, repeatable) |
+| `--variable <spec>`       | Add variable (format: `name:type[:default][:required]`, repeatable) |
 | `-e, --extends <name>`    | Extend playbook (can be repeated)                         |
 | `--tag <tag>`             | Add tag (can be repeated)                                 |
 

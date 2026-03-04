@@ -64,7 +64,6 @@ const channelCreateOptions: CommandOption[] = [
   },
   {
     name: 'visibility',
-    short: 'V',
     description: 'Visibility: public or private (default)',
     hasValue: true,
   },
