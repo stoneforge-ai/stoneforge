@@ -1,5 +1,14 @@
 # @stoneforge/core
 
+## 1.14.0
+
+### Minor Changes
+
+- 54e031a: Add optional `libraryPath` field to `ExternalDocument` type for reading library path metadata from external document providers
+- 7b0894c: Add optional `libraryPath` field to `ExternalDocumentInput` for organizing documents into subdirectories based on library membership
+- 89a73d8: Add optional `category` and `tags` fields to `ExternalDocumentInput` type for passing document metadata through the external sync pipeline
+- 6a769ce: Add `noLibrarySkipped` optional field to `ExternalSyncResult` interface to report how many documents were excluded from sync due to not being in any library.
+
 ## 1.13.0
 
 ### Minor Changes

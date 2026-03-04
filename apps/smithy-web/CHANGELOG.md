@@ -1,5 +1,12 @@
 # @stoneforge/smithy-web
 
+## 1.14.0
+
+### Patch Changes
+
+- 110f842: Show rate-limited executable names in the RateLimitBanner and add a Configure link to the settings page
+  - @stoneforge/ui@1.14.0
+
 ## 1.13.0
 
 ### Minor Changes

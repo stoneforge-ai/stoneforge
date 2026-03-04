@@ -1,5 +1,57 @@
 # @stoneforge/smithy-server
 
+## 1.14.0
+
+### Patch Changes
+
+- 832d362: Pass idConfig to createWorkflowFromPlaybook in smithy-server workflow route for adaptive hash length and collision detection.
+- Updated dependencies [03260a5]
+- Updated dependencies [a82e4f8]
+- Updated dependencies [54e031a]
+- Updated dependencies [54e031a]
+- Updated dependencies [eb08c40]
+- Updated dependencies [66a831b]
+- Updated dependencies [4c78782]
+- Updated dependencies [42a2618]
+- Updated dependencies [ff96f34]
+- Updated dependencies [0497707]
+- Updated dependencies [f52c7bb]
+- Updated dependencies [d973b7b]
+- Updated dependencies [0fe35b1]
+- Updated dependencies [e50386c]
+- Updated dependencies [76f4eec]
+- Updated dependencies [4613863]
+- Updated dependencies [7b0894c]
+- Updated dependencies [5e12790]
+- Updated dependencies [a65a4dd]
+- Updated dependencies [3a02a16]
+- Updated dependencies [940fa7b]
+- Updated dependencies [b75f07f]
+- Updated dependencies [7b0894c]
+- Updated dependencies [89a73d8]
+- Updated dependencies [89a73d8]
+- Updated dependencies [f5af534]
+- Updated dependencies [832d362]
+- Updated dependencies [832d362]
+- Updated dependencies [8794e6a]
+- Updated dependencies [c5b5e07]
+- Updated dependencies [e262b2e]
+- Updated dependencies [1033e1d]
+- Updated dependencies [4c3c57f]
+- Updated dependencies [7ccf4e1]
+- Updated dependencies [6a769ce]
+- Updated dependencies [6a769ce]
+- Updated dependencies [0f4412d]
+- Updated dependencies [ed6c56c]
+- Updated dependencies [a261b37]
+- Updated dependencies [411cd24]
+- Updated dependencies [bd19f33]
+  - @stoneforge/quarry@1.14.0
+  - @stoneforge/core@1.14.0
+  - @stoneforge/smithy@1.14.0
+  - @stoneforge/shared-routes@1.14.0
+  - @stoneforge/storage@1.14.0
+
 ## 1.13.0
 
 ### Patch Changes
