@@ -451,7 +451,7 @@ describe('Integration: End-to-end folder sync', () => {
     });
 
     // Step 2: Push the document to the folder
-    const pushResult = await engine.push({ all: true });
+    const pushResult = await engine.push({ all: true, includeNoLibrary: true });
     expect(pushResult.pushed).toBe(1);
     expect(pushResult.errors).toHaveLength(0);
 
@@ -508,7 +508,7 @@ describe('Integration: End-to-end folder sync', () => {
     });
 
     // Push document to folder
-    const pushResult = await engine.push({ all: true });
+    const pushResult = await engine.push({ all: true, includeNoLibrary: true });
     expect(pushResult.pushed).toBe(1);
 
     // Read the file back using the adapter
@@ -581,7 +581,7 @@ describe('Integration: End-to-end Notion sync (mocked)', () => {
     });
 
     // Step 1: Push document to Notion
-    const pushResult = await engine.push({ all: true });
+    const pushResult = await engine.push({ all: true, includeNoLibrary: true });
     expect(pushResult.pushed).toBe(1);
     expect(pushResult.errors).toHaveLength(0);
     expect(updateCalls).toHaveLength(1);
@@ -697,7 +697,7 @@ describe('Integration: Round-trip fidelity', () => {
     });
 
     // Push
-    const pushResult = await engine.push({ all: true });
+    const pushResult = await engine.push({ all: true, includeNoLibrary: true });
     expect(pushResult.pushed).toBe(1);
 
     // Simulate external modification
@@ -756,7 +756,7 @@ describe('Integration: Round-trip fidelity', () => {
     });
 
     // Full sync cycle
-    const syncResult = await engine.sync({ all: true });
+    const syncResult = await engine.sync({ all: true, includeNoLibrary: true });
     expect(syncResult.errors).toHaveLength(0);
     expect(syncResult.pushed).toBe(1);
 
@@ -842,7 +842,7 @@ describe('Integration: Mixed sync (tasks + documents)', () => {
     });
 
     // Run bidirectional sync
-    const result = await engine.sync({ all: true });
+    const result = await engine.sync({ all: true, includeNoLibrary: true });
     expect(result.errors).toHaveLength(0);
 
     // Both task and document should have been pushed
@@ -904,7 +904,7 @@ describe('Integration: Mixed sync (tasks + documents)', () => {
     });
 
     // Sync only documents
-    const result = await engine.push({ all: true, adapterTypes: ['document'] });
+    const result = await engine.push({ all: true, adapterTypes: ['document'], includeNoLibrary: true });
     expect(result.errors).toHaveLength(0);
     expect(docUpdateCalls.length).toBeGreaterThanOrEqual(0); // may push
     expect(taskUpdateCalls).toHaveLength(0); // tasks filtered out
@@ -1074,7 +1074,7 @@ describe('Integration: System category filtering', () => {
     });
 
     // Push all — only the linked normal doc should be pushed
-    const result = await engine.push({ all: true });
+    const result = await engine.push({ all: true, includeNoLibrary: true });
     expect(result.pushed).toBe(1);
     expect(updateCalls).toHaveLength(1);
     expect(updateCalls[0]).toBe('page-normal');
@@ -1635,7 +1635,7 @@ describe('Integration: Error handling in document sync', () => {
       providerConfigs: [{ provider: 'notion', token: 'ntn_test', defaultProject: 'workspace-1' }],
     });
 
-    const result = await engine.push({ all: true });
+    const result = await engine.push({ all: true, includeNoLibrary: true });
 
     // One error, one success
     expect(result.errors).toHaveLength(1);

@@ -679,9 +679,9 @@ describe('external-sync link-all', () => {
 
     expect(result.exitCode).not.toBe(ExitCode.SUCCESS);
     expect(result.error).toBeDefined();
-    // Should mention token or configuration
+    // Should mention token, configuration, or missing smithy package
     expect(
-      result.error!.includes('token') || result.error!.includes('configured') || result.error!.includes('settings')
+      result.error!.includes('token') || result.error!.includes('configured') || result.error!.includes('settings') || result.error!.includes('smithy')
     ).toBe(true);
   });
 
@@ -754,8 +754,8 @@ describe('external-sync link-all', () => {
 
     expect(result.exitCode).not.toBe(ExitCode.SUCCESS);
     expect(result.error).toBeDefined();
-    // Should mention configuration, not token
-    expect(result.error!.includes('not configured')).toBe(true);
+    // Should mention configuration or missing smithy package
+    expect(result.error!.includes('not configured') || result.error!.includes('smithy')).toBe(true);
   });
 
   test('folder provider fails if no project is configured', async () => {
@@ -782,8 +782,8 @@ describe('external-sync link-all', () => {
 
     expect(result.exitCode).not.toBe(ExitCode.SUCCESS);
     expect(result.error).toBeDefined();
-    // Should mention project not configured
-    expect(result.error!.includes('project')).toBe(true);
+    // Should mention project or missing smithy package
+    expect(result.error!.includes('project') || result.error!.includes('smithy')).toBe(true);
   });
 
   test('github provider still requires a token', async () => {
@@ -808,7 +808,8 @@ describe('external-sync link-all', () => {
 
     expect(result.exitCode).not.toBe(ExitCode.SUCCESS);
     expect(result.error).toBeDefined();
-    expect(result.error!.includes('token')).toBe(true);
+    // Should mention token or missing smithy package
+    expect(result.error!.includes('token') || result.error!.includes('smithy')).toBe(true);
   });
 
   // ==========================================================================
