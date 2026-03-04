@@ -64,7 +64,7 @@ const blockedCache = createBlockedCacheService(storage);
 #### Queries
 
 ```typescript
-blockedCache.isBlocked(elementId);         // boolean
+blockedCache.isBlocked(elementId);         // BlockingInfo | null
 blockedCache.getAllBlocked();               // All blocked elements
 blockedCache.getBlockedBy(blockerId);      // Elements blocked by a specific element
 ```

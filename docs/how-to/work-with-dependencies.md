@@ -30,7 +30,7 @@ await api.addDependency({
   blockedId: taskA.id,
   blockerId: taskB.id,
   type: 'blocks',
-  createdBy: actorId,
+  actor: actorId,
 });
 
 // Add parent-child (plan contains task)
@@ -38,7 +38,7 @@ await api.addDependency({
   blockedId: taskId,
   blockerId: planId,
   type: 'parent-child',
-  createdBy: actorId,
+  actor: actorId,
 });
 
 // Add with metadata (for awaits gates)
@@ -46,11 +46,11 @@ await api.addDependency({
   blockedId: taskId,
   blockerId: approvalGateId,
   type: 'awaits',
-  createdBy: actorId,
+  actor: actorId,
   metadata: {
     gateType: 'approval',
     requiredApprovers: ['manager-1', 'lead-1'],
-    requiredCount: 1,
+    approvalCount: 1,
     currentApprovers: [],
   },
 });
@@ -194,7 +194,7 @@ await api.addDependency({
   blockedId: taskId,
   blockerId: gateId,
   type: 'awaits',
-  createdBy: actorId,
+  actor: actorId,
   metadata: {
     gateType: 'timer',
     waitUntil: '2024-01-15T10:00:00.000Z',
@@ -211,11 +211,11 @@ await api.addDependency({
   blockedId: taskId,
   blockerId: gateId,
   type: 'awaits',
-  createdBy: actorId,
+  actor: actorId,
   metadata: {
     gateType: 'approval',
     requiredApprovers: ['manager-1', 'lead-1'],
-    requiredCount: 1,  // Need 1 of the 2
+    approvalCount: 1,  // Need 1 of the 2
     currentApprovers: [],
   },
 });
@@ -227,7 +227,7 @@ await api.recordApproval(blockedId, blockerId, 'manager-1');
 await api.removeApproval(blockedId, blockerId, 'manager-1');
 ```
 
-Satisfied when: `currentApprovers.length >= requiredCount`
+Satisfied when: `currentApprovers.length >= approvalCount`
 
 ### External Gate
 
@@ -236,9 +236,11 @@ await api.addDependency({
   blockedId: taskId,
   blockerId: gateId,
   type: 'awaits',
-  createdBy: actorId,
+  actor: actorId,
   metadata: {
     gateType: 'external',
+    externalSystem: 'ci',
+    externalId: 'build-123',
     satisfied: false,
   },
 });
@@ -334,7 +336,7 @@ await api.addDependency({
   metadata: {
     gateType: 'approval',
     requiredApprovers: ['tech-lead', 'product-owner'],
-    requiredCount: 2,
+    approvalCount: 2,
     currentApprovers: [],
   },
 });

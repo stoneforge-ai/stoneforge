@@ -127,7 +127,7 @@ await api.addDependency({
   blockedId: taskB.id,  // The one being blocked
   blockerId: taskA.id,  // The blocker (must complete first)
   type: 'blocks',
-  createdBy: actorId,
+  actor: actorId,
 });
 ```
 
@@ -141,7 +141,7 @@ await api.addDependency({
   blockedId: taskId,    // The child
   blockerId: planId,    // The parent
   type: 'parent-child',
-  createdBy: actorId,
+  actor: actorId,
 });
 ```
 
@@ -161,7 +161,7 @@ await api.addDependency({
     gateType: 'timer',
     waitUntil: '2024-01-20T09:00:00.000Z',
   },
-  createdBy: actorId,
+  actor: actorId,
 });
 
 // Approval gate - wait for approvers
@@ -175,7 +175,7 @@ await api.addDependency({
     approvalCount: 1,  // Need 1 of 2
     currentApprovers: [],
   },
-  createdBy: actorId,
+  actor: actorId,
 });
 
 // External gate - wait for external system
@@ -189,7 +189,7 @@ await api.addDependency({
     externalId: 'build-123',
     satisfied: false,
   },
-  createdBy: actorId,
+  actor: actorId,
 });
 ```
 
@@ -279,7 +279,7 @@ await api.addDependency({
   blockedId: task2.id,
   blockerId: task1.id,
   type: 'blocks',
-  createdBy: actorId,
+  actor: actorId,
 });
 
 // Task 3 waits for Task 2
@@ -287,7 +287,7 @@ await api.addDependency({
   blockedId: task3.id,
   blockerId: task2.id,
   type: 'blocks',
-  createdBy: actorId,
+  actor: actorId,
 });
 ```
 
@@ -312,7 +312,7 @@ await api.addDependency({
     approvalCount: 2,
     currentApprovers: [],
   },
-  createdBy: actorId,
+  actor: actorId,
 });
 
 // When approved:
@@ -329,7 +329,7 @@ await api.addDependency({
   blockedId: task.id,
   blockerId: specDoc.id,
   type: 'references',
-  createdBy: actorId,
+  actor: actorId,
 });
 
 // Link related documents
@@ -337,7 +337,7 @@ await api.addDependency({
   blockedId: doc1.id,
   blockerId: doc2.id,
   type: 'relates-to',
-  createdBy: actorId,
+  actor: actorId,
 });
 ```
 
@@ -347,7 +347,7 @@ await api.addDependency({
 
 2. **Direction matters** - For `blocks`, `blockedId` is the waiting task and `blockerId` is what must complete first.
 
-3. **Cycles auto-checked** - `api.addDependency()` auto-checks for cycles on blocking types and throws `CYCLE_DETECTED`. Use `detectCycle()` for detailed results.
+3. **Cycles NOT auto-checked on QuarryAPI** - `api.addDependency()` does NOT auto-check for cycles. Use `DependencyService.detectCycle()` manually for detailed results. Self-referential dependencies are rejected immediately with `CYCLE_DETECTED`.
 
 4. **`relates-to` is normalized** - Always query both directions to find all related elements.
 

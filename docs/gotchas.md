@@ -75,7 +75,7 @@ Common pitfalls and their solutions, organized by severity and category.
 
 - Messages are **immutable** after creation (`updatedAt === createdAt` always)
 - Cannot edit or delete message content
-- Must have either `channelId` or `threadId`
+- Both `channelId` and `threadId` are always present (`threadId` is `null` for non-threaded messages)
 - Content is stored as `DocumentId` reference (`contentRef`), not inline
 
 ## Channels
@@ -84,7 +84,7 @@ Common pitfalls and their solutions, organized by severity and category.
 
 ## Direct Channels
 
-- Direct channel names are deterministic: `[entityA:entityB]` sorted alphabetically
+- Direct channel names are deterministic: `entityA:entityB` sorted alphabetically (no brackets)
 - Creating A→B or B→A produces the same channel (find-or-create semantics)
 
 ## IDs
