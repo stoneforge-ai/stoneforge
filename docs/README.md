@@ -98,8 +98,8 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for full architecture details.
 | Workflow operations | `types/workflow-ops.ts` | - |
 | ID generator | `id/generator.ts` | `id/generator.bun.test.ts` |
 | Error codes | `errors/codes.ts` | `errors/codes.bun.test.ts` |
-| Error base class | `errors/error.ts` | - |
-| Error factories | `errors/factories.ts` | - |
+| Error base class | `errors/error.ts` | `errors/error.bun.test.ts` |
+| Error factories | `errors/factories.ts` | `errors/factories.bun.test.ts` |
 | Mention parsing utils | `utils/mentions.ts` | - |
 | External sync types | `types/external-sync.ts` | `types/external-sync.bun.test.ts` |
 
@@ -121,7 +121,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for full architecture details.
 | Concept | Source | Tests |
 |---------|--------|-------|
 | QuarryAPI | `api/quarry-api.ts` | `api/*.integration.bun.test.ts` |
-| API types | `api/types.ts` | - |
+| API types | `api/types.ts` | `api/types.bun.test.ts` |
 | Dependency service | `services/dependency.ts` | `services/dependency.bun.test.ts` |
 | Blocked cache | `services/blocked-cache.ts` | `services/blocked-cache.bun.test.ts` |
 | Inbox service | `services/inbox.ts` | `services/inbox.bun.test.ts` |
@@ -137,7 +137,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for full architecture details.
 | Sync hash | `sync/hash.ts` | - |
 | Sync serialization | `sync/serialization.ts` | - |
 | Sync types | `sync/types.ts` | - |
-| Sync auto-export | `sync/auto-export.ts` | - |
+| Sync auto-export | `sync/auto-export.ts` | `sync/auto-export.bun.test.ts` |
 | Config loader | `config/config.ts` | `config/config.bun.test.ts` |
 | Config defaults | `config/defaults.ts` | - |
 | Config types | `config/types.ts` | - |
@@ -425,9 +425,9 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for full architecture details.
 | **CLI** | | |
 | CLI plugin entry | `cli/plugin.ts` | - |
 | Merge CLI command | `cli/commands/merge.ts` | `cli/commands/merge.bun.test.ts` |
-| Agent CLI commands | `cli/commands/agent.ts` | - |
+| Agent CLI commands | `cli/commands/agent.ts` | `cli/commands/agent.bun.test.ts` |
 | Daemon CLI commands | `cli/commands/daemon.ts` | - |
-| Dispatch CLI command | `cli/commands/dispatch.ts` | - |
+| Dispatch CLI command | `cli/commands/dispatch.ts` | `cli/commands/dispatch.bun.test.ts` |
 | Pool CLI commands | `cli/commands/pool.ts` | - |
 | Serve CLI command | `cli/commands/serve.ts` | - |
 | Task CLI commands | `cli/commands/task.ts` | - |

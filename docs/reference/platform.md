@@ -67,7 +67,8 @@ GET     /api/stats
 ### Adding an Endpoint
 
 ```typescript
-// In apps/quarry-server/src/index.ts
+// In packages/quarry/src/server/index.ts
+// (apps/quarry-server/src/index.ts is a thin wrapper that calls startQuarryServer())
 
 // GET endpoint
 app.get('/api/elements/:id', async (c) => {
@@ -450,10 +451,12 @@ GET     /api/scheduler/history         # Execution history
 
 ### Adding an Endpoint
 
-Create or edit a route file in `src/routes/`:
+Create or edit a route file in `packages/smithy/src/server/routes/`:
+
+> **Note:** `apps/smithy-server/src/index.ts` is a thin wrapper that calls `startSmithyServer()`. Route definitions and mounting live in the `@stoneforge/smithy` package.
 
 ```typescript
-// src/routes/my-feature.ts
+// packages/smithy/src/server/routes/my-feature.ts
 import { Hono } from 'hono';
 import type { Services } from '../services.js';
 
@@ -470,11 +473,14 @@ export function createMyFeatureRoutes(services: Services) {
 }
 ```
 
-Then mount in `src/index.ts`:
+Then export from `packages/smithy/src/server/routes/index.ts` and mount in `packages/smithy/src/server/index.ts`:
 
 ```typescript
-import { createMyFeatureRoutes } from './routes/my-feature.js';
+// In packages/smithy/src/server/routes/index.ts
+export { createMyFeatureRoutes } from './my-feature.js';
 
+// In packages/smithy/src/server/index.ts
+import { createMyFeatureRoutes } from './routes/index.js';
 app.route('/', createMyFeatureRoutes(services));
 ```
 

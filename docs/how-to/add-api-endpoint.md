@@ -24,7 +24,7 @@ DELETE  /api/features/:id       # Delete
 
 ### 2. Add the Route Handler
 
-Edit `apps/quarry-server/src/index.ts`:
+Edit `packages/quarry/src/server/index.ts` (note: `apps/quarry-server/src/index.ts` is a thin wrapper):
 
 ```typescript
 // GET - List all features
@@ -272,7 +272,7 @@ app.get('/api/search', async (c) => {
 
 ## Checklist
 
-- [ ] Route handler added to `apps/quarry-server/src/index.ts`
+- [ ] Route handler added to `packages/quarry/src/server/index.ts`
 - [ ] Query parameters parsed correctly
 - [ ] Error handling for not found (404)
 - [ ] Error handling for validation (400)
@@ -359,9 +359,9 @@ export function formatMyResponse(item: MyType) {
 
 ### Orchestrator Server Checklist
 
-- [ ] Route file created in `src/routes/`
-- [ ] Exported from `src/routes/index.ts`
-- [ ] Mounted in `src/index.ts`
+- [ ] Route file created in `packages/smithy/src/server/routes/`
+- [ ] Exported from `packages/smithy/src/server/routes/index.ts`
+- [ ] Mounted in `packages/smithy/src/server/index.ts`
 - [ ] Uses injected services from `Services` interface
 - [ ] Formatter added if needed
 - [ ] Error handling with consistent error format
