@@ -745,7 +745,6 @@ interface DocShowOptions {
 const docShowOptions: CommandOption[] = [
   {
     name: 'docVersion',
-    short: 'V',
     description: 'Show specific version',
     hasValue: true,
   },

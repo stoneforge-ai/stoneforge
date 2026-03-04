@@ -283,7 +283,7 @@ describe('parseArgs', () => {
     const camelCaseOptions: CommandOption[] = [
       { name: 'replyTo', short: 'r', description: 'Reply to message', hasValue: true },
       { name: 'rootOnly', description: 'Root only', hasValue: false },
-      { name: 'docVersion', short: 'V', description: 'Document version', hasValue: true },
+      { name: 'docVersion', description: 'Document version', hasValue: true },
     ];
 
     it('should accept kebab-case form of camelCase options', () => {
