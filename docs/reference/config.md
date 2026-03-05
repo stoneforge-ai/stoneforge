@@ -63,6 +63,7 @@ interface Configuration {
     autoLinkProvider?: string;       // Provider name for auto-linking tasks (e.g., 'github')
     autoLinkDocumentProvider?: string; // Provider name for auto-linking documents (e.g., 'folder', 'notion')
   };
+  demoMode: boolean;               // Demo mode: use free opencode provider (default: false)
 }
 ```
 
@@ -141,7 +142,8 @@ type ConfigPath =
   | 'externalSync.defaultDirection'
   | 'externalSync.autoLink'
   | 'externalSync.autoLinkProvider'
-  | 'externalSync.autoLinkDocumentProvider';
+  | 'externalSync.autoLinkDocumentProvider'
+  | 'demoMode';
 ```
 
 ## Modifying Configuration
@@ -193,6 +195,7 @@ const discovery = discoverConfigFile(undefined, '/project');
 | `STONEFORGE_JSON` | - | `true` (JSON output mode) |
 | `STONEFORGE_VERBOSE` | - | `true` (verbose/debug mode) |
 | `STONEFORGE_CONFIG` | - | `/path/to/config.yaml` |
+| `STONEFORGE_DEMO_MODE` | `demoMode` | `true` |
 
 ```typescript
 import { loadEnvConfig, getEnvConfigPath } from '@stoneforge/quarry';
@@ -242,6 +245,8 @@ external_sync:
   auto_link: false
   auto_link_provider: github  # Provider for auto-linking tasks (when auto_link is true)
   auto_link_document_provider: folder  # Provider for auto-linking documents (e.g., 'folder', 'notion')
+
+demo_mode: false  # Use free opencode/minimax-m2.5-free provider (no API keys needed)
 ```
 
 ## Duration Strings
