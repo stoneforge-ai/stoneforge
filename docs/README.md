@@ -356,6 +356,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for full architecture details.
 | Operation log service | `services/operation-log-service.ts` | `services/operation-log-service.bun.test.ts` |
 | Rate limit tracker | `services/rate-limit-tracker.ts` | `services/rate-limit-tracker.bun.test.ts` |
 | External sync daemon | `services/external-sync-daemon.ts` | - |
+| Demo mode service | `services/demo-mode-service.ts` | `services/demo-mode-service.bun.test.ts` |
 | **Runtime** | | |
 | Spawner service | `runtime/spawner.ts` | `runtime/spawner.bun.test.ts` |
 | Session manager | `runtime/session-manager.ts` | `runtime/session-manager.bun.test.ts` |
