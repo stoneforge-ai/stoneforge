@@ -255,59 +255,102 @@ class OpenCodeServerManager {
   }
 
   private async startServer(config?: ServerManagerConfig): Promise<OpencodeClient> {
-    const createOpencode = await this.loadSDK();
+    const { spawn } = await import('node:child_process');
+    const createOpencodeClient = await this.loadSDKClient();
 
-    // The SDK passes options.config as OPENCODE_CONFIG_CONTENT to the spawned process.
-    // Use config.wd to set the working directory (the SDK ignores top-level cwd).
-    const opencodeConfig: Record<string, unknown> = {};
-    if (config?.cwd) {
-      opencodeConfig.wd = config.cwd;
-    }
-
-    // The SDK copies process.env at spawn time — set our env vars temporarily
-    // so they're inherited by the spawned opencode process.
-    const envOverrides: Record<string, string> = {
+    // Build env with our overrides — passed directly to spawn(), no process.env mutation
+    const env: Record<string, string> = {
+      ...(process.env as Record<string, string>),
       OPENCODE_PERMISSION: JSON.stringify({ '*': 'allow' }),
       OPENCODE_CLIENT: 'stoneforge',
     };
     if (config?.stoneforgeRoot) {
-      envOverrides.STONEFORGE_ROOT = config.stoneforgeRoot;
+      env.STONEFORGE_ROOT = config.stoneforgeRoot;
     }
 
-    const savedEnv: Record<string, string | undefined> = {};
-    for (const [key, value] of Object.entries(envOverrides)) {
-      savedEnv[key] = process.env[key];
-      process.env[key] = value;
+    // Build opencode config for OPENCODE_CONFIG_CONTENT
+    const opencodeConfig: Record<string, unknown> = {};
+    if (config?.cwd) {
+      opencodeConfig.wd = config.cwd;
     }
+    env.OPENCODE_CONFIG_CONTENT = JSON.stringify(opencodeConfig);
 
-    try {
-      const result = await createOpencode({
-        port: config?.port ?? 0,
-        config: opencodeConfig,
+    // Use port 0 to let opencode pick a free port, or use configured port
+    const port = config?.port ?? 0;
+    const hostname = '127.0.0.1';
+    const args = ['serve', `--hostname=${hostname}`, `--port=${port}`];
+
+    // Spawn opencode directly — bypassing the SDK's createOpencode/createOpencodeServer
+    // so we can pass `cwd` to the child process. The SDK does not support cwd.
+    const proc = spawn('opencode', args, {
+      cwd: config?.cwd, // THE KEY FIX: set the process working directory
+      env, // Pass our full env directly — no process.env mutation needed
+    });
+
+    // Parse server URL from stdout (same logic as SDK's createOpencodeServer)
+    const timeout = 10000;
+    const url = await new Promise<string>((resolve, reject) => {
+      const id = setTimeout(() => {
+        reject(new Error(`Timeout waiting for opencode server to start after ${timeout}ms`));
+      }, timeout);
+
+      let output = '';
+
+      proc.stdout?.on('data', (chunk: Buffer) => {
+        output += chunk.toString();
+        const lines = output.split('\n');
+        for (const line of lines) {
+          if (line.startsWith('opencode server listening')) {
+            const match = line.match(/on\s+(https?:\/\/[^\s]+)/);
+            if (!match) {
+              clearTimeout(id);
+              reject(new Error(`Failed to parse server url from output: ${line}`));
+              return;
+            }
+            clearTimeout(id);
+            resolve(match[1]);
+            return;
+          }
+        }
       });
 
-      // The SDK returns richer types; we extract what we need
-      this.client = result.client as unknown as OpencodeClient;
-      this.server = result.server as unknown as OpencodeServer;
-      this.startPromise = null;
+      proc.stderr?.on('data', (chunk: Buffer) => {
+        output += chunk.toString();
+      });
 
-      return this.client;
-    } finally {
-      // Restore original env
-      for (const [key, value] of Object.entries(savedEnv)) {
-        if (value === undefined) {
-          delete process.env[key];
-        } else {
-          process.env[key] = value;
+      proc.on('exit', (code: number | null) => {
+        clearTimeout(id);
+        let msg = `opencode server exited with code ${code}`;
+        if (output.trim()) {
+          msg += `\nServer output: ${output}`;
         }
-      }
-    }
+        reject(new Error(msg));
+      });
+
+      proc.on('error', (error: Error) => {
+        clearTimeout(id);
+        reject(error);
+      });
+    });
+
+    // Use SDK's createOpencodeClient for the HTTP client (that part works fine)
+    const client = createOpencodeClient({ baseUrl: url });
+
+    this.client = client as unknown as OpencodeClient;
+    this.server = { close: () => proc.kill() } as unknown as OpencodeServer;
+    this.startPromise = null;
+
+    return this.client;
   }
 
-  private async loadSDK(): Promise<(...args: unknown[]) => Promise<{ client: unknown; server: unknown }>> {
+  /**
+   * Load the SDK's createOpencodeClient function.
+   * We only need the HTTP client from the SDK — server spawning is handled directly.
+   */
+  private async loadSDKClient(): Promise<(opts: { baseUrl: string }) => unknown> {
     try {
       const sdk = await import('@opencode-ai/sdk');
-      return sdk.createOpencode as (...args: unknown[]) => Promise<{ client: unknown; server: unknown }>;
+      return sdk.createOpencodeClient as (opts: { baseUrl: string }) => unknown;
     } catch {
       throw new Error(
         'OpenCode SDK is not installed. Install it with: npm install @opencode-ai/sdk'
