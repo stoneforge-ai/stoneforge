@@ -11,3 +11,4 @@ export { ShortcutsSection } from './ShortcutsSection';
 export { DefaultsSection } from './DefaultsSection';
 export { NotificationsSection } from './NotificationsSection';
 export { SyncSection } from './SyncSection';
+export { DemoModeSection } from './DemoModeSection';

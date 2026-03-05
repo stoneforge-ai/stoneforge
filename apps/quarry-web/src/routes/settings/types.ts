@@ -4,7 +4,7 @@
 
 export type Theme = 'light' | 'dark' | 'system' | 'high-contrast';
 
-export type SettingsSection = 'theme' | 'shortcuts' | 'defaults' | 'notifications' | 'sync';
+export type SettingsSection = 'theme' | 'shortcuts' | 'defaults' | 'notifications' | 'sync' | 'demo';
 
 export interface SectionNavItem {
   id: SettingsSection;

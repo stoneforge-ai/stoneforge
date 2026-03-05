@@ -26,6 +26,7 @@ test.describe('TB59: Settings Page - Theme', () => {
     await expect(page.getByTestId('settings-nav-defaults')).toBeVisible();
     await expect(page.getByTestId('settings-nav-notifications')).toBeVisible();
     await expect(page.getByTestId('settings-nav-sync')).toBeVisible();
+    await expect(page.getByTestId('settings-nav-demo')).toBeVisible();
   });
 
   test('theme section is shown by default', async ({ page }) => {

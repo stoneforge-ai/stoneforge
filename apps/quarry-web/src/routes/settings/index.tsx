@@ -17,6 +17,7 @@ import {
   DefaultsSection,
   NotificationsSection,
   SyncSection,
+  DemoModeSection,
   ComingSoonSection,
 } from './components';
 
@@ -88,6 +89,8 @@ export function SettingsPage() {
         return <NotificationsSection isMobile={isMobile} />;
       case 'sync':
         return <SyncSection isMobile={isMobile} />;
+      case 'demo':
+        return <DemoModeSection isMobile={isMobile} />;
       default: {
         const section = SETTINGS_SECTIONS.find((s) => s.id === activeSection);
         if (section) {
