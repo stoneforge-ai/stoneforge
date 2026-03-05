@@ -31,56 +31,79 @@ export interface ServerStartOptions {
   host?: string;
 }
 
-export function startServer(app: Hono, services: Services, lspManager?: LspManager, options?: ServerStartOptions): void {
+const MAX_PORT_RETRIES = 20;
+
+export async function startServer(app: Hono, services: Services, lspManager?: LspManager, options?: ServerStartOptions): Promise<number> {
   if (isBun) {
-    startBunServer(app, services, lspManager, options);
+    return startBunServer(app, services, lspManager, options);
   } else {
-    startNodeServer(app, services, lspManager, options);
+    return startNodeServer(app, services, lspManager, options);
   }
 }
 
-function startBunServer(app: Hono, services: Services, lspManager?: LspManager, options?: ServerStartOptions): void {
-  const PORT = options?.port ?? DEFAULT_PORT;
+async function startBunServer(app: Hono, services: Services, lspManager?: LspManager, options?: ServerStartOptions): Promise<number> {
+  const requestedPort = options?.port ?? DEFAULT_PORT;
   const HOST = options?.host ?? DEFAULT_HOST;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const Bun = (globalThis as any).Bun;
-  const server = Bun.serve({
-    port: PORT,
-    hostname: HOST,
-    fetch: app.fetch,
-    websocket: {
-      open(ws: ServerWebSocket<AnyWSData>) {
-        const data = ws.data;
-        if (data.wsType === 'events') {
-          handleEventsWSOpen(ws as ServerWebSocket<EventsWSClientData>);
-        } else if (data.wsType === 'lsp') {
-          // LSP open is handled after upgrade with language param
-        } else {
-          handleWSOpen(ws as ServerWebSocket<WSClientData>);
-        }
-      },
-      message(ws: ServerWebSocket<AnyWSData>, message: string | Buffer) {
-        const data = ws.data;
-        if (data.wsType === 'events') {
-          handleEventsWSMessage(ws as ServerWebSocket<EventsWSClientData>, message);
-        } else if (data.wsType === 'lsp') {
-          handleLspWSMessage(ws as ServerWebSocket<LspWSClientData>, message);
-        } else {
-          handleWSMessage(ws as ServerWebSocket<WSClientData>, message, services);
-        }
-      },
-      close(ws: ServerWebSocket<AnyWSData>) {
-        const data = ws.data;
-        if (data.wsType === 'events') {
-          handleEventsWSClose(ws as ServerWebSocket<EventsWSClientData>);
-        } else if (data.wsType === 'lsp') {
-          handleLspWSClose(ws as ServerWebSocket<LspWSClientData>);
-        } else {
-          handleWSClose(ws as ServerWebSocket<WSClientData>);
-        }
-      },
-    },
-  });
+
+  let server: ReturnType<typeof Bun.serve>;
+  let actualPort = requestedPort;
+
+  for (let attempt = 0; attempt < MAX_PORT_RETRIES; attempt++) {
+    const tryPort = requestedPort + attempt;
+    try {
+      server = Bun.serve({
+        port: tryPort,
+        hostname: HOST,
+        fetch: app.fetch,
+        websocket: {
+          open(ws: ServerWebSocket<AnyWSData>) {
+            const data = ws.data;
+            if (data.wsType === 'events') {
+              handleEventsWSOpen(ws as ServerWebSocket<EventsWSClientData>);
+            } else if (data.wsType === 'lsp') {
+              // LSP open is handled after upgrade with language param
+            } else {
+              handleWSOpen(ws as ServerWebSocket<WSClientData>);
+            }
+          },
+          message(ws: ServerWebSocket<AnyWSData>, message: string | Buffer) {
+            const data = ws.data;
+            if (data.wsType === 'events') {
+              handleEventsWSMessage(ws as ServerWebSocket<EventsWSClientData>, message);
+            } else if (data.wsType === 'lsp') {
+              handleLspWSMessage(ws as ServerWebSocket<LspWSClientData>, message);
+            } else {
+              handleWSMessage(ws as ServerWebSocket<WSClientData>, message, services);
+            }
+          },
+          close(ws: ServerWebSocket<AnyWSData>) {
+            const data = ws.data;
+            if (data.wsType === 'events') {
+              handleEventsWSClose(ws as ServerWebSocket<EventsWSClientData>);
+            } else if (data.wsType === 'lsp') {
+              handleLspWSClose(ws as ServerWebSocket<LspWSClientData>);
+            } else {
+              handleWSClose(ws as ServerWebSocket<WSClientData>);
+            }
+          },
+        },
+      });
+      actualPort = tryPort;
+      break;
+    } catch (err: unknown) {
+      const isAddrInUse = err instanceof Error && (
+        err.message.includes('EADDRINUSE') ||
+        err.message.includes('address already in use')
+      );
+      if (isAddrInUse && attempt < MAX_PORT_RETRIES - 1) {
+        logger.warn(`Port ${tryPort} in use, trying ${tryPort + 1}...`);
+        continue;
+      }
+      throw err;
+    }
+  }
 
   // Terminal WebSocket endpoint
   app.get('/ws', (c) => {
@@ -107,188 +130,219 @@ function startBunServer(app: Hono, services: Services, lspManager?: LspManager, 
     return upgraded ? new Response(null, { status: 101 }) : c.json({ error: 'WebSocket upgrade failed' }, 400);
   });
 
-  logger.info(`Server running at http://${HOST}:${PORT} (Bun)`);
-  logger.info(`WebSocket available at ws://${HOST}:${PORT}/ws`);
-  logger.info(`Events WebSocket available at ws://${HOST}:${PORT}/ws/events`);
-  if (lspManager) {
-    logger.info(`LSP WebSocket available at ws://${HOST}:${PORT}/ws/lsp?language=<lang>`);
+  if (actualPort !== requestedPort) {
+    logger.warn(`Requested port ${requestedPort} was in use, server started on port ${actualPort}`);
   }
+  logger.info(`Server running at http://${HOST}:${actualPort} (Bun)`);
+  logger.info(`WebSocket available at ws://${HOST}:${actualPort}/ws`);
+  logger.info(`Events WebSocket available at ws://${HOST}:${actualPort}/ws/events`);
+  if (lspManager) {
+    logger.info(`LSP WebSocket available at ws://${HOST}:${actualPort}/ws/lsp?language=<lang>`);
+  }
+
+  return actualPort;
 }
 
-function startNodeServer(app: Hono, services: Services, lspManager?: LspManager, options?: ServerStartOptions): void {
-  const PORT = options?.port ?? DEFAULT_PORT;
+async function startNodeServer(app: Hono, services: Services, lspManager?: LspManager, options?: ServerStartOptions): Promise<number> {
+  const requestedPort = options?.port ?? DEFAULT_PORT;
   const HOST = options?.host ?? DEFAULT_HOST;
 
-  import('ws').then(({ WebSocketServer }) => {
-    import('http').then(({ createServer }) => {
-      import('url').then(({ parse: parseUrl }) => {
-        const httpServer = createServer(async (req, res) => {
-          const url = `http://${HOST}:${PORT}${req.url}`;
-          const headers = new Headers();
-          for (const [key, value] of Object.entries(req.headers)) {
-            if (value) headers.set(key, Array.isArray(value) ? value.join(', ') : value);
-          }
+  const { WebSocketServer } = await import('ws');
+  const { createServer } = await import('http');
+  const { parse: parseUrl } = await import('url');
 
-          let body: string | undefined;
-          if (req.method !== 'GET' && req.method !== 'HEAD') {
-            const chunks: Buffer[] = [];
-            for await (const chunk of req) {
-              chunks.push(chunk);
-            }
-            body = Buffer.concat(chunks).toString();
-          }
+  const httpServer = createServer(async (req, res) => {
+    // Use the actual port that was bound (set after listen succeeds)
+    const url = `http://${HOST}:${actualPort}${req.url}`;
+    const headers = new Headers();
+    for (const [key, value] of Object.entries(req.headers)) {
+      if (value) headers.set(key, Array.isArray(value) ? value.join(', ') : value);
+    }
 
-          const request = new Request(url, { method: req.method, headers, body });
-          const response = await app.fetch(request);
+    let body: string | undefined;
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) {
+        chunks.push(chunk);
+      }
+      body = Buffer.concat(chunks).toString();
+    }
 
-          res.statusCode = response.status;
-          response.headers.forEach((value, key) => res.setHeader(key, value));
+    const request = new Request(url, { method: req.method, headers, body });
+    const response = await app.fetch(request);
 
-          if (response.body) {
-            const reader = response.body.getReader();
-            const pump = async (): Promise<void> => {
-              try {
-                const { done, value } = await reader.read();
-                if (done) {
-                  res.end();
-                  return;
-                }
-                res.write(value);
-                return pump();
-              } catch {
-                res.end();
-              }
-            };
-            await pump();
-          } else {
-            res.end(await response.text());
-          }
-        });
+    res.statusCode = response.status;
+    response.headers.forEach((value, key) => res.setHeader(key, value));
 
-        // Main WebSocket server for agent terminal connections
-        const wss = new WebSocketServer({ noServer: true });
-
-        wss.on('connection', (ws) => {
-          const wsData: WSClientData = {
-            id: `ws-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          };
-
-          const WS_OPEN = 1;
-          const wsAdapter: ServerWebSocket<WSClientData> = {
-            data: wsData,
-            send: (data: string | ArrayBuffer) => {
-              if (ws.readyState === WS_OPEN) {
-                ws.send(typeof data === 'string' ? data : Buffer.from(data));
-              }
-            },
-            close: () => ws.close(),
-            readyState: ws.readyState,
-          };
-
-          handleWSOpen(wsAdapter);
-          ws.on('message', (msg) => {
-            (wsAdapter as { readyState: number }).readyState = ws.readyState;
-            handleWSMessage(wsAdapter, msg.toString(), services);
-          });
-          ws.on('close', () => handleWSClose(wsAdapter));
-        });
-
-        // Event-subscription WebSocket server
-        const eventsWss = new WebSocketServer({ noServer: true });
-
-        eventsWss.on('connection', (ws) => {
-          const WS_OPEN = 1;
-          const wsAdapter: ServerWebSocket<EventsWSClientData> = {
-            data: {
-              id: '',
-              wsType: 'events',
-              subscriptions: new Set(),
-              eventListener: () => {},
-            },
-            send: (data: string | ArrayBuffer) => {
-              if (ws.readyState === WS_OPEN) {
-                ws.send(typeof data === 'string' ? data : Buffer.from(data));
-              }
-            },
-            close: () => ws.close(),
-            readyState: ws.readyState,
-          };
-
-          handleEventsWSOpen(wsAdapter);
-          ws.on('message', (msg) => {
-            (wsAdapter as { readyState: number }).readyState = ws.readyState;
-            handleEventsWSMessage(wsAdapter, msg.toString());
-          });
-          ws.on('close', () => handleEventsWSClose(wsAdapter));
-        });
-
-        // LSP WebSocket server for language server connections
-        const lspWss = new WebSocketServer({ noServer: true });
-
-        lspWss.on('connection', (ws, req) => {
-          const parsedUrl = parseUrl(req.url || '', true);
-          const language = parsedUrl.query.language as string | undefined;
-
-          if (!language) {
-            ws.close(1002, 'Language query parameter is required');
+    if (response.body) {
+      const reader = response.body.getReader();
+      const pump = async (): Promise<void> => {
+        try {
+          const { done, value } = await reader.read();
+          if (done) {
+            res.end();
             return;
           }
+          res.write(value);
+          return pump();
+        } catch {
+          res.end();
+        }
+      };
+      await pump();
+    } else {
+      res.end(await response.text());
+    }
+  });
 
-          if (!lspManager) {
-            ws.close(1002, 'LSP manager not available');
-            return;
-          }
+  // Main WebSocket server for agent terminal connections
+  const wss = new WebSocketServer({ noServer: true });
 
-          const WS_OPEN = 1;
-          const wsAdapter: ServerWebSocket<LspWSClientData> = {
-            data: { id: '', language },
-            send: (data: string | ArrayBuffer) => {
-              if (ws.readyState === WS_OPEN) {
-                ws.send(typeof data === 'string' ? data : Buffer.from(data));
-              }
-            },
-            close: () => ws.close(),
-            readyState: ws.readyState,
-          };
+  wss.on('connection', (ws) => {
+    const wsData: WSClientData = {
+      id: `ws-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    };
 
-          handleLspWSOpen(wsAdapter, language, lspManager);
-          ws.on('message', (msg) => {
-            (wsAdapter as { readyState: number }).readyState = ws.readyState;
-            handleLspWSMessage(wsAdapter, msg.toString());
-          });
-          ws.on('close', () => handleLspWSClose(wsAdapter));
-        });
+    const WS_OPEN = 1;
+    const wsAdapter: ServerWebSocket<WSClientData> = {
+      data: wsData,
+      send: (data: string | ArrayBuffer) => {
+        if (ws.readyState === WS_OPEN) {
+          ws.send(typeof data === 'string' ? data : Buffer.from(data));
+        }
+      },
+      close: () => ws.close(),
+      readyState: ws.readyState,
+    };
 
-        // Handle upgrade requests to route to appropriate WebSocket server
-        httpServer.on('upgrade', (req, socket, head) => {
-          const pathname = parseUrl(req.url || '').pathname;
+    handleWSOpen(wsAdapter);
+    ws.on('message', (msg) => {
+      (wsAdapter as { readyState: number }).readyState = ws.readyState;
+      handleWSMessage(wsAdapter, msg.toString(), services);
+    });
+    ws.on('close', () => handleWSClose(wsAdapter));
+  });
 
-          if (pathname === '/ws/events') {
-            eventsWss.handleUpgrade(req, socket, head, (ws) => {
-              eventsWss.emit('connection', ws, req);
-            });
-          } else if (pathname === '/ws/lsp') {
-            lspWss.handleUpgrade(req, socket, head, (ws) => {
-              lspWss.emit('connection', ws, req);
-            });
-          } else if (pathname === '/ws') {
-            wss.handleUpgrade(req, socket, head, (ws) => {
-              wss.emit('connection', ws, req);
-            });
-          } else {
-            socket.destroy();
-          }
-        });
+  // Event-subscription WebSocket server
+  const eventsWss = new WebSocketServer({ noServer: true });
 
-        httpServer.listen(PORT, HOST, () => {
-          logger.info(`Server running at http://${HOST}:${PORT} (Node.js)`);
-          logger.info(`WebSocket available at ws://${HOST}:${PORT}/ws`);
-          logger.info(`Events WebSocket available at ws://${HOST}:${PORT}/ws/events`);
-          if (lspManager) {
-            logger.info(`LSP WebSocket available at ws://${HOST}:${PORT}/ws/lsp?language=<lang>`);
-          }
-        });
+  eventsWss.on('connection', (ws) => {
+    const WS_OPEN = 1;
+    const wsAdapter: ServerWebSocket<EventsWSClientData> = {
+      data: {
+        id: '',
+        wsType: 'events',
+        subscriptions: new Set(),
+        eventListener: () => {},
+      },
+      send: (data: string | ArrayBuffer) => {
+        if (ws.readyState === WS_OPEN) {
+          ws.send(typeof data === 'string' ? data : Buffer.from(data));
+        }
+      },
+      close: () => ws.close(),
+      readyState: ws.readyState,
+    };
+
+    handleEventsWSOpen(wsAdapter);
+    ws.on('message', (msg) => {
+      (wsAdapter as { readyState: number }).readyState = ws.readyState;
+      handleEventsWSMessage(wsAdapter, msg.toString());
+    });
+    ws.on('close', () => handleEventsWSClose(wsAdapter));
+  });
+
+  // LSP WebSocket server for language server connections
+  const lspWss = new WebSocketServer({ noServer: true });
+
+  lspWss.on('connection', (ws, req) => {
+    const parsedUrl = parseUrl(req.url || '', true);
+    const language = parsedUrl.query.language as string | undefined;
+
+    if (!language) {
+      ws.close(1002, 'Language query parameter is required');
+      return;
+    }
+
+    if (!lspManager) {
+      ws.close(1002, 'LSP manager not available');
+      return;
+    }
+
+    const WS_OPEN = 1;
+    const wsAdapter: ServerWebSocket<LspWSClientData> = {
+      data: { id: '', language },
+      send: (data: string | ArrayBuffer) => {
+        if (ws.readyState === WS_OPEN) {
+          ws.send(typeof data === 'string' ? data : Buffer.from(data));
+        }
+      },
+      close: () => ws.close(),
+      readyState: ws.readyState,
+    };
+
+    handleLspWSOpen(wsAdapter, language, lspManager);
+    ws.on('message', (msg) => {
+      (wsAdapter as { readyState: number }).readyState = ws.readyState;
+      handleLspWSMessage(wsAdapter, msg.toString());
+    });
+    ws.on('close', () => handleLspWSClose(wsAdapter));
+  });
+
+  // Handle upgrade requests to route to appropriate WebSocket server
+  httpServer.on('upgrade', (req, socket, head) => {
+    const pathname = parseUrl(req.url || '').pathname;
+
+    if (pathname === '/ws/events') {
+      eventsWss.handleUpgrade(req, socket, head, (ws) => {
+        eventsWss.emit('connection', ws, req);
+      });
+    } else if (pathname === '/ws/lsp') {
+      lspWss.handleUpgrade(req, socket, head, (ws) => {
+        lspWss.emit('connection', ws, req);
+      });
+    } else if (pathname === '/ws') {
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        wss.emit('connection', ws, req);
+      });
+    } else {
+      socket.destroy();
+    }
+  });
+
+  // Try to listen on the requested port, incrementing on EADDRINUSE
+  let actualPort = requestedPort;
+
+  const tryListen = (port: number): Promise<number> => {
+    return new Promise((resolve, reject) => {
+      const onError = (err: NodeJS.ErrnoException) => {
+        httpServer.removeListener('error', onError);
+        if (err.code === 'EADDRINUSE' && port - requestedPort < MAX_PORT_RETRIES - 1) {
+          logger.warn(`Port ${port} in use, trying ${port + 1}...`);
+          resolve(tryListen(port + 1));
+        } else {
+          reject(err);
+        }
+      };
+      httpServer.on('error', onError);
+      httpServer.listen(port, HOST, () => {
+        httpServer.removeListener('error', onError);
+        resolve(port);
       });
     });
-  });
+  };
+
+  actualPort = await tryListen(requestedPort);
+
+  if (actualPort !== requestedPort) {
+    logger.warn(`Requested port ${requestedPort} was in use, server started on port ${actualPort}`);
+  }
+  logger.info(`Server running at http://${HOST}:${actualPort} (Node.js)`);
+  logger.info(`WebSocket available at ws://${HOST}:${actualPort}/ws`);
+  logger.info(`Events WebSocket available at ws://${HOST}:${actualPort}/ws/events`);
+  if (lspManager) {
+    logger.info(`LSP WebSocket available at ws://${HOST}:${actualPort}/ws/lsp?language=<lang>`);
+  }
+
+  return actualPort;
 }

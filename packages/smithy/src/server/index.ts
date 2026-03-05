@@ -67,7 +67,12 @@ export interface SmithyServerOptions {
   corsOrigins?: string[];
 }
 
-export async function startSmithyServer(options: SmithyServerOptions = {}): Promise<Services> {
+export interface SmithyServerResult {
+  services: Services;
+  port: number;
+}
+
+export async function startSmithyServer(options: SmithyServerOptions = {}): Promise<SmithyServerResult> {
   logger.info('Log level: ' + getLogLevel());
   const port = options.port ?? DEFAULT_PORT;
   const host = options.host ?? DEFAULT_HOST;
@@ -168,7 +173,18 @@ export async function startSmithyServer(options: SmithyServerOptions = {}): Prom
   const broadcaster = initializeBroadcaster(services.api);
   await broadcaster.start();
 
-  startServer(app, services, lspManager, { port, host });
+  const actualPort = await startServer(app, services, lspManager, { port, host });
+
+  // If the server bound to a different port, update CORS origins dynamically.
+  // Hono's cors middleware evaluates the origin list at request time, so mutating
+  // the array after startup works correctly.
+  if (actualPort !== port) {
+    corsOrigins.push(
+      `http://${host}:${actualPort}`,
+      `http://127.0.0.1:${actualPort}`,
+      `http://localhost:${actualPort}`,
+    );
+  }
 
   // Auto-resume director session if it was running before server restart
   // This must happen after startServer() so HTTP/WS infrastructure is ready for clients
@@ -232,5 +248,5 @@ export async function startSmithyServer(options: SmithyServerOptions = {}): Prom
     logger.info('External sync daemon auto-started');
   }
 
-  return services;
+  return { services, port: actualPort };
 }

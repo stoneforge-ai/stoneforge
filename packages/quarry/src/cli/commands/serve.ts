@@ -98,14 +98,15 @@ async function startSmithy(options: GlobalOptions): Promise<CommandResult> {
   const port = options.port ? parseInt(String(options.port), 10) : 3457;
   const host = options.host ? String(options.host) : 'localhost';
 
-  await startSmithyServer({
+  const result = await startSmithyServer({
     port,
     host,
     dbPath: options.db ? String(options.db) : undefined,
     webRoot: smithyWebRoot(),
   });
 
-  console.log(`[orchestrator] Smithy server running at http://${host}:${port}`);
+  const actualPort = (result && typeof result === 'object' && 'port' in result) ? (result as { port: number }).port : port;
+  console.log(`[orchestrator] Smithy server running at http://${host}:${actualPort}`);
   return await new Promise<never>(() => {});
 }
 

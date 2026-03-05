@@ -30,14 +30,14 @@ export const serveSmithyCommand = {
       const webRoot = resolve(__dirname, '../../../web');
       const hasWebAssets = existsSync(webRoot);
 
-      await startSmithyServer({
+      const { port: actualPort } = await startSmithyServer({
         port,
         host,
         dbPath: options.db ? String(options.db) : undefined,
         webRoot: hasWebAssets ? webRoot : undefined,
       });
 
-      console.log(`[orchestrator] Smithy server running at http://${host}:${port}`);
+      console.log(`[orchestrator] Smithy server running at http://${host}:${actualPort}`);
 
       // Keep the process alive — never resolve so main() doesn't call process.exit()
       return await new Promise<never>(() => {});
