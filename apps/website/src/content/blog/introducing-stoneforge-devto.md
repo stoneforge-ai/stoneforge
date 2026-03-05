@@ -26,7 +26,7 @@ Stoneforge takes its name from a fantasy world created to think about this probl
 A single bad merge from one agent can ripple through your codebase the same way.
 
 <figure>
-<img alt="The Shattering — multiple artisans working the same stone block without coordination, conflicting shapes, cracked joins, tools scattered" src="https://stoneforge.ai/blog/images/the-shattering.png" loading="lazy" />
+<img alt="The Shattering — multiple artisans working the same stone block without coordination, conflicting shapes, cracked joins, tools scattered" src="https://stoneforge.ai/blog/images/the-shattering.png?v=2" loading="lazy" />
 <figcaption>Before the stoneforge: no isolation, no coordination, no shared records. Every agent shaping the same code at the same time.</figcaption>
 </figure>
 
@@ -35,7 +35,7 @@ The Shattering ends when someone builds infrastructure that makes collaboration 
 The rest of this post explains how Stoneforge works, organized around the problems above.
 
 <figure>
-<img alt="The coordinated stoneforge — Director at the planning table, Workers at separate isolated benches, Steward at the inspection station, the Pulse mechanism on the wall" src="https://stoneforge.ai/blog/images/stoneforge.png" loading="lazy" />
+<img alt="The coordinated stoneforge — Director at the planning table, Workers at separate isolated benches, Steward at the inspection station, the Pulse mechanism on the wall" src="https://stoneforge.ai/blog/images/stoneforge.png?v=2" loading="lazy" />
 <figcaption>The Great Forge of Mount Verath at peak operation. Director, Workers, Steward, and the Pulse — the four roles that turn chaos into coordination.</figcaption>
 </figure>
 
@@ -69,7 +69,7 @@ A background process called the **dispatch daemon** polls every five seconds. Ea
 When task 1 completes, tasks 2 and 3 unblock automatically. The daemon assigns them to two different workers in the next cycle. They execute in parallel. Neither knows about the other, and neither needs to.
 
 <figure>
-<img alt="Orchestration flow — from your goal through the Director, task pool, parallel workers in worktrees, to the Merge Steward" src="https://stoneforge.ai/blog/images/workflow.png" loading="lazy" />
+<img alt="Orchestration flow — from your goal through the Director, task pool, parallel workers in worktrees, to the Merge Steward" src="https://stoneforge.ai/blog/images/workflow.png?v=2" loading="lazy" />
 <figcaption>Your goal flows through the Director into a prioritized task pool. The dispatch daemon assigns ready tasks to idle workers in isolated worktrees. Stewards merge the results.</figcaption>
 </figure>
 
@@ -102,7 +102,7 @@ Worktrees are local and create instantly. Spin up a dozen without provisioning a
 The conflict surface for coding agents is git, not the operating system. Two agents can safely share a machine, a filesystem, even `node_modules`, as long as they're on different branches in different directories. That's what worktrees give you: git-level isolation without OS-level overhead.
 
 <figure>
-<img alt="Three separate benches around a shared quarry — each artisan shapes their own copy of the source stone independently" src="https://stoneforge.ai/blog/images/workers.png" loading="lazy" />
+<img alt="Three separate benches around a shared quarry — each artisan shapes their own copy of the source stone independently" src="https://stoneforge.ai/blog/images/workers.png?v=2" loading="lazy" />
 <figcaption>Each worker operates in its own git worktree — a separate copy of the repo on a separate branch. They share the source stone but never interfere with each other's work.</figcaption>
 </figure>
 
@@ -128,7 +128,7 @@ The dispatch daemon assigns the task to the next available worker. That worker s
 The next worker picks up with all the code the previous worker wrote and a structured summary of their progress and decisions. Context accumulates across handoffs.
 
 <figure>
-<img alt="The Passing of the Chisel — one artisan steps away from a half-finished stone, handoff note secured on the bench, another artisan approaching" src="https://stoneforge.ai/blog/images/passing-chisel.png" loading="lazy" />
+<img alt="The Passing of the Chisel — one artisan steps away from a half-finished stone, handoff note secured on the bench, another artisan approaching" src="https://stoneforge.ai/blog/images/passing-chisel.png?v=2" loading="lazy" />
 <figcaption>The Passing of the Chisel. When a worker approaches its context limit, it commits its progress, writes handoff notes, and steps away. The next worker picks up with a fresh context window and full history.</figcaption>
 </figure>
 
@@ -166,7 +166,7 @@ The merge steward runs in a temporary detached worktree, a separate checkout at 
 If tests pass, the code ships and the branch gets deleted. You didn't touch anything.
 
 <figure>
-<img alt="The merge flow — full branch lifecycle from worker commit through steward inspection to squash-merge, depicted as the Steward's workbench process" src="https://stoneforge.ai/blog/images/merge-flow.png" loading="lazy" />
+<img alt="The merge flow — full branch lifecycle from worker commit through steward inspection to squash-merge, depicted as the Steward's workbench process" src="https://stoneforge.ai/blog/images/merge-flow.png?v=2" loading="lazy" />
 <figcaption>A worker's branch moves through the steward's inspection sequence: commit, temporary worktree checkout, squash-merge, test, and either ship to main or create a fix task and re-queue.</figcaption>
 </figure>
 
@@ -213,7 +213,7 @@ Dispatch is the headline, but the daemon does more. Each five-second cycle runs 
 Strict sequencing matters: orphans are recovered before new work is dispatched. Messages are routed before stewards fire. Reconciliation runs before dispatch so no broken task accidentally gets assigned to a worker. Each phase's output feeds the next.
 
 <figure>
-<img alt="The dispatch daemon's seven-phase polling cycle — a circular clockwork mechanism showing all phases from orphan recovery through worker dispatch and merge steward dispatch to reconciliation" src="https://stoneforge.ai/blog/images/the-pulse.png" loading="lazy" />
+<img alt="The dispatch daemon's seven-phase polling cycle — a circular clockwork mechanism showing all phases from orphan recovery through worker dispatch and merge steward dispatch to reconciliation" src="https://stoneforge.ai/blog/images/the-pulse.png?v=2" loading="lazy" />
 <figcaption>The Pulse's seven-phase cycle runs every five seconds. Worker dispatch and merge steward dispatch are the two active-work phases; the others are housekeeping that keeps the system healthy.</figcaption>
 </figure>
 
@@ -254,7 +254,7 @@ Three tasks, three lines. Each element is stored once with its latest state — 
 Why not just SQLite? Binary files don't diff. They don't merge across branches. If they corrupt, you lose everything. Why not just JSONL? Scanning a flat file for one task by ID is slow at scale. Full-text search needs indexes. Dependency graph traversal needs joins.
 
 <figure>
-<img alt="The dual record system — permanent wall-carvings deep in the quarry (JSONL) and expendable clay tablets at the entrance (SQLite)" src="https://stoneforge.ai/blog/images/dual-records.png" loading="lazy" />
+<img alt="The dual record system — permanent wall-carvings deep in the quarry (JSONL) and expendable clay tablets at the entrance (SQLite)" src="https://stoneforge.ai/blog/images/dual-records.png?v=2" loading="lazy" />
 <figcaption>JSONL files are the permanent record — append-only, human-readable, git-mergeable. SQLite is the expendable cache, rebuilt from JSONL on demand.</figcaption>
 </figure>
 
@@ -321,7 +321,7 @@ The daemon routes messages based on each agent's role and current session state.
 **Persistent workers and Directors** with active sessions receive messages forwarded directly as user input, but only after two minutes of inactivity from the human operator. If you're actively typing or giving instructions, messages queue up and wait. This prevents agent messages from interrupting your flow mid-thought. Once you pause, queued messages are delivered. A duplicate guard prevents double-forwarding.
 
 <figure>
-<img alt="Message routing — how the dispatch daemon routes messages differently for busy workers, idle workers, persistent workers, and Directors" src="https://stoneforge.ai/blog/images/message-routing.png" loading="lazy" />
+<img alt="Message routing — how the dispatch daemon routes messages differently for busy workers, idle workers, persistent workers, and Directors" src="https://stoneforge.ai/blog/images/message-routing.png?v=2" loading="lazy" />
 <figcaption>Messages route differently based on each agent's role and session state. Busy workers aren't interrupted. Idle workers get triage sessions. Persistent workers and Directors receive messages directly.</figcaption>
 </figure>
 
@@ -336,7 +336,7 @@ Stoneforge solves this with a knowledge base that agents are required to read be
 Every agent, when it starts a session, reads the **Documentation Directory**, a master index of all project knowledge. Specifications, decision logs, technique references, tutorials, runbooks, changelogs. The Directory tells the agent what knowledge exists and where to find it. Agents search for anything relevant to their current task before writing code.
 
 <figure>
-<img alt="The guild archive — stone shelves of scrolls organized into labeled libraries, an artisan consulting the Documentation Directory at a reading desk" src="https://stoneforge.ai/blog/images/guild-archive.png" loading="lazy" />
+<img alt="The guild archive — stone shelves of scrolls organized into labeled libraries, an artisan consulting the Documentation Directory at a reading desk" src="https://stoneforge.ai/blog/images/guild-archive.png?v=2" loading="lazy" />
 <figcaption>Every agent reads the Documentation Directory before starting work. Specifications, decision logs, and references are indexed and searchable — knowledge that accumulates instead of scattering across terminals.</figcaption>
 </figure>
 
@@ -403,7 +403,7 @@ The trigger system supports both **cron triggers** (standard five-field expressi
 Steward sessions have safety guardrails. An idle timeout (default two minutes) kills stewards that stop producing output. A max duration timeout (default thirty minutes) stops runaway sessions. The scheduler prevents overlapping runs: if a cron-triggered steward is still executing when the next cron fires, it skips.
 
 <figure>
-<img alt="The Four Stewards — an infographic showing four specialized inspection niches, each with a distinct steward archetype and their tools of the trade" src="https://stoneforge.ai/blog/images/four-stewards.png" loading="lazy" />
+<img alt="The Four Stewards — an infographic showing four specialized inspection niches, each with a distinct steward archetype and their tools of the trade" src="https://stoneforge.ai/blog/images/four-stewards.png?v=2" loading="lazy" />
 <figcaption>Four steward types run quality gates automatically: merge stewards integrate code, docs stewards verify accuracy, recovery stewards handle stuck tasks, and custom stewards run your playbooks.</figcaption>
 </figure>
 
@@ -426,7 +426,7 @@ Each provider handles its own authentication. Stoneforge doesn't store API keys.
 Models are configurable per agent or per provider. Your Director can run on Claude Opus for stronger planning and reasoning, while workers use Claude Sonnet for faster, cheaper execution. Your merge stewards can run on GPT Codex while your docs stewards use the latest GLM model. Match the model to the job. Use the most capable model where it matters and optimize for cost everywhere else.
 
 <figure>
-<img alt="The Provider's Compact — three artisans from different traditions working side by side, distinct tools but shared infrastructure and compatible output" src="https://stoneforge.ai/blog/images/providers-compact.png" loading="lazy" />
+<img alt="The Provider's Compact — three artisans from different traditions working side by side, distinct tools but shared infrastructure and compatible output" src="https://stoneforge.ai/blog/images/providers-compact.png?v=2" loading="lazy" />
 <figcaption>Different providers, identical infrastructure. Claude Code, OpenCode, and OpenAI Codex work side by side, producing compatible output through the same dispatch system.</figcaption>
 </figure>
 
@@ -471,7 +471,7 @@ Workflows can be ephemeral (one-off, not persisted) or durable (fully event-sour
 Everything described above is visible and controllable from a single web dashboard at `http://localhost:3457`.
 
 <figure>
-<img alt="The Director's chamber — overlooking the workshop floor, status crystals on the desk, a network of speaking stones on the wall" src="https://stoneforge.ai/blog/images/directors-chamber.png" loading="lazy" />
+<img alt="The Director's chamber — overlooking the workshop floor, status crystals on the desk, a network of speaking stones on the wall" src="https://stoneforge.ai/blog/images/directors-chamber.png?v=2" loading="lazy" />
 <figcaption>The Director's chamber — a single view of the entire operation. Status crystals track agents and tasks. Speaking stones map the communication topology. Your dashboard at localhost:3457.</figcaption>
 </figure>
 
