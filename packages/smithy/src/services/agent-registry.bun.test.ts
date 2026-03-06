@@ -7,8 +7,8 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'fs';
 import { createStorage, initializeSchema } from '@stoneforge/storage';
-import { createQuarryAPI } from '@stoneforge/quarry';
-import { createEntity, EntityTypeValue, type EntityId } from '@stoneforge/core';
+import { createQuarryAPI, type QuarryAPI } from '@stoneforge/quarry';
+import { createEntity, EntityTypeValue, type EntityId, type ElementId } from '@stoneforge/core';
 import {
   createAgentRegistry,
   type AgentRegistry,
@@ -52,6 +52,7 @@ describe('Agent Channel Name Utilities (TB-O7a)', () => {
 
 describe('AgentRegistry', () => {
   let registry: AgentRegistry;
+  let api: QuarryAPI;
   let testDbPath: string;
   let systemEntity: EntityId;
 
@@ -61,7 +62,7 @@ describe('AgentRegistry', () => {
     const storage = createStorage(testDbPath);
     initializeSchema(storage);
 
-    const api = createQuarryAPI(storage);
+    api = createQuarryAPI(storage);
     registry = createAgentRegistry(api);
 
     // Create a system entity for tests
@@ -600,6 +601,97 @@ describe('AgentRegistry', () => {
       expect(channel).toBeDefined();
       expect(channel?.permissions.visibility).toBe('private');
       expect(channel?.permissions.joinPolicy).toBe('invite-only');
+    });
+  });
+
+  describe('ensureAgentChannel', () => {
+    test('returns existing channel when it already exists', async () => {
+      const worker = await registry.registerWorker({
+        name: 'ExistingChannelWorker',
+        workerMode: 'ephemeral',
+        createdBy: systemEntity,
+      });
+
+      const meta = getAgentMetadata(worker);
+      expect(meta?.channelId).toBeDefined();
+
+      const channel = await registry.ensureAgentChannel(worker.id as unknown as EntityId);
+      expect(channel).toBeDefined();
+      expect(channel.id).toBe(meta?.channelId);
+    });
+
+    test('recreates channel when it has been deleted', async () => {
+      const worker = await registry.registerWorker({
+        name: 'DeletedChannelWorker',
+        workerMode: 'ephemeral',
+        createdBy: systemEntity,
+      });
+
+      const originalMeta = getAgentMetadata(worker);
+      const originalChannelId = originalMeta?.channelId;
+      expect(originalChannelId).toBeDefined();
+
+      // Delete the channel directly via the API to simulate a lost channel
+      // (soft delete sets status to 'tombstone')
+      await api.delete(originalChannelId as unknown as ElementId);
+
+      // ensureAgentChannel should detect the tombstoned channel and recreate it
+      const recreatedChannel = await registry.ensureAgentChannel(worker.id as unknown as EntityId);
+      expect(recreatedChannel).toBeDefined();
+      expect(recreatedChannel.channelType).toBe('direct');
+      expect(recreatedChannel.members).toContain(worker.id);
+      expect(recreatedChannel.members).toContain(systemEntity);
+
+      // The new channel should have a different ID from the deleted one
+      expect(recreatedChannel.id).not.toBe(originalChannelId);
+
+      // Agent metadata should be updated with the new channel ID
+      const updatedAgent = await registry.getAgent(worker.id as unknown as EntityId);
+      const updatedMeta = getAgentMetadata(updatedAgent!);
+      expect(updatedMeta?.channelId).toBe(recreatedChannel.id);
+
+      // The channel should be retrievable via getAgentChannel with the new ID
+      const retrievedChannel = await registry.getAgentChannel(worker.id as unknown as EntityId);
+      expect(retrievedChannel).toBeDefined();
+      expect(retrievedChannel?.id).toBe(recreatedChannel.id);
+    });
+
+    test('recreates channel when channelId metadata is missing', async () => {
+      const worker = await registry.registerWorker({
+        name: 'NoChannelIdWorker',
+        workerMode: 'ephemeral',
+        createdBy: systemEntity,
+      });
+
+      const originalMeta = getAgentMetadata(worker);
+      expect(originalMeta?.channelId).toBeDefined();
+
+      // Clear the channelId from agent metadata to simulate a partial registration failure
+      await registry.updateAgentMetadata(worker.id as unknown as EntityId, {
+        channelId: undefined,
+      } as any);
+
+      // Verify channelId is gone from metadata
+      const agentNoChannel = await registry.getAgent(worker.id as unknown as EntityId);
+      expect(getAgentMetadata(agentNoChannel!)?.channelId).toBeUndefined();
+
+      // ensureAgentChannel should recreate the channel
+      const recreatedChannel = await registry.ensureAgentChannel(worker.id as unknown as EntityId);
+      expect(recreatedChannel).toBeDefined();
+      expect(recreatedChannel.channelType).toBe('direct');
+      expect(recreatedChannel.members).toContain(worker.id);
+      expect(recreatedChannel.members).toContain(systemEntity);
+
+      // Agent metadata should now have the new channel ID
+      const updatedAgent = await registry.getAgent(worker.id as unknown as EntityId);
+      const updatedMeta = getAgentMetadata(updatedAgent!);
+      expect(updatedMeta?.channelId).toBe(recreatedChannel.id);
+    });
+
+    test('throws for non-existent agent', async () => {
+      await expect(
+        registry.ensureAgentChannel('non-existent-id' as EntityId)
+      ).rejects.toThrow('Agent not found');
     });
   });
 });
