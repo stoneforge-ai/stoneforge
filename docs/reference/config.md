@@ -63,6 +63,7 @@ interface Configuration {
     autoLinkProvider?: string;       // Provider name for auto-linking tasks (e.g., 'github')
     autoLinkDocumentProvider?: string; // Provider name for auto-linking documents (e.g., 'folder', 'notion')
   };
+  demoMode: boolean;               // Configure all agents to use opencode provider with free model (default: false)
 }
 ```
 
@@ -141,7 +142,8 @@ type ConfigPath =
   | 'externalSync.defaultDirection'
   | 'externalSync.autoLink'
   | 'externalSync.autoLinkProvider'
-  | 'externalSync.autoLinkDocumentProvider';
+  | 'externalSync.autoLinkDocumentProvider'
+  | 'demoMode';
 ```
 
 ## Modifying Configuration
@@ -192,6 +194,7 @@ const discovery = discoverConfigFile(undefined, '/project');
 | `STONEFORGE_IDENTITY_MODE` | `identity.mode` | `cryptographic` |
 | `STONEFORGE_JSON` | - | `true` (JSON output mode) |
 | `STONEFORGE_VERBOSE` | - | `true` (verbose/debug mode) |
+| `STONEFORGE_DEMO_MODE` | `demoMode` | `true` (use opencode provider with free model) |
 | `STONEFORGE_CONFIG` | - | `/path/to/config.yaml` |
 
 ```typescript
@@ -242,6 +245,8 @@ external_sync:
   auto_link: false
   auto_link_provider: github  # Provider for auto-linking tasks (when auto_link is true)
   auto_link_document_provider: folder  # Provider for auto-linking documents (e.g., 'folder', 'notion')
+
+demo_mode: false  # Configure all agents to use opencode provider with free model
 ```
 
 ## Duration Strings
