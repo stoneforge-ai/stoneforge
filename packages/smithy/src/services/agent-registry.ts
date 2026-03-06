@@ -17,6 +17,9 @@
 
 import type { Entity, EntityId, ElementId, Channel, ChannelId, IdGeneratorConfig } from '@stoneforge/core';
 import { EntityTypeValue, createEntity, createTimestamp, createDirectChannel, generateDirectChannelName, duplicateName, asEntityId, asElementId } from '@stoneforge/core';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('agent-registry');
 import type { QuarryAPI } from '@stoneforge/quarry';
 import type {
   AgentRole,
@@ -226,6 +229,18 @@ export interface AgentRegistry {
    * @returns The channel ID, or undefined if the agent has no channel
    */
   getAgentChannelId(agentId: EntityId): Promise<ChannelId | undefined>;
+
+  /**
+   * Ensures that an agent has a dedicated channel. If the channel is missing
+   * (e.g., due to a partial registration failure, JSONL sync issue, or crash),
+   * it will be recreated and the agent's metadata updated with the new channel ID.
+   *
+   * Logs a warning when a channel needs to be recreated.
+   *
+   * @param agentId - The entity ID of the agent
+   * @returns The agent's channel (existing or newly created)
+   */
+  ensureAgentChannel(agentId: EntityId): Promise<Channel>;
 }
 
 // ============================================================================
@@ -567,6 +582,31 @@ export class AgentRegistryImpl implements AgentRegistry {
 
     const meta = getAgentMetadata(agent);
     return meta?.channelId;
+  }
+
+  async ensureAgentChannel(agentId: EntityId): Promise<Channel> {
+    const agent = await this.getAgent(agentId);
+    if (!agent) {
+      throw new Error(`Agent not found: ${agentId}`);
+    }
+
+    // Check if the channel already exists and is not deleted (tombstoned)
+    const existingChannel = await this.getAgentChannel(agentId);
+    if (existingChannel && (existingChannel as unknown as { status?: string }).status !== 'tombstone') {
+      return existingChannel;
+    }
+
+    // Channel is missing or deleted — recreate it
+    logger.warn(`Agent channel missing for agent "${agent.name}" (${agentId}), recreating`);
+
+    const channel = await this.createAgentChannel(agent.name, agentId, agent.createdBy);
+
+    // Update the agent's metadata with the new channel ID
+    await this.updateAgentMetadata(agentId, {
+      channelId: channel.id,
+    } as Partial<AgentMetadata>);
+
+    return channel;
   }
 
   // ----------------------------------------

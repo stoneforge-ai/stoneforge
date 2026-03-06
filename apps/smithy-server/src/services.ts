@@ -105,6 +105,14 @@ export async function initializeServices(): Promise<Services> {
     } catch (err) {
       logger.warn(`Failed to load session state for agent ${agent.name}:`, err);
     }
+
+    // Ensure each agent has a dedicated channel (recreate if missing due to
+    // partial registration failure, JSONL sync issue, or crash)
+    try {
+      await agentRegistry.ensureAgentChannel(agent.id as unknown as EntityId);
+    } catch (err) {
+      logger.warn(`Failed to ensure agent channel for agent ${agent.name}:`, err);
+    }
   }
   logger.info(`Loaded session state for ${agents.length} agents`);
 
