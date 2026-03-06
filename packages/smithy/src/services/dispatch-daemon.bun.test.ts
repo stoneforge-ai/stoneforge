@@ -5814,3 +5814,136 @@ describe('recoverOrphanedAssignments - recovery steward orphan recovery', () => 
     expect(meta!.sessionHistory![1].sessionId).toBe('steward-session-1');
   });
 });
+
+describe('assignTaskToWorker - missing agent channel resilience', () => {
+  let api: QuarryAPI;
+  let inboxService: InboxService;
+  let agentRegistry: AgentRegistry;
+  let taskAssignment: TaskAssignmentService;
+  let dispatchService: DispatchService;
+  let sessionManager: SessionManager;
+  let worktreeManager: WorktreeManager;
+  let stewardScheduler: StewardScheduler;
+  let daemon: DispatchDaemon;
+  let testDbPath: string;
+  let systemEntity: EntityId;
+
+  beforeEach(async () => {
+    testDbPath = `/tmp/dispatch-daemon-missing-channel-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`;
+    const storage = createStorage({ path: testDbPath, create: true });
+    initializeSchema(storage);
+
+    api = createQuarryAPI(storage);
+    inboxService = createInboxService(storage);
+    agentRegistry = createAgentRegistry(api);
+    taskAssignment = createTaskAssignmentService(api);
+    dispatchService = createDispatchService(api, taskAssignment, agentRegistry);
+    sessionManager = createMockSessionManager();
+    worktreeManager = createMockWorktreeManager();
+    stewardScheduler = createMockStewardScheduler();
+
+    const { createEntity, EntityTypeValue } = await import('@stoneforge/core');
+    const entity = await createEntity({
+      name: 'test-system',
+      entityType: EntityTypeValue.SYSTEM,
+      createdBy: 'system:test' as EntityId,
+    });
+    const saved = await api.create(entity as unknown as Record<string, unknown> & { createdBy: EntityId });
+    systemEntity = saved.id as unknown as EntityId;
+
+    const config: DispatchDaemonConfig = {
+      pollIntervalMs: 100,
+      workerAvailabilityPollEnabled: true,
+      inboxPollEnabled: false,
+      stewardTriggerPollEnabled: false,
+      workflowTaskPollEnabled: false,
+    };
+
+    daemon = createDispatchDaemon(
+      api,
+      agentRegistry,
+      sessionManager,
+      dispatchService,
+      worktreeManager,
+      taskAssignment,
+      stewardScheduler,
+      inboxService,
+      config
+    );
+  });
+
+  afterEach(async () => {
+    await daemon.stop();
+    if (fs.existsSync(testDbPath)) {
+      fs.unlinkSync(testDbPath);
+    }
+  });
+
+  async function createTestWorker(name: string): Promise<AgentEntity> {
+    return agentRegistry.registerWorker({
+      name,
+      workerMode: 'ephemeral',
+      createdBy: systemEntity,
+      maxConcurrentTasks: 1,
+    });
+  }
+
+  async function createTestTask(title: string): Promise<Task> {
+    const task = await createTask({
+      title,
+      createdBy: systemEntity,
+      status: TaskStatus.OPEN,
+    });
+    return api.create(task as unknown as Record<string, unknown> & { createdBy: EntityId }) as Promise<Task>;
+  }
+
+  test('skips worker when dispatchService.dispatch throws "Agent channel not found"', async () => {
+    // 1. Register a worker and create a task
+    const worker = await createTestWorker('missing-channel-worker');
+    const task = await createTestTask('Task for missing channel test');
+
+    // 2. Mock dispatchService.dispatch to throw "Agent channel not found"
+    const impl = daemon as DispatchDaemonImpl;
+    const originalDispatch = (impl as any).dispatchService.dispatch;
+    (impl as any).dispatchService.dispatch = mock(async () => {
+      throw new Error(`Agent channel not found for agent: ${worker.id}`);
+    });
+
+    // 3. Run the poll
+    const result = await daemon.pollWorkerAvailability();
+
+    // 4. The daemon should NOT have errored — it should have handled gracefully
+    expect(result.errors).toBe(0);
+    // The task was not successfully dispatched, so processed should be 0
+    expect(result.processed).toBe(0);
+
+    // 5. Verify the task remains unassigned (available for other workers)
+    const updatedTask = await api.get<Task>(task.id);
+    expect(updatedTask?.assignee).toBeFalsy();
+
+    // 6. Restore original dispatch
+    (impl as any).dispatchService.dispatch = originalDispatch;
+  });
+
+  test('re-throws non-channel errors from dispatchService.dispatch', async () => {
+    // 1. Register a worker and create a task
+    const worker = await createTestWorker('other-error-worker');
+    await createTestTask('Task for other error test');
+
+    // 2. Mock dispatchService.dispatch to throw a different error
+    const impl = daemon as DispatchDaemonImpl;
+    const originalDispatch = (impl as any).dispatchService.dispatch;
+    (impl as any).dispatchService.dispatch = mock(async () => {
+      throw new Error('Some other dispatch error');
+    });
+
+    // 3. Run the poll — the error should bubble up to the outer catch
+    const result = await daemon.pollWorkerAvailability();
+
+    // 4. The outer catch should record it as an error
+    expect(result.errors).toBe(1);
+
+    // 5. Restore original dispatch
+    (impl as any).dispatchService.dispatch = originalDispatch;
+  });
+});

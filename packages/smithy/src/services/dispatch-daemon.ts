@@ -2660,7 +2660,30 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       sessionId: session.providerSessionId ?? session.id,
     };
 
-    await this.dispatchService.dispatch(task.id, workerId, dispatchOptions);
+    try {
+      await this.dispatchService.dispatch(task.id, workerId, dispatchOptions);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes('Agent channel not found')) {
+        logger.warn(
+          `Skipping worker ${worker.name} (${workerId}): agent channel not found for task ${task.id}`
+        );
+        this.operationLog?.write(
+          'warn',
+          'dispatch',
+          `Skipping worker with missing channel: ${worker.name} (${workerId}) for task ${task.id}`,
+          { agentId: workerId, taskId: task.id }
+        );
+        // Defensively unassign the task in case it was partially assigned
+        try {
+          await this.taskAssignment.unassignTask(task.id);
+        } catch {
+          // Task may not have been assigned yet — ignore
+        }
+        return false;
+      }
+      throw error;
+    }
     this.emitter.emit('task:dispatched', task.id, workerId);
 
     // Record session history entry for this worker session
