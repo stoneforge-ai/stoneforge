@@ -3004,8 +3004,22 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       logger.info(
         `Task ${task.id} shows rate limit pattern in session history ` +
         `(last ${RATE_LIMIT_SESSION_PATTERN_COUNT} sessions were rapid exits). ` +
-        `Skipping recovery steward spawn.`
+        `Skipping recovery steward spawn and recording rate limit.`
       );
+
+      // Record the rate limit so the daemon pauses dispatch and the dashboard banner shows.
+      // Without this, the orphan recovery loop would repeatedly detect the pattern every
+      // poll cycle without ever pausing — causing infinite log spam.
+      const fallbackChain = this.settingsService?.getAgentDefaults().fallbackChain ?? [];
+      const resetTime = new Date(Date.now() + RAPID_EXIT_FALLBACK_RESET_MS);
+      if (fallbackChain.length > 0) {
+        for (const executable of fallbackChain) {
+          this.handleRateLimitDetected(executable, resetTime);
+        }
+      } else {
+        this.handleRateLimitDetected('claude', resetTime);
+      }
+
       return false;
     }
 

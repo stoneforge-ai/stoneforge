@@ -4599,6 +4599,62 @@ describe('spawnRecoveryStewardForTask - rate limit session history guard', () =>
     expect(sessionManager.startSession).toHaveBeenCalled();
   });
 
+  test('records rate limit in tracker when session history shows rate limit pattern', async () => {
+    const worker = await createTestWorker('rl-record-worker');
+    const workerId = worker.id as unknown as EntityId;
+    await createTestRecoverySteward('recovery-steward-rl-record');
+
+    // Task has N rapid sessions without proper completion (rate limit pattern)
+    await createTaskWithRateLimitPattern('Rate limited task - tracker test', workerId);
+
+    // Verify no rate limits are recorded before recovery runs
+    const beforeStatus = daemon.getRateLimitStatus();
+    expect(beforeStatus.isPaused).toBe(false);
+    expect(beforeStatus.limits).toHaveLength(0);
+
+    // Run orphan recovery — should detect rate limit pattern and record it
+    const result = await daemon.recoverOrphanedAssignments();
+
+    // Recovery steward should NOT have been spawned
+    expect(result.processed).toBe(0);
+    expect(sessionManager.startSession).not.toHaveBeenCalled();
+
+    // Rate limit SHOULD be recorded in the tracker
+    const afterStatus = daemon.getRateLimitStatus();
+    expect(afterStatus.isPaused).toBe(true);
+    expect(afterStatus.limits.length).toBeGreaterThanOrEqual(1);
+    expect(afterStatus.limits[0].executable).toBe('claude');
+
+    // The reset time should be approximately RAPID_EXIT_FALLBACK_RESET_MS from now
+    const resetTime = new Date(afterStatus.limits[0].resetsAt);
+    const expectedResetTime = Date.now() + RAPID_EXIT_FALLBACK_RESET_MS;
+    // Allow 10 seconds of tolerance
+    expect(Math.abs(resetTime.getTime() - expectedResetTime)).toBeLessThan(10_000);
+  });
+
+  test('rate limit pattern detection prevents repeated log spam on subsequent cycles', async () => {
+    const worker = await createTestWorker('rl-spam-worker');
+    const workerId = worker.id as unknown as EntityId;
+    await createTestRecoverySteward('recovery-steward-rl-spam');
+
+    // Task has N rapid sessions without proper completion
+    await createTaskWithRateLimitPattern('Rate limited task - spam test', workerId);
+
+    // First cycle: detects pattern, records rate limit
+    const result1 = await daemon.recoverOrphanedAssignments();
+    expect(result1.processed).toBe(0);
+
+    // After recording rate limit, daemon should be paused
+    const status = daemon.getRateLimitStatus();
+    expect(status.isPaused).toBe(true);
+
+    // Second cycle: since daemon is paused, the task should be skipped
+    // entirely (at the resolveExecutableWithFallback level), not re-triggering
+    // the pattern detection log
+    const result2 = await daemon.recoverOrphanedAssignments();
+    expect(result2.processed).toBe(0);
+  });
+
   test('does not detect rate limit pattern when sessions are far apart', async () => {
     const worker = await createTestWorker('far-apart-worker');
     const workerId = worker.id as unknown as EntityId;
