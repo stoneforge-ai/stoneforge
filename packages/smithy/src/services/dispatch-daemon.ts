@@ -103,14 +103,6 @@ export const RAPID_EXIT_FALLBACK_RESET_MS = 60 * 60 * 1000;
 export const RAPID_EXIT_THRESHOLD_MS = 10_000;
 
 /**
- * Grace period (in milliseconds) after a manual `wake()` during which
- * rate limit re-detections are suppressed. This prevents the daemon from
- * immediately re-recording a rate limit from stale session events or
- * rapid-exit detectors right after the user presses "Wake Now".
- */
-export const WAKE_GRACE_PERIOD_MS = 30_000;
-
-/**
  * Number of recent session history entries to examine when detecting
  * a rate limit pattern. If the last N sessions were all very short-lived,
  * the task is likely stuck due to rate limiting rather than a genuine bug.
@@ -498,7 +490,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
   private pollIntervalHandle?: NodeJS.Timeout;
   private currentPollCycle?: Promise<void>;
   private rateLimitSleepTimer?: NodeJS.Timeout;
-  private wakeGraceUntil?: number;
+  private lastWakeAt?: number;
 
   /**
    * Tracks inbox item IDs that are currently being forwarded to persistent agents.
@@ -671,12 +663,6 @@ export class DispatchDaemonImpl implements DispatchDaemon {
   // ----------------------------------------
 
   handleRateLimitDetected(executable: string, resetsAt: Date): void {
-    // Skip re-detection during grace period after manual wake
-    if (this.wakeGraceUntil && Date.now() < this.wakeGraceUntil) {
-      logger.debug(`Ignoring rate limit detection for '${executable}' during wake grace period`);
-      return;
-    }
-
     // Clamp reset time to at least RATE_LIMIT_MINIMUM_FLOOR_MS from now.
     // The rate limit parser can produce reset times that are too short due to
     // timezone issues or rounding. Premature expiry causes orphan recovery to
@@ -794,8 +780,8 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       this.rateLimitSleepTimer = undefined;
     }
 
-    // Suppress re-detection for a grace period after manual wake
-    this.wakeGraceUntil = Date.now() + WAKE_GRACE_PERIOD_MS;
+    // Record wake timestamp so hasRecentRateLimitPattern() can ignore pre-wake history
+    this.lastWakeAt = Date.now();
 
     logger.info('Manual wake: cleared all rate limits, dispatch will resume on next poll cycle');
   }
@@ -2277,12 +2263,6 @@ export class DispatchDaemonImpl implements DispatchDaemon {
 
       const sessionDuration = Date.now() - startTime;
       if (sessionDuration >= RAPID_EXIT_THRESHOLD_MS) {
-        // Session ran long enough — clear wake grace period since genuine
-        // rate limits after this point should be detected normally.
-        if (this.wakeGraceUntil) {
-          this.wakeGraceUntil = undefined;
-          logger.debug('Cleared wake grace period after session ran past rapid exit threshold');
-        }
         return;
       }
 
@@ -2398,11 +2378,14 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       }
     }
 
-    // Check that the pattern is recent — if the last rapid-exit session
-    // was long ago, the rate limit has likely expired and recovery should proceed.
-    const mostRecentStart = new Date(recentSessions[recentSessions.length - 1].startedAt).getTime();
-    if (Date.now() - mostRecentStart > RATE_LIMIT_SESSION_GAP_MS) {
-      return false;
+    // If wake() was called, ignore patterns that predate the wake.
+    // After wake, the ONLY way a rate limit should be recorded is from
+    // new rate limit events that occur AFTER the wake.
+    if (this.lastWakeAt) {
+      const mostRecentStart = new Date(recentSessions[recentSessions.length - 1].startedAt).getTime();
+      if (mostRecentStart < this.lastWakeAt) {
+        return false; // Pattern predates last wake — ignore
+      }
     }
 
     // All recent sessions were rapid retries without proper completion
