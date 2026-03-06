@@ -119,7 +119,7 @@ export class OpenCodeInteractiveProvider implements InteractiveProvider {
     const shellArgs: string[] = process.platform === 'win32'
       ? []
       : options.initialPrompt
-        ? ['-l', '-c', opencodeCommand + ' "$1"', '_', options.initialPrompt]
+        ? ['-l', '-c', opencodeCommand + ' --prompt "$1"', '_', options.initialPrompt]
         : ['-l', '-c', opencodeCommand];
 
     const ptyProcess = pty.spawn(shell, shellArgs, {
