@@ -39,6 +39,7 @@ import {
   RAPID_EXIT_FALLBACK_RESET_MS,
   RATE_LIMIT_SESSION_PATTERN_COUNT,
   RATE_LIMIT_SESSION_GAP_MS,
+  WAKE_GRACE_PERIOD_MS,
 } from './dispatch-daemon.js';
 import type { SettingsService, ServerAgentDefaults } from './settings-service.js';
 import { createAgentRegistry, type AgentRegistry, type AgentEntity } from './agent-registry.js';
@@ -2143,6 +2144,222 @@ describe('DispatchDaemon Rate Limit Integration', () => {
 
     await noSettingsDaemon.stop();
     daemon = noSettingsDaemon;
+  });
+});
+
+// ============================================================================
+// wake() grace period — suppress rate limit re-detection after manual wake
+// ============================================================================
+
+describe('wake() grace period - suppress rate limit re-detection', () => {
+  let api: QuarryAPI;
+  let inboxService: InboxService;
+  let agentRegistry: AgentRegistry;
+  let taskAssignment: TaskAssignmentService;
+  let dispatchService: DispatchService;
+  let sessionManager: SessionManager;
+  let worktreeManager: WorktreeManager;
+  let stewardScheduler: StewardScheduler;
+  let settingsService: SettingsService;
+  let daemon: DispatchDaemonImpl;
+  let testDbPath: string;
+  let systemEntity: EntityId;
+
+  beforeEach(async () => {
+    testDbPath = `/tmp/dispatch-daemon-wake-grace-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`;
+    const storage = createStorage({ path: testDbPath, create: true });
+    initializeSchema(storage);
+
+    api = createQuarryAPI(storage);
+    inboxService = createInboxService(storage);
+    agentRegistry = createAgentRegistry(api);
+    taskAssignment = createTaskAssignmentService(api);
+    dispatchService = createDispatchService(api, taskAssignment, agentRegistry);
+    sessionManager = createMockSessionManager();
+    worktreeManager = createMockWorktreeManager();
+    stewardScheduler = createMockStewardScheduler();
+    settingsService = createMockSettingsService({
+      fallbackChain: ['claude2', 'claude'],
+    });
+
+    const { createEntity, EntityTypeValue } = await import('@stoneforge/core');
+    const entity = await createEntity({
+      name: 'test-system-wake-grace',
+      entityType: EntityTypeValue.SYSTEM,
+      createdBy: 'system:test' as EntityId,
+    });
+    const saved = await api.create(entity as unknown as Record<string, unknown> & { createdBy: EntityId });
+    systemEntity = saved.id as unknown as EntityId;
+
+    const config: DispatchDaemonConfig = {
+      pollIntervalMs: 100,
+      workerAvailabilityPollEnabled: true,
+      inboxPollEnabled: false,
+      stewardTriggerPollEnabled: false,
+      workflowTaskPollEnabled: false,
+    };
+
+    daemon = new DispatchDaemonImpl(
+      api,
+      agentRegistry,
+      sessionManager,
+      dispatchService,
+      worktreeManager,
+      taskAssignment,
+      stewardScheduler,
+      inboxService,
+      config,
+      undefined, // poolService
+      settingsService
+    );
+  });
+
+  afterEach(async () => {
+    await daemon.stop();
+    if (fs.existsSync(testDbPath)) {
+      fs.unlinkSync(testDbPath);
+    }
+  });
+
+  test('wake() suppresses handleRateLimitDetected() during grace period', () => {
+    // Call wake to set the grace period
+    daemon.wake();
+
+    // Immediately try to detect a rate limit (within grace period)
+    const resetsAt = new Date(Date.now() + 60 * 60 * 1000);
+    daemon.handleRateLimitDetected('claude2', resetsAt);
+
+    // Rate limit should NOT be recorded
+    const status = daemon.getRateLimitStatus();
+    expect(status.isPaused).toBe(false);
+    expect(status.limits).toHaveLength(0);
+  });
+
+  test('wake() grace period expires and subsequent rate limits are detected', () => {
+    // Call wake to set the grace period
+    daemon.wake();
+
+    // Manually expire the grace period by setting wakeGraceUntil to the past
+    (daemon as unknown as { wakeGraceUntil: number }).wakeGraceUntil = Date.now() - 1;
+
+    // Now rate limit detection should work normally
+    const resetsAt = new Date(Date.now() + 60 * 60 * 1000);
+    daemon.handleRateLimitDetected('claude2', resetsAt);
+
+    const status = daemon.getRateLimitStatus();
+    expect(status.isPaused).toBe(true);
+    expect(status.limits.length).toBeGreaterThan(0);
+  });
+
+  test('dispatch still attempts during grace period (not paused)', () => {
+    // Call wake
+    daemon.wake();
+
+    // Daemon should not be paused — dispatch should proceed
+    const status = daemon.getRateLimitStatus();
+    expect(status.isPaused).toBe(false);
+    expect(status.limits).toHaveLength(0);
+  });
+
+  test('grace period does not suppress rate limits that were set before wake()', () => {
+    // Set a rate limit first
+    const resetsAt = new Date(Date.now() + 60 * 60 * 1000);
+    daemon.handleRateLimitDetected('claude2', resetsAt);
+
+    // Verify it's set
+    let status = daemon.getRateLimitStatus();
+    expect(status.isPaused).toBe(true);
+
+    // Wake clears the rate limit and sets grace period
+    daemon.wake();
+
+    // Rate limit should be cleared
+    status = daemon.getRateLimitStatus();
+    expect(status.isPaused).toBe(false);
+    expect(status.limits).toHaveLength(0);
+
+    // New rate limit during grace period should be suppressed
+    daemon.handleRateLimitDetected('claude2', resetsAt);
+    status = daemon.getRateLimitStatus();
+    expect(status.isPaused).toBe(false);
+  });
+
+  test('grace period is cleared when session runs past RAPID_EXIT_THRESHOLD_MS', async () => {
+    const worker = await agentRegistry.registerWorker({
+      name: 'wake-grace-worker',
+      workerMode: 'ephemeral',
+      createdBy: systemEntity,
+      maxConcurrentTasks: 1,
+    });
+    const workerId = worker.id as unknown as EntityId;
+
+    const task = await (async () => {
+      const t = await createTask({
+        title: 'Task for grace period clearing',
+        createdBy: systemEntity,
+        status: TaskStatus.IN_PROGRESS,
+        assignee: workerId,
+      });
+      return api.create(t as unknown as Record<string, unknown> & { createdBy: EntityId }) as Promise<Task>;
+    })();
+
+    // Set up metadata so the task looks like it has an assigned worker with a worktree
+    await api.update<Task>(task.id, {
+      metadata: updateOrchestratorTaskMeta(undefined, {
+        assignedAgent: workerId,
+        worktree: '/worktrees/wake-grace-worker/task',
+        sessionId: 'old-session-id',
+      }),
+    });
+
+    // Call wake to set grace period
+    daemon.wake();
+
+    // Verify grace period is set
+    expect((daemon as unknown as { wakeGraceUntil?: number }).wakeGraceUntil).toBeDefined();
+
+    // Simulate a session that runs past RAPID_EXIT_THRESHOLD_MS via attachRapidExitDetector
+    const events = new EventEmitter();
+    const startTime = Date.now();
+
+    // Access the private method via prototype
+    (daemon as unknown as { attachRapidExitDetector: (events: EventEmitter, task: Task, worker: AgentEntity) => void })
+      .attachRapidExitDetector(events, task, worker);
+
+    // Simulate session running past threshold by faking Date.now
+    const originalNow = Date.now;
+    Date.now = () => startTime + RAPID_EXIT_THRESHOLD_MS + 1000;
+
+    // Emit exit — this should clear the grace period because session ran long enough
+    events.emit('exit');
+
+    // Small delay for async handler
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    // Restore Date.now
+    Date.now = originalNow;
+
+    // Grace period should be cleared
+    expect((daemon as unknown as { wakeGraceUntil?: number }).wakeGraceUntil).toBeUndefined();
+  });
+
+  test('multiple wake() calls reset the grace period', () => {
+    daemon.wake();
+    const firstGrace = (daemon as unknown as { wakeGraceUntil?: number }).wakeGraceUntil;
+
+    // Small delay to get a different timestamp
+    const laterTime = (firstGrace ?? 0) + 100;
+    const originalNow = Date.now;
+    Date.now = () => laterTime - WAKE_GRACE_PERIOD_MS + 1;
+
+    daemon.wake();
+    const secondGrace = (daemon as unknown as { wakeGraceUntil?: number }).wakeGraceUntil;
+
+    Date.now = originalNow;
+
+    // Second wake should have a new (later or equal) grace timestamp
+    expect(secondGrace).toBeDefined();
+    expect(secondGrace).toBeGreaterThanOrEqual(firstGrace!);
   });
 });
 
