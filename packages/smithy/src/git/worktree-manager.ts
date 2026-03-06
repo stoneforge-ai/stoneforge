@@ -930,6 +930,10 @@ export class WorktreeManagerImpl implements WorktreeManager {
       strictArgs = ['install'];
     }
 
+    // Check if packageManager field is present in package.json.
+    // If so, use corepack to ensure the correct version is used.
+    const useCorepack = await this.shouldUseCorepack(packageJsonPath, command);
+
     // Use a longer timeout for dependency installation (5 minutes)
     const INSTALL_TIMEOUT_MS = 5 * 60 * 1000;
     const execOptions = {
@@ -938,14 +942,20 @@ export class WorktreeManagerImpl implements WorktreeManager {
       timeout: INSTALL_TIMEOUT_MS,
     };
 
+    // When using corepack, the command becomes 'corepack' and the manager
+    // is prepended to the args (e.g. corepack pnpm install --frozen-lockfile).
+    const execCommand = useCorepack ? 'corepack' : command;
+    const wrapArgs = (args: string[]) =>
+      useCorepack ? [command, ...args] : args;
+
     try {
-      await execFileAsync(command, strictArgs, execOptions);
+      await execFileAsync(execCommand, wrapArgs(strictArgs), execOptions);
     } catch {
       // Strict install failed — the lockfile may be out of sync with
       // package.json (e.g. uncommitted lockfile changes on the base branch).
       // Fall back to a plain install so the worktree is still usable.
       try {
-        await execFileAsync(command, ['install'], execOptions);
+        await execFileAsync(execCommand, wrapArgs(['install']), execOptions);
       } catch (error) {
         const execError = error as Error & { stdout?: string; stderr?: string };
         const details = [
@@ -959,6 +969,49 @@ export class WorktreeManagerImpl implements WorktreeManager {
           details
         );
       }
+    }
+  }
+
+  /**
+   * Determines whether corepack should be used for dependency installation.
+   *
+   * Returns true when:
+   * 1. package.json has a `packageManager` field specifying the detected manager
+   * 2. corepack is available on the system
+   *
+   * Falls back to false (direct invocation) when either condition is not met.
+   */
+  private async shouldUseCorepack(
+    packageJsonPath: string,
+    detectedManager: string,
+  ): Promise<boolean> {
+    try {
+      const raw = fs.readFileSync(packageJsonPath, 'utf8');
+      const pkg = JSON.parse(raw) as { packageManager?: string };
+
+      if (!pkg.packageManager) {
+        return false;
+      }
+
+      // packageManager format is "name@version" (e.g. "pnpm@9.12.0")
+      const atIndex = pkg.packageManager.indexOf('@');
+      const managerName =
+        atIndex > 0 ? pkg.packageManager.slice(0, atIndex) : pkg.packageManager;
+
+      // Only use corepack when the packageManager field matches the detected manager
+      if (managerName !== detectedManager) {
+        return false;
+      }
+
+      // Check that corepack is available
+      await execFileAsync('corepack', ['--version'], {
+        encoding: 'utf8',
+        timeout: 10_000,
+      });
+      return true;
+    } catch {
+      // package.json unreadable, no packageManager field, or corepack unavailable
+      return false;
     }
   }
 

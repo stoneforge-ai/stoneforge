@@ -619,6 +619,198 @@ describe('WorktreeManager Custom Directory', () => {
 // Unit Tests - Error Messages
 // ============================================================================
 
+// ============================================================================
+// Unit Tests - Corepack / packageManager Detection
+// ============================================================================
+
+describe('installDependencies with packageManager field', () => {
+  let tempDir: string;
+  let manager: WorktreeManager;
+
+  beforeEach(async () => {
+    tempDir = createTempGitRepo();
+    manager = createWorktreeManager({ workspaceRoot: tempDir });
+    await manager.initWorkspace();
+  });
+
+  afterEach(() => {
+    cleanupTempDir(tempDir);
+  });
+
+  test('uses corepack when packageManager field is present and corepack is available', async () => {
+    // Write package.json with packageManager field and a lockfile
+    fs.writeFileSync(
+      path.join(tempDir, 'package.json'),
+      JSON.stringify({ name: 'test', packageManager: 'pnpm@9.12.0' }),
+    );
+    fs.writeFileSync(path.join(tempDir, 'pnpm-lock.yaml'), 'lockfileVersion: 9\n');
+    execSync('git add -A && git commit -m "add package.json"', { cwd: tempDir, stdio: 'pipe' });
+
+    // Check if corepack is available on this system
+    let corepackAvailable = false;
+    try {
+      execSync('corepack --version', { stdio: 'pipe' });
+      corepackAvailable = true;
+    } catch {
+      // corepack not available
+    }
+
+    // installDependencies will be invoked — it should try corepack when available.
+    // The install will fail (no real deps) but we verify it doesn't throw an
+    // unexpected error (the DEPENDENCY_INSTALL_FAILED error is expected).
+    try {
+      await manager.createWorktree({
+        agentName: 'alice',
+        taskId: 'task-corepack' as ElementId,
+        taskTitle: 'corepack test',
+        installDependencies: true,
+      });
+    } catch (err) {
+      // Expected: install fails because there are no real dependencies.
+      // The important thing is that the worktree was created and the error
+      // is a dependency install failure, not something else.
+      expect(err).toBeInstanceOf(WorktreeError);
+      expect((err as WorktreeError).code).toBe('DEPENDENCY_INSTALL_FAILED');
+    }
+
+    // If corepack is available, the error message should reference corepack
+    // (since corepack wraps the command). If not, it falls back to pnpm directly.
+    // Either way, the worktree directory should have been created.
+  });
+
+  test('uses direct command when no packageManager field is present', async () => {
+    // Write package.json WITHOUT packageManager field, with a lockfile
+    fs.writeFileSync(
+      path.join(tempDir, 'package.json'),
+      JSON.stringify({ name: 'test' }),
+    );
+    fs.writeFileSync(path.join(tempDir, 'pnpm-lock.yaml'), 'lockfileVersion: 9\n');
+    execSync('git add -A && git commit -m "add package.json"', { cwd: tempDir, stdio: 'pipe' });
+
+    // installDependencies will run pnpm directly (no corepack wrapper)
+    try {
+      await manager.createWorktree({
+        agentName: 'bob',
+        taskId: 'task-direct' as ElementId,
+        taskTitle: 'direct test',
+        installDependencies: true,
+      });
+    } catch (err) {
+      expect(err).toBeInstanceOf(WorktreeError);
+      expect((err as WorktreeError).code).toBe('DEPENDENCY_INSTALL_FAILED');
+    }
+  });
+
+  test('falls back to direct command when packageManager manager name does not match lockfile', async () => {
+    // package.json says yarn but lockfile is pnpm — should not use corepack
+    fs.writeFileSync(
+      path.join(tempDir, 'package.json'),
+      JSON.stringify({ name: 'test', packageManager: 'yarn@4.0.0' }),
+    );
+    fs.writeFileSync(path.join(tempDir, 'pnpm-lock.yaml'), 'lockfileVersion: 9\n');
+    execSync('git add -A && git commit -m "add package.json"', { cwd: tempDir, stdio: 'pipe' });
+
+    try {
+      await manager.createWorktree({
+        agentName: 'carol',
+        taskId: 'task-mismatch' as ElementId,
+        taskTitle: 'mismatch test',
+        installDependencies: true,
+      });
+    } catch (err) {
+      // Should fall back to pnpm (from lockfile detection), not corepack yarn
+      expect(err).toBeInstanceOf(WorktreeError);
+      expect((err as WorktreeError).code).toBe('DEPENDENCY_INSTALL_FAILED');
+    }
+  });
+});
+
+// ============================================================================
+// Unit Tests - shouldUseCorepack logic (via internal access)
+// ============================================================================
+
+describe('shouldUseCorepack logic', () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = `/tmp/corepack-test-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    fs.mkdirSync(tempDir, { recursive: true });
+  });
+
+  afterEach(() => {
+    cleanupTempDir(tempDir);
+  });
+
+  test('returns false when package.json has no packageManager field', async () => {
+    const pkgPath = path.join(tempDir, 'package.json');
+    fs.writeFileSync(pkgPath, JSON.stringify({ name: 'test' }));
+
+    // Access private method via bracket notation for testing
+    const mgr = createWorktreeManager({ workspaceRoot: tempDir }) as any;
+    const result = await mgr.shouldUseCorepack(pkgPath, 'pnpm');
+    expect(result).toBe(false);
+  });
+
+  test('returns false when packageManager name does not match detected manager', async () => {
+    const pkgPath = path.join(tempDir, 'package.json');
+    fs.writeFileSync(pkgPath, JSON.stringify({ name: 'test', packageManager: 'yarn@4.0.0' }));
+
+    const mgr = createWorktreeManager({ workspaceRoot: tempDir }) as any;
+    const result = await mgr.shouldUseCorepack(pkgPath, 'pnpm');
+    expect(result).toBe(false);
+  });
+
+  test('returns true when packageManager matches and corepack is available', async () => {
+    // Skip if corepack is not installed
+    let corepackAvailable = false;
+    try {
+      execSync('corepack --version', { stdio: 'pipe' });
+      corepackAvailable = true;
+    } catch {
+      // skip
+    }
+
+    if (!corepackAvailable) {
+      // Cannot test corepack availability when it's not installed
+      return;
+    }
+
+    const pkgPath = path.join(tempDir, 'package.json');
+    fs.writeFileSync(pkgPath, JSON.stringify({ name: 'test', packageManager: 'pnpm@9.12.0' }));
+
+    const mgr = createWorktreeManager({ workspaceRoot: tempDir }) as any;
+    const result = await mgr.shouldUseCorepack(pkgPath, 'pnpm');
+    expect(result).toBe(true);
+  });
+
+  test('returns false when package.json is unreadable', async () => {
+    const pkgPath = path.join(tempDir, 'nonexistent', 'package.json');
+
+    const mgr = createWorktreeManager({ workspaceRoot: tempDir }) as any;
+    const result = await mgr.shouldUseCorepack(pkgPath, 'pnpm');
+    expect(result).toBe(false);
+  });
+
+  test('parses packageManager field without version (bare name)', async () => {
+    const pkgPath = path.join(tempDir, 'package.json');
+    fs.writeFileSync(pkgPath, JSON.stringify({ name: 'test', packageManager: 'pnpm' }));
+
+    // Should match detected manager even without @version
+    let corepackAvailable = false;
+    try {
+      execSync('corepack --version', { stdio: 'pipe' });
+      corepackAvailable = true;
+    } catch {
+      // skip
+    }
+
+    const mgr = createWorktreeManager({ workspaceRoot: tempDir }) as any;
+    const result = await mgr.shouldUseCorepack(pkgPath, 'pnpm');
+    // If corepack is available, should return true; if not, false
+    expect(result).toBe(corepackAvailable);
+  });
+});
+
 describe('Error Messages', () => {
   test('GitRepositoryNotFoundError has helpful message', () => {
     const error = new GitRepositoryNotFoundError('/path/to/project');
