@@ -114,6 +114,37 @@ describe('OpenCodeInteractiveProvider', () => {
       expect(command).toContain('--continue');
     });
 
+    it('should include working directory as positional arg in the command', async () => {
+      const provider = new OpenCodeInteractiveProvider('/usr/bin/opencode');
+
+      await provider.spawn({
+        workingDirectory: '/tmp/test-project',
+      });
+
+      const [_shell, args] = mockSpawn.mock.calls[0];
+      const command = args[2] as string;
+      // The command should end with the shell-quoted directory path
+      expect(command).toContain("'/tmp/test-project'");
+    });
+
+    it('should include working directory after flags in the command', async () => {
+      const provider = new OpenCodeInteractiveProvider('/usr/bin/opencode');
+
+      await provider.spawn({
+        workingDirectory: '/tmp/test-project',
+        model: 'anthropic/claude-sonnet-4-5-20250929',
+        initialPrompt: 'Hello',
+      });
+
+      const [_shell, args] = mockSpawn.mock.calls[0];
+      const command = args[2] as string;
+      // Directory should appear after --model flag and before --prompt
+      expect(command).toContain('--model');
+      expect(command).toContain("'/tmp/test-project'");
+      // Directory should be the last arg before --prompt "$1"
+      expect(command).toMatch(/\/tmp\/test-project'.*--prompt "\$1"$/);
+    });
+
     it('should set OPENCODE_PERMISSION env var for permission bypass', async () => {
       const provider = new OpenCodeInteractiveProvider('/usr/bin/opencode');
 

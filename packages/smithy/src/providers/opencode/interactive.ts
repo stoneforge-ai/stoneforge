@@ -111,7 +111,8 @@ export class OpenCodeInteractiveProvider implements InteractiveProvider {
     // Build the CLI command string (simple args only — not the prompt).
     // Use `exec` so the CLI replaces the shell process — when the CLI exits,
     // the PTY exits immediately (no lingering shell to clean up).
-    const opencodeCommand = 'exec ' + [shellQuote(this.executablePath), ...args].join(' ');
+    const dirArg = options.workingDirectory ? shellQuote(options.workingDirectory) : '';
+    const opencodeCommand = 'exec ' + [shellQuote(this.executablePath), ...args, dirArg].filter(Boolean).join(' ');
 
     // Spawn PTY using bash -l -c to run the command in a login shell.
     // When an initial prompt is provided, it's passed as a bash positional
