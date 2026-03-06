@@ -2008,6 +2008,7 @@ interface AgentRegistry {
   // Channel Operations
   getAgentChannel(agentId: EntityId): Promise<Channel | undefined>;
   getAgentChannelId(agentId: EntityId): Promise<ChannelId | undefined>;
+  ensureAgentChannel(agentId: EntityId): Promise<Channel>;
 }
 ```
 
@@ -2111,6 +2112,10 @@ const channel = await registry.getAgentChannel(agentId);
 
 // Get just the channel ID (faster — no channel fetch)
 const channelId = await registry.getAgentChannelId(agentId);
+
+// Ensure agent has a channel (recreates if missing due to partial failure, sync issue, or crash)
+const channel = await registry.ensureAgentChannel(agentId);
+// Returns existing channel if present, or creates a new one and updates agent metadata
 ```
 
 ### Registration Input Types
