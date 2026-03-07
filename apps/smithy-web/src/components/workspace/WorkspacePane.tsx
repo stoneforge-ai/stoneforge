@@ -14,6 +14,7 @@ import { TerminalInput } from './TerminalInput';
 import { Tooltip } from '@stoneforge/ui';
 import { SessionHistoryModal } from './SessionHistoryModal';
 import { useAgentStatus, useStartAgentSession, useStopAgentSession, useInterruptAgentSession, useResumeAgentSession } from '../../api/hooks/useAgents';
+import { useAgentTokens, formatTokenCount } from '../../api/hooks/useAgentTokens';
 
 export interface WorkspacePaneProps {
   pane: WorkspacePaneType;
@@ -97,6 +98,9 @@ export const WorkspacePane = forwardRef<WorkspacePaneHandle, WorkspacePaneProps>
   const resumeSession = useResumeAgentSession();
 
   const hasActiveSession = statusData?.hasActiveSession ?? false;
+
+  // Per-agent token usage (polls every 10s via shared React Query cache)
+  const { tokens: agentTokens } = useAgentTokens(pane.agentId);
 
   // Update currentSessionId and providerSessionId when active session changes
   useEffect(() => {
@@ -296,6 +300,25 @@ export const WorkspacePane = forwardRef<WorkspacePaneHandle, WorkspacePaneProps>
             ">
               {pane.workerMode}
             </span>
+          )}
+
+          {/* Token usage display */}
+          {agentTokens && agentTokens.totalTokens > 0 && (
+            <Tooltip
+              content={`Input: ${agentTokens.inputTokens.toLocaleString()} | Output: ${agentTokens.outputTokens.toLocaleString()} | Sessions: ${agentTokens.sessionCount}`}
+              side="bottom"
+            >
+              <span
+                className="
+                  px-1.5 py-0.5 rounded text-xs font-mono
+                  bg-[var(--color-surface-hover)] text-[var(--color-text-tertiary)]
+                  flex-shrink-0 cursor-default
+                "
+                data-testid="pane-token-usage"
+              >
+                {formatTokenCount(agentTokens.inputTokens)} / {formatTokenCount(agentTokens.outputTokens)} tokens
+              </span>
+            </Tooltip>
           )}
 
         </div>
