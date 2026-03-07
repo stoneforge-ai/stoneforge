@@ -30,8 +30,8 @@ const logger = createLogger('demo-mode-service');
 /** Demo mode provider name */
 export const DEMO_PROVIDER = 'opencode';
 
-/** Demo mode model identifier */
-export const DEMO_MODEL = 'minimax-m2.5-free';
+/** Demo mode model identifier (composite provider/model format for OpenCode CLI) */
+export const DEMO_MODEL = 'opencode/minimax-m2.5-free';
 
 /** Settings key for demo mode saved agent configs */
 export const DEMO_MODE_SAVED_CONFIGS_KEY = 'demoModeSavedConfigs';
@@ -163,7 +163,7 @@ export function createDemoModeService(deps: DemoModeServiceDeps): DemoModeServic
       // Persist demoMode flag to config file
       persistConfigFlag(true);
 
-      logger.info(`Demo mode enabled: ${agentsUpdated} agents updated to ${DEMO_PROVIDER}/${DEMO_MODEL}`);
+      logger.info(`Demo mode enabled: ${agentsUpdated} agents updated to ${DEMO_MODEL}`);
 
       return {
         enabled: true,
