@@ -1,5 +1,16 @@
 # @stoneforge/smithy-web
 
+## 1.16.0
+
+### Minor Changes
+
+- 2537df2: Add token usage display to activity page agent cards showing input/output token counts
+
+### Patch Changes
+
+- 00add6f: Fix workspace pane token display to show only current session tokens instead of aggregating all past sessions. Update `useAgentTokens` hook to accept optional `sessionId` parameter and `useProviderMetrics` to support session-specific queries.
+  - @stoneforge/ui@1.16.0
+
 ## 1.15.0
 
 ### Patch Changes

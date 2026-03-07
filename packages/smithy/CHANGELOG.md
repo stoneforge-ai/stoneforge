@@ -1,5 +1,20 @@
 # @stoneforge/smithy
 
+## 1.16.0
+
+### Minor Changes
+
+- f1f4099: Add per-agent token metrics aggregation via `groupBy=agent` on GET /api/provider-metrics endpoint
+
+### Patch Changes
+
+- 7e192ef: Fix token capture: record metrics incrementally via upsert on each assistant event, fix accumulation bug that used falsy checks and replacement instead of Math.max, and cache task ID lookups
+- 00add6f: Fix workspace pane token display: add session-filtered metrics query via `getBySession()` method and `sessionId` API parameter. Reduce default polling interval to 5 seconds for faster realtime updates.
+  - @stoneforge/core@1.16.0
+  - @stoneforge/storage@1.16.0
+  - @stoneforge/quarry@1.16.0
+  - @stoneforge/shared-routes@1.16.0
+
 ## 1.15.0
 
 ### Minor Changes
