@@ -356,6 +356,163 @@ describe('MetricsService', () => {
   });
 
   // ========================================================================
+  // upsert()
+  // ========================================================================
+
+  describe('upsert', () => {
+    test('inserts a new row when no row exists for session', () => {
+      service.upsert({
+        provider: 'claude-code',
+        model: 'claude-sonnet-4',
+        sessionId: 'session-upsert-1',
+        inputTokens: 1000,
+        outputTokens: 500,
+        durationMs: 5000,
+        outcome: 'completed',
+      });
+
+      const result = service.aggregateByProvider({ days: 7 });
+      expect(result).toHaveLength(1);
+      expect(result[0].totalInputTokens).toBe(1000);
+      expect(result[0].totalOutputTokens).toBe(500);
+      expect(result[0].sessionCount).toBe(1);
+    });
+
+    test('updates existing row taking max of token counts', () => {
+      // First upsert: initial values
+      service.upsert({
+        provider: 'claude-code',
+        model: 'claude-sonnet-4',
+        sessionId: 'session-upsert-2',
+        inputTokens: 1000,
+        outputTokens: 500,
+        durationMs: 5000,
+        outcome: 'completed',
+      });
+
+      // Second upsert: higher values — should update
+      service.upsert({
+        provider: 'claude-code',
+        model: 'claude-sonnet-4',
+        sessionId: 'session-upsert-2',
+        inputTokens: 3000,
+        outputTokens: 1500,
+        durationMs: 10000,
+        outcome: 'completed',
+      });
+
+      const result = service.aggregateByProvider({ days: 7 });
+      expect(result).toHaveLength(1);
+      // Should be the higher values, not a sum
+      expect(result[0].totalInputTokens).toBe(3000);
+      expect(result[0].totalOutputTokens).toBe(1500);
+      // Should still be 1 session, not 2
+      expect(result[0].sessionCount).toBe(1);
+    });
+
+    test('does not decrease token counts on upsert with lower values', () => {
+      service.upsert({
+        provider: 'claude-code',
+        sessionId: 'session-upsert-3',
+        inputTokens: 5000,
+        outputTokens: 2000,
+        durationMs: 10000,
+        outcome: 'completed',
+      });
+
+      // Upsert with lower values — should keep the higher ones
+      service.upsert({
+        provider: 'claude-code',
+        sessionId: 'session-upsert-3',
+        inputTokens: 1000,
+        outputTokens: 500,
+        durationMs: 12000,
+        outcome: 'completed',
+      });
+
+      const result = service.aggregateByProvider({ days: 7 });
+      expect(result[0].totalInputTokens).toBe(5000);
+      expect(result[0].totalOutputTokens).toBe(2000);
+    });
+
+    test('updates outcome on upsert', () => {
+      service.upsert({
+        provider: 'claude-code',
+        sessionId: 'session-upsert-4',
+        inputTokens: 1000,
+        outputTokens: 500,
+        durationMs: 5000,
+        outcome: 'completed',
+      });
+
+      // Change outcome to failed
+      service.upsert({
+        provider: 'claude-code',
+        sessionId: 'session-upsert-4',
+        inputTokens: 1000,
+        outputTokens: 500,
+        durationMs: 6000,
+        outcome: 'failed',
+      });
+
+      const result = service.aggregateByProvider({ days: 7 });
+      expect(result[0].failedCount).toBe(1);
+    });
+
+    test('fills in model on subsequent upsert when initially null', () => {
+      service.upsert({
+        provider: 'claude-code',
+        sessionId: 'session-upsert-5',
+        inputTokens: 100,
+        outputTokens: 50,
+        durationMs: 1000,
+        outcome: 'completed',
+      });
+
+      service.upsert({
+        provider: 'claude-code',
+        model: 'claude-sonnet-4',
+        sessionId: 'session-upsert-5',
+        inputTokens: 200,
+        outputTokens: 100,
+        durationMs: 2000,
+        outcome: 'completed',
+      });
+
+      const result = service.aggregateByModel({ days: 7 });
+      expect(result).toHaveLength(1);
+      expect(result[0].group).toBe('claude-sonnet-4');
+    });
+
+    test('multiple incremental upserts accumulate correctly', () => {
+      // Simulate incremental recording during a session
+      const sessionId = 'session-incremental';
+      let inputTotal = 0;
+      let outputTotal = 0;
+
+      for (let i = 0; i < 10; i++) {
+        inputTotal += 500;
+        outputTotal += 200;
+        service.upsert({
+          provider: 'claude-code',
+          model: 'claude-sonnet-4',
+          sessionId,
+          inputTokens: inputTotal,
+          outputTokens: outputTotal,
+          durationMs: (i + 1) * 1000,
+          outcome: 'completed',
+        });
+      }
+
+      const result = service.aggregateByProvider({ days: 7 });
+      expect(result).toHaveLength(1);
+      expect(result[0].totalInputTokens).toBe(5000);
+      expect(result[0].totalOutputTokens).toBe(2000);
+      expect(result[0].sessionCount).toBe(1);
+    });
+  });
+
+  // ========================================================================
   // Edge cases
   // ========================================================================
 

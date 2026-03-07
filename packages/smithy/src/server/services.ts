@@ -305,41 +305,58 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
       let sessionOutputTokens = 0;
       let sessionModel: string | undefined;
 
-      // Helper to record metrics once on session completion
-      const recordSessionMetrics = () => {
-        if (metricsRecorded) return;
-        metricsRecorded = true;
+      // Resolved task ID cache (looked up once, reused for all upserts)
+      let resolvedTaskId: string | undefined;
+      let taskIdResolved = false;
 
+      // Helper to resolve the task ID once and cache it
+      const resolveTaskId = async (): Promise<string | undefined> => {
+        if (taskIdResolved) return resolvedTaskId;
+        try {
+          const tasks = await taskAssignmentService.getAgentTasks(agentId);
+          resolvedTaskId = tasks.length > 0 ? tasks[0].taskId : undefined;
+        } catch {
+          // If task lookup fails, leave undefined
+        }
+        taskIdResolved = true;
+        return resolvedTaskId;
+      };
+
+      // Helper to upsert metrics incrementally (called on each assistant event)
+      const upsertSessionMetrics = () => {
         const durationMs = Date.now() - sessionStartTime;
         const provider = 'claude-code';
 
-        // Look up the task ID from the agent's current assignment (best-effort)
-        taskAssignmentService.getAgentTasks(agentId)
-          .then(tasks => {
-            const taskId = tasks.length > 0 ? tasks[0].taskId : undefined;
-            metricsService.record({
-              provider,
-              model: sessionModel,
-              sessionId: session.id,
-              taskId,
-              inputTokens: sessionInputTokens,
-              outputTokens: sessionOutputTokens,
-              durationMs,
-              outcome: sessionOutcome,
-            });
-          })
-          .catch(() => {
-            // If task lookup fails, record without task ID
-            metricsService.record({
-              provider,
-              model: sessionModel,
-              sessionId: session.id,
-              inputTokens: sessionInputTokens,
-              outputTokens: sessionOutputTokens,
-              durationMs,
-              outcome: sessionOutcome,
-            });
+        resolveTaskId().then(taskId => {
+          metricsService.upsert({
+            provider,
+            model: sessionModel,
+            sessionId: session.id,
+            taskId,
+            inputTokens: sessionInputTokens,
+            outputTokens: sessionOutputTokens,
+            durationMs,
+            outcome: sessionOutcome,
           });
+        }).catch(() => {
+          // Best-effort: upsert without task ID
+          metricsService.upsert({
+            provider,
+            model: sessionModel,
+            sessionId: session.id,
+            inputTokens: sessionInputTokens,
+            outputTokens: sessionOutputTokens,
+            durationMs,
+            outcome: sessionOutcome,
+          });
+        });
+      };
+
+      // Helper to record final metrics once on session completion
+      const recordSessionMetrics = () => {
+        if (metricsRecorded) return;
+        metricsRecorded = true;
+        upsertSessionMetrics();
       };
 
       // Auto-terminate sessions when they emit a 'result' event
@@ -357,17 +374,18 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
           if (rawMsg?.model && !sessionModel) {
             sessionModel = rawMsg.model;
           }
+          // Record metrics incrementally so in-progress sessions show accumulating token counts
+          upsertSessionMetrics();
           return;
         }
 
         if (event.type === 'result') {
-          // The SDK result event contains cumulative totals for the entire session.
-          // Prefer these over the accumulated per-turn values.
-          // The usage field is NonNullableUsage (BetaUsage shape: input_tokens, output_tokens)
+          // The SDK result event may contain cumulative totals for the entire session.
+          // Take the MAX of accumulated vs result values to avoid undercounting.
           const usage = event.raw?.usage as { input_tokens?: number; output_tokens?: number } | undefined;
-          if (usage && (usage.input_tokens || usage.output_tokens)) {
-            sessionInputTokens = usage.input_tokens ?? 0;
-            sessionOutputTokens = usage.output_tokens ?? 0;
+          if (usage && (usage.input_tokens !== undefined || usage.output_tokens !== undefined)) {
+            sessionInputTokens = Math.max(sessionInputTokens, usage.input_tokens ?? 0);
+            sessionOutputTokens = Math.max(sessionOutputTokens, usage.output_tokens ?? 0);
           }
 
           // Extract model from modelUsage keys (Record<string, ModelUsage>)

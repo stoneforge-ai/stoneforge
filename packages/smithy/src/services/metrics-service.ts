@@ -136,9 +136,18 @@ interface DbTimeSeriesRow {
 
 export interface MetricsService {
   /**
-   * Record a provider metric entry
+   * Record a provider metric entry (insert a new row)
    */
   record(input: RecordMetricInput): void;
+
+  /**
+   * Upsert a metrics row for a session.
+   * If a row with the given sessionId already exists, update token counts
+   * (taking the max of existing vs new values), duration, model, and outcome.
+   * If no row exists, insert a new one.
+   * Used for incremental recording during active sessions.
+   */
+  upsert(input: RecordMetricInput): void;
 
   /**
    * Get aggregated metrics grouped by provider
@@ -225,6 +234,65 @@ export function createMetricsService(storage: StorageBackend): MetricsService {
         logger.debug(`Metric recorded: ${input.provider}/${input.model ?? 'unknown'} - ${input.outcome} (${input.inputTokens + input.outputTokens} tokens)`);
       } catch (err) {
         logger.error('Failed to record metric:', err);
+      }
+    },
+
+    upsert(input: RecordMetricInput): void {
+      try {
+        // Check if a row already exists for this session
+        const existing = storage.query<DbMetricRow>(
+          `SELECT id, input_tokens, output_tokens FROM provider_metrics WHERE session_id = ? LIMIT 1`,
+          [input.sessionId]
+        );
+
+        if (existing.length > 0) {
+          // Update existing row: take max of accumulated vs new values to avoid undercounting
+          const row = existing[0];
+          const newInputTokens = Math.max(Number(row.input_tokens), input.inputTokens);
+          const newOutputTokens = Math.max(Number(row.output_tokens), input.outputTokens);
+
+          storage.run(
+            `UPDATE provider_metrics
+             SET input_tokens = ?, output_tokens = ?, duration_ms = ?, outcome = ?,
+                 model = COALESCE(?, model)
+             WHERE id = ?`,
+            [
+              newInputTokens,
+              newOutputTokens,
+              input.durationMs,
+              input.outcome,
+              input.model ?? null,
+              row.id,
+            ]
+          );
+
+          logger.debug(`Metric upserted (update): ${input.provider}/${input.model ?? 'unknown'} - ${input.outcome} (${newInputTokens + newOutputTokens} tokens)`);
+        } else {
+          // Insert new row
+          const id = generateMetricId();
+          const timestamp = new Date().toISOString();
+
+          storage.run(
+            `INSERT INTO provider_metrics (id, timestamp, provider, model, session_id, task_id, input_tokens, output_tokens, duration_ms, outcome)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              id,
+              timestamp,
+              input.provider,
+              input.model ?? null,
+              input.sessionId,
+              input.taskId ?? null,
+              input.inputTokens,
+              input.outputTokens,
+              input.durationMs,
+              input.outcome,
+            ]
+          );
+
+          logger.debug(`Metric upserted (insert): ${input.provider}/${input.model ?? 'unknown'} - ${input.outcome} (${input.inputTokens + input.outputTokens} tokens)`);
+        }
+      } catch (err) {
+        logger.error('Failed to upsert metric:', err);
       }
     },
 
