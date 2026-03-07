@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react';
 import { Terminal, Square, Crown, Wrench, Shield } from 'lucide-react';
 import type { Agent, SessionRecord, Task } from '../../api/types.js';
 import type { AgentOutput } from '../../api/hooks/useActiveAgentOutputs.js';
+import { useAgentTokens, formatTokenCount } from '../../api/hooks/useAgentTokens.js';
 
 export interface ActiveAgentCardProps {
   agent: Agent;
@@ -44,6 +45,9 @@ export function ActiveAgentCard({
 }: ActiveAgentCardProps) {
   const [elapsed, setElapsed] = useState('');
   const startTime = session.startedAt || session.createdAt;
+
+  // Per-agent token usage (polls every 10s via shared React Query cache)
+  const { tokens: agentTokens } = useAgentTokens(agent.id);
 
   // Live-updating duration
   useEffect(() => {
@@ -115,9 +119,20 @@ export function ActiveAgentCard({
                   : 'idle...'}
           </span>
         </div>
-        <span className="text-xs text-[var(--color-text-secondary)] font-mono flex-shrink-0 pt-2">
-          {elapsed}
-        </span>
+        <div className="flex flex-col items-end flex-shrink-0 pt-2 gap-1">
+          <span className="text-xs text-[var(--color-text-secondary)] font-mono">
+            {elapsed}
+          </span>
+          {agentTokens && agentTokens.totalTokens > 0 && (
+            <span
+              className="text-[10px] font-mono text-[var(--color-text-tertiary)]"
+              title={`Input: ${agentTokens.inputTokens.toLocaleString()} | Output: ${agentTokens.outputTokens.toLocaleString()}`}
+              data-testid="agent-card-token-usage"
+            >
+              {formatTokenCount(agentTokens.inputTokens)} in / {formatTokenCount(agentTokens.outputTokens)} out
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Row 4: Actions */}
