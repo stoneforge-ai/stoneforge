@@ -46,7 +46,7 @@ export interface TimeRange {
  * Aggregated metrics for a group (provider or model)
  */
 export interface AggregatedMetrics {
-  /** Group key (provider name or model name) */
+  /** Group key (provider name, model name, or agent ID) */
   group: string;
   /** Total input tokens */
   totalInputTokens: number;
@@ -58,6 +58,8 @@ export interface AggregatedMetrics {
   sessionCount: number;
   /** Average duration in milliseconds */
   avgDurationMs: number;
+  /** Total duration in milliseconds (only present for agent grouping) */
+  totalDurationMs?: number;
   /** Error rate (0-1) */
   errorRate: number;
   /** Number of failed sessions */
@@ -147,6 +149,11 @@ export interface MetricsService {
    * Get aggregated metrics grouped by model
    */
   aggregateByModel(timeRange: TimeRange): AggregatedMetrics[];
+
+  /**
+   * Get aggregated metrics grouped by agent (via session_id → agent_id mapping)
+   */
+  aggregateByAgent(timeRange: TimeRange): AggregatedMetrics[];
 
   /**
    * Get time-series data for trend charts
@@ -281,6 +288,46 @@ export function createMetricsService(storage: StorageBackend): MetricsService {
         totalTokens: Number(row.total_input_tokens) + Number(row.total_output_tokens),
         sessionCount: Number(row.session_count),
         avgDurationMs: Math.round(Number(row.avg_duration_ms)),
+        errorRate: Number(row.session_count) > 0
+          ? Number(row.failed_count) / Number(row.session_count)
+          : 0,
+        failedCount: Number(row.failed_count),
+        rateLimitedCount: Number(row.rate_limited_count),
+      }));
+    },
+
+    aggregateByAgent(timeRange: TimeRange): AggregatedMetrics[] {
+      const cutoff = getTimeCutoff(timeRange);
+
+      const rows = storage.query<DbAggregateRow & { total_duration_ms: number }>(
+        `SELECT
+           sm.agent_id AS group_key,
+           COALESCE(SUM(pm.input_tokens), 0) AS total_input_tokens,
+           COALESCE(SUM(pm.output_tokens), 0) AS total_output_tokens,
+           COUNT(*) AS session_count,
+           COALESCE(AVG(pm.duration_ms), 0) AS avg_duration_ms,
+           COALESCE(SUM(pm.duration_ms), 0) AS total_duration_ms,
+           COALESCE(SUM(CASE WHEN pm.outcome = 'failed' THEN 1 ELSE 0 END), 0) AS failed_count,
+           COALESCE(SUM(CASE WHEN pm.outcome = 'rate_limited' THEN 1 ELSE 0 END), 0) AS rate_limited_count
+         FROM provider_metrics pm
+         JOIN (
+           SELECT DISTINCT session_id, agent_id
+           FROM session_messages
+         ) sm ON pm.session_id = sm.session_id
+         WHERE pm.timestamp >= ?
+         GROUP BY sm.agent_id
+         ORDER BY total_input_tokens + total_output_tokens DESC`,
+        [cutoff]
+      );
+
+      return rows.map(row => ({
+        group: row.group_key,
+        totalInputTokens: Number(row.total_input_tokens),
+        totalOutputTokens: Number(row.total_output_tokens),
+        totalTokens: Number(row.total_input_tokens) + Number(row.total_output_tokens),
+        sessionCount: Number(row.session_count),
+        avgDurationMs: Math.round(Number(row.avg_duration_ms)),
+        totalDurationMs: Number(row.total_duration_ms),
         errorRate: Number(row.session_count) > 0
           ? Number(row.failed_count) / Number(row.session_count)
           : 0,

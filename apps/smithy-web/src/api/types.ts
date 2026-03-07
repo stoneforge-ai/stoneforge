@@ -592,10 +592,10 @@ export interface PlaybookFilter {
 // ============================================================================
 
 /**
- * Aggregated metrics for a single provider or model group
+ * Aggregated metrics for a single provider, model, or agent group
  */
 export interface AggregatedProviderMetrics {
-  /** Group key (provider name or model name) */
+  /** Group key (provider name, model name, or agent ID) */
   group: string;
   /** Total input tokens */
   totalInputTokens: number;
@@ -607,6 +607,8 @@ export interface AggregatedProviderMetrics {
   sessionCount: number;
   /** Average duration in milliseconds */
   avgDurationMs: number;
+  /** Total duration in milliseconds (only present for agent grouping) */
+  totalDurationMs?: number;
   /** Error rate (0-1) */
   errorRate: number;
   /** Number of failed sessions */

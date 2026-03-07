@@ -41,6 +41,32 @@ function createMockServices() {
         rateLimitedCount: 0,
       },
     ]),
+    aggregateByAgent: vi.fn().mockReturnValue([
+      {
+        group: 'el-w1',
+        totalInputTokens: 12000,
+        totalOutputTokens: 6000,
+        totalTokens: 18000,
+        sessionCount: 5,
+        avgDurationMs: 6000,
+        totalDurationMs: 30000,
+        errorRate: 0,
+        failedCount: 0,
+        rateLimitedCount: 0,
+      },
+      {
+        group: 'el-w2',
+        totalInputTokens: 3000,
+        totalOutputTokens: 1500,
+        totalTokens: 4500,
+        sessionCount: 2,
+        avgDurationMs: 4000,
+        totalDurationMs: 8000,
+        errorRate: 0.5,
+        failedCount: 1,
+        rateLimitedCount: 0,
+      },
+    ]),
     getTimeSeries: vi.fn().mockReturnValue([
       {
         bucket: '2026-02-22',
@@ -105,6 +131,36 @@ describe('GET /api/provider-metrics', () => {
     expect(body.metrics[0].group).toBe('claude-sonnet-4');
 
     expect(services.metricsService.aggregateByModel).toHaveBeenCalledWith({ days: 7 });
+  });
+
+  it('accepts groupBy=agent parameter', async () => {
+    const app = createMetricsRoutes(services);
+    const res = await app.request('/api/provider-metrics?groupBy=agent');
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.groupBy).toBe('agent');
+    expect(body.metrics).toHaveLength(2);
+    expect(body.metrics[0].group).toBe('el-w1');
+    expect(body.metrics[0].totalInputTokens).toBe(12000);
+    expect(body.metrics[0].totalOutputTokens).toBe(6000);
+    expect(body.metrics[0].sessionCount).toBe(5);
+    expect(body.metrics[0].totalDurationMs).toBe(30000);
+    expect(body.metrics[1].group).toBe('el-w2');
+
+    expect(services.metricsService.aggregateByAgent).toHaveBeenCalledWith({ days: 7 });
+  });
+
+  it('does not include time series for groupBy=agent', async () => {
+    const app = createMetricsRoutes(services);
+    const res = await app.request('/api/provider-metrics?groupBy=agent&includeSeries=true');
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.groupBy).toBe('agent');
+    expect(body.timeSeries).toBeUndefined();
+
+    expect(services.metricsService.getTimeSeries).not.toHaveBeenCalled();
   });
 
   it('returns 400 for invalid groupBy parameter', async () => {

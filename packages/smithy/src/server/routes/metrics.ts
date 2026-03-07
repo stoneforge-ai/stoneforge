@@ -33,7 +33,7 @@ export function createMetricsRoutes(services: Services) {
    *
    * Query params:
    *   - timeRange: '7d' | '14d' | '30d' (default: '7d')
-   *   - groupBy: 'provider' | 'model' (default: 'provider')
+   *   - groupBy: 'provider' | 'model' | 'agent' (default: 'provider')
    *   - includeSeries: 'true' | 'false' (default: 'false') — include time-series data
    */
   app.get('/api/provider-metrics', (c) => {
@@ -42,9 +42,9 @@ export function createMetricsRoutes(services: Services) {
       const groupBy = c.req.query('groupBy') || 'provider';
       const includeSeries = c.req.query('includeSeries') === 'true';
 
-      if (groupBy !== 'provider' && groupBy !== 'model') {
+      if (groupBy !== 'provider' && groupBy !== 'model' && groupBy !== 'agent') {
         return c.json(
-          { error: { code: 'INVALID_PARAM', message: 'groupBy must be "provider" or "model"' } },
+          { error: { code: 'INVALID_PARAM', message: 'groupBy must be "provider", "model", or "agent"' } },
           400
         );
       }
@@ -52,9 +52,14 @@ export function createMetricsRoutes(services: Services) {
       const days = parseTimeRange(timeRangeParam);
       const timeRange = { days };
 
-      const aggregated = groupBy === 'provider'
-        ? services.metricsService.aggregateByProvider(timeRange)
-        : services.metricsService.aggregateByModel(timeRange);
+      let aggregated;
+      if (groupBy === 'agent') {
+        aggregated = services.metricsService.aggregateByAgent(timeRange);
+      } else if (groupBy === 'model') {
+        aggregated = services.metricsService.aggregateByModel(timeRange);
+      } else {
+        aggregated = services.metricsService.aggregateByProvider(timeRange);
+      }
 
       const result: {
         timeRange: { days: number; label: string };
@@ -67,7 +72,7 @@ export function createMetricsRoutes(services: Services) {
         metrics: aggregated,
       };
 
-      if (includeSeries) {
+      if (includeSeries && (groupBy === 'provider' || groupBy === 'model')) {
         result.timeSeries = services.metricsService.getTimeSeries(timeRange, groupBy);
       }
 
