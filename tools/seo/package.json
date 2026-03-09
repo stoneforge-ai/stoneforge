@@ -1,0 +1,15 @@
+{
+  "name": "@stoneforge/seo-tools",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "keyword-research": "bun run keyword-research.ts",
+    "serp-analysis": "bun run serp-analysis.ts",
+    "competitor-analysis": "bun run competitor-analysis.ts",
+    "content-calendar": "bun run content-calendar.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.0"
+  }
+}

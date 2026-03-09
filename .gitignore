@@ -51,3 +51,7 @@ OPENCODE_CONFIG_CONTENT
 
 .npmrc
 /.stoneforge/.worktrees/
+
+# SEO tools
+tools/seo/.env
+tools/seo/output/*.json
