@@ -17,11 +17,14 @@ import {
   ElementType,
   createTimestamp,
   createEntity,
+  createDirectChannel,
   type Entity,
   type EntityId,
   type ElementId,
+  type Channel,
+  type ChannelId,
 } from '@stoneforge/core';
-import { EntityTypeValue } from '@stoneforge/core';
+import { EntityTypeValue, asEntityId } from '@stoneforge/core';
 import { createSyncService } from '../../sync/service.js';
 import { installSkillsToWorkspace } from './install.js';
 import type { QuarryAPI } from '../../api/quarry-api.js';
@@ -320,7 +323,38 @@ async function createDefaultAgents(
       metadata: { [AGENT_META_KEY]: agentMeta },
     });
 
-    await api.create(entity as unknown as Record<string, unknown> & { createdBy: EntityId });
+    const savedEntity = await api.create(entity as unknown as Record<string, unknown> & { createdBy: EntityId });
+    const agentEntityId = asEntityId(savedEntity.id);
+
+    // Create a direct channel between operator and the agent
+    const channel = await createDirectChannel({
+      entityA: OPERATOR_ENTITY_ID,
+      entityB: agentEntityId,
+      entityAName: OPERATOR_ENTITY_NAME,
+      entityBName: agentDef.name,
+      createdBy: OPERATOR_ENTITY_ID,
+      tags: ['agent-channel'],
+      metadata: {
+        agentId: agentEntityId,
+        agentName: agentDef.name,
+        purpose: 'Agent direct messaging channel',
+      },
+    });
+
+    await api.create<Channel>(
+      channel as unknown as Record<string, unknown> & { createdBy: EntityId }
+    );
+
+    // Update agent metadata with channelId
+    const updatedMeta = {
+      ...savedEntity.metadata,
+      [AGENT_META_KEY]: {
+        ...agentMeta,
+        channelId: channel.id as unknown as ChannelId,
+      },
+    };
+    await api.update(savedEntity.id, { metadata: updatedMeta });
+
     created++;
   }
 

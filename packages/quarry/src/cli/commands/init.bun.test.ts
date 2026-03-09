@@ -6,8 +6,11 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { existsSync, rmSync, readFileSync, mkdirSync, writeFileSync, mkdtempSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { initCommand, DEFAULT_AGENTS_MD, DEFAULT_AGENTS } from './init.js';
+import { initCommand, DEFAULT_AGENTS_MD, DEFAULT_AGENTS, OPERATOR_ENTITY_ID } from './init.js';
 import { ExitCode, DEFAULT_GLOBAL_OPTIONS } from '../types.js';
+import { createStorage, initializeSchema } from '@stoneforge/storage';
+import { createQuarryAPI } from '../../api/quarry-api.js';
+import type { Channel } from '@stoneforge/core';
 
 describe('initCommand', () => {
   let testDir: string;
@@ -407,6 +410,87 @@ describe('initCommand', () => {
 
       const steward = DEFAULT_AGENTS.find(a => a.name === 'm-steward-1');
       expect(steward?.metadata.agentRole).toBe('steward');
+    });
+
+    it('should create a direct channel for each agent', async () => {
+      const result = await initCommand.handler([], { ...DEFAULT_GLOBAL_OPTIONS });
+      expect(result.exitCode).toBe(ExitCode.SUCCESS);
+
+      // Open the created database and verify channels exist
+      const dbPath = join(testDir, '.stoneforge', 'stoneforge.db');
+      const backend = createStorage({ path: dbPath });
+      const api = createQuarryAPI(backend);
+
+      for (const agentDef of DEFAULT_AGENTS) {
+        // Look up agent entity
+        const agent = await api.lookupEntityByName(agentDef.name);
+        expect(agent).toBeTruthy();
+
+        // Get channelId from agent metadata
+        const agentMeta = (agent!.metadata as Record<string, unknown>)['agent'] as Record<string, unknown>;
+        expect(agentMeta.channelId).toBeTruthy();
+
+        // Fetch the channel directly
+        const channel = await api.get(agentMeta.channelId as string);
+        expect(channel).toBeTruthy();
+        const ch = channel as unknown as Channel;
+        expect(ch.tags).toContain('agent-channel');
+        expect(ch.metadata).toHaveProperty('agentId', agent!.id);
+        expect(ch.metadata).toHaveProperty('agentName', agentDef.name);
+        expect(ch.channelType).toBe('direct');
+      }
+    });
+
+    it('should set channelId in agent metadata', async () => {
+      const result = await initCommand.handler([], { ...DEFAULT_GLOBAL_OPTIONS });
+      expect(result.exitCode).toBe(ExitCode.SUCCESS);
+
+      const dbPath = join(testDir, '.stoneforge', 'stoneforge.db');
+      const backend = createStorage({ path: dbPath });
+      const api = createQuarryAPI(backend);
+
+      for (const agentDef of DEFAULT_AGENTS) {
+        const agent = await api.lookupEntityByName(agentDef.name);
+        expect(agent).toBeTruthy();
+
+        const agentMeta = (agent!.metadata as Record<string, unknown>)['agent'] as Record<string, unknown>;
+        expect(agentMeta).toBeTruthy();
+        expect(agentMeta.channelId).toBeTruthy();
+        expect(typeof agentMeta.channelId).toBe('string');
+      }
+    });
+
+    it('should not create duplicate channels on partial re-init', async () => {
+      // First init
+      const first = await initCommand.handler([], { ...DEFAULT_GLOBAL_OPTIONS });
+      expect(first.exitCode).toBe(ExitCode.SUCCESS);
+
+      // Simulate partial re-init: remove database but keep directory
+      const sfDir = join(testDir, '.stoneforge');
+      const dbPath = join(sfDir, 'stoneforge.db');
+      rmSync(dbPath, { force: true });
+      try { rmSync(dbPath + '-wal', { force: true }); } catch { /* ignore */ }
+      try { rmSync(dbPath + '-shm', { force: true }); } catch { /* ignore */ }
+      try { rmSync(dbPath + '-journal', { force: true }); } catch { /* ignore */ }
+
+      // Second init - creates fresh DB so agents + channels are recreated
+      const second = await initCommand.handler([], { ...DEFAULT_GLOBAL_OPTIONS });
+      expect(second.exitCode).toBe(ExitCode.SUCCESS);
+
+      // Open DB and verify each agent has exactly one channel
+      const backend = createStorage({ path: dbPath });
+      const api = createQuarryAPI(backend);
+
+      const channelIds = new Set<string>();
+      for (const agentDef of DEFAULT_AGENTS) {
+        const agent = await api.lookupEntityByName(agentDef.name);
+        expect(agent).toBeTruthy();
+        const agentMeta = (agent!.metadata as Record<string, unknown>)['agent'] as Record<string, unknown>;
+        expect(agentMeta.channelId).toBeTruthy();
+        channelIds.add(agentMeta.channelId as string);
+      }
+      // All channel IDs should be unique (no duplicates)
+      expect(channelIds.size).toBe(DEFAULT_AGENTS.length);
     });
   });
 
