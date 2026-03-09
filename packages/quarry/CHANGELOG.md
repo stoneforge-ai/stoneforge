@@ -1,5 +1,17 @@
 # @stoneforge/quarry
 
+## 1.16.0
+
+### Minor Changes
+
+- 7691985: Create agent direct channels during `sf init` default agent setup, ensuring agents have channels for dispatch messaging
+
+### Patch Changes
+
+- @stoneforge/core@1.16.0
+- @stoneforge/storage@1.16.0
+- @stoneforge/shared-routes@1.16.0
+
 ## 1.15.0
 
 ### Minor Changes
