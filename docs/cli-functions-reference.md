@@ -846,13 +846,13 @@ Drops and reinitializes the database. With `--full`, deletes everything and rein
 **File:** `external-sync.ts`
 **Description:** Sync with external services (GitHub Issues, Linear, etc.).
 
-### `sf external-sync link <element-id>`
-**Description:** Link a local element to an external service.
+### `sf external-sync link <elementId> <url-or-external-id>`
+**Description:** Link a local element to an external issue or page.
 
 | Option | Short | Description |
 |--------|-------|-------------|
 | `--provider <name>` | `-p` | Provider name (default: github) |
-| `--type <type>` | `-t` | Element type: task or document |
+| `--type <type>` | `-t` | Element type: task or document (default: task) |
 
 ### `sf external-sync unlink <element-id>`
 **Description:** Unlink a local element from an external service.
@@ -860,16 +860,16 @@ Drops and reinitializes the database. With `--full`, deletes everything and rein
 ### `sf external-sync link-all`
 **Description:** Link all unlinked elements to an external provider.
 
-| Option | Description |
-|--------|-------------|
-| `--provider <name>` | Provider to link to (required) |
-| `--project <name>` | Override default project |
-| `--status <status>` | Only link elements with this status (repeatable) |
-| `--dry-run` | Preview without linking |
-| `--batch-size <n>` | Concurrency limit (default: 10) |
-| `--force` | Re-link already linked elements |
-| `--type <type>` | Element type: task or document (default: task) |
-| `--no-library` | Include documents not in any library |
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--provider <name>` | `-p` | Provider to link to (required) |
+| `--project <name>` | | Override default project |
+| `--status <status>` | `-s` | Only link elements with this status (repeatable) |
+| `--dry-run` | `-n` | Preview without linking |
+| `--batch-size <n>` | `-b` | Concurrency limit (default: 10) |
+| `--force` | `-f` | Re-link already linked elements |
+| `--type <type>` | `-t` | Element type: task or document (default: task) |
+| `--no-library` | | Include documents not in any library |
 
 ### `sf external-sync unlink-all`
 **Description:** Unlink all linked elements.
@@ -910,24 +910,30 @@ Drops and reinitializes the database. With `--full`, deletes everything and rein
 ### `sf external-sync resolve <element-id>`
 **Description:** Resolve sync conflicts.
 
-| Option | Description |
-|--------|-------------|
-| `--keep <local\|remote>` | Which version to keep |
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--keep <local\|remote>` | `-k` | Which version to keep |
 
-### `sf external-sync set-token <provider> <token>`
+### `sf external-sync status`
+**Description:** Show external sync state (linked counts, providers, conflicts, cursors).
+
+### `sf external-sync config`
+**Description:** Show current provider configuration.
+
+### `sf external-sync config set-token <provider> <token>`
 **Description:** Set authentication token for a provider.
 
-### `sf external-sync set-project <provider> <project>`
+### `sf external-sync config set-project <provider> <project>`
 **Description:** Set default project for a provider.
 
-### `sf external-sync set-auto-link <provider>`
+### `sf external-sync config set-auto-link <provider>`
 **Description:** Enable auto-link with a provider (new tasks auto-create external issues).
 
 | Option | Description |
 |--------|-------------|
 | `--type <type>` | Type of auto-link: task or document (default: task) |
 
-### `sf external-sync disable-auto-link`
+### `sf external-sync config disable-auto-link`
 **Description:** Disable auto-link.
 
 | Option | Description |
