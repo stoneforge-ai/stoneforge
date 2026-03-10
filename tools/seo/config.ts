@@ -41,7 +41,17 @@ export const config = {
   },
   googleSearchConsole: {
     serviceAccountKeyPath: process.env.GOOGLE_SERVICE_ACCOUNT_KEY_PATH ?? "",
+    /** @deprecated Use `siteUrls` instead. Kept for backwards compatibility. */
     siteUrl: process.env.GSC_SITE_URL ?? "",
+    /**
+     * Comma-separated list of site URLs verified in Google Search Console.
+     * Set via GSC_SITE_URLS env var. Falls back to GSC_SITE_URL for backwards compat.
+     */
+    siteUrls: (process.env.GSC_SITE_URLS
+      ? process.env.GSC_SITE_URLS.split(",").map((u) => u.trim()).filter(Boolean)
+      : process.env.GSC_SITE_URL
+        ? [process.env.GSC_SITE_URL.trim()]
+        : []),
   },
   outputDir: resolve(__dirname, "output"),
 } as const;
