@@ -40,16 +40,15 @@ docsLinks:
 order: 2
 ---
 
-OpenAI's Codex CLI is a terminal-based coding agent that operates in a sandboxed environment, applying code changes with built-in safety controls. Each Codex session handles one task in isolation.
+OpenAI's [Codex CLI](https://github.com/openai/codex) is a terminal-based coding agent that runs in a sandboxed environment with built-in safety controls. Each Codex session handles one task in isolation.
 
-Stoneforge adds **multi-agent orchestration** on top of Codex, letting you dispatch multiple tasks to parallel Codex agents while handling coordination, merging, and failure recovery automatically.
+Stoneforge adds multi-agent orchestration on top of Codex, dispatching multiple tasks to parallel Codex agents and handling coordination, merging, and failure recovery.
 
 ### How Stoneforge dispatches to Codex
 
-When you create tasks in Stoneforge, the Daemon watches the task queue and dispatches work to available Codex agents:
+When you create tasks, the Daemon watches the queue and dispatches work to available Codex agents:
 
 ```bash
-# Define work
 sf plan create --title "Backend Improvements"
 
 sf task create --title "Add rate limiting to API" --plan "Backend Improvements"
@@ -60,22 +59,20 @@ sf task create --title "Add request logging middleware" --plan "Backend Improvem
 sf serve
 ```
 
-Each Codex agent gets its own worktree, its own task context, and clear acceptance criteria. Stoneforge handles the coordination — you focus on defining what needs to be built.
+Each Codex agent gets its own worktree, task context, and acceptance criteria.
 
 ### Sandboxed execution at scale
 
-Codex CLI's sandboxing model keeps each agent contained. Stoneforge extends this with git-level isolation through worktrees. The result: multiple Codex agents running in parallel, each sandboxed and each on its own branch, with zero interference between sessions.
+Codex CLI's sandboxing keeps each agent contained. Stoneforge adds git-level isolation through worktrees, so multiple Codex agents run in parallel on separate branches without interfering with each other.
 
 ### Merge and review pipeline
 
-When a Codex agent completes its task, Stoneforge's Steward takes over:
+When a Codex agent completes its task, the Steward:
 
 1. Validates the branch builds and tests pass
 2. Checks for merge conflicts with other completed work
 3. Creates a merge request with a summary of changes
-4. Merges automatically if all checks pass, or flags for human review
-
-This gives you the throughput of parallel development with the safety of sequential review.
+4. Merges automatically if checks pass, or flags for human review
 
 ### Getting started with Codex
 
@@ -91,4 +88,4 @@ sf init
 sf serve
 ```
 
-Configure the `approval` setting to control how much autonomy Codex agents have — from `suggest` (review everything) to `auto-edit` (full autonomy within sandbox).
+Codex CLI has three approval modes: `suggest` (approve everything), `auto-edit` (auto-apply file changes, approve shell commands), and `full-auto` (no confirmation). Set the `approval` field in your Stoneforge config to match your preferred level of oversight.
