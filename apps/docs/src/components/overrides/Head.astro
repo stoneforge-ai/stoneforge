@@ -262,8 +262,12 @@ window.plausible = window.plausible || function() { (window.plausible.q = window
     }
   }
 
-  // Use astro:page-load for View Transitions support (fires on initial load + navigations)
-  document.addEventListener('astro:page-load', setupPageAnalytics);
+  // Run on initial page load
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupPageAnalytics);
+  } else {
+    setupPageAnalytics();
+  }
 })();
 </script>
 
