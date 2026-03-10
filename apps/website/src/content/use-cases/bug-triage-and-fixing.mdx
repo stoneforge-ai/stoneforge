@@ -1,6 +1,6 @@
 ---
-title: "Bug Triage and Fixing"
-description: "Dispatch bug reports to AI agents that investigate, fix, and test, resolving multiple bugs in parallel."
+title: "AI Bug Fixing & Automated Triage"
+description: "Dispatch bug reports to AI agents for automated bug triage and AI bug fixing. Resolve multiple bugs in parallel with regression tests included."
 problem: "Bug backlogs grow faster than teams can fix them. Each bug requires context-switching: reproduce, investigate, fix, test, review. When you're fixing Bug A, Bugs B through Z sit idle. Critical bugs get attention, but the long tail of medium-priority issues rarely gets addressed."
 icon: "bug"
 order: 3
@@ -12,23 +12,23 @@ docsLinks:
   - title: "Task Priorities"
     url: "https://docs.stoneforge.ai/core-concepts/tasks/"
 faqItems:
-  - question: "Can Stoneforge automatically import bugs from GitHub Issues or Linear?"
+  - question: "Can AI bug fixing tools import bugs from GitHub Issues or Linear?"
     answer: "Yes. Stoneforge's external sync feature connects to GitHub Issues and Linear. You can pull issues from these services and they're imported as tasks. Status updates sync bidirectionally, so when an agent fixes a bug, the linked issue is updated automatically."
-  - question: "How does Stoneforge reproduce and diagnose bugs?"
+  - question: "How does automated bug triage diagnose and reproduce issues?"
     answer: "Each Worker agent reads the bug report, examines the relevant code, and tries to reproduce the issue by running existing tests or writing new ones. It then traces the root cause, applies a fix, and verifies the fix passes all tests before submitting for review."
-  - question: "What if an agent can't fix a bug?"
+  - question: "What if an AI agent can't fix a bug?"
     answer: "If an agent gets stuck, it hands off the task with a diagnostic report covering what it tried, what it found, and where it got blocked. This handoff note is visible in the dashboard and the linked issue, so a human developer can pick up with full context."
-  - question: "Can I prioritize which bugs get fixed first?"
-    answer: "Yes. Tasks have priority levels (1-5) that control dispatch order. You can also set dependencies so that, for example, an authentication bug is fixed before the session-related bugs that depend on it."
-  - question: "Does Stoneforge write tests for the bugs it fixes?"
+  - question: "How do you prioritize which bugs get AI bug fixing first?"
+    answer: "Tasks have priority levels (1-5) that control dispatch order. You can also set dependencies so that, for example, an authentication bug is fixed before the session-related bugs that depend on it."
+  - question: "Does AI bug fixing include regression tests?"
     answer: "Yes. Agents are instructed to write regression tests that verify the fix. This ensures the same bug doesn't reappear. The Steward agent runs tests as part of the merge review."
 ---
 
-Stoneforge lets you fix bugs in parallel instead of one at a time. Import your bug backlog, set priorities, and let multiple agents investigate and fix bugs simultaneously.
+AI bug fixing with Stoneforge lets you resolve bugs in parallel instead of one at a time. Import your bug backlog, set priorities, and let automated bug triage dispatch multiple agents to investigate and fix bugs simultaneously.
 
-### From backlog to fixed in parallel
+### From backlog to fixed with parallel AI agents
 
-Stoneforge dispatches multiple bugs to separate agents instead of having one developer cycle through them sequentially. Each agent gets its own worktree, reproduces the issue, writes a fix, adds regression tests, and submits a merge request.
+Instead of having one developer cycle through bugs sequentially, Stoneforge dispatches multiple bugs to separate agents. Each agent gets its own worktree, reproduces the issue, writes a fix, adds regression tests, and submits a merge request.
 
 ```bash
 # Pull bugs from GitHub Issues
@@ -44,15 +44,15 @@ sf task create --title "Fix: Email notification sent twice on retry" --priority 
 sf serve
 ```
 
-### Intelligent triage
+### Intelligent automated bug triage
 
 The Director agent can analyze incoming bugs and estimate complexity, identify related bugs that should be fixed together, and flag bugs that might share a root cause. Related bugs are grouped into a single task to avoid duplicate fixes.
 
-### Regression tests included
+### Regression tests with every fix
 
-Every bug fix comes with a regression test. The agent writes a test that fails without the fix and passes with it. The [Steward agent](https://docs.stoneforge.ai/core-concepts/agents/) runs tests before merging to make sure nothing is broken.
+Every AI bug fixing result comes with a regression test. The agent writes a test that fails without the fix and passes with it. The [Steward agent](https://docs.stoneforge.ai/core-concepts/agents/) runs tests before merging to make sure nothing is broken — similar to the quality checks in [automated code review](/use-cases/code-review-automation/).
 
-### Bidirectional sync
+### Bidirectional sync with issue trackers
 
 When an agent fixes a bug, the linked GitHub Issue or Linear ticket is updated automatically with a summary of the fix, a link to the merge request, and which tests were added.
 
@@ -62,6 +62,6 @@ When an agent fixes a bug, the linked GitHub Issue or Linear ticket is updated a
 # session refresh. Added regression test in auth.test.ts."
 ```
 
-### Clear the backlog
+### Clear the backlog with AI bug fixing
 
-Because agents work in parallel, you can make progress on multiple bugs at once instead of working through them one by one. The medium-priority bugs that tend to sit untouched at the bottom of the backlog can finally get some attention.
+Because agents work in parallel, you can make progress on multiple bugs at once instead of working through them one by one. The medium-priority bugs that tend to sit untouched at the bottom of the backlog finally get attention. Pair this with [AI test generation](/use-cases/test-generation/) to prevent future regressions.

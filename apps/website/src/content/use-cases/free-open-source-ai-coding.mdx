@@ -1,6 +1,6 @@
 ---
-title: "Free Open-Source AI Coding Agent"
-description: "Stoneforge is a free, open-source AI coding agent with multi-agent orchestration. Self-hosted, no per-seat pricing."
+title: "Free AI Coding Agent — Open Source"
+description: "Stoneforge is a free AI coding agent and open source AI coding assistant with multi-agent orchestration. Self-hosted, no per-seat pricing, Apache 2.0."
 problem: "Most AI coding tools charge per seat or per month, and your code passes through someone else's servers. For developers and teams who want AI coding assistance without recurring fees, vendor lock-in, or data privacy trade-offs, the options have been limited."
 icon: "parallel"
 order: 8
@@ -12,28 +12,28 @@ docsLinks:
   - title: "Configuration Reference"
     url: "https://docs.stoneforge.ai/guides/configuration/"
 faqItems:
-  - question: "Is Stoneforge really free?"
+  - question: "Is Stoneforge really a free AI coding agent?"
     answer: "Yes. Stoneforge is licensed under Apache 2.0. There are no per-seat fees, no usage limits, and no premium tiers. You pay your LLM provider directly for API usage (e.g., Anthropic, OpenAI), but Stoneforge itself costs nothing."
-  - question: "What LLM providers does Stoneforge support?"
+  - question: "What LLM providers does this free AI coding assistant support?"
     answer: "Stoneforge is agent-agnostic. It works with Claude Code, OpenAI Codex, and other coding agents. You bring your own API keys and pay the providers directly at their standard rates."
-  - question: "Can I use Stoneforge without sending code to the cloud?"
+  - question: "Can I use this open source AI coding agent without sending code to the cloud?"
     answer: "Yes. Stoneforge runs entirely on your machine. Code context only leaves your machine when an agent makes an API call to your configured LLM provider. If you use a local model, nothing leaves your machine at all."
-  - question: "How does Stoneforge compare to Devin or Cursor Pro?"
+  - question: "How does this free AI coding agent compare to Devin or Cursor?"
     answer: "Devin charges $20-$500/month depending on the plan, and Cursor Pro costs $20/month per seat. Stoneforge is free. The trade-off is that Stoneforge requires self-hosting and initial setup, while Devin and Cursor are managed services. Stoneforge also provides multi-agent orchestration that those tools don't offer."
-  - question: "How long does it take to set up Stoneforge?"
+  - question: "How long does it take to set up this open source AI coding agent?"
     answer: "The core install takes about a minute: npm install, sf init, sf serve. Configuring agents, setting up API keys, and learning the orchestration model takes longer, roughly 15 minutes for a basic setup."
 ---
 
-Stoneforge is a free, self-hosted AI coding agent that orchestrates multiple AI agents working on your codebase in parallel. It is licensed under Apache 2.0. There are no per-seat fees, no usage caps, and no premium tiers.
+Stoneforge is a free AI coding agent that orchestrates multiple AI agents working on your codebase in parallel. As an open source AI coding assistant licensed under Apache 2.0, there are no per-seat fees, no usage caps, and no premium tiers.
 
-You bring your own LLM API keys (Anthropic, OpenAI, or others), and Stoneforge handles the orchestration: dispatching tasks to agents, managing isolated git worktrees, and merging results back into your codebase.
+You bring your own LLM API keys (Anthropic, OpenAI, or others), and this free AI coding assistant handles the orchestration: dispatching tasks to agents, managing isolated git worktrees, and merging results back into your codebase.
 
 ### What you get for $0
 
-Stoneforge ships with the full orchestration stack:
+This open source AI coding agent ships with the full orchestration stack:
 
 - **Multi-agent dispatch.** A Director agent breaks down work into tasks. A daemon assigns those tasks to Worker agents running in isolated git worktrees. Multiple agents work on separate branches simultaneously.
-- **Automated merge and review.** Steward agents review completed work, run tests, resolve straightforward merge conflicts, and merge branches.
+- **Automated merge and review.** Steward agents review completed work, run tests, resolve straightforward merge conflicts, and merge branches. See [automated code review](/use-cases/code-review-automation/) for details.
 - **Web dashboard.** A local web UI at `localhost:3457` shows agent status, task progress, plans, and messages in real time.
 - **Dependency-aware scheduling.** Define task dependencies so the orchestrator sequences work correctly. Independent tasks run in parallel; dependent tasks wait for their prerequisites.
 - **Knowledge persistence.** Workspace documents survive across sessions. Agents build up a shared knowledge base about your codebase over time.
@@ -48,9 +48,9 @@ This also means you are not locked into one provider. You can use Claude Code fo
 
 ### Your code stays on your machine
 
-Stoneforge runs locally. Your source code, task history, and orchestration state live on your filesystem in SQLite databases and git-tracked JSONL files. Code only leaves your machine when an agent sends context to an LLM API, and you control which provider that is.
+This free AI coding agent runs locally. Your source code, task history, and orchestration state live on your filesystem in SQLite databases and git-tracked JSONL files. Code only leaves your machine when an agent sends context to an LLM API, and you control which provider that is.
 
-For air-gapped environments, Stoneforge works with local models. Nothing needs to phone home.
+For air-gapped environments, this open source AI coding agent works with local models. Nothing needs to phone home.
 
 ### How it compares to paid alternatives
 
@@ -62,7 +62,7 @@ The AI coding tool market has grown expensive:
 
 Stoneforge costs nothing to run. The trade-off: you self-host it and manage the setup yourself. There is no managed cloud version or support team. You are responsible for your own infrastructure.
 
-For solo developers and small teams comfortable with self-hosting, this is a straightforward win. For organizations that need managed hosting and vendor support, a paid tool might be a better fit.
+For solo developers and small teams comfortable with self-hosting, a free AI coding assistant is a straightforward win. For organizations that need managed hosting and vendor support, a paid tool might be a better fit.
 
 ### Get running in minutes
 
@@ -80,4 +80,4 @@ sf serve
 
 Open `http://localhost:3457`. Register a Director agent, add your LLM API keys, and create your first plan. The Director breaks the plan into tasks, the daemon dispatches them to Worker agents, and Steward agents handle review and merge.
 
-The [quick start guide](https://docs.stoneforge.ai/getting-started/quick-start/) walks through the full setup, including agent configuration and your first multi-agent run.
+The [quick start guide](https://docs.stoneforge.ai/getting-started/quick-start/) walks through the full setup, including agent configuration and your first multi-agent run. You can also explore [parallel AI development](/use-cases/parallel-feature-development/) to see how the orchestration works in practice.

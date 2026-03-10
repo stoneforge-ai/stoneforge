@@ -1,6 +1,6 @@
 ---
-title: "Test Generation at Scale"
-description: "Generate test suites across your codebase with parallel AI agents that follow your existing test patterns."
+title: "AI Test Generation at Scale"
+description: "Generate comprehensive test suites with AI test generation agents. Automated testing AI that follows your existing patterns and boosts coverage fast."
 problem: "Test coverage tends to fall behind. Writing tests is time-consuming, and developers understandably prioritize shipping features. Over time, untested code accumulates and regressions become harder to catch."
 icon: "test"
 order: 4
@@ -12,19 +12,19 @@ docsLinks:
   - title: "Workspace Configuration"
     url: "https://docs.stoneforge.ai/guides/configuration/"
 faqItems:
-  - question: "What types of tests can Stoneforge agents generate?"
+  - question: "What types of tests can AI test generation produce?"
     answer: "Agents can generate unit tests, integration tests, and end-to-end tests. They analyze your existing test patterns (framework, assertion style, mocking approach) and generate tests that match your conventions. Supported frameworks include Jest, Vitest, Pytest, Go testing, and more."
-  - question: "How does Stoneforge ensure generated tests are meaningful?"
+  - question: "How does automated testing AI ensure generated tests are meaningful?"
     answer: "Agents analyze code paths, edge cases, and error handling to create tests that catch real bugs, not just tests that pass. Each agent runs the test suite to verify tests pass, and the Steward reviews test quality before merging."
-  - question: "Can I target specific directories or modules for test generation?"
+  - question: "Can I target specific directories for AI test generation?"
     answer: "Yes. You can scope test generation tasks to specific directories, file patterns, or modules. For example, generate tests only for the /api/routes/ directory, or target all files with less than 50% coverage."
-  - question: "Will generated tests conflict with my existing test suite?"
+  - question: "Will AI-generated tests conflict with my existing test suite?"
     answer: "No. Agents analyze your existing tests before generating new ones to avoid duplication. They follow your naming conventions, use the same test utilities, and organize tests in the same directory structure you already use."
-  - question: "How much coverage improvement can I expect?"
+  - question: "How much test coverage improvement can automated testing AI deliver?"
     answer: "Results vary depending on your starting coverage, codebase complexity, and language. Agents focus on untested code paths, edge cases, and error handlers. You'll get the biggest gains in codebases with large gaps in coverage."
 ---
 
-Stoneforge can generate tests across your codebase in parallel. Instead of one developer writing tests file by file, multiple agents work simultaneously, each targeting different modules.
+AI test generation with Stoneforge creates tests across your codebase in parallel. Instead of one developer writing tests file by file, multiple automated testing AI agents work simultaneously, each targeting different modules to boost your coverage fast.
 
 ### Coverage audit, then parallel generation
 
@@ -43,7 +43,7 @@ sf plan create --title "Increase test coverage to 80%" \
 # 5. Generate integration tests for API endpoints
 ```
 
-### Pattern-aware test generation
+### Pattern-aware AI test generation
 
 Agents study your existing tests before writing new ones. They pick up your [testing conventions](https://docs.stoneforge.ai/guides/configuration/): which framework you use, how you structure test files, what mocking patterns you prefer. The goal is tests that look like your team wrote them.
 
@@ -59,11 +59,11 @@ sf init
 
 ### Every test runs before merge
 
-Each generated test suite is executed in the agent's worktree to verify everything passes. The Steward agent runs the full test suite again before merging, catching any interactions between newly generated tests.
+Each generated test suite is executed in the agent's worktree to verify everything passes. The Steward agent runs the full test suite again before merging, catching any interactions between newly generated tests — the same quality gate used in [automated code review](/use-cases/code-review-automation/).
 
 ### Target the riskiest code first
 
-Focus test generation where it matters most. Prioritize modules that handle payments, authentication, or data integrity. Stoneforge's priority system lets you ensure high-risk modules get tested first.
+Focus AI test generation where it matters most. Prioritize modules that handle payments, authentication, or data integrity. Stoneforge's priority system lets you ensure high-risk modules get tested first, reducing the chance of regressions in critical paths.
 
 ```bash
 # High-priority: test the critical paths first

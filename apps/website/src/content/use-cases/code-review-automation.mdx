@@ -1,6 +1,6 @@
 ---
-title: "Code Review Automation"
-description: "Automate code reviews with AI agents that check style, security, performance, and correctness before human review."
+title: "Automated Code Review AI"
+description: "Automate code reviews with AI agents that check style, security, and correctness. Automated code review AI catches issues before human reviewers see the PR."
 problem: "Code reviews create delays. Senior developers spend hours reviewing PRs, often catching the same kinds of issues repeatedly: missing error handling, inconsistent naming, security oversights. PR queues grow, and developers wait for approvals."
 icon: "review"
 order: 6
@@ -12,23 +12,23 @@ docsLinks:
   - title: "Merge Strategy"
     url: "https://docs.stoneforge.ai/guides/merge-strategy/"
 faqItems:
-  - question: "Does Stoneforge replace human code review?"
+  - question: "Does automated code review AI replace human reviewers?"
     answer: "No. Stoneforge's review agents handle mechanical aspects of review: style consistency, common bug patterns, security checks, test coverage. Human reviewers still own architecture decisions, design trade-offs, and business logic. Think of it as a first pass that catches the routine stuff."
-  - question: "How does the Steward agent review code?"
+  - question: "How does AI code review analyze pull requests?"
     answer: "The Steward agent reads the full diff, checks against your team's coding standards, runs tests, and produces a review with inline comments. It flags potential issues with severity levels and suggests specific fixes."
-  - question: "Can I customize what the review agents check for?"
+  - question: "Can I customize what automated code review AI checks for?"
     answer: "Yes. You can customize the merge steward's behavior by overriding its prompt at .stoneforge/prompts/steward-merge.md, or by creating a custom steward with a playbook that defines your review criteria. You can specify coding standards, banned patterns, required test coverage thresholds, and naming conventions."
-  - question: "How does automated review integrate with GitHub PRs?"
+  - question: "How does AI code review integrate with GitHub PRs?"
     answer: "Stoneforge's external sync posts review comments directly on GitHub PRs. The Steward's findings appear as inline comments on the relevant code lines. Approvals, change requests, and merge decisions sync bidirectionally between Stoneforge and GitHub."
-  - question: "What security checks does the Steward perform?"
+  - question: "What security checks does automated code review AI perform?"
     answer: "The Steward checks for common security issues like hardcoded secrets, SQL injection vectors, XSS vulnerabilities, missing input validation, and insecure dependencies. You can extend these checks by customizing the steward prompt or creating a custom steward with a security-focused playbook."
 ---
 
-Stoneforge's [Steward agents](https://docs.stoneforge.ai/core-concepts/agents/) automate the mechanical parts of code review so your senior developers spend less time on routine checks.
+Automated code review AI from Stoneforge handles the mechanical parts of code review so your senior developers spend less time on routine checks. The [Steward agents](https://docs.stoneforge.ai/core-concepts/agents/) perform AI code review on every merge request automatically.
 
 ### Consistent first pass on every PR
 
-Every PR gets reviewed the same way. The Steward agent checks for style issues, common bugs, security vulnerabilities, and test coverage before a human reviewer opens the PR.
+Every PR gets reviewed the same way. The automated code review AI checks for style issues, common bugs, security vulnerabilities, and test coverage before a human reviewer opens the PR.
 
 ```bash
 # The Steward agent reviews every merge request automatically.
@@ -43,7 +43,7 @@ Every PR gets reviewed the same way. The Steward agent checks for style issues, 
 
 ### More than linting
 
-Linters catch syntax and formatting issues. Stoneforge's review agents read the full diff and understand the context of a change. They can flag missing error handling, identify potential null pointer issues, and catch cases where a code path lacks test coverage. They won't catch everything a senior developer would, but they handle a lot of the repetitive checks.
+Linters catch syntax and formatting issues. Stoneforge's AI code review reads the full diff and understands the context of a change. It can flag missing error handling, identify potential null pointer issues, and catch cases where a code path lacks test coverage. It won't catch everything a senior developer would, but it handles a lot of the repetitive checks.
 
 ### Custom review criteria
 
@@ -51,11 +51,11 @@ Define what matters to your team. Create [custom Steward configurations](https:/
 
 ### Specific fix suggestions
 
-Review comments include concrete suggestions, not vague observations. Instead of "this could be improved," the Steward points to a specific line and suggests a fix, like adding a guard clause for an unhandled null case.
+AI code review comments include concrete suggestions, not vague observations. Instead of "this could be improved," the Steward points to a specific line and suggests a fix, like adding a guard clause for an unhandled null case.
 
-### Faster review cycles
+### Faster review cycles with automated code review AI
 
-With routine issues caught automatically, human reviewers can focus on the parts of review that need human judgment. The review flow looks like this:
+With routine issues caught automatically, human reviewers can focus on the parts of review that need human judgment. Combine this with [AI test generation](/use-cases/test-generation/) to ensure new code ships with proper test coverage.
 
 ```bash
 # Review flow:

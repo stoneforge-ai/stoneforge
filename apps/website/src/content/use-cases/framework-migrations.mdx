@@ -1,6 +1,6 @@
 ---
-title: "Framework Migrations"
-description: "Migrate frameworks, languages, or libraries with parallel AI agents that handle the repetitive file-by-file conversion."
+title: "AI Framework Migration"
+description: "Run AI framework migration tasks in parallel across your codebase. Automated code migration agents handle repetitive file-by-file conversions at scale."
 problem: "Framework migrations are the projects everyone puts off. Migrating from React Class Components to Hooks, Express to Fastify, or JavaScript to TypeScript means touching hundreds of files with similar transformations. The work takes weeks and blocks other development."
 icon: "migrate"
 order: 7
@@ -12,23 +12,23 @@ docsLinks:
   - title: "Custom Agent Prompts"
     url: "https://docs.stoneforge.ai/guides/custom-prompts/"
 faqItems:
-  - question: "What types of migrations does Stoneforge handle?"
+  - question: "What types of AI framework migration does Stoneforge handle?"
     answer: "Stoneforge works well for framework migrations (React to Solid, Express to Hono), language migrations (JavaScript to TypeScript, Python 2 to 3), library swaps (Moment.js to Day.js, Lodash to native), build tool migrations (Webpack to Vite), and CSS migrations (CSS Modules to Tailwind). Migrations that involve repetitive file-by-file transformations are the best fit."
-  - question: "How does Stoneforge ensure migration consistency?"
+  - question: "How does automated code migration ensure consistency?"
     answer: "You define the migration pattern once in your workspace prompts, and each agent follows the same transformation rules. The Director agent creates a plan so that shared utilities and types are migrated first, with dependent modules following in the correct order."
-  - question: "Can I migrate incrementally instead of all at once?"
+  - question: "Can I run an AI framework migration incrementally?"
     answer: "Yes. Stoneforge's plan system supports incremental migration. You can migrate module by module, merging each as it completes. The old and new code coexist safely because each migration task is a separate, reviewable PR."
-  - question: "How does Stoneforge handle migration-specific edge cases?"
+  - question: "How does automated code migration handle edge cases?"
     answer: "Agents read surrounding code for context rather than doing naive find-and-replace. They can handle many complex patterns, but will flag edge cases they can't resolve confidently for human review. The handoff note includes what needs manual attention."
-  - question: "What if the migration breaks existing tests?"
+  - question: "What if the AI framework migration breaks existing tests?"
     answer: "Agents update tests as part of each migration task. For example, when migrating a component from Class to Hooks, the agent also updates the corresponding test file. The Steward checks that all tests pass before merging."
 ---
 
-Stoneforge can break a framework migration into parallel tasks. You define the transformation pattern once, and agents apply it across your codebase concurrently.
+AI framework migration with Stoneforge breaks large migrations into parallel tasks. You define the transformation pattern once, and automated code migration agents apply it across your codebase concurrently.
 
-### Plan the migration graph
+### Plan the migration dependency graph
 
-Migrations have dependencies: you can't migrate components before migrating the shared utilities they import. Stoneforge's [Director agent](https://docs.stoneforge.ai/core-concepts/agents/) can analyze your import graph and create a dependency-ordered plan.
+Migrations have dependencies: you can't migrate components before migrating the shared utilities they import. Stoneforge's [Director agent](https://docs.stoneforge.ai/core-concepts/agents/) analyzes your import graph and creates a dependency-ordered plan for the AI framework migration.
 
 ```bash
 # Create a plan for the migration
@@ -43,7 +43,7 @@ sf plan create --title "Migrate from JavaScript to TypeScript"
 # Phase 6: Update build config and CI pipeline
 ```
 
-### Consistent transformations at scale
+### Consistent automated code migration at scale
 
 Consistency matters in migrations. Every file should be transformed the same way. Stoneforge supports this through [workspace prompts](https://docs.stoneforge.ai/guides/custom-prompts/) where you define the transformation rules each agent follows.
 
@@ -60,11 +60,11 @@ Consistency matters in migrations. Every file should be transformed the same way
 
 ### Incremental, not big-bang
 
-Each phase produces small, mergeable PRs. Your codebase transitions incrementally instead of through a long-lived migration branch that goes stale. If something goes wrong, you roll back one PR, not the entire migration.
+Each phase produces small, mergeable PRs. Your codebase transitions incrementally instead of through a long-lived migration branch that goes stale. If something goes wrong, you roll back one PR, not the entire migration. This approach works hand-in-hand with [AI code refactoring](/use-cases/large-scale-refactoring/) for broader codebase improvements.
 
 ### Parallel execution within phases
 
-Within each phase, agents work in parallel. If Phase 3 has 15 service files to migrate, three agents can handle five files each. The dependency system ensures phases execute in the right order while allowing parallelism within each phase.
+Within each phase of an AI framework migration, agents work in parallel. If Phase 3 has 15 service files to migrate, three agents can handle five files each. The dependency system ensures phases execute in the right order while allowing parallelism within each phase.
 
 ```bash
 # Start the migration
@@ -76,6 +76,6 @@ sf serve
 # Worker-3: Migrating src/services/users.js → users.ts (100% ✓)
 ```
 
-### Test-driven migration
+### Test-driven automated code migration
 
-Agents run existing tests against migrated code and fix any failures before submitting a merge request. For TypeScript migrations, they also check for type errors with `tsc --noEmit`.
+Agents run existing tests against migrated code and fix any failures before submitting a merge request. For TypeScript migrations, they also check for type errors with `tsc --noEmit`. Pair with [AI test generation](/use-cases/test-generation/) to fill coverage gaps exposed during migration.

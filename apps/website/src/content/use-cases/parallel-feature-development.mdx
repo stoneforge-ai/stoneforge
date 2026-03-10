@@ -1,6 +1,6 @@
 ---
-title: "Parallel Feature Development"
-description: "Run multiple feature branches simultaneously with AI agents that build, test, and merge independently."
+title: "Parallel AI Development"
+description: "Run multiple AI agents across parallel branches. Stoneforge orchestrates parallel AI development so features are built, tested, and merged simultaneously."
 problem: "Feature development is inherently sequential. One developer works on one branch at a time, and context-switching between features kills productivity. Even with a large team, coordination overhead limits how many features ship per sprint."
 icon: "parallel"
 order: 1
@@ -12,19 +12,19 @@ docsLinks:
   - title: "Agent Roles & Orchestration"
     url: "https://docs.stoneforge.ai/core-concepts/agents/"
 faqItems:
-  - question: "How many features can Stoneforge develop in parallel?"
+  - question: "How many AI agents can run in parallel at once?"
     answer: "Stoneforge can orchestrate as many parallel agents as your infrastructure supports. Teams commonly run 4-8 agents simultaneously, each working on a separate feature branch. The limiting factor is typically merge conflict complexity, not agent count."
-  - question: "How does Stoneforge handle merge conflicts between parallel branches?"
+  - question: "How does parallel AI development handle merge conflicts?"
     answer: "Stoneforge's Steward agents automatically detect and resolve merge conflicts. When conflicts arise, the Steward analyzes both changes, resolves straightforward conflicts automatically, and flags complex ones for human review. The dependency graph ensures conflicting tasks are sequenced when possible."
-  - question: "Can I control which features are developed first?"
+  - question: "Can I control which features AI agents develop first?"
     answer: "Yes. Stoneforge supports task priorities, dependency chains, and plans. You can set explicit ordering, mark tasks as blocked by others, or let the Director agent optimize the execution order based on your dependency graph."
-  - question: "Does parallel feature development work with monorepos?"
+  - question: "Does parallel AI development work with monorepos?"
     answer: "Absolutely. Stoneforge uses isolated git worktrees for each agent, so parallel work across different packages in a monorepo is conflict-free by default. The dependency system understands cross-package relationships."
-  - question: "What happens if one feature branch breaks the build?"
+  - question: "What happens if one AI agent's feature branch breaks the build?"
     answer: "Each agent works in its own worktree with independent builds. A broken build in one branch doesn't affect others. The Steward agent runs CI checks before merging and will hold broken branches until they pass."
 ---
 
-Stoneforge turns sequential feature development into a parallel operation. Instead of one developer working on one branch, you describe the features you need and let the orchestrator dispatch them across multiple AI agents simultaneously.
+Parallel AI development turns sequential feature work into a concurrent operation. Instead of one developer working on one branch, you describe the features you need and Stoneforge lets you run multiple AI agents simultaneously — each building, testing, and merging a separate feature.
 
 ### Isolated worktrees, zero interference
 
@@ -43,7 +43,7 @@ sf task create --title "Implement webhook retry logic" --plan "Sprint 14 Feature
 sf serve
 ```
 
-### Dependency-aware dispatch
+### Dependency-aware task dispatch
 
 Not all features are independent. Stoneforge's [dependency system](https://docs.stoneforge.ai/core-concepts/dependencies/) lets you express relationships between tasks. If the analytics dashboard depends on a new API endpoint, the orchestrator waits for the endpoint task to complete before starting the dashboard.
 
@@ -56,8 +56,8 @@ sf task create --title "Build analytics dashboard" --plan "Sprint 14 Features" \
 
 ### Automatic merge and review
 
-When an agent completes a feature, the Steward agent takes over — running tests, checking for conflicts, and merging the branch. You get a merge request with a summary of changes, test results, and any issues flagged during review.
+When an agent completes a feature, the Steward agent takes over — running tests, checking for conflicts, and merging the branch. You get a merge request with a summary of changes, test results, and any issues flagged during [automated code review](/use-cases/code-review-automation/).
 
-### Real-time visibility
+### Real-time visibility into parallel agents
 
-The Stoneforge [web dashboard](https://docs.stoneforge.ai/getting-started/dashboard/) shows every agent's progress in real time. See which features are in progress, which are in review, and which have merged — all from a single view.
+The Stoneforge [web dashboard](https://docs.stoneforge.ai/getting-started/dashboard/) shows every agent's progress in real time. See which features are in progress, which are in review, and which have merged — all from a single view. Whether you run multiple AI agents on a small project or across a large monorepo, parallel AI development with Stoneforge keeps your entire team's work visible and coordinated.
