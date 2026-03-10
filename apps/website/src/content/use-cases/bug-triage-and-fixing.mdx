@@ -1,7 +1,7 @@
 ---
 title: "Bug Triage and Fixing"
-description: "Dispatch bug reports to AI agents that investigate, fix, and test — resolving multiple bugs in parallel."
-problem: "Bug backlogs grow faster than teams can fix them. Each bug requires context-switching: reproduce, investigate, fix, test, review. When you're fixing Bug A, Bugs B through Z sit idle. Critical bugs get attention, but the long tail of medium-priority issues never gets addressed."
+description: "Dispatch bug reports to AI agents that investigate, fix, and test, resolving multiple bugs in parallel."
+problem: "Bug backlogs grow faster than teams can fix them. Each bug requires context-switching: reproduce, investigate, fix, test, review. When you're fixing Bug A, Bugs B through Z sit idle. Critical bugs get attention, but the long tail of medium-priority issues rarely gets addressed."
 icon: "bug"
 order: 3
 docsLinks:
@@ -13,26 +13,26 @@ docsLinks:
     url: "https://docs.stoneforge.ai/core-concepts/tasks/"
 faqItems:
   - question: "Can Stoneforge automatically import bugs from GitHub Issues or Linear?"
-    answer: "Yes. Stoneforge's external sync feature connects to GitHub Issues, Linear, and Notion. Bugs tagged with a specific label (e.g., 'stoneforge') are automatically imported as tasks. Status updates sync bidirectionally — when an agent fixes a bug, the issue is updated automatically."
+    answer: "Yes. Stoneforge's external sync feature connects to GitHub Issues and Linear. You can pull issues from these services and they're imported as tasks. Status updates sync bidirectionally, so when an agent fixes a bug, the linked issue is updated automatically."
   - question: "How does Stoneforge reproduce and diagnose bugs?"
-    answer: "Each Worker agent reads the bug report, examines the relevant code, and attempts to reproduce the issue by running existing tests or writing new ones. The agent then traces the root cause, applies a fix, and verifies the fix passes all tests before submitting for review."
+    answer: "Each Worker agent reads the bug report, examines the relevant code, and tries to reproduce the issue by running existing tests or writing new ones. It then traces the root cause, applies a fix, and verifies the fix passes all tests before submitting for review."
   - question: "What if an agent can't fix a bug?"
-    answer: "If an agent gets stuck, it hands off the task with a detailed diagnostic report — what it tried, what it found, and where it got blocked. This handoff note is visible in the dashboard and the linked issue, so a human developer can pick up with full context."
+    answer: "If an agent gets stuck, it hands off the task with a diagnostic report covering what it tried, what it found, and where it got blocked. This handoff note is visible in the dashboard and the linked issue, so a human developer can pick up with full context."
   - question: "Can I prioritize which bugs get fixed first?"
-    answer: "Absolutely. Tasks have priority levels (1-5) that control dispatch order. You can also set dependencies — for example, fix the authentication bug before tackling the session-related bugs that depend on it."
+    answer: "Yes. Tasks have priority levels (1-5) that control dispatch order. You can also set dependencies so that, for example, an authentication bug is fixed before the session-related bugs that depend on it."
   - question: "Does Stoneforge write tests for the bugs it fixes?"
-    answer: "Yes. Agents are instructed to write regression tests that verify the fix. This ensures the same bug doesn't reappear. The Steward agent checks test coverage as part of the merge review."
+    answer: "Yes. Agents are instructed to write regression tests that verify the fix. This ensures the same bug doesn't reappear. The Steward agent runs tests as part of the merge review."
 ---
 
-Stoneforge transforms bug fixing from a sequential slog into a parallel operation. Import your bug backlog, set priorities, and let multiple agents investigate and fix bugs simultaneously.
+Stoneforge lets you fix bugs in parallel instead of one at a time. Import your bug backlog, set priorities, and let multiple agents investigate and fix bugs simultaneously.
 
 ### From backlog to fixed in parallel
 
-Instead of one developer cycling through bugs, Stoneforge dispatches multiple bugs to separate agents. Each agent gets its own worktree, reproduces the issue, writes a fix, adds regression tests, and submits a merge request.
+Stoneforge dispatches multiple bugs to separate agents instead of having one developer cycle through them sequentially. Each agent gets its own worktree, reproduces the issue, writes a fix, adds regression tests, and submits a merge request.
 
 ```bash
-# Sync bugs from GitHub Issues
-sf sync github --label "bug" --label "stoneforge"
+# Pull bugs from GitHub Issues
+sf external-sync pull --provider github
 
 # Or create bug tasks manually
 sf task create --title "Fix: Login fails with SSO redirect loop" --priority 1
@@ -50,11 +50,11 @@ The Director agent can analyze incoming bugs and estimate complexity, identify r
 
 ### Regression tests included
 
-Every bug fix comes with a regression test. The agent writes a test that fails without the fix and passes with it — ensuring the bug stays fixed. The [Steward agent](https://docs.stoneforge.ai/core-concepts/agents/) verifies test coverage before merging.
+Every bug fix comes with a regression test. The agent writes a test that fails without the fix and passes with it. The [Steward agent](https://docs.stoneforge.ai/core-concepts/agents/) runs tests before merging to make sure nothing is broken.
 
 ### Bidirectional sync
 
-When an agent fixes a bug, the linked GitHub Issue or Linear ticket is updated automatically. Comments include a summary of the fix, a link to the merge request, and which tests were added. No manual status updates needed.
+When an agent fixes a bug, the linked GitHub Issue or Linear ticket is updated automatically with a summary of the fix, a link to the merge request, and which tests were added.
 
 ```bash
 # Bug fixed → GitHub Issue updated automatically
@@ -64,4 +64,4 @@ When an agent fixes a bug, the linked GitHub Issue or Linear ticket is updated a
 
 ### Clear the backlog
 
-Teams using Stoneforge for bug triage typically clear 3-5x more bugs per sprint than manual fixing. The long tail of medium-priority bugs — the ones that never get attention — finally gets addressed.
+Because agents work in parallel, you can make progress on multiple bugs at once instead of working through them one by one. The medium-priority bugs that tend to sit untouched at the bottom of the backlog can finally get some attention.
