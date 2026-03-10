@@ -1962,6 +1962,87 @@ When created with a `SettingsService`, the tracker:
 
 ---
 
+## DemoModeService
+
+**File:** `services/demo-mode-service.ts`
+
+Manages enabling and disabling demo mode, which configures all agents to use a free provider (`opencode/minimax-m2.5-free`). Saves and restores previous agent configurations automatically.
+
+```typescript
+import { createDemoModeService } from '@stoneforge/smithy';
+
+const demoService = createDemoModeService({
+  agentRegistry,
+  settingsService,
+  persistConfigFlag: (enabled) => { /* write to config file */ },
+  readConfigFlag: () => { /* read from config file */ },
+});
+```
+
+### Methods
+
+```typescript
+// Enable demo mode — saves current configs, switches all agents
+const result = await demoService.enable();
+// result: { enabled: true, agentsUpdated: 3, provider: 'opencode', model: 'opencode/minimax-m2.5-free' }
+
+// Disable demo mode — restores previous agent configs
+const result = await demoService.disable();
+// result: { enabled: false, agentsUpdated: 3, provider: 'opencode', model: 'opencode/minimax-m2.5-free' }
+
+// Check status
+const status = demoService.getStatus();
+// status: { enabled: boolean, provider: string, model: string, savedConfigCount: number }
+
+// Quick check
+const isDemo = demoService.isEnabled();
+```
+
+### Types
+
+```typescript
+interface DemoModeServiceDeps {
+  agentRegistry: AgentRegistry;
+  settingsService: SettingsService;
+  persistConfigFlag: (enabled: boolean) => void;
+  readConfigFlag: () => boolean;
+}
+
+interface DemoModeResult {
+  enabled: boolean;
+  agentsUpdated: number;
+  provider: string;
+  model: string;
+}
+
+interface DemoModeStatus {
+  enabled: boolean;
+  provider: string;
+  model: string;
+  savedConfigCount: number;
+}
+
+interface SavedAgentConfig {
+  agentId: string;
+  agentName: string;
+  provider?: string;
+  model?: string;
+}
+```
+
+### Constants
+
+- `DEMO_PROVIDER` = `'opencode'`
+- `DEMO_MODEL` = `'opencode/minimax-m2.5-free'`
+- `DEMO_MODE_SAVED_CONFIGS_KEY` = `'demoModeSavedConfigs'`
+
+### Related Services
+
+- **SettingsService** — persists saved agent configs for restoration
+- **AgentRegistry** — reads/updates agent provider and model metadata
+
+---
+
 ## AgentRegistry
 
 **File:** `services/agent-registry.ts`
