@@ -1,5 +1,17 @@
 # @stoneforge/smithy
 
+## 1.16.1
+
+### Patch Changes
+
+- 2b1493b: Deduplicate daemon warning notifications to prevent repeated toasts from flooding the UI on every poll cycle
+- 8499c3a: Fix headless session termination: close() now interrupts the underlying SDK query/process to prevent zombie agents from continuing after stop
+- aa30908: Fix opencode spawn ENOENT on Windows by adding `shell: true` to the spawn call for proper PATH resolution
+  - @stoneforge/core@1.16.1
+  - @stoneforge/storage@1.16.1
+  - @stoneforge/quarry@1.16.1
+  - @stoneforge/shared-routes@1.16.1
+
 ## 1.16.0
 
 ### Minor Changes

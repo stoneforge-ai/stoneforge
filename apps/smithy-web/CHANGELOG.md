@@ -1,5 +1,12 @@
 # @stoneforge/smithy-web
 
+## 1.16.1
+
+### Patch Changes
+
+- d7199b2: Auto-refresh terminal after image drag+drop upload to fix mangled output
+  - @stoneforge/ui@1.16.1
+
 ## 1.16.0
 
 ### Minor Changes
