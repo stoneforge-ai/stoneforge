@@ -55,3 +55,4 @@ OPENCODE_CONFIG_CONTENT
 # SEO tools
 tools/seo/.env
 tools/seo/output/*.json
+tools/seo/service-account.json
