@@ -1,0 +1,122 @@
+---
+title: "Stoneforge vs Devin"
+description: "Compare Stoneforge's multi-agent orchestration with Devin, the autonomous AI software engineer. Local control vs cloud autonomy."
+competitor: "Devin"
+competitorUrl: "https://devin.ai"
+differentiator: "Local multi-agent orchestration vs autonomous cloud AI engineer"
+features:
+  - category: "Architecture"
+    feature: "Approach"
+    stoneforge: "Orchestrates multiple AI coding agents working in parallel on your machine"
+    competitor: "Fully autonomous AI software engineer running in a cloud sandbox"
+  - category: "Architecture"
+    feature: "Parallel agents"
+    stoneforge: "Unlimited, each in isolated git worktrees"
+    competitor: "Single agent per task, multiple sessions possible"
+  - category: "Architecture"
+    feature: "Agent choice"
+    stoneforge: "Agent-agnostic — use Claude Code, Codex, OpenCode, or any CLI agent"
+    competitor: "Devin's own compound AI system (Planner, Coder, Critic models)"
+  - category: "Workflow"
+    feature: "Autonomy model"
+    stoneforge: "Developer stays in the loop as Director, agents are Workers"
+    competitor: "Fully autonomous — give it a task and it works end-to-end"
+  - category: "Workflow"
+    feature: "Task management"
+    stoneforge: "Plans, priorities, dependencies, automatic dispatch via Daemon"
+    competitor: "Accepts tasks from Slack, Jira, or the web UI; no dependency tracking"
+  - category: "Workflow"
+    feature: "Automatic merge & review"
+    stoneforge: "Yes, Steward agents handle merge and review"
+    competitor: "Opens PRs with descriptions; responds to review comments"
+  - category: "Cost & Control"
+    feature: "Pricing"
+    stoneforge: "Free and open-source"
+    competitor: "Core from $20/mo (pay-per-ACU), Teams $500/mo, Enterprise custom"
+  - category: "Cost & Control"
+    feature: "Environment"
+    stoneforge: "Runs locally on your machine"
+    competitor: "Cloud sandbox with terminal, editor, and browser"
+  - category: "Cost & Control"
+    feature: "Self-hosted"
+    stoneforge: "Yes, fully local"
+    competitor: "No (Enterprise VPC option available)"
+  - category: "Cost & Control"
+    feature: "Data privacy"
+    stoneforge: "Full control, code stays on your machine"
+    competitor: "Code processed in Devin's cloud environment"
+  - category: "Developer Experience"
+    feature: "Setup"
+    stoneforge: "Install CLI, configure agents, run locally"
+    competitor: "SaaS — sign up and start assigning tasks"
+  - category: "Developer Experience"
+    feature: "Visibility"
+    stoneforge: "Full access to agent sessions, local worktrees, git history"
+    competitor: "Web-based session viewer with terminal, editor, and browser replay"
+faqItems:
+  - question: "Should I use Stoneforge or Devin?"
+    answer: "It depends on the level of control you want. Devin is a fully autonomous AI engineer — you hand it a task and it works independently in a cloud sandbox. Stoneforge keeps you in the loop as the Director, orchestrating multiple agents that work locally in your codebase. Choose Devin for hands-off delegation; choose Stoneforge for structured, multi-agent orchestration you control."
+  - question: "Is Stoneforge free? How does it compare to Devin's pricing?"
+    answer: "Stoneforge is free and open-source (Apache 2.0). Devin starts at $20/month for the Core plan with pay-per-use ACUs, $500/month for Teams, and custom pricing for Enterprise. With Stoneforge, you bring your own API keys for whichever AI agents you use, so your cost is the underlying model usage."
+  - question: "Can Stoneforge do what Devin does?"
+    answer: "Both turn task descriptions into working code, but they work differently. Devin operates as a single autonomous agent with its own compound AI system. Stoneforge orchestrates multiple third-party agents in parallel, with dependency-aware task dispatch and automated merge workflows. Stoneforge doesn't try to be an autonomous engineer — it's an orchestration layer that coordinates agents."
+  - question: "Does Devin support multiple agents working in parallel?"
+    answer: "You can run multiple Devin sessions on separate tasks, but each session is a single agent. Stoneforge is built for multi-agent parallelism: the Daemon dispatches tasks to available agents based on a dependency graph, and each agent works in an isolated git worktree."
+  - question: "Is Devin better for solo developers or teams?"
+    answer: "Devin works for both, with team-oriented features in its Teams and Enterprise plans. Stoneforge is also built for both, but its orchestration model (Director, Worker, Steward roles) particularly shines when coordinating many tasks across a codebase. Solo developers who want simple task delegation may find Devin's autonomous approach more convenient."
+verdict: "Choose Stoneforge when you want full control over your AI coding workflow: local execution, agent flexibility, dependency-aware task dispatch, and automated merge. Stoneforge is free, open-source, and lets you orchestrate any CLI-based coding agent. Choose it when you have a backlog of interdependent tasks and want structured coordination across multiple agents."
+order: 4
+---
+
+## Autonomous AI engineer vs. multi-agent orchestration
+
+Devin and Stoneforge represent two different philosophies for AI-assisted software development. Devin aims to be an autonomous software engineer that works independently. Stoneforge aims to be an orchestration layer that keeps the developer in control while coordinating multiple AI agents.
+
+### Devin: the autonomous AI engineer
+
+Devin, built by Cognition, is designed to handle entire engineering tasks end-to-end. You give it a task — a Jira ticket, a Slack message, a bug report — and it plans, writes code, tests, and opens a pull request. It runs in a cloud sandbox with its own terminal, code editor, and browser, so it can read documentation, install dependencies, and debug issues without human intervention.
+
+Under the hood, Devin uses a compound AI system with specialized models: a Planner for breaking down tasks, a Coder for implementation, and a Critic for reviewing code quality and security. This architecture lets it handle complex, multi-step tasks autonomously.
+
+Devin's strength is convenience. You describe what you want, and it delivers a PR. The trade-off is that you're delegating control to a cloud-based system you can't self-host (outside of Enterprise VPC), and you're locked into Devin's own AI models.
+
+### Stoneforge: orchestration you control
+
+Stoneforge takes a different approach. Instead of being an AI engineer itself, it orchestrates other AI coding agents — Claude Code, Codex, OpenCode, or any CLI-based agent you prefer. You act as the Director, defining tasks with priorities and dependencies. The Daemon dispatches tasks to available agents, each working in an isolated git worktree. Steward agents handle merge and review automatically.
+
+Everything runs locally on your machine. You choose which agents to use, you see exactly what they're doing, and your code never leaves your infrastructure.
+
+### The autonomy trade-off
+
+The core difference is how much control you want:
+
+- **Devin** optimizes for autonomy. It's best when you want to hand off a task and get a PR back without managing the process. This works well for well-defined tasks where you trust the AI to make good decisions.
+- **Stoneforge** optimizes for structured coordination. It's best when you have many tasks with dependencies, want to choose your own agents, or need to keep code local. You stay involved as the Director, but agents do the implementation work.
+
+```bash
+# Stoneforge: structured task orchestration with dependencies
+sf plan create --title "Payment System Overhaul"
+
+sf task create --title "Add Stripe webhook handlers" --plan "Payment System Overhaul"
+sf task create --title "Implement subscription billing" --plan "Payment System Overhaul"
+
+# This task waits until webhook handlers are merged
+sf task create --title "Add payment failure retry logic" --plan "Payment System Overhaul" \
+  --depends-on "Add Stripe webhook handlers"
+```
+
+### Multi-agent parallelism
+
+Devin runs as a single agent per session. You can start multiple sessions on different tasks, but there's no built-in coordination between them — if two sessions touch overlapping code, you resolve conflicts manually.
+
+Stoneforge is designed for multi-agent parallelism from the ground up. The Daemon manages a task queue, respects dependency ordering, and dispatches work to available agents automatically. Steward agents handle merging, so conflicts are caught and resolved as part of the workflow.
+
+### Cost comparison
+
+Devin is a paid SaaS product. The Core plan starts at $20/month with pay-per-use pricing ($2.25 per Agent Compute Unit). The Teams plan is $500/month. Enterprise pricing is custom.
+
+Stoneforge is free and open-source. Your cost is whatever the underlying AI agents charge for API usage. Since you bring your own agents and API keys, you have full control over spending.
+
+<Fragment slot="competitor-verdict">
+  <p>Choose Devin when you want a fully autonomous AI engineer that handles tasks end-to-end with minimal oversight. Devin's cloud sandbox, compound AI architecture, and polished task-to-PR workflow make it a strong choice for teams that want to delegate well-defined tasks without managing infrastructure or agent configuration. It's the simpler option when you don't need multi-agent coordination or dependency-aware dispatch.</p>
+</Fragment>
