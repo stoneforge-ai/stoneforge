@@ -84,79 +84,162 @@ function getAuthHeader(): string {
   return `Basic ${btoa(`${login}:${password}`)}`;
 }
 
-async function analyzeSerpForKeywords(keywords: string[]): Promise<KeywordSerpData[]> {
-  const { baseUrl } = config.dataForSeo;
-  const auth = getAuthHeader();
+/** Max concurrent SERP requests (DataForSEO allows up to 2000/min, but we stay conservative) */
+const SERP_CONCURRENCY = 10;
+/** Delay between batches in ms */
+const BATCH_DELAY_MS = 500;
+/** Max retries per keyword */
+const MAX_RETRIES = 3;
+/** Delay between retries in ms (doubles each retry) */
+const RETRY_BASE_DELAY_MS = 1000;
 
-  console.log(`Analyzing SERP data for ${keywords.length} keyword(s)...`);
+async function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
-  // Post tasks to DataForSEO SERP API
-  const tasks = keywords.map((keyword) => ({
+/**
+ * Fetch SERP data for a single keyword with retry logic.
+ * DataForSEO SERP Live Advanced endpoint only supports 1 task per request.
+ */
+async function fetchSerpForKeyword(
+  keyword: string,
+  baseUrl: string,
+  auth: string,
+): Promise<KeywordSerpData | null> {
+  const task = [{
     keyword,
     location_code: 2840, // US
     language_code: "en",
     device: "desktop",
     os: "windows",
     depth: 10,
-  }));
+  }];
 
-  const postResponse = await fetch(`${baseUrl}/serp/google/organic/live/advanced`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": auth,
-    },
-    body: JSON.stringify(tasks),
-  });
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const response = await fetch(`${baseUrl}/serp/google/organic/live/advanced`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": auth,
+        },
+        body: JSON.stringify(task),
+      });
 
-  if (!postResponse.ok) {
-    const body = await postResponse.text();
-    throw new Error(`DataForSEO SERP API error (${postResponse.status}): ${body}`);
-  }
+      if (!response.ok) {
+        const body = await response.text();
+        console.warn(`  ⚠ HTTP ${response.status} for "${keyword}" (attempt ${attempt}/${MAX_RETRIES}): ${body.slice(0, 200)}`);
+        if (attempt < MAX_RETRIES) {
+          await sleep(RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1));
+          continue;
+        }
+        return null;
+      }
 
-  const postData = await postResponse.json() as any;
-  const results: KeywordSerpData[] = [];
+      const postData = await response.json() as any;
 
-  if (postData.tasks) {
-    for (const task of postData.tasks) {
-      if (task.status_code !== 20000 || !task.result) continue;
+      if (!postData.tasks || postData.tasks.length === 0) {
+        console.warn(`  ⚠ No tasks returned for "${keyword}" (attempt ${attempt}/${MAX_RETRIES})`);
+        if (attempt < MAX_RETRIES) {
+          await sleep(RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1));
+          continue;
+        }
+        return null;
+      }
 
-      for (const result of task.result) {
-        const keyword = result.keyword;
-        const serpResults: SerpResult[] = [];
-        const serpFeatures: SerpFeature[] = [];
-        let searchVolume = result.search_volume ?? 0;
+      const taskResult = postData.tasks[0];
+      if (taskResult.status_code !== 20000 || !taskResult.result) {
+        console.warn(`  ⚠ Task failed for "${keyword}": status_code=${taskResult.status_code}, status_message="${taskResult.status_message ?? "unknown"}" (attempt ${attempt}/${MAX_RETRIES})`);
+        if (attempt < MAX_RETRIES) {
+          await sleep(RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1));
+          continue;
+        }
+        return null;
+      }
 
-        if (result.items) {
-          for (const item of result.items) {
-            if (item.type === "organic") {
-              serpResults.push({
-                position: item.rank_absolute ?? item.position,
-                url: item.url ?? "",
-                title: item.title ?? "",
-                domain: item.domain ?? "",
-                description: item.description ?? "",
-              });
-            } else {
-              // Track SERP features
-              serpFeatures.push({
-                type: item.type,
-                position: item.rank_absolute ?? item.position,
-              });
-            }
+      // Parse the first result
+      const result = taskResult.result[0];
+      if (!result) return null;
+
+      const serpResults: SerpResult[] = [];
+      const serpFeatures: SerpFeature[] = [];
+      const searchVolume = result.search_volume ?? 0;
+
+      if (result.items) {
+        for (const item of result.items) {
+          if (item.type === "organic") {
+            serpResults.push({
+              position: item.rank_absolute ?? item.position,
+              url: item.url ?? "",
+              title: item.title ?? "",
+              domain: item.domain ?? "",
+              description: item.description ?? "",
+            });
+          } else {
+            serpFeatures.push({
+              type: item.type,
+              position: item.rank_absolute ?? item.position,
+            });
           }
         }
-
-        results.push({
-          keyword,
-          difficulty: result.keyword_difficulty ?? 0,
-          searchVolume,
-          results: serpResults,
-          serpFeatures,
-          totalResults: result.se_results_count ?? 0,
-        });
       }
+
+      return {
+        keyword: result.keyword ?? keyword,
+        difficulty: result.keyword_difficulty ?? 0,
+        searchVolume,
+        results: serpResults,
+        serpFeatures,
+        totalResults: result.se_results_count ?? 0,
+      };
+    } catch (err: any) {
+      console.warn(`  ⚠ Network error for "${keyword}" (attempt ${attempt}/${MAX_RETRIES}): ${err.message}`);
+      if (attempt < MAX_RETRIES) {
+        await sleep(RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1));
+        continue;
+      }
+      return null;
     }
+  }
+  return null;
+}
+
+async function analyzeSerpForKeywords(keywords: string[]): Promise<KeywordSerpData[]> {
+  const { baseUrl } = config.dataForSeo;
+  const auth = getAuthHeader();
+  const total = keywords.length;
+
+  console.log(`Analyzing SERP data for ${total} keyword(s) (concurrency: ${SERP_CONCURRENCY})...`);
+
+  const results: KeywordSerpData[] = [];
+  let completed = 0;
+  let failed = 0;
+
+  // Process keywords in batches with controlled concurrency
+  for (let i = 0; i < total; i += SERP_CONCURRENCY) {
+    const batch = keywords.slice(i, i + SERP_CONCURRENCY);
+    const batchPromises = batch.map((keyword) => fetchSerpForKeyword(keyword, baseUrl, auth));
+    const batchResults = await Promise.all(batchPromises);
+
+    for (const result of batchResults) {
+      if (result) {
+        results.push(result);
+      } else {
+        failed++;
+      }
+      completed++;
+    }
+
+    console.log(`  Fetching SERP data: ${completed}/${total}${failed > 0 ? ` (${failed} failed)` : ""}`);
+
+    // Delay between batches to avoid rate limiting (skip after last batch)
+    if (i + SERP_CONCURRENCY < total) {
+      await sleep(BATCH_DELAY_MS);
+    }
+  }
+
+  if (failed > 0) {
+    console.warn(`  ⚠ ${failed}/${total} keywords failed to return SERP data`);
   }
 
   return results;
@@ -193,7 +276,10 @@ async function getKeywordDifficulty(keywords: string[]): Promise<Map<string, num
   const data = await response.json() as any;
   if (data.tasks) {
     for (const task of data.tasks) {
-      if (task.status_code !== 20000 || !task.result) continue;
+      if (task.status_code !== 20000 || !task.result) {
+        console.warn(`  ⚠ Keyword difficulty task failed: status_code=${task.status_code}, status_message="${task.status_message ?? "unknown"}"`);
+        continue;
+      }
       for (const result of task.result) {
         if (result.keyword) {
           difficultyMap.set(result.keyword, result.keyword_difficulty ?? result.competition ?? 0);
