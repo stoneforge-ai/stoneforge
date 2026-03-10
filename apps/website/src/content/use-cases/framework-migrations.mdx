@@ -1,7 +1,7 @@
 ---
 title: "Framework Migrations"
-description: "Migrate frameworks, languages, or libraries with parallel AI agents that handle the tedious file-by-file conversion."
-problem: "Framework migrations are the projects everyone avoids. Migrating from React Class Components to Hooks, Express to Fastify, or JavaScript to TypeScript means touching hundreds of files with repetitive transformations. It's mind-numbing work that takes weeks and blocks other development."
+description: "Migrate frameworks, languages, or libraries with parallel AI agents that handle the repetitive file-by-file conversion."
+problem: "Framework migrations are the projects everyone puts off. Migrating from React Class Components to Hooks, Express to Fastify, or JavaScript to TypeScript means touching hundreds of files with similar transformations. The work takes weeks and blocks other development."
 icon: "migrate"
 order: 7
 docsLinks:
@@ -13,29 +13,28 @@ docsLinks:
     url: "https://docs.stoneforge.ai/guides/custom-prompts/"
 faqItems:
   - question: "What types of migrations does Stoneforge handle?"
-    answer: "Stoneforge handles framework migrations (React to Solid, Express to Hono), language migrations (JavaScript to TypeScript, Python 2 to 3), library swaps (Moment.js to Day.js, Lodash to native), build tool migrations (Webpack to Vite), and CSS migrations (CSS Modules to Tailwind). Any migration that involves repetitive file-by-file transformations is a good fit."
+    answer: "Stoneforge works well for framework migrations (React to Solid, Express to Hono), language migrations (JavaScript to TypeScript, Python 2 to 3), library swaps (Moment.js to Day.js, Lodash to native), build tool migrations (Webpack to Vite), and CSS migrations (CSS Modules to Tailwind). Migrations that involve repetitive file-by-file transformations are the best fit."
   - question: "How does Stoneforge ensure migration consistency?"
-    answer: "Define the migration pattern once in your workspace prompts, and every agent follows the same transformation rules. The Director agent creates a plan that ensures shared utilities and types are migrated first, with dependent modules following in the correct order."
+    answer: "You define the migration pattern once in your workspace prompts, and each agent follows the same transformation rules. The Director agent creates a plan so that shared utilities and types are migrated first, with dependent modules following in the correct order."
   - question: "Can I migrate incrementally instead of all at once?"
     answer: "Yes. Stoneforge's plan system supports incremental migration. You can migrate module by module, merging each as it completes. The old and new code coexist safely because each migration task is a separate, reviewable PR."
   - question: "How does Stoneforge handle migration-specific edge cases?"
-    answer: "Agents are context-aware — they don't just do string replacement. They understand AST-level transformations, handle complex patterns, and flag edge cases they can't resolve automatically for human review. The handoff note includes exactly what needs manual attention."
+    answer: "Agents read surrounding code for context rather than doing naive find-and-replace. They can handle many complex patterns, but will flag edge cases they can't resolve confidently for human review. The handoff note includes what needs manual attention."
   - question: "What if the migration breaks existing tests?"
-    answer: "Agents update tests as part of the migration task. When migrating a component from Class to Hooks, the agent also updates the corresponding test file. The Steward verifies all tests pass before merging each task."
+    answer: "Agents update tests as part of each migration task. For example, when migrating a component from Class to Hooks, the agent also updates the corresponding test file. The Steward checks that all tests pass before merging."
 ---
 
-Stoneforge turns daunting framework migrations into a parallel, incremental operation. Define the transformation pattern once, and let agents apply it across your entire codebase simultaneously.
+Stoneforge can break a framework migration into parallel tasks. You define the transformation pattern once, and agents apply it across your codebase concurrently.
 
 ### Plan the migration graph
 
-Migrations have dependencies. You can't migrate the components before migrating the shared utilities they depend on. Stoneforge's [Director agent](https://docs.stoneforge.ai/core-concepts/agents/) analyzes your import graph and creates a dependency-ordered plan.
+Migrations have dependencies: you can't migrate components before migrating the shared utilities they import. Stoneforge's [Director agent](https://docs.stoneforge.ai/core-concepts/agents/) can analyze your import graph and create a dependency-ordered plan.
 
 ```bash
-# Describe the migration
-sf plan create --title "Migrate from JavaScript to TypeScript" \
-  --description "Convert all .js files to .ts/.tsx. Add type annotations. Update tsconfig. Fix type errors. Maintain all existing tests."
+# Create a plan for the migration
+sf plan create --title "Migrate from JavaScript to TypeScript"
 
-# The Director creates an ordered plan:
+# The Director breaks this into dependency-ordered tasks:
 # Phase 1 (parallel): Add tsconfig.json, install dependencies
 # Phase 2 (parallel): Migrate src/types/ and src/utils/ (no deps)
 # Phase 3 (parallel): Migrate src/services/ (depends on types)
@@ -46,7 +45,7 @@ sf plan create --title "Migrate from JavaScript to TypeScript" \
 
 ### Consistent transformations at scale
 
-The key to a successful migration is consistency. Every file should be transformed the same way. Stoneforge enforces this through [workspace prompts](https://docs.stoneforge.ai/guides/custom-prompts/) that define the exact transformation rules.
+Consistency matters in migrations. Every file should be transformed the same way. Stoneforge supports this through [workspace prompts](https://docs.stoneforge.ai/guides/custom-prompts/) where you define the transformation rules each agent follows.
 
 ```bash
 # .stoneforge/prompts/worker.md:
@@ -61,11 +60,11 @@ The key to a successful migration is consistency. Every file should be transform
 
 ### Incremental, not big-bang
 
-Each phase produces small, mergeable PRs. Your codebase transitions from the old framework to the new one incrementally — no long-lived migration branch that goes stale. If something goes wrong, you roll back one PR, not the entire migration.
+Each phase produces small, mergeable PRs. Your codebase transitions incrementally instead of through a long-lived migration branch that goes stale. If something goes wrong, you roll back one PR, not the entire migration.
 
 ### Parallel execution within phases
 
-Within each phase, agents work in parallel. If Phase 3 has 15 service files to migrate, three agents can handle five files each — finishing in a third of the time. The dependency system ensures phases execute in the right order while maximizing parallelism within each phase.
+Within each phase, agents work in parallel. If Phase 3 has 15 service files to migrate, three agents can handle five files each. The dependency system ensures phases execute in the right order while allowing parallelism within each phase.
 
 ```bash
 # Start the migration
@@ -79,4 +78,4 @@ sf serve
 
 ### Test-driven migration
 
-Every migrated file is tested before merge. Agents run existing tests against the migrated code and fix any failures. For TypeScript migrations, agents also ensure zero type errors with `tsc --noEmit` before submitting the merge request.
+Agents run existing tests against migrated code and fix any failures before submitting a merge request. For TypeScript migrations, they also check for type errors with `tsc --noEmit`.
