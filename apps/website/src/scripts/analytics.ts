@@ -33,21 +33,29 @@
 // Extend Window to include Plausible's global function
 declare global {
   interface Window {
-    plausible: (
+    plausible: ((
       eventName: string,
       options?: { props?: Record<string, string>; callback?: () => void }
-    ) => void;
+    ) => void) & { q?: any[][] };
   }
 }
 
+// Initialize Plausible queue pattern immediately.
+// This buffers events until the real Plausible script loads (which uses defer).
+// When Plausible loads, it processes the queue. No events are lost regardless of load order.
+// If Plausible is blocked (e.g. by an ad-blocker), events are silently queued and discarded.
+window.plausible =
+  window.plausible ||
+  function (...args: any[]) {
+    (window.plausible.q = window.plausible.q || []).push(args);
+  };
+
 /**
  * Track a custom event via Plausible.
- * Falls back to a no-op if the Plausible script hasn't loaded (e.g. blocked by ad-blocker).
+ * Events are queued if the Plausible script hasn't loaded yet.
  */
 function trackEvent(name: string, props?: Record<string, string>): void {
-  if (typeof window.plausible === 'function') {
-    window.plausible(name, props ? { props } : undefined);
-  }
+  window.plausible(name, props ? { props } : undefined);
 }
 
 /**

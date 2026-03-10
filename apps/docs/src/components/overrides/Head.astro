@@ -181,8 +181,8 @@ window.plausible = window.plausible || function() { (window.plausible.q = window
 <!-- Plausible Custom Events -->
 <script is:inline>
 (function() {
+  // Use the queue-backed plausible function — always available thanks to the queue pattern above.
   var plausible = window.plausible;
-  if (!plausible) return;
 
   // --- Global listeners (registered once, use event delegation) ---
 
