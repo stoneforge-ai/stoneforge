@@ -74,6 +74,7 @@ export function mergeConfiguration(
   partial: PartialConfiguration
 ): Configuration {
   const result: Configuration = {
+    name: partial.name !== undefined ? partial.name : base.name,
     actor: partial.actor !== undefined ? partial.actor : base.actor,
     baseBranch: partial.baseBranch !== undefined ? partial.baseBranch : base.baseBranch,
     database: partial.database !== undefined ? partial.database : base.database,
@@ -153,6 +154,7 @@ export function createConfiguration(partial?: PartialConfiguration): Configurati
  */
 export function cloneConfiguration(config: Configuration): Configuration {
   return {
+    name: config.name,
     actor: config.actor,
     baseBranch: config.baseBranch,
     database: config.database,
@@ -202,6 +204,9 @@ export function diffConfigurations(
 ): PartialConfiguration {
   const diff: PartialConfiguration = {};
 
+  if (a.name !== b.name) {
+    diff.name = b.name;
+  }
   if (a.actor !== b.actor) {
     diff.actor = b.actor;
   }
@@ -308,6 +313,7 @@ export function configurationsEqual(a: Configuration, b: Configuration): boolean
   const aPackages = a.plugins?.packages ?? [];
   const bPackages = b.plugins?.packages ?? [];
   return (
+    a.name === b.name &&
     a.actor === b.actor &&
     a.baseBranch === b.baseBranch &&
     a.database === b.database &&

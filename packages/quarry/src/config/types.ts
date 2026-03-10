@@ -141,6 +141,8 @@ export const VALID_AUTO_LINK_PROVIDERS: readonly string[] = [
  * Complete Stoneforge configuration
  */
 export interface Configuration {
+  /** Workspace name (optional, for display purposes) */
+  name?: string;
   /** Default actor name for operations */
   actor?: string;
   /** Base branch for merge targets (default: auto-detect) */
@@ -167,6 +169,7 @@ export interface Configuration {
  * Partial configuration for merging
  */
 export type PartialConfiguration = {
+  name?: string;
   actor?: string;
   baseBranch?: string;
   database?: string;
@@ -213,6 +216,7 @@ export interface TrackedValue<T> {
  * Configuration with source tracking for each value
  */
 export interface TrackedConfiguration {
+  name?: TrackedValue<string>;
   actor?: TrackedValue<string>;
   baseBranch?: TrackedValue<string>;
   database: TrackedValue<string>;
@@ -257,6 +261,7 @@ export interface TrackedConfiguration {
  * Uses snake_case to match YAML conventions
  */
 export interface YamlConfigFile {
+  name?: string;
   actor?: string;
   base_branch?: string;
   database?: string;
@@ -372,6 +377,7 @@ export interface ConfigValidationResult {
  * Valid configuration paths (as const array for runtime validation)
  */
 export const VALID_CONFIG_PATHS = [
+  'name',
   'actor',
   'baseBranch',
   'database',
@@ -411,6 +417,7 @@ export function isValidConfigPath(value: string): value is ConfigPath {
  * Maps config paths to their value types
  */
 export interface ConfigPathTypes {
+  name: string | undefined;
   actor: string | undefined;
   baseBranch: string | undefined;
   database: string;

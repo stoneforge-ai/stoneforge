@@ -186,6 +186,9 @@ export function convertYamlToConfig(yamlConfig: YamlConfigFile): PartialConfigur
   const result: PartialConfiguration = {};
 
   // Direct fields
+  if (yamlConfig.name !== undefined) {
+    result.name = yamlConfig.name;
+  }
   if (yamlConfig.actor !== undefined) {
     result.actor = yamlConfig.actor;
   }
@@ -363,6 +366,9 @@ export function convertConfigToYaml(config: Configuration | PartialConfiguration
   const result: YamlConfigFile = {};
 
   // Direct fields
+  if (config.name !== undefined) {
+    result.name = config.name;
+  }
   if (config.actor !== undefined) {
     result.actor = config.actor;
   }

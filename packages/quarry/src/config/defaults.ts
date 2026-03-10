@@ -88,6 +88,7 @@ export const DEFAULT_EXTERNAL_SYNC_CONFIG: ExternalSyncConfig = {
  * Complete default configuration
  */
 export const DEFAULT_CONFIG: Configuration = {
+  name: undefined,
   actor: undefined,
   baseBranch: undefined,
   database: 'stoneforge.db',
@@ -150,6 +151,7 @@ export const MAX_POLL_INTERVAL = ONE_HOUR;
  */
 export function getDefaultConfig(): Configuration {
   return {
+    name: undefined,
     actor: undefined,
     baseBranch: undefined,
     database: DEFAULT_CONFIG.database,

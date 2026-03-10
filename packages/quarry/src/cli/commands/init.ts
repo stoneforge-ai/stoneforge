@@ -416,6 +416,13 @@ async function initHandler(
     const configPath = join(stoneforgeDir, CONFIG_FILENAME);
     if (!existsSync(configPath)) {
       let config = isDemo ? DEMO_CONFIG : DEFAULT_CONFIG;
+      if (options.name) {
+        // Insert workspace name at the top of the config, after the header comment
+        config = config.replace(
+          '# Default actor for operations (optional)',
+          `# Workspace name\nname: ${options.name}\n\n# Default actor for operations (optional)`
+        );
+      }
       if (options.actor) {
         config = config.replace('# actor: my-agent', `actor: ${options.actor}`);
       }
@@ -528,9 +535,11 @@ async function initHandler(
       ? `\n\n🎮 Demo mode is active!\n   All agents are configured to use the free ${DEMO_MODEL} provider.\n   No API keys required. To disable, set demo_mode: false in .stoneforge/config.yaml.`
       : '';
 
+    const nameMessage = options.name ? `\nWorkspace name: ${options.name}` : '';
+
     return success(
-      { path: stoneforgeDir, operatorId: OPERATOR_ENTITY_ID, agentsMdCreated, skillsInstalled, agentsCreated: agentResult.created, demoMode: isDemo },
-      `${baseMessage}\nCreated default operator entity: ${OPERATOR_ENTITY_ID}${agentsMessage}${agentsMdMessage}${importMessage}${skillsMessage}${demoModeNotice}`
+      { path: stoneforgeDir, operatorId: OPERATOR_ENTITY_ID, agentsMdCreated, skillsInstalled, agentsCreated: agentResult.created, demoMode: isDemo, name: options.name },
+      `${baseMessage}${nameMessage}\nCreated default operator entity: ${OPERATOR_ENTITY_ID}${agentsMessage}${agentsMdMessage}${importMessage}${skillsMessage}${demoModeNotice}`
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -566,6 +575,7 @@ Default agents are automatically created:
 Re-running init is safe — existing agents are not duplicated.
 
 Options:
+  --name    Set the workspace name (stored in config.yaml).
   --demo    Enable demo mode. Configures all agents to use the free
             opencode/minimax-m2.5-free provider (no API keys required).`,
   options: [

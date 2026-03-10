@@ -125,6 +125,73 @@ describe('initCommand', () => {
     });
   });
 
+  describe('name option', () => {
+    it('should include name in config when provided', async () => {
+      await initCommand.handler([], {
+        ...DEFAULT_GLOBAL_OPTIONS,
+        name: 'My Workspace',
+      });
+
+      const configPath = join(testDir, '.stoneforge', 'config.yaml');
+      const content = readFileSync(configPath, 'utf-8');
+      expect(content).toContain('name: My Workspace');
+    });
+
+    it('should not include name in config when not provided', async () => {
+      await initCommand.handler([], { ...DEFAULT_GLOBAL_OPTIONS });
+
+      const configPath = join(testDir, '.stoneforge', 'config.yaml');
+      const content = readFileSync(configPath, 'utf-8');
+      expect(content).not.toContain('name:');
+    });
+
+    it('should include name in success message', async () => {
+      const result = await initCommand.handler([], {
+        ...DEFAULT_GLOBAL_OPTIONS,
+        name: 'My Workspace',
+      });
+      expect(result.exitCode).toBe(ExitCode.SUCCESS);
+      expect(result.message).toContain('Workspace name: My Workspace');
+    });
+
+    it('should include name in result data', async () => {
+      const result = await initCommand.handler([], {
+        ...DEFAULT_GLOBAL_OPTIONS,
+        name: 'My Workspace',
+      });
+      expect(result.exitCode).toBe(ExitCode.SUCCESS);
+      const data = result.data as { name: string };
+      expect(data.name).toBe('My Workspace');
+    });
+
+    it('should work with --name and --actor together', async () => {
+      await initCommand.handler([], {
+        ...DEFAULT_GLOBAL_OPTIONS,
+        name: 'My Workspace',
+        actor: 'myagent',
+      });
+
+      const configPath = join(testDir, '.stoneforge', 'config.yaml');
+      const content = readFileSync(configPath, 'utf-8');
+      expect(content).toContain('name: My Workspace');
+      expect(content).toContain('actor: myagent');
+    });
+
+    it('should work with --name and --demo together', async () => {
+      const result = await initCommand.handler([], {
+        ...DEFAULT_GLOBAL_OPTIONS,
+        name: 'Demo Project',
+        demo: true,
+      } as typeof DEFAULT_GLOBAL_OPTIONS);
+      expect(result.exitCode).toBe(ExitCode.SUCCESS);
+
+      const configPath = join(testDir, '.stoneforge', 'config.yaml');
+      const content = readFileSync(configPath, 'utf-8');
+      expect(content).toContain('name: Demo Project');
+      expect(content).toContain('demo_mode: true');
+    });
+  });
+
   describe('error handling', () => {
     it('should fail if already initialized', async () => {
       // First init should succeed

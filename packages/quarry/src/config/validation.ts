@@ -33,6 +33,45 @@ import { validateDurationRange, formatDuration } from './duration.js';
 // ============================================================================
 
 /**
+ * Validates a workspace name
+ */
+export function isValidName(value: unknown): value is string {
+  if (typeof value !== 'string') {
+    return false;
+  }
+  // Name must be non-empty and at most 100 characters
+  return value.length > 0 && value.length <= 100;
+}
+
+/**
+ * Validates workspace name and throws if invalid
+ */
+export function validateName(value: unknown): string {
+  if (typeof value !== 'string') {
+    throw new ValidationError(
+      'Workspace name must be a string',
+      ErrorCode.INVALID_INPUT,
+      { field: 'name', value, expected: 'string' }
+    );
+  }
+  if (value.length === 0) {
+    throw new ValidationError(
+      'Workspace name cannot be empty',
+      ErrorCode.INVALID_INPUT,
+      { field: 'name', value }
+    );
+  }
+  if (value.length > 100) {
+    throw new ValidationError(
+      'Workspace name must be at most 100 characters',
+      ErrorCode.INVALID_INPUT,
+      { field: 'name', value, expected: 'at most 100 characters' }
+    );
+  }
+  return value;
+}
+
+/**
  * Validates an actor name
  */
 export function isValidActor(value: unknown): value is string {
@@ -289,6 +328,11 @@ export function validateConfiguration(config: unknown): Configuration {
 
   const obj = config as Record<string, unknown>;
 
+  // Validate name (optional)
+  if (obj.name !== undefined) {
+    validateName(obj.name);
+  }
+
   // Validate actor (optional)
   if (obj.actor !== undefined) {
     validateActor(obj.actor);
@@ -512,6 +556,9 @@ export function validateConfigurationSafe(config: unknown): ConfigValidationResu
  * Validates partial configuration for merging
  */
 export function validatePartialConfiguration(config: PartialConfiguration): void {
+  if (config.name !== undefined) {
+    validateName(config.name);
+  }
   if (config.actor !== undefined) {
     validateActor(config.actor);
   }
