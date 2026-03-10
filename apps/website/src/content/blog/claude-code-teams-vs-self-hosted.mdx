@@ -1,14 +1,17 @@
 ---
 title: "Claude Code Teams vs Self-Hosted: What Devs Need to Know"
-description: "Compare Anthropic's Claude Code Teams with self-hosted alternatives like Stoneforge. We cover cost, privacy, multi-agent support, and flexibility."
+description: "Compare Claude Code Teams with self-hosted alternatives like Stoneforge. Honest breakdown of cost, privacy, multi-agent support, and flexibility."
 date: 2026-03-08
 tags: ["comparison", "claude-code", "self-hosted"]
 relatedContent:
+  - title: "Stoneforge vs Claude Code Agent Teams"
+    url: "/comparisons/claude-code-teams/"
+    type: "compare"
+  - title: "Claude Code Orchestration with Stoneforge"
+    url: "/integrations/claude-code/"
+    type: "use-case"
   - title: "How to Run Multiple AI Coding Agents in Parallel"
     url: "/blog/how-to-run-multiple-ai-coding-agents-in-parallel/"
-    type: "blog"
-  - title: "The Case for Multi-Agent Software Development"
-    url: "/blog/the-case-for-multi-agent-software-development/"
     type: "blog"
   - title: "Stoneforge Documentation"
     url: "https://docs.stoneforge.ai"
@@ -17,37 +20,35 @@ relatedContent:
 
 {/* SEO CHECKLIST
     [x] Title tag <=60 chars with primary keyword
-    [x] Meta description <=160 chars
+    [x] Meta description <=160 chars (156)
     [x] H1 = title, H2s for each section
     [x] 2-3 internal links to docs.stoneforge.ai
     [x] 1-2 internal links to use case or comparison pages
     [x] 3-5 FAQ items if applicable
     [x] Image alt text with keywords */}
 
-Anthropic's Claude Code Teams gives organizations a managed way to deploy Claude Code across their engineering teams. It's a solid product. But it's not the only option — and depending on your priorities, self-hosting with a tool like Stoneforge might be a better fit.
+Anthropic's Claude Code Teams gives engineering organizations a managed way to deploy Claude Code across their team. It's a good product with real strengths. But depending on your priorities around cost, data control, and multi-agent throughput, a self-hosted AI coding agent setup with a tool like Stoneforge might be a better fit.
 
-This post compares both approaches honestly. We'll cover what matters to engineering teams: cost at scale, data privacy, multi-agent capabilities, and the flexibility to customize your workflow.
+This post compares both approaches honestly. We'll look at what each offers, where one wins over the other, and who should pick which.
 
 ## What Claude Code Teams Offers
 
-Claude Code Teams is Anthropic's managed offering for engineering organizations. Here's what you get:
+The Claude Team plan is built for groups of 5 to 150 developers. Anthropic offers two seat types:
 
-- **Managed access** — centralized billing and seat management for your team
-- **Usage-based pricing** — pay per seat with included API credits
-- **Admin controls** — set usage policies, manage permissions
-- **Anthropic infrastructure** — your code context is processed on Anthropic's servers
-- **Single-agent model** — each developer gets their own Claude Code session
+**Standard seats** ($25/month) include Claude chat, projects, and connectors with 1.25x the usage of the Pro plan. **Premium seats** ($150/month) add Claude Code access with 6.25x usage and early access to new collaboration features.
 
-The value proposition is straightforward: zero setup, Anthropic handles the infrastructure, and your team gets access to Claude's coding capabilities through a polished CLI experience.
+Administrative controls include centralized billing, SSO with domain capture, just-in-time provisioning, role-based permissions, spend caps, and Claude Code usage analytics.
+
+Anthropic also shipped an experimental [Agent Teams](https://code.claude.com/docs/en/agent-teams) feature in early 2026, which lets one Claude Code session coordinate multiple "teammate" sessions for parallel work within a single codebase. It's disabled by default and still marked experimental, but it signals where the product is headed.
 
 ## What Self-Hosted Looks Like
 
-Self-hosting means running Claude Code (or any compatible agent) against your own API keys, with an orchestration layer like Stoneforge managing the workflow. Here's the stack:
+Self-hosting means running Claude Code (or any compatible agent) against your own API keys, with an orchestration layer managing the workflow. With [Stoneforge](/integrations/claude-code/), the stack looks like this:
 
-- **Your API keys** — direct Anthropic API access (or any provider)
-- **Your infrastructure** — agents run on your machines or CI/CD runners
-- **Your data** — code never leaves your network (except for API calls to the model provider)
-- **Multi-agent orchestration** — Stoneforge manages parallel agent sessions, task dispatch, and merge coordination
+- Your API keys with direct Anthropic API access (or any other provider)
+- Agents running on your machines or CI/CD runners
+- Code that never leaves your network except for model API calls
+- An orchestration daemon that manages parallel agent sessions, task dispatch, dependency tracking, and merge coordination
 
 ```bash
 # Self-hosted setup with Stoneforge
@@ -57,156 +58,143 @@ sf config set api-key $ANTHROPIC_API_KEY
 sf daemon start --workers 3
 ```
 
+Stoneforge is open-source under Apache 2.0. There's no license fee, no seat count, and no vendor lock-in on the orchestration layer.
+
 ## Cost Comparison
 
-Let's look at real numbers. Pricing changes, so treat these as illustrative — check current pricing before making decisions.
+Pricing changes over time. These numbers are current as of March 2026. Check [Anthropic's pricing page](https://claude.com/pricing) for the latest.
 
 ### Claude Code Teams
 
-- Per-seat monthly fee with included usage
-- Overages billed per-token
-- Minimum seat commitments on some plans
-- Anthropic controls pricing and can adjust at any time
+Premium seats (required for Claude Code access) cost $150/month per developer. That includes a generous usage allocation, but overages are billed per-token. For a team of 10 developers, the base cost is $1,500/month before any overages.
+
+Standard seats at $25/month don't include Claude Code, so they're not relevant to this comparison.
 
 ### Self-Hosted (API Direct)
 
-- You pay Anthropic's API pricing directly (per million tokens)
-- No seat fees — only pay for what you use
-- Can use prompt caching to reduce costs significantly
-- Can switch providers (or use multiple) without changing your workflow
+You pay Anthropic's API pricing directly. No seat fees. With Claude Sonnet, that's $3 per million input tokens and $15 per million output tokens.
 
 ### The Math
 
-For a team of 5 developers, each running ~50 tasks per week with an average of 20k input tokens and 4k output tokens per task:
+For a developer running roughly 50 agent tasks per week, with an average of 20k input tokens and 4k output tokens per task:
 
-**Monthly token usage per developer:**
-- Input: 50 tasks x 20k tokens x 4 weeks = 4M input tokens
-- Output: 50 tasks x 4k tokens x 4 weeks = 800k output tokens
-
-**Self-hosted API cost per developer** (at Claude Sonnet API pricing):
-- Input: 4M tokens x $3/MTok = $12
-- Output: 800k tokens x $15/MTok = $12
-- Total: ~$24/developer/month
+- Input: 50 tasks x 20k tokens x 4 weeks = 4M input tokens = $12/month
+- Output: 50 tasks x 4k tokens x 4 weeks = 800k output tokens = $12/month
+- Total: ~$24/developer/month at API list price
 - With prompt caching (typical 60-70% cache hit rate): ~$12-15/developer/month
 
-The self-hosted approach tends to be significantly cheaper at scale, especially with prompt caching. The managed offering includes overhead for the platform, support, and admin tooling — which may or may not be worth the premium depending on your team's needs.
+That's roughly 6-12x cheaper than a $150 premium seat. For a team of 10, the difference is $1,500/month vs. $120-240/month.
 
-**Important caveat:** These numbers assume moderate usage. Heavy users who run agents continuously will see different economics. The breakeven depends on your team's specific usage patterns.
+The managed offering bundles platform support, admin tooling, and the convenience of not managing API keys. Whether that premium is worth it depends on your team.
+
+**Caveat:** These numbers assume moderate usage. Developers who run agents continuously will see higher API bills, and the gap narrows. The breakeven depends on your specific usage patterns.
 
 ## Data Privacy and Security
 
 This is often the deciding factor for enterprise teams.
 
 ### Claude Code Teams
-- Your code context is sent to Anthropic's infrastructure for processing
-- Anthropic's [data policies](https://www.anthropic.com/policies) govern how your code is handled
-- Enterprise plans may include additional data protections
-- You're trusting a third party with your proprietary code
+
+Code context is sent to Anthropic's infrastructure for processing. Team and Enterprise plans don't use your data for model training by default. Enterprise customers can negotiate a [Zero-Data-Retention (ZDR) addendum](https://privacy.claude.com/en/articles/10440198-custom-data-retention-controls-for-enterprise-plans) for maximum data isolation, and custom retention controls allow a minimum 30-day retention period.
+
+Anthropic does not currently offer regional data residency guarantees, which matters for organizations operating under GDPR or similar frameworks.
 
 ### Self-Hosted
-- Code stays on your machines — only model API calls leave your network
-- You control exactly what gets sent to the model provider
-- Can run behind a VPN or air-gapped network with a proxy
-- Audit trail is entirely under your control
-- Compatible with SOC 2, HIPAA, and other compliance frameworks (because you own the infrastructure)
 
-For teams working on proprietary algorithms, financial systems, healthcare data, or government contracts, self-hosting eliminates an entire category of compliance questions.
+Code stays on your machines. Only model API calls leave your network, and you control exactly what those calls contain. You can run behind a VPN, route through an API proxy for auditing, or use a self-hosted model for complete air-gapped operation.
+
+The audit trail and data lifecycle are entirely under your control, which simplifies compliance with SOC 2, HIPAA, FedRAMP, and similar frameworks.
+
+For teams working on proprietary algorithms, financial systems, healthcare data, or government contracts, self-hosting eliminates an entire category of compliance conversations.
 
 ## Multi-Agent Capabilities
 
-This is where the approaches diverge most significantly.
+Both approaches now support multi-agent work, but with different architectures.
 
-### Claude Code Teams
-- One agent per developer
-- Sequential task execution
-- No built-in orchestration between agents
-- Each developer manages their own agent session manually
+### Claude Code Agent Teams
+
+Anthropic's [experimental Agent Teams](https://code.claude.com/docs/en/agent-teams) feature lets one Claude Code session act as a team lead, coordinating teammate sessions that work in parallel. Teammates can share context, communicate directly, and converge on solutions together.
+
+The strongest use cases are research (multiple teammates investigating different aspects simultaneously), building new modules (each teammate owns a separate piece), and debugging with competing hypotheses.
+
+It's a meaningful step forward. Two limitations to note: it's still experimental (disabled by default, enabled via `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`), and it operates within a single developer's session rather than across a team.
 
 ### Self-Hosted with Stoneforge
-- Multiple agents per developer (typically 3-5 concurrent)
-- Parallel task execution across isolated git worktrees
-- Automated task dispatch, dependency management, and merge sequencing
-- Agents can be assigned different roles (Director, Worker, Steward)
-- [Automatic conflict resolution](https://docs.stoneforge.ai/concepts/merge-steward) when parallel branches land
 
-The throughput difference is substantial. A single developer with Stoneforge can maintain 3-5 active agent sessions, each working on separate tasks. Combined with automated merge management, this translates to roughly 3x the completed tasks per hour compared to single-agent sequential work.
+Stoneforge takes a different approach. Instead of teammates within one session, it manages fully independent agent processes across a team, each in its own [isolated git worktree](https://docs.stoneforge.ai/getting-started):
+
+- A daemon dispatches tasks from your backlog to available worker agents
+- Each worker runs in complete isolation with no shared context to corrupt
+- A [merge steward](https://docs.stoneforge.ai/concepts/merge-steward) handles branch integration, conflict resolution, and CI checks
+- Agents are assigned specialized roles: Director plans work, Workers execute, Stewards review
+- The system tracks dependencies so blocked tasks wait automatically
 
 ```bash
-# Single-agent (Claude Code Teams)
-$ claude "refactor the auth module"
-# ... wait 10 minutes ...
-$ claude "fix the failing tests"
-# ... wait 8 minutes ...
-$ claude "add the new API endpoint"
-# ... wait 12 minutes ...
-# Total: ~30 minutes for 3 tasks
-
-# Multi-agent (Stoneforge)
-$ sf daemon start --workers 3
-# All 3 tasks execute in parallel
-# Total: ~12 minutes for 3 tasks (wall clock)
+# Stoneforge: daemon manages the full lifecycle
+$ sf daemon start --workers 5
+# 5 independent agents pick tasks, work in parallel,
+# push branches, and merge steward integrates results
 ```
+
+The architectural difference: Agent Teams coordinates within a session for a single developer. Stoneforge coordinates across sessions for an entire team, with persistent task tracking, automatic recovery when agents fail, and a merge pipeline that keeps main green.
 
 ## Flexibility and Customization
 
-### Claude Code Teams
-- Use Claude models only
-- Anthropic controls the feature roadmap
-- Configuration limited to what the platform exposes
-- Updates happen on Anthropic's schedule
+Claude Code Teams is Claude-only. Anthropic controls the feature roadmap, and configuration is limited to what the platform exposes.
 
-### Self-Hosted
-- Agent-agnostic — use Claude Code, Codex, OpenCode, or mix them
-- Customize agent prompts, roles, and behavior per task type
-- Integrate with your existing CI/CD, issue trackers, and tooling
-- Open-source — inspect, modify, and contribute to the orchestration layer
-- [Custom stewards](https://docs.stoneforge.ai/concepts/custom-stewards) for team-specific review workflows
-
-Self-hosting gives you the flexibility to build exactly the workflow your team needs. If you want a Steward that enforces specific code review standards, or a Director that integrates with your Linear board, you can build that.
+Self-hosted orchestration is agent-agnostic. Stoneforge works with Claude Code, Codex, OpenCode, or a mix. You can customize agent prompts and roles per task type, integrate with your existing CI/CD and issue trackers ([Linear sync](https://docs.stoneforge.ai/concepts/external-sync), GitHub issues), and build [custom stewards](https://docs.stoneforge.ai/concepts/custom-stewards) for team-specific review workflows. It's open-source, so you can inspect and modify anything.
 
 ## When to Choose Claude Code Teams
 
 Claude Code Teams is the right choice when:
 
-- **You want zero operational overhead** — no infrastructure to manage, no updates to install
-- **Your team is small** (1-5 developers) and the per-seat cost is acceptable
-- **Data privacy isn't a hard constraint** — your code isn't subject to strict compliance requirements
-- **Single-agent throughput is sufficient** — your workflow doesn't benefit from parallelism
-- **You want official support** from Anthropic
+- You want zero operational overhead with no infrastructure to manage
+- Your team is small (under 10 developers) and $150/seat/month is acceptable
+- Your code isn't subject to strict data residency or compliance requirements
+- You primarily need single-developer AI assistance rather than team-wide orchestration
+- You value official Anthropic support and a managed experience
 
 ## When to Choose Self-Hosted
 
 Self-hosting with Stoneforge makes more sense when:
 
-- **Cost matters at scale** — API-direct pricing is significantly cheaper for teams >5 developers
-- **Data must stay on your infrastructure** — compliance, IP protection, or policy requirements
-- **You need multi-agent parallelism** — your backlog has enough independent tasks to benefit from 3-5 concurrent agents
-- **You want provider flexibility** — ability to switch between or combine different AI coding agents
-- **Customization is important** — you need control over agent behavior, prompts, review workflows
-- **You're already running infrastructure** — adding Stoneforge to existing CI/CD is low marginal effort
+- Cost matters at scale. API-direct pricing is substantially cheaper, especially for teams above 5 developers.
+- Data must stay on your infrastructure for compliance, IP protection, or policy reasons
+- You need team-wide orchestration with persistent task queues, automatic dispatch, and merge management
+- You want provider flexibility to switch between or combine different AI coding agents
+- Customization is important: control over agent behavior, prompts, review workflows, and integrations
+- You're already running infrastructure and adding Stoneforge is low marginal effort
+
+For a detailed feature-by-feature breakdown, see our [Stoneforge vs Claude Code Agent Teams comparison](/comparisons/claude-code-teams/).
 
 ## Making the Decision
 
-There's no universally correct answer here. Claude Code Teams is a well-engineered managed service. Self-hosting with Stoneforge gives you more control and multi-agent capabilities at the cost of managing your own setup.
+Claude Code Teams is a well-engineered managed service that's getting better quickly. The Agent Teams feature, once it graduates from experimental status, will close the multi-agent gap for single-developer workflows.
 
-For most individual developers or small teams that just want AI coding assistance without thinking about infrastructure, Claude Code Teams is the pragmatic choice.
+For individual developers or small teams that want AI coding assistance without thinking about infrastructure, Claude Code Teams is the pragmatic choice.
 
-For teams that care about cost optimization, data sovereignty, multi-agent throughput, or workflow customization, self-hosting is worth the setup investment. Stoneforge's [getting started guide](https://docs.stoneforge.ai/getting-started) takes about 15 minutes.
+For teams that care about cost optimization, data sovereignty, team-wide orchestration, or workflow customization, self-hosting is worth the setup investment. Stoneforge's [getting started guide](https://docs.stoneforge.ai/getting-started) takes about 15 minutes.
+
+Stoneforge is a young open-source project. It won't have the polish of a managed Anthropic product, and you'll be responsible for your own infrastructure. That trade-off is the core of this decision: managed convenience vs. control and flexibility. Both are valid.
 
 ## Frequently Asked Questions
 
-### Can I migrate from Claude Code Teams to self-hosted (or vice versa)?
+### Can I migrate from Claude Code Teams to self-hosted?
 
 Yes. Both approaches use Claude Code as the underlying agent. Your `.claude/` configuration, CLAUDE.md files, and workflow knowledge transfer directly. Stoneforge adds orchestration on top without modifying how Claude Code itself operates.
 
 ### Does self-hosting mean I lose Anthropic support?
 
-You lose platform-level support (the Teams admin features), but you still use Anthropic's API with their standard API support. Stoneforge has its own [community and documentation](https://docs.stoneforge.ai). For most engineering teams, the Claude Code CLI docs plus Stoneforge's orchestration docs cover the full stack.
+You lose platform-level support (the Teams admin features), but you still use Anthropic's API with their standard API support. Stoneforge has its own [community and documentation](https://docs.stoneforge.ai). For most teams, the Claude Code CLI docs plus Stoneforge's orchestration docs cover what you need.
 
-### What about latency? Is self-hosted slower?
+### What about latency?
 
-No. In both cases, the agent makes API calls to Anthropic's model serving infrastructure. The latency is identical because the model inference happens on the same servers. Self-hosted just means your orchestration layer runs locally.
+Identical. In both cases, the agent makes API calls to Anthropic's model serving infrastructure. The model inference happens on the same servers regardless of whether you're on a Team plan or using API keys directly.
 
-### Can I use Claude Code Teams for some developers and self-hosted for others?
+### How does Claude Code Agent Teams compare to Stoneforge's multi-agent system?
 
-Technically yes, but it complicates billing and workflow management. Most teams pick one approach. If you're evaluating, start with self-hosted on a small project to measure the throughput and cost differences before committing.
+Agent Teams coordinates multiple Claude Code sessions within a single developer's workflow, with a team lead assigning tasks to teammates. Stoneforge orchestrates fully independent agent processes across an entire team, with persistent task tracking, automatic dispatch from a shared backlog, and a merge pipeline. They solve related but different problems: Agent Teams optimizes individual developer throughput, Stoneforge optimizes team-wide throughput.
+
+### Can I use both together?
+
+Yes. You could use Stoneforge for team-wide orchestration while individual worker agents use Agent Teams internally for complex subtasks. The two layers don't conflict.
