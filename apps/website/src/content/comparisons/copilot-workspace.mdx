@@ -1,14 +1,14 @@
 ---
-title: "Stoneforge vs GitHub Copilot Coding Agent"
-description: "Compare Stoneforge and GitHub's Copilot coding agent. Open-source, self-hosted orchestration vs GitHub-native cloud agent."
-competitor: "GitHub Copilot Coding Agent"
+title: "Stoneforge vs Copilot Workspace"
+description: "Compare Stoneforge and GitHub Copilot Workspace. Self-hosted, open-source multi-agent orchestration vs GitHub's cloud AI coding agent. Features and pricing."
+competitor: "Copilot Workspace"
 competitorUrl: "https://github.com/features/copilot"
-differentiator: "Self-hosted open-source orchestration vs GitHub-native cloud agent"
+differentiator: "Open-Source Alternative"
 features:
   - category: "Architecture"
     feature: "Approach"
     stoneforge: "Multi-agent orchestration with task dispatch"
-    competitor: "Issue-to-PR workflow with cloud-based agent sessions"
+    competitor: "Copilot Workspace issue-to-PR workflow with cloud-based agent sessions"
   - category: "Architecture"
     feature: "Parallel agents"
     stoneforge: "Unlimited, in isolated git worktrees"
@@ -54,33 +54,33 @@ features:
     stoneforge: "Yes, Apache 2.0"
     competitor: "No (VS Code extension is MIT, but service is proprietary)"
 faqItems:
-  - question: "How does Stoneforge compare to GitHub's Copilot coding agent?"
-    answer: "Both tools let AI work on code from task descriptions. GitHub's coding agent takes a GitHub issue, spins up a cloud environment via GitHub Actions, and creates a PR. Stoneforge orchestrates multiple agents locally, tracks dependencies between tasks, and handles merge through Steward agents. Stoneforge is open-source and works with any git host or AI coding agent."
-  - question: "Can Stoneforge replace GitHub's Copilot coding agent?"
-    answer: "It depends on your workflow. Stoneforge offers dependency-aware task dispatch, automated merge, and self-hosting. GitHub's coding agent has tighter GitHub integration, a polished issue-to-PR flow, and requires no infrastructure setup. Teams deeply embedded in GitHub may prefer the coding agent's lower friction."
-  - question: "Does Stoneforge work with GitHub?"
-    answer: "Yes. Stoneforge is git-based and works with GitHub, GitLab, Bitbucket, or any git remote. Agents push to branches and create PRs through your existing git workflow."
-  - question: "Can both tools run agents in parallel?"
-    answer: "Yes, both support parallel execution. GitHub's coding agent lets you assign multiple issues to Copilot simultaneously via Mission Control. Stoneforge manages parallelism through its Daemon, which dispatches tasks to available agents based on a dependency graph, so dependent tasks wait for their prerequisites."
-verdict: "Stoneforge may be a better fit if you need self-hosting, want to avoid GitHub lock-in, or require dependency-aware task ordering across many parallel agents. It gives you full control over infrastructure and agent choice. That said, it requires more setup than GitHub's coding agent, which works out of the box for GitHub-native teams."
+  - question: "How does GitHub Copilot Workspace compare to Stoneforge?"
+    answer: "Both tools let AI work on code from task descriptions. GitHub Copilot Workspace takes a GitHub issue, spins up a cloud environment via GitHub Actions, and creates a PR. Stoneforge orchestrates multiple AI coding agents locally, tracks dependencies between tasks, and handles merge through Steward agents. Stoneforge is open-source and works with any git host."
+  - question: "Is there a self-hosted alternative to Copilot Workspace?"
+    answer: "Yes. Stoneforge offers dependency-aware task dispatch, automated merge, and fully self-hosted orchestration. GitHub Copilot Workspace has tighter GitHub integration and a polished issue-to-PR flow. Teams that need self-hosted AI coding agents or want to avoid GitHub lock-in may prefer Stoneforge."
+  - question: "Does Stoneforge work with GitHub like Copilot Workspace?"
+    answer: "Yes. Stoneforge is git-based and works with GitHub, GitLab, Bitbucket, or any git remote. Agents push to branches and create PRs through your existing git workflow. Unlike Copilot Workspace, Stoneforge is not limited to any single git platform."
+  - question: "Can Copilot Workspace run multiple AI coding agents in parallel?"
+    answer: "Yes, both support parallel execution. GitHub Copilot Workspace lets you assign multiple issues to Copilot simultaneously via Mission Control. Stoneforge manages parallelism through its Daemon, which dispatches tasks to available agents based on a dependency graph, so dependent tasks wait for their prerequisites."
+verdict: "Stoneforge may be a better fit than Copilot Workspace if you need self-hosting, want to avoid GitHub lock-in, or require dependency-aware task ordering across many parallel AI coding agents. It gives you full control over infrastructure and agent choice. That said, it requires more setup than GitHub Copilot Workspace, which works out of the box for GitHub-native teams."
 order: 3
 ---
 
-## Cloud agent vs. local orchestration
+## GitHub Copilot Workspace vs Stoneforge: cloud agent vs local orchestration
 
-GitHub's Copilot coding agent (the successor to the earlier Copilot Workspace preview) and Stoneforge both turn task descriptions into working code. They take different approaches to get there.
+GitHub Copilot Workspace (now known as the Copilot coding agent) and Stoneforge both turn task descriptions into working code. They take fundamentally different approaches: Copilot Workspace runs as a cloud-hosted [AI coding agent](/compare/) tied to GitHub, while Stoneforge provides [self-hosted, open-source orchestration](/use-cases/free-open-source-ai-coding/) for any AI agent.
 
-### Copilot coding agent
+### What is Copilot Workspace?
 
-You assign a GitHub issue to Copilot, and it spins up a cloud environment via GitHub Actions. The agent plans the changes, implements them, and opens a pull request. You can steer the agent mid-session, choose from multiple AI models (Claude, GPT Codex, or custom agents), and manage multiple sessions through Mission Control.
+You assign a GitHub issue to Copilot, and GitHub Copilot Workspace spins up a cloud environment via GitHub Actions. The agent plans the changes, implements them, and opens a pull request. You can steer the agent mid-session, choose from multiple AI models (Claude, GPT Codex, or custom agents), and manage multiple sessions through Mission Control.
 
-### Stoneforge
+### Stoneforge: self-hosted multi-agent orchestration
 
-You create tasks, optionally define dependencies between them, and the Daemon dispatches them to available agents. Each agent works in an isolated git worktree. When the work is done, Steward agents handle merging, review, and CI checks. Stoneforge doesn't care which AI agent you use or where your code is hosted.
+You create tasks, optionally define dependencies between them, and the Daemon dispatches them to available [AI coding agents](/integrations/claude-code/). Each agent works in an isolated git worktree. When the work is done, Steward agents handle merging, review, and CI checks. Stoneforge doesn't care which AI agent you use or where your code is hosted.
 
-### Where they differ
+### Where Copilot Workspace and Stoneforge differ
 
-Both tools can run agents in parallel, but they manage work differently. GitHub's coding agent treats each issue as an independent unit. Stoneforge tracks dependencies between tasks, so if task B depends on task A, the Daemon holds B until A merges. This matters for coordinated changes across a codebase:
+Both tools can run agents in parallel, but they manage work differently. GitHub Copilot Workspace treats each issue as an independent unit. Stoneforge tracks dependencies between tasks, so if task B depends on task A, the Daemon holds B until A merges. This matters for coordinated changes across a codebase:
 
 ```bash
 # Create a plan with dependency ordering
@@ -96,10 +96,10 @@ sf task create --title "Generate API client SDKs" --plan "Q1 API Overhaul" \
   --depends-on "Migrate to OpenAPI 3.1"
 ```
 
-### Platform flexibility
+### Platform flexibility vs GitHub Copilot Workspace lock-in
 
-Stoneforge works with any git host (GitHub, GitLab, Bitbucket, self-hosted) and any CLI-based coding agent. If you switch AI providers or git platforms, nothing in your Stoneforge setup changes. The trade-off is that you don't get the deep GitHub-native integration that the Copilot coding agent provides.
+Stoneforge works with any git host (GitHub, GitLab, Bitbucket, self-hosted) and any CLI-based AI coding agent. If you switch AI providers or git platforms, nothing in your Stoneforge setup changes. The trade-off is that you don't get the deep GitHub-native integration that Copilot Workspace provides. For teams exploring [multi-agent development](/compare/multi-agent-vs-single-agent/) beyond a single platform, Stoneforge offers more flexibility.
 
 <Fragment slot="competitor-verdict">
-  <p>Choose GitHub's Copilot coding agent if your team already works in GitHub and wants a managed, low-setup experience. The issue-to-PR flow is polished, Mission Control makes it easy to oversee multiple agent sessions, and the integration with GitHub Actions, issues, and PRs is seamless. It's a strong choice when you don't need cross-task dependency management or self-hosting.</p>
+  <p>Choose GitHub Copilot Workspace if your team already works in GitHub and wants a managed, low-setup experience. The issue-to-PR flow is polished, Mission Control makes it easy to oversee multiple agent sessions, and the integration with GitHub Actions, issues, and PRs is seamless. Copilot Workspace is a strong choice when you don't need cross-task dependency management or self-hosting.</p>
 </Fragment>

@@ -1,14 +1,14 @@
 ---
-title: "Stoneforge vs Cursor"
-description: "Compare Stoneforge's multi-agent orchestration with Cursor's AI-powered IDE. Different tools for different workflows."
-competitor: "Cursor"
+title: "Stoneforge vs Cursor AI"
+description: "Compare Stoneforge and Cursor AI for AI-powered development. Multi-agent orchestration complements Cursor's AI IDE with parallel task dispatch and merge."
+competitor: "Cursor AI"
 competitorUrl: "https://cursor.com"
-differentiator: "Multi-agent orchestration vs AI-powered IDE"
+differentiator: "Multi-Agent Orchestration vs AI IDE"
 features:
   - category: "Architecture"
     feature: "Approach"
     stoneforge: "Multi-agent orchestration layer, coordinates parallel agents"
-    competitor: "AI-enhanced IDE with built-in agent mode"
+    competitor: "Cursor AI: AI-enhanced IDE with built-in agent mode"
   - category: "Architecture"
     feature: "Parallel agents"
     stoneforge: "Unlimited, each in isolated git worktrees"
@@ -54,42 +54,42 @@ features:
     stoneforge: "Moderate, CLI-based workflow"
     competitor: "Low, familiar IDE experience"
 faqItems:
-  - question: "Should I use Stoneforge or Cursor?"
-    answer: "They serve different purposes and work well together. Cursor is an AI-powered IDE for interactive coding with real-time assistance. Stoneforge is an orchestration layer that dispatches multiple AI agents to work on separate tasks in parallel. You'd use Cursor when you want hands-on AI help while writing code, and Stoneforge when you want to run several agents on different tasks at the same time."
-  - question: "Can I use Stoneforge and Cursor together?"
-    answer: "Yes. Stoneforge orchestrates agents in the background while you use Cursor (or any IDE) for your own work. They don't conflict. Stoneforge works in isolated git worktrees, so its agents never touch your working tree."
-  - question: "Is Stoneforge a replacement for Cursor?"
-    answer: "No. Stoneforge is not an IDE and doesn't provide code completion or inline editing. It's an orchestration layer for coordinating multiple AI coding agents. Cursor is where you write code interactively; Stoneforge runs agents on separate tasks in the background."
-  - question: "Doesn't Cursor already support parallel agents?"
-    answer: "Yes, Cursor 2.0 added parallel agent support with up to 8 in-IDE agents and cloud-based background agents. The difference is scope: Cursor's agents work within the IDE on a single prompt or task. Stoneforge manages a queue of tasks with priorities, dependencies, and automatic dispatch across any number of agents, with built-in merge and review workflows."
-  - question: "What can Stoneforge do that Cursor can't?"
-    answer: "Stoneforge manages a full task lifecycle: plans, priorities, dependencies, automatic dispatch to agents, and Steward-managed merge and review. It also works with any CLI-based agent (Claude Code, Codex, OpenCode), not just one IDE's built-in models. Cursor offers a much richer interactive coding experience that Stoneforge doesn't try to replicate."
-verdict: "Choose Stoneforge when you need structured task orchestration across multiple agents. If you have a backlog of tasks with dependencies, want automatic dispatch and merge, or need to coordinate agents from different providers, Stoneforge handles that. It pairs well with Cursor: use Cursor for interactive coding and Stoneforge for background orchestration."
+  - question: "Cursor AI vs Stoneforge: which should I use?"
+    answer: "They serve different purposes and work well together. Cursor AI is an AI-powered IDE for interactive coding with real-time assistance. Stoneforge is an orchestration layer that dispatches multiple AI coding agents to work on separate tasks in parallel. Use Cursor AI when you want hands-on AI help while writing code, and Stoneforge when you want to run several agents on different tasks at the same time."
+  - question: "Can I use Stoneforge with Cursor AI?"
+    answer: "Yes. Stoneforge orchestrates agents in the background while you use Cursor AI (or any IDE) for your own work. They don't conflict. Stoneforge works in isolated git worktrees, so its agents never touch your working tree."
+  - question: "Is Stoneforge a Cursor AI replacement?"
+    answer: "No. Stoneforge is not an IDE and doesn't provide code completion or inline editing. It's an orchestration layer for coordinating multiple AI coding agents. Cursor AI is where you write code interactively; Stoneforge runs agents on separate tasks in the background."
+  - question: "Does Cursor AI support parallel AI coding agents?"
+    answer: "Yes, Cursor 2.0 added parallel agent support with up to 8 in-IDE agents and cloud-based background agents. The difference is scope: Cursor AI's agents work within the IDE on a single prompt or task. Stoneforge manages a queue of tasks with priorities, dependencies, and automatic dispatch across any number of agents, with built-in merge and review workflows."
+  - question: "What can Stoneforge do that Cursor AI can't?"
+    answer: "Stoneforge manages a full task lifecycle: plans, priorities, dependencies, automatic dispatch to AI coding agents, and Steward-managed merge and review. It also works with any CLI-based agent (Claude Code, Codex, OpenCode), not just one IDE's built-in models. Cursor AI offers a much richer interactive coding experience that Stoneforge doesn't try to replicate."
+verdict: "Choose Stoneforge when you need structured task orchestration across multiple AI coding agents. If you have a backlog of tasks with dependencies, want automatic dispatch and merge, or need to coordinate agents from different providers, Stoneforge handles that. It pairs well with Cursor AI: use Cursor AI for interactive coding and Stoneforge for background orchestration."
 order: 2
 ---
 
-## IDE copilot vs. orchestration layer
+## Cursor AI vs Stoneforge: IDE copilot vs orchestration layer
 
-Cursor and Stoneforge occupy different parts of the AI development workflow. Cursor is where you write and edit code with AI assistance. Stoneforge coordinates multiple agents working on separate tasks in the background. Most teams would use both, not choose between them.
+Cursor AI and Stoneforge occupy different parts of the AI development workflow. Cursor AI is where you write and edit code with AI assistance. Stoneforge coordinates multiple [AI coding agents](/integrations/claude-code/) working on separate tasks in the background. Most teams would use both, not choose between them.
 
-### Cursor: AI-powered IDE
+### Cursor AI: the AI-powered IDE
 
-Cursor is a VS Code fork with deep AI integration. It provides real-time code completion, inline chat, multi-file editing via Composer, and an agent mode that can make changes across your codebase. Since version 2.0, it also supports running up to 8 parallel agents in-IDE and cloud-based background agents that clone your repo, work in a VM, and open a PR when done.
+Cursor AI is a VS Code fork with deep AI integration. It provides real-time code completion, inline chat, multi-file editing via Composer, and an agent mode that can make changes across your codebase. Since version 2.0, Cursor AI also supports running up to 8 parallel agents in-IDE and cloud-based background agents that clone your repo, work in a VM, and open a PR when done.
 
-Cursor is a polished, mature product with a large user base. Its interactive editing experience is strong, and the learning curve is minimal if you already use VS Code.
+Cursor AI is a polished, mature product with a large user base. Its interactive editing experience is strong, and the learning curve is minimal if you already use VS Code.
 
-### Stoneforge: task orchestration for agents
+### Stoneforge: multi-agent task orchestration
 
-Stoneforge is a different kind of tool. It doesn't provide an editor or code completion. Instead, it manages a queue of tasks, dispatches them to AI coding agents (Claude Code, Codex, OpenCode, or others), and coordinates the results. Each agent works in an isolated git worktree. Steward agents handle merge and review automatically.
+Stoneforge is a different kind of tool. It doesn't provide an editor or code completion. Instead, it manages a queue of tasks, dispatches them to AI coding agents ([Claude Code](/integrations/claude-code/), [Codex](/integrations/codex/), [OpenCode](/integrations/opencode/), or others), and coordinates the results. Each agent works in an isolated git worktree. Steward agents handle merge and review automatically.
 
-Stoneforge is newer and rougher around the edges. Its strength is structured orchestration: dependency-aware dispatch, role-based agents (Director, Worker, Steward, Daemon), and automatic merge workflows.
+Stoneforge is [free and open-source](/use-cases/free-open-source-ai-coding/). Its strength is structured orchestration: dependency-aware dispatch, role-based agents (Director, Worker, Steward, Daemon), and automatic merge workflows.
 
-### Using them together
+### Using Cursor AI and Stoneforge together
 
 The two tools complement each other:
 
-- **Cursor** for interactive work: exploring code, writing features, debugging, prototyping.
-- **Stoneforge** for background work: dispatching a batch of tasks to agents while you focus on something else.
+- **Cursor AI** for interactive work: exploring code, writing features, debugging, prototyping.
+- **Stoneforge** for background work: dispatching a batch of tasks to AI coding agents while you focus on something else.
 
 ```bash
 # While you work in Cursor on the main feature...
@@ -99,12 +99,12 @@ sf task create --title "Update API documentation"
 sf task create --title "Refactor database queries for performance"
 ```
 
-### Where Stoneforge adds something different
+### Where Stoneforge adds multi-agent orchestration
 
-Cursor's parallel agents work within the IDE on prompts you provide. Stoneforge manages an entire task lifecycle outside of any IDE: plans with multiple tasks, dependency ordering, automatic agent dispatch, and Steward-managed merge review. If you're coordinating a sprint's worth of work across many agents, that structure helps.
+Cursor AI's parallel agents work within the IDE on prompts you provide. Stoneforge manages an entire task lifecycle outside of any IDE: plans with multiple tasks, dependency ordering, automatic agent dispatch, and Steward-managed merge review. If you're coordinating a [sprint's worth of parallel feature development](/use-cases/parallel-feature-development/) across many AI coding agents, that structure helps.
 
-If you're working interactively on one thing at a time, Cursor's built-in agent mode is likely all you need.
+If you're working interactively on one thing at a time, Cursor AI's built-in agent mode is likely all you need.
 
 <Fragment slot="competitor-verdict">
-  <p>Choose Cursor when you want AI assistance integrated directly into your editor. Cursor's interactive coding experience, real-time completions, and low learning curve make it an excellent choice for day-to-day development. Its parallel agent and background agent features also cover many multi-task workflows without needing a separate orchestration tool. For most individual developers, Cursor on its own is the simpler and more productive option.</p>
+  <p>Choose Cursor AI when you want AI assistance integrated directly into your editor. Cursor AI's interactive coding experience, real-time completions, and low learning curve make it an excellent choice for day-to-day development. Its parallel agent and background agent features also cover many multi-task workflows without needing a separate orchestration tool. For most individual developers, Cursor AI on its own is the simpler and more productive option.</p>
 </Fragment>

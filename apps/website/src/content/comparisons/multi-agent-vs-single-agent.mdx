@@ -1,8 +1,8 @@
 ---
-title: "Multi-Agent vs Single-Agent AI Development"
-description: "When does multi-agent AI development outperform single-agent copilots? A practical guide to choosing the right approach."
-competitor: "Single-Agent Copilots"
-differentiator: "When parallel AI agents outperform a single copilot"
+title: "Multi-Agent vs Single-Agent AI Coding"
+description: "When does multi-agent AI coding outperform single-agent copilots? A practical guide to multi-agent development with parallel AI coding agents and orchestration."
+competitor: "Single-Agent AI"
+differentiator: "Multi-Agent AI Coding Guide"
 features:
   - category: "Execution Model"
     feature: "Parallelism"
@@ -41,23 +41,23 @@ features:
     stoneforge: "Yes, plan, dispatch, and execute entire sprints"
     competitor: "No, designed for single-task assistance"
 faqItems:
-  - question: "What is multi-agent AI development?"
-    answer: "Multi-agent AI development uses multiple AI coding agents working on different tasks simultaneously, each in an isolated environment. An orchestration layer manages task assignment, dependency ordering, and merging results. This contrasts with single-agent development where one AI assistant helps one developer with one task at a time."
-  - question: "When should I use multi-agent instead of single-agent AI?"
-    answer: "Multi-agent development works well when you have many independent or semi-independent tasks: feature sprints, large refactoring, test generation across modules, or documentation updates. Single-agent is better for interactive work, debugging, and tasks that require continuous human judgment."
-  - question: "Can multi-agent AI development work for small teams?"
-    answer: "Yes. A single developer using Stoneforge can dispatch several agents to work on different tasks while they focus on architecture or review. You set the direction; the agents handle implementation."
-  - question: "How does Stoneforge prevent merge conflicts between agents?"
+  - question: "What is multi-agent AI coding?"
+    answer: "Multi-agent AI coding uses multiple AI coding agents working on different tasks simultaneously, each in an isolated environment. An orchestration layer manages task assignment, dependency ordering, and merging results. This contrasts with single-agent development where one AI assistant helps one developer with one task at a time."
+  - question: "When should I use multi-agent development instead of a single AI coding agent?"
+    answer: "Multi-agent development works well when you have many independent or semi-independent tasks: feature sprints, large refactoring, test generation across modules, or documentation updates. Single-agent AI coding is better for interactive work, debugging, and tasks that require continuous human judgment."
+  - question: "Can multi-agent AI coding work for small teams?"
+    answer: "Yes. A single developer using Stoneforge can dispatch several AI coding agents to work on different tasks while they focus on architecture or review. You set the direction; the agents handle implementation."
+  - question: "How does multi-agent development prevent merge conflicts?"
     answer: "Stoneforge uses isolated git worktrees so agents never modify the same working copy. The dependency system ensures tasks that might conflict are sequenced appropriately. When conflicts do arise during merge, Steward agents analyze both changes and resolve straightforward conflicts automatically."
-  - question: "What AI agents work with multi-agent orchestration?"
+  - question: "What AI coding agents work with multi-agent orchestration?"
     answer: "Stoneforge works with any CLI-based AI coding agent: Claude Code, OpenAI Codex CLI, OpenCode, Aider, and more. You can mix different agents for different task types, using a stronger model for complex architecture and a faster model for routine tasks."
-verdict: "Multi-agent development (with Stoneforge) is worth trying when you have a backlog of parallelizable tasks. It's most useful for sprint planning, large-scale refactoring, and workflows where the bottleneck is developer throughput rather than problem complexity. The orchestration overhead tends to pay for itself once you're running 3+ agents concurrently."
+verdict: "Multi-agent AI coding (with Stoneforge) is worth trying when you have a backlog of parallelizable tasks. Multi-agent development is most useful for sprint planning, large-scale refactoring, and workflows where the bottleneck is developer throughput. The orchestration overhead pays for itself once you're running 3+ AI coding agents concurrently."
 order: 4
 ---
 
-## How AI coding tools have evolved
+## How multi-agent AI coding evolved from single-agent tools
 
-AI coding tools have gone through a few distinct phases. Understanding where multi-agent orchestration fits can help you pick the right tool for your workflow.
+Multi-agent development represents the latest evolution in AI coding tools. Understanding where multi-agent AI coding fits can help you pick the right approach for your workflow.
 
 ### Phase 1: Code completion
 
@@ -65,15 +65,15 @@ Tools like GitHub Copilot and TabNine predict the next line of code. Fast, low-f
 
 ### Phase 2: AI chat assistants
 
-Cursor, ChatGPT, and similar tools let you have conversations about code. You describe what you want, the AI generates it, and you iterate. More capable than completion, but still one conversation at a time.
+[Cursor AI](/compare/cursor/), ChatGPT, and similar tools let you have conversations about code. You describe what you want, the AI generates it, and you iterate. More capable than completion, but still one conversation at a time.
 
-### Phase 3: Autonomous agents
+### Phase 3: Autonomous AI coding agents
 
-Claude Code, Codex CLI, and OpenCode can work autonomously, reading codebases, running tests, and committing code. They complete entire tasks, not just lines. Some of these tools are starting to add their own multi-agent capabilities too (Claude Code's Agent Teams, Codex's parallel cloud agents, VS Code's multi-agent orchestration).
+[Claude Code](/integrations/claude-code/), [Codex CLI](/integrations/codex/), and [OpenCode](/integrations/opencode/) can work autonomously, reading codebases, running tests, and committing code. They complete entire tasks, not just lines. Some of these tools are starting to add their own multi-agent capabilities too ([Claude Code Teams](/compare/claude-code-teams/), Codex's parallel cloud agents, VS Code's multi-agent orchestration).
 
-### Phase 4: Dedicated orchestration
+### Phase 4: Multi-agent development orchestration
 
-Stoneforge sits in this category. Rather than bolting orchestration onto an existing agent, it's built specifically to coordinate multiple agents across a codebase: dispatching tasks, managing dependencies, and merging results.
+Stoneforge sits in this category. Rather than bolting orchestration onto an existing AI coding agent, it's built specifically to coordinate multiple agents across a codebase: dispatching tasks, managing dependencies, and merging results. This is where multi-agent AI coding truly shines.
 
 ```bash
 # Define a plan and create tasks. Agents pick them up automatically.
@@ -90,26 +90,26 @@ sf task create --title "Update deployment configuration" --plan "Sprint 14" \
 # Agents work in parallel, each in an isolated worktree
 ```
 
-### When single-agent is the better choice
+### When single-agent AI coding is the better choice
 
-Multi-agent isn't always the answer. Single-agent copilots are better for:
+Multi-agent development isn't always the answer. Single-agent AI coding is better for:
 
 - Exploratory coding, where you don't know the solution yet and need to iterate interactively
 - Debugging, where you need to trace through code step by step with AI assistance
 - Learning, where the goal is understanding rather than output
 - Small, quick edits, where orchestration overhead would exceed the task complexity
 
-It's also worth noting that major tools like Claude Code and VS Code now support running multiple agents within their own ecosystems. If you're already invested in one of those tools, their built-in multi-agent features may be enough for your needs.
+It's also worth noting that major tools like [Claude Code](/integrations/claude-code/) and VS Code now support running multiple agents within their own ecosystems. If you're already invested in one of those tools, their built-in multi-agent features may be enough for your needs.
 
-### Where multi-agent orchestration helps
+### Where multi-agent AI coding helps
 
-Multi-agent orchestration tends to pay off when:
+Multi-agent AI coding with dedicated orchestration tends to pay off when:
 
-- You have 3+ tasks that can run in parallel
+- You have 3+ tasks that can run in parallel with [AI coding agents](/compare/)
 - Tasks have clear acceptance criteria that let agents work autonomously
-- The codebase is large enough that parallel agents can work in different areas
+- The codebase is large enough that parallel agents can work in different areas — ideal for [large-scale refactoring](/use-cases/large-scale-refactoring/)
 - You want to dispatch a sprint backlog and review results rather than coding each task yourself
 
 <Fragment slot="competitor-verdict">
-  <p>Choose single-agent copilots for interactive, developer-in-the-loop workflows. They're the right choice when you're exploring solutions, debugging complex issues, or working on tasks that require continuous human judgment. Single-agent tools also have a lower learning curve and integrate directly into your IDE. And increasingly, tools like Claude Code and VS Code offer their own multi-agent capabilities, blurring the line between these categories.</p>
+  <p>Choose single-agent AI coding for interactive, developer-in-the-loop workflows. Single-agent tools are the right choice when you're exploring solutions, debugging complex issues, or working on tasks that require continuous human judgment. They also have a lower learning curve and integrate directly into your IDE. And increasingly, tools like Claude Code and VS Code offer their own multi-agent development capabilities, blurring the line between these categories.</p>
 </Fragment>
