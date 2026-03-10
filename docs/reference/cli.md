@@ -43,6 +43,10 @@ bun packages/quarry/src/bin/sf.ts
 | `sf install`    | Install stoneforge extensions     |
 | `sf log`        | Show operation log entries        |
 | `sf metrics`    | Show provider metrics             |
+| `sf history`    | Show element event history        |
+| `sf reset`      | Reset a Stoneforge workspace      |
+| `sf doctor`     | Check system health               |
+| `sf migrate`    | Run database migrations           |
 
 ## CRUD Commands
 

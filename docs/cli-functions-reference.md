@@ -194,9 +194,9 @@ Drops and reinitializes the database. With `--full`, deletes everything and rein
 ### `sf assign <id> <assignee>` / `sf task assign`
 **Description:** Assign a task to an entity.
 
-| Option | Description |
-|--------|-------------|
-| `--unassign` | Remove assignment |
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--unassign` | `-u` | Remove assignment |
 
 ### `sf defer <id>` / `sf task defer <id>`
 **Description:** Defer a task (sets status to deferred).
@@ -360,8 +360,8 @@ Drops and reinitializes the database. With `--full`, deletes everything and rein
 | Option | Short | Description |
 |--------|-------|-------------|
 | `--status <status>` | `-s` | Filter: pending, running, completed, failed, cancelled |
-| `--ephemeral` | | Show only ephemeral workflows |
-| `--durable` | | Show only durable workflows |
+| `--ephemeral` | `-e` | Show only ephemeral workflows |
+| `--durable` | `-d` | Show only durable workflows |
 | `--limit <n>` | `-l` | Maximum results |
 
 ### `sf workflow show <id>`
@@ -372,7 +372,7 @@ Drops and reinitializes the database. With `--full`, deletes everything and rein
 
 | Option | Short | Description |
 |--------|-------|-------------|
-| `--ready` | | Show only ready tasks |
+| `--ready` | `-r` | Show only ready tasks |
 | `--status <status>` | `-s` | Filter by status |
 | `--limit <n>` | `-l` | Maximum results |
 
@@ -541,7 +541,7 @@ Drops and reinitializes the database. With `--full`, deletes everything and rein
 | `--visibility <vis>` | | public or private (default) |
 | `--policy <policy>` | `-p` | Join policy: open, invite-only (default), or request |
 | `--member <id>` | `-m` | Add member (repeatable) |
-| `--direct <entity>` | | Create direct channel with entity |
+| `--direct <entity>` | `-d` | Create direct channel with entity |
 | `--tag <tag>` | | Add tag (repeatable) |
 
 ### `sf channel list`
@@ -623,7 +623,7 @@ Drops and reinitializes the database. With `--full`, deletes everything and rein
 |--------|-------|-------------|
 | `--content <text>` | `-c` | New content |
 | `--file <path>` | `-f` | Read new content from file |
-| `--metadata <json>` | | Updated metadata |
+| `--metadata <json>` | `-m` | Updated metadata |
 
 ### `sf document history <id>`
 **Description:** Show document version history.
