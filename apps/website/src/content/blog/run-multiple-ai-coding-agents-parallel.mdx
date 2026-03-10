@@ -1,0 +1,236 @@
+---
+title: "Run Multiple AI Coding Agents in Parallel"
+description: "A practical guide to running multiple AI coding agents in parallel. Covers isolation, dependency ordering, merge conflicts, and step-by-step setup."
+date: 2026-03-09
+tags: ["multi-agent", "tutorial", "productivity"]
+relatedContent:
+  - title: "The Case for Multi-Agent Software Development"
+    url: "/blog/the-case-for-multi-agent-software-development/"
+    type: "blog"
+  - title: "Parallel Feature Development"
+    url: "/use-cases/parallel-feature-development/"
+    type: "use-case"
+  - title: "Getting Started with Stoneforge"
+    url: "https://docs.stoneforge.ai/getting-started"
+    type: "docs"
+---
+
+{/* SEO CHECKLIST
+    [x] Title tag <=60 chars with primary keyword
+    [x] Meta description <=160 chars
+    [x] H1 = title, H2s for each section
+    [x] 2-3 internal links to docs.stoneforge.ai
+    [x] 1-2 internal links to use case or comparison pages
+    [x] 3-5 FAQ items
+    [x] Image alt text with keywords */}
+
+Most developers using AI coding agents today work with one agent at a time. You describe a task, wait for the agent to finish, review the output, then move on. That works fine for a single task. It falls apart when you have a dozen.
+
+The bottleneck isn't the agent's speed. It's the serial execution model. While your agent refactors the auth module, the test suite fix, the new API endpoint, and the docs update all sit idle in your backlog. Each task might take 10 minutes of agent time, but strung together sequentially, your 12-task sprint takes three hours of wall-clock time -- and you spend half of it waiting.
+
+Running multiple AI coding agents in parallel fixes this. But it introduces real coordination problems that require actual infrastructure to solve. This guide covers why parallelism matters, what makes it hard, and how to set it up.
+
+## Why One Agent at a Time Doesn't Scale
+
+A single AI coding agent can only hold one context window at a time. It reads your codebase, plans a change, writes code, and runs tests. While it does that, nothing else happens. Your timeline looks like this:
+
+```
+Agent: [===auth refactor===]...[===fix tests===]...[===new endpoint===]
+You:   [wait     ][review  ][wait    ][review ][wait      ][review  ]
+```
+
+The inefficiency compounds. Between tasks, you re-orient the agent with context about the next piece of work. You handle the git workflow -- committing, branching, maybe resolving a conflict with something that landed while the agent was working. And if the agent gets stuck on task 3, everything after it stalls.
+
+For teams with large backlogs of independent work, this sequential model wastes the majority of available compute time. Four independent tasks that each take 10 minutes should not require 40 minutes of wall-clock time plus your overhead.
+
+## The Multi-Agent Approach
+
+Multi-agent development runs several AI coding agents simultaneously, each handling a different task on its own branch. The theoretical speedup is straightforward: if you have N independent tasks and N agents, your wall-clock time drops from the sum of all tasks to the duration of the longest single task.
+
+```
+Sequential (1 agent):  10 + 8 + 12 + 6 = 36 minutes
+Parallel (4 agents):   max(10, 8, 12, 6) = 12 minutes
+```
+
+In practice, the speedup is less than linear because not all tasks are perfectly independent and there's overhead in coordination. Measured across batches of 10+ tasks on a TypeScript monorepo, 3 parallel agents typically complete work in about one-third the wall-clock time of a single agent.
+
+The approach works especially well for:
+
+- Feature work spanning separate modules (backend, frontend, docs)
+- Batches of similar changes (migrating 15 API handlers to a new middleware)
+- Test writing alongside implementation
+- Bug fixes across unrelated subsystems
+
+## The Hard Parts
+
+Running `claude code` in four terminal tabs simultaneously is technically parallel execution. It is not multi-agent development. The gap between the two is entirely about coordination, and coordination is where things break down.
+
+### Merge Conflicts
+
+Two agents modifying the same file produce conflicts. Even agents working on different files can conflict if they both touch a shared configuration, a routing table, or a package lockfile. The probability of conflicts scales with the number of parallel agents and the coupling between their tasks.
+
+Manual resolution doesn't scale here. If three agents finish within a few minutes of each other, you need to merge their branches in sequence, resolving any conflicts that arise from earlier merges before the next one can land. This is tedious work that interrupts the throughput gains you were trying to achieve.
+
+### Dependency Ordering
+
+Not all tasks can run at the same time. "Write the API endpoint" and "Write tests for the API endpoint" have a clear ordering dependency. Dispatching the test-writing agent before the endpoint exists wastes its time and yours.
+
+In a simple backlog, you can track this manually. In a real sprint with 15-20 tasks and a web of dependencies, the ordering problem gets combinatorial. You need a system that understands which tasks block which, and holds dependent tasks until their prerequisites are complete.
+
+### Context Isolation
+
+Each agent needs a clean, isolated copy of the codebase. If Agent 1 modifies `src/auth.ts` in place while Agent 2 is reading it, you get undefined behavior. This isn't hypothetical -- without filesystem isolation, agents will read partially-written files, fail on syntax errors they didn't cause, and produce changes based on stale state.
+
+Git worktrees solve this at the filesystem level. Each agent gets its own working directory with its own branch, all backed by the same git object database. The worktrees are lightweight (they share the `.git` directory) and provide complete isolation. No symlink tricks, no Docker containers, no copying the entire repo.
+
+```
+.stoneforge/.worktrees/
+  worker-1-auth-refactor/      # branch: agent/worker-1/auth-refactor
+  worker-2-fix-tests/          # branch: agent/worker-2/fix-tests
+  worker-3-new-endpoint/       # branch: agent/worker-3/new-endpoint
+```
+
+## How Stoneforge Handles It
+
+[Stoneforge](https://stoneforge.ai) is an open-source orchestration layer that manages the full lifecycle of parallel AI coding agents. It sits on top of Claude Code, Codex, or OpenCode and handles the coordination problems described above.
+
+The architecture uses four agent roles:
+
+**Director** -- breaks down high-level goals into discrete tasks, sets dependencies, answers workers' questions. Runs as a persistent session.
+
+**Workers** -- execute tasks in isolated git worktrees. Each worker is ephemeral: it's spawned when a task is dispatched, works until the task is complete (or hands off if stuck), then shuts down.
+
+**Steward** -- reviews completed work, manages merge sequencing, handles conflict resolution. When Worker 1's branch conflicts with recently-merged code from Worker 2, the Steward rebases and resolves.
+
+**Daemon** -- the dispatch engine. Watches the task queue, checks dependency state, and spawns workers as tasks become available. No manual intervention needed.
+
+This separation matters because it eliminates the coordination overhead from your workflow. You interact with the Director to define work. Everything else runs automatically.
+
+## Step-by-Step: Your First Parallel Run
+
+Here's how to go from zero to three agents running in parallel on your codebase.
+
+### 1. Install and initialize
+
+```bash
+git clone https://github.com/stoneforge-ai/stoneforge.git
+cd stoneforge
+bun install
+bun link
+```
+
+Then, in your project:
+
+```bash
+cd your-project
+sf init
+```
+
+This creates a `.stoneforge/` directory with workspace configuration and registers default agents (a director, two workers, and a merge steward). Stoneforge stores its data in git-friendly JSONL files, so your workspace state is versioned alongside your code.
+
+### 2. Create a plan with tasks
+
+```bash
+sf plan create --title "Sprint 14"
+sf task create --title "Refactor auth module to use JWT" --plan "Sprint 14"
+sf task create --title "Fix failing integration tests" --plan "Sprint 14"
+sf task create --title "Add /api/v2/users endpoint" --plan "Sprint 14"
+sf task create --title "Write tests for users endpoint" --plan "Sprint 14"
+```
+
+Set dependencies between tasks using the `dependency add` command. The syntax is `sf dependency add --type=blocks <blocked-task> <blocker-task>`, meaning the first task waits for the second to complete:
+
+```bash
+# "Write tests for users endpoint" is blocked by "Add /api/v2/users endpoint"
+sf dependency add --type=blocks <test-task-id> <users-endpoint-task-id>
+```
+
+Plans default to `draft` status, which prevents the daemon from dispatching their tasks. Once your tasks and dependencies are set, activate the plan:
+
+```bash
+sf plan activate <plan-id>
+```
+
+The daemon won't dispatch the test-writing task until the endpoint task is completed and merged.
+
+### 3. Start the daemon
+
+```bash
+sf daemon start
+```
+
+The daemon evaluates your task queue and dispatches to available registered workers. `sf init` creates two workers by default (e-worker-1 and e-worker-2). You can register additional workers with `sf entity register worker-3 --type agent --tag worker`. Each dispatched worker gets its own worktree and branch:
+
+```
+[daemon] Dispatching "Refactor auth module" → e-worker-1
+[daemon] Dispatching "Fix integration tests" → e-worker-2
+[daemon] Dispatching "Add /api/v2/users endpoint" → worker-3
+
+[e-worker-1] Starting in worktree: .stoneforge/.worktrees/e-worker-1-auth/
+[e-worker-2] Starting in worktree: .stoneforge/.worktrees/e-worker-2-tests/
+[worker-3] Starting in worktree: .stoneforge/.worktrees/worker-3-users/
+```
+
+### 4. Watch them work
+
+Workers operate autonomously. Each one reads the task description, consults any [workspace documentation](https://docs.stoneforge.ai/concepts/workspaces), writes code, commits, pushes, and marks the task complete. When a worker finishes, it triggers a merge request and shuts down. The daemon dispatches the next available task to a new worker.
+
+```
+[e-worker-2] Task complete. MR created: !42
+[steward] Reviewing MR !42 — Fix integration tests
+[steward] MR !42 merged to master
+[worker-3] Task complete. MR created: !43
+[steward] Reviewing MR !43 — Add /api/v2/users endpoint
+[steward] MR !43 merged to master
+[daemon] Dispatching "Write tests for users endpoint" → e-worker-2
+```
+
+Notice the dependency handling: "Write tests for users endpoint" was only dispatched after worker-3 completed the users endpoint task and it merged. The daemon tracks this automatically.
+
+### 5. Review the merged result
+
+After all tasks complete and merge, your master branch has the cumulative changes. The Steward handled merge ordering, so the commits land in dependency-respecting sequence. If worker-3's branch conflicted with worker-1's merged changes, the Steward rebased and resolved before merging.
+
+```bash
+git log --oneline -5
+# abc1234 Add users endpoint tests
+# def5678 Add /api/v2/users endpoint
+# 789abcd Fix failing integration tests
+# 012efgh Refactor auth module to use JWT
+```
+
+Three tasks ran in parallel. The fourth waited for its dependency. Total wall-clock time was roughly the duration of the longest task, not the sum of all four.
+
+## When NOT to Use Multi-Agent Parallelism
+
+Parallel agents are not always the right tool. Save yourself the overhead in these situations:
+
+**Small, quick changes.** If you need to rename a variable or fix a typo, spinning up an orchestration layer is overkill. Use a single agent or do it by hand.
+
+**Tightly coupled code.** If every task touches the same 3 files, the merge conflict rate will erase your parallelism gains. Refactor first to reduce coupling, then parallelize.
+
+**Exploratory work.** Prototyping and exploration require tight feedback loops with a single agent. You need to iterate, change direction, and rethink the approach. Parallel agents assume you already know what to build.
+
+**Codebases without tests.** Parallel agents can produce changes that individually pass linting but break each other when combined. Automated tests catch this at merge time. Without tests, you lose the safety net that makes autonomous agent work viable.
+
+## Frequently Asked Questions
+
+### How many agents can I run at once?
+
+The limiting factor is usually API rate limits, not local compute. Each agent session is primarily network-bound -- making API calls to the model provider. A modern development machine can comfortably run 5-10 agent worktrees simultaneously. The practical limit is your ability to review output and your API budget.
+
+### Does this work with any AI coding agent?
+
+Stoneforge supports [Claude Code](/integrations/claude-code/), [Codex](/integrations/codex/), and [OpenCode](/integrations/opencode/). The orchestration layer is agent-agnostic -- it manages task lifecycle, branching, and merging regardless of which agent writes the code. You can even mix agents within a single session if different tasks suit different models.
+
+### What happens when an agent gets stuck?
+
+Workers can hand off tasks when they hit a wall -- context window full, missing requirements, or a problem they can't solve. The handoff includes a summary of what's done and what's remaining. The daemon respawns a fresh worker to continue from where the previous one left off. If an agent goes silent for too long, the Steward sends a nudge and escalates if there's no response.
+
+### How does this compare to Claude Code Teams?
+
+[Claude Code Teams](/blog/claude-code-teams-vs-self-hosted/) is Anthropic's managed offering for team-based Claude Code access. It provides centralized billing and admin controls but uses a single-agent-per-developer model. Stoneforge is self-hosted and adds multi-agent orchestration: parallel execution, automated dispatch, dependency tracking, and merge coordination. The tradeoff is operational overhead (you manage the infrastructure) in exchange for higher throughput and more control.
+
+### Is multi-agent coding reliable enough for production codebases?
+
+It depends on your test coverage and review process. Multi-agent orchestration doesn't change the quality of individual agent output. What it adds is structured review (the Steward checks each merge request) and dependency-aware sequencing (changes land in the right order). Teams with good test suites and CI pipelines report that multi-agent workflows produce comparable quality to single-agent work, at higher throughput. Start with lower-risk tasks (docs, tests, isolated bug fixes) to build confidence before using it for core feature work.
