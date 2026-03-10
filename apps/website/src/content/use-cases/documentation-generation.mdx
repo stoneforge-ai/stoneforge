@@ -1,7 +1,7 @@
 ---
 title: "Documentation Generation"
 description: "Auto-generate and maintain API docs, guides, and READMEs from your code with AI agents that understand context."
-problem: "Documentation is always out of date. Developers change the code but forget to update the docs. Writing documentation from scratch takes hours, and maintaining it across API changes, new features, and deprecations is a never-ending chore that nobody wants to own."
+problem: "Documentation falls out of date. Developers change the code but forget to update the docs. Writing documentation from scratch takes hours, and maintaining it across API changes, new features, and deprecations is tedious work that nobody wants to own."
 icon: "docs"
 order: 5
 docsLinks:
@@ -13,29 +13,29 @@ docsLinks:
     url: "https://docs.stoneforge.ai/guides/custom-prompts/"
 faqItems:
   - question: "What types of documentation can Stoneforge generate?"
-    answer: "Stoneforge agents can generate API reference docs, README files, architecture guides, code comments, JSDoc/TSDoc annotations, OpenAPI specs, and step-by-step how-to guides. They analyze your source code, existing docs, and commit history to produce accurate, context-rich documentation."
+    answer: "Stoneforge agents can generate API reference docs, README files, architecture guides, code comments, JSDoc/TSDoc annotations, and step-by-step how-to guides. Since agents are LLM-powered, they can output most text-based formats you need, though results will vary depending on the complexity of your codebase."
   - question: "How do I keep generated docs in sync with code changes?"
-    answer: "Set up a recurring documentation task that runs after each sprint or release. The agent diffs the code against the existing docs, identifies what's changed, and updates only the affected sections. You can also trigger doc updates via CI when specific files change."
+    answer: "Create a documentation update task after each sprint or release. The agent diffs the code against the existing docs, identifies what's changed, and updates the affected sections. You can also trigger doc updates via CI when specific files change."
   - question: "Can Stoneforge generate docs for an undocumented codebase?"
-    answer: "Yes. Agents can generate documentation from scratch by analyzing your code structure, function signatures, type definitions, tests, and usage patterns. For large codebases, the Director breaks this into module-by-module tasks that run in parallel."
+    answer: "Yes. Agents can generate documentation from scratch by analyzing your code structure, function signatures, type definitions, tests, and usage patterns. For large codebases, the Director breaks this into module-by-module tasks that workers handle in parallel."
   - question: "Does Stoneforge support multiple documentation formats?"
-    answer: "Yes. Agents can output Markdown, MDX, reStructuredText, JSDoc, TSDoc, and OpenAPI/Swagger YAML. You specify the format in the task description or workspace prompt, and all generated docs follow that format consistently."
+    answer: "Agents are LLM-powered, so they can output Markdown, MDX, JSDoc, TSDoc, and other text formats. Specify the format in the task description or workspace prompt and the agents will follow it."
   - question: "How do I ensure documentation quality and accuracy?"
-    answer: "The Steward agent reviews generated docs for accuracy, completeness, and style. You can also define documentation standards in your workspace prompts — tone, structure, required sections, and terminology — that every agent follows."
+    answer: "The Steward agent reviews generated docs before they're merged. You can also define documentation standards in your workspace prompts (tone, structure, required sections, terminology) that agents follow when writing."
 ---
 
-Stoneforge turns documentation from a chore into an automated process. Agents analyze your code, understand the context, and produce documentation that stays current with every code change.
+Stoneforge agents can analyze your code and produce documentation that reflects the current state of your codebase. You describe what you need, and the Director breaks it into tasks that workers handle in parallel.
 
-### From code to docs in parallel
+### Generate docs per module
 
-Each agent focuses on a specific module or package, generating documentation that reflects the actual code — not an outdated wiki page from six months ago.
+Each worker agent focuses on a specific module or package, reading the source code and generating docs from it.
 
 ```bash
 # Create a documentation plan
 sf plan create --title "Generate API documentation" \
-  --description "Generate comprehensive API docs for all public endpoints. Include request/response examples, error codes, and authentication requirements. Output as MDX files in docs/api/."
+  --description "Generate API docs for all public endpoints. Include request/response examples, error codes, and authentication requirements. Output as MDX files in docs/api/."
 
-# Tasks are created per module:
+# The Director creates tasks per module:
 # 1. Document /api/auth endpoints
 # 2. Document /api/users endpoints
 # 3. Document /api/billing endpoints
@@ -43,9 +43,9 @@ sf plan create --title "Generate API documentation" \
 # 5. Generate OpenAPI spec from route definitions
 ```
 
-### Context-aware, not template-based
+### Context from code, not templates
 
-Stoneforge agents don't fill in templates — they read your code, understand how functions are used, trace data flow, and write documentation that explains the *why*, not just the *what*. They examine tests to understand expected behavior and pull examples from actual usage.
+Agents read your source code, trace how functions are called, and examine tests to understand expected behavior. This means generated docs can explain intent and usage patterns, not just function signatures. The quality depends on how readable your code is and how well you describe what you want in the task.
 
 ```bash
 # Customize documentation standards in workspace prompts
@@ -55,20 +55,20 @@ Stoneforge agents don't fill in templates — they read your code, understand ho
 #  Use the existing docs/ structure and link between related pages."
 ```
 
-### Keep docs fresh with recurring tasks
+### Update docs when code changes
 
-Documentation rot is the real problem. Stoneforge lets you schedule recurring documentation updates that scan for code changes and update affected docs automatically.
+Documentation rot is the harder problem. When your code changes, create a task to update the affected docs.
 
 ```bash
-# Create tasks to update docs after code changes
+# Create a task to update docs after code changes
 sf task create --title "Update API docs for v2.3 changes" \
   --description "Review all code changes since v2.2 tag. Update affected API docs, add docs for new endpoints, deprecate removed ones."
 ```
 
-### Multi-format output
+### Multiple formats from the same source
 
-Need Markdown for your docs site, JSDoc for IDE tooltips, and OpenAPI for your API gateway? Create separate tasks for each format — they all run in parallel, sourcing from the same code but outputting in different formats.
+Need Markdown for your docs site and JSDoc for IDE tooltips? Create separate tasks for each format. They run in parallel, reading the same code but producing different output.
 
-### Internal knowledge, preserved
+### Capture institutional knowledge
 
-Beyond public API docs, Stoneforge agents can generate [architecture decision records](https://docs.stoneforge.ai/core-concepts/documents/), onboarding guides, and runbooks. The kind of documentation that usually lives only in senior developers' heads gets captured and maintained automatically.
+Beyond API docs, Stoneforge agents can generate [architecture decision records](https://docs.stoneforge.ai/core-concepts/documents/), onboarding guides, and runbooks. The kind of knowledge that usually lives in senior developers' heads can be written down and kept in version control alongside the code.
