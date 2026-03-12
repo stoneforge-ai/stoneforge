@@ -622,6 +622,22 @@ export interface ApprovalRequestResponse {
 // ============================================================================
 
 /**
+ * Breakdown of costs by token category
+ */
+export interface CostBreakdown {
+  /** Cost from input tokens */
+  inputCost: number;
+  /** Cost from output tokens */
+  outputCost: number;
+  /** Cost from cache read tokens */
+  cacheReadCost: number;
+  /** Cost from cache creation tokens */
+  cacheCreationCost: number;
+  /** Total cost (sum of all categories) */
+  totalCost: number;
+}
+
+/**
  * Aggregated metrics for a single provider, model, or agent group
  */
 export interface AggregatedProviderMetrics {
@@ -649,6 +665,8 @@ export interface AggregatedProviderMetrics {
   failedCount: number;
   /** Number of rate-limited sessions */
   rateLimitedCount: number;
+  /** Estimated cost breakdown computed from model pricing */
+  estimatedCost?: CostBreakdown;
 }
 
 /**

@@ -100,8 +100,31 @@ function createMockServices() {
     ]),
   };
 
+  const costService = {
+    calculateCost: vi.fn().mockReturnValue({
+      inputCost: 0.03,
+      outputCost: 0.075,
+      cacheReadCost: 0.001,
+      cacheCreationCost: 0.002,
+      totalCost: 0.108,
+    }),
+    enrichWithCosts: vi.fn().mockImplementation((metrics: Array<Record<string, unknown>>) =>
+      metrics.map(m => ({
+        ...m,
+        estimatedCost: {
+          inputCost: 0.03,
+          outputCost: 0.075,
+          cacheReadCost: 0.001,
+          cacheCreationCost: 0.002,
+          totalCost: 0.108,
+        },
+      }))
+    ),
+  };
+
   return {
     metricsService,
+    costService,
   } as unknown as Services;
 }
 

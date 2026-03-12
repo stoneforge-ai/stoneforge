@@ -36,6 +36,12 @@
       "import": "./dist/utils/index.js",
       "default": "./dist/utils/index.js"
     },
+    "./config": {
+      "types": "./src/config/index.ts",
+      "bun": "./src/config/index.ts",
+      "import": "./dist/config/index.js",
+      "default": "./dist/config/index.js"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

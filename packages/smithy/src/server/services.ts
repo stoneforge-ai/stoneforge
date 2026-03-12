@@ -29,6 +29,7 @@ import {
   createDocsStewardService,
   createSettingsService,
   createMetricsService,
+  createCostService,
   createRateLimitTracker,
   createExternalSyncDaemon,
   createDemoModeService,
@@ -55,6 +56,7 @@ import {
   type OnSessionStartedCallback,
   type ExternalSyncDaemon,
   type DemoModeService,
+  type CostService,
   trackListeners,
   createApprovalService,
   type ApprovalService,
@@ -100,6 +102,7 @@ export interface Services {
   sessionMessageService: SessionMessageService;
   settingsService: SettingsService;
   metricsService: MetricsService;
+  costService: CostService;
   demoModeService: DemoModeService;
   approvalService: ApprovalService;
   storageBackend: StorageBackend;
@@ -156,6 +159,9 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
 
   // Create metrics service for provider usage tracking
   const metricsService = createMetricsService(storageBackend);
+
+  // Create cost service for pricing calculations
+  const costService = createCostService(storageBackend);
 
   const sessionManager = createSessionManager(spawnerService, api, agentRegistry, settingsService);
   const sessionInitialPrompts = new Map<string, string>();
@@ -576,6 +582,7 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
     sessionMessageService,
     settingsService,
     metricsService,
+    costService,
     demoModeService,
     approvalService,
     storageBackend,

@@ -3,12 +3,21 @@
  *
  * Displays LLM provider usage metrics including token counts,
  * estimated costs, session counts, and error rates.
+ *
+ * Cost estimates use per-model pricing from @stoneforge/core's
+ * model pricing configuration, covering all 4 token categories.
  */
 
 import type { Command, GlobalOptions, CommandResult, CommandOption } from '../types.js';
 import { success, failure, ExitCode } from '../types.js';
 import { createAPI } from '../db.js';
 import type { StorageBackend } from '@stoneforge/storage';
+import {
+  type CostBreakdown,
+  calculateCost,
+  calculateCostFromPricing,
+  lookupModelPricing,
+} from '@stoneforge/core';
 
 // ============================================================================
 // Types
@@ -19,10 +28,23 @@ interface AggregateRow {
   group_key: string;
   total_input_tokens: number;
   total_output_tokens: number;
+  total_cache_read_tokens: number;
+  total_cache_creation_tokens: number;
   session_count: number;
   avg_duration_ms: number;
   failed_count: number;
   rate_limited_count: number;
+}
+
+/** Per-model token breakdown for cost aggregation within a group */
+interface ModelTokenRow {
+  [key: string]: unknown;
+  group_key: string;
+  model: string | null;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_creation_tokens: number;
 }
 
 interface MetricsSummary {
@@ -32,20 +54,22 @@ interface MetricsSummary {
     group: string;
     totalInputTokens: number;
     totalOutputTokens: number;
+    totalCacheReadTokens: number;
+    totalCacheCreationTokens: number;
     totalTokens: number;
     sessionCount: number;
     avgDurationMs: number;
     errorRate: number;
     failedCount: number;
     rateLimitedCount: number;
-    estimatedCost: number;
+    estimatedCost: CostBreakdown;
   }>;
   totals: {
     totalInputTokens: number;
     totalOutputTokens: number;
     totalTokens: number;
     sessionCount: number;
-    estimatedCost: number;
+    estimatedCost: CostBreakdown;
   };
 }
 
@@ -64,16 +88,6 @@ function parseTimeRange(value: string | undefined): number {
     if (days > 0 && days <= 365) return days;
   }
   return 7;
-}
-
-/**
- * Rough cost estimate based on token counts.
- * Uses approximate Claude pricing: $3/MTok input, $15/MTok output.
- */
-function estimateCost(inputTokens: number, outputTokens: number): number {
-  const inputCost = (inputTokens / 1_000_000) * 3;
-  const outputCost = (outputTokens / 1_000_000) * 15;
-  return inputCost + outputCost;
 }
 
 /**
@@ -133,6 +147,8 @@ function queryMetrics(
        ${groupExpr} AS group_key,
        COALESCE(SUM(input_tokens), 0) AS total_input_tokens,
        COALESCE(SUM(output_tokens), 0) AS total_output_tokens,
+       COALESCE(SUM(cache_read_tokens), 0) AS total_cache_read_tokens,
+       COALESCE(SUM(cache_creation_tokens), 0) AS total_cache_creation_tokens,
        COUNT(*) AS session_count,
        COALESCE(AVG(duration_ms), 0) AS avg_duration_ms,
        COALESCE(SUM(CASE WHEN outcome = 'failed' THEN 1 ELSE 0 END), 0) AS failed_count,
@@ -143,6 +159,101 @@ function queryMetrics(
      ORDER BY total_input_tokens + total_output_tokens DESC`,
     params
   );
+}
+
+/**
+ * Compute cost breakdown for a model-grouped metric using model pricing lookup.
+ */
+function computeModelGroupCost(modelName: string, row: AggregateRow): CostBreakdown {
+  const result = calculateCost(
+    modelName,
+    '',
+    Number(row.total_input_tokens),
+    Number(row.total_output_tokens),
+    Number(row.total_cache_read_tokens),
+    Number(row.total_cache_creation_tokens)
+  );
+  return {
+    inputCost: result.inputCost,
+    outputCost: result.outputCost,
+    cacheReadCost: result.cacheReadCost,
+    cacheCreationCost: result.cacheCreationCost,
+    totalCost: result.totalCost,
+  };
+}
+
+/**
+ * Compute cost breakdown for a provider-grouped metric by querying
+ * per-model token breakdowns from the database.
+ */
+function computeProviderGroupCost(
+  backend: StorageBackend,
+  providerName: string,
+  cutoffStr: string
+): CostBreakdown {
+  const rows = backend.query<ModelTokenRow>(
+    `SELECT
+       provider AS group_key,
+       COALESCE(model, 'unknown') AS model,
+       COALESCE(SUM(input_tokens), 0) AS input_tokens,
+       COALESCE(SUM(output_tokens), 0) AS output_tokens,
+       COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens,
+       COALESCE(SUM(cache_creation_tokens), 0) AS cache_creation_tokens
+     FROM provider_metrics
+     WHERE timestamp >= ? AND provider = ?
+     GROUP BY provider, model`,
+    [cutoffStr, providerName]
+  );
+
+  let totalInputCost = 0;
+  let totalOutputCost = 0;
+  let totalCacheReadCost = 0;
+  let totalCacheCreationCost = 0;
+
+  for (const row of rows) {
+    const model = String(row.model ?? 'unknown');
+    const { pricing } = lookupModelPricing(model);
+    const cost = calculateCostFromPricing(
+      pricing,
+      Number(row.input_tokens),
+      Number(row.output_tokens),
+      Number(row.cache_read_tokens),
+      Number(row.cache_creation_tokens)
+    );
+    totalInputCost += cost.inputCost;
+    totalOutputCost += cost.outputCost;
+    totalCacheReadCost += cost.cacheReadCost;
+    totalCacheCreationCost += cost.cacheCreationCost;
+  }
+
+  return {
+    inputCost: totalInputCost,
+    outputCost: totalOutputCost,
+    cacheReadCost: totalCacheReadCost,
+    cacheCreationCost: totalCacheCreationCost,
+    totalCost: totalInputCost + totalOutputCost + totalCacheReadCost + totalCacheCreationCost,
+  };
+}
+
+/**
+ * Sum multiple CostBreakdown objects into a single total.
+ */
+function sumCosts(costs: CostBreakdown[]): CostBreakdown {
+  const result: CostBreakdown = {
+    inputCost: 0,
+    outputCost: 0,
+    cacheReadCost: 0,
+    cacheCreationCost: 0,
+    totalCost: 0,
+  };
+  for (const c of costs) {
+    result.inputCost += c.inputCost;
+    result.outputCost += c.outputCost;
+    result.cacheReadCost += c.cacheReadCost;
+    result.cacheCreationCost += c.cacheCreationCost;
+    result.totalCost += c.totalCost;
+  }
+  return result;
 }
 
 // ============================================================================
@@ -165,27 +276,41 @@ async function metricsHandler(
 
     const rows = queryMetrics(backend, days, groupBy, providerFilter);
 
-    const metrics = rows.map(row => ({
-      group: row.group_key,
-      totalInputTokens: Number(row.total_input_tokens),
-      totalOutputTokens: Number(row.total_output_tokens),
-      totalTokens: Number(row.total_input_tokens) + Number(row.total_output_tokens),
-      sessionCount: Number(row.session_count),
-      avgDurationMs: Math.round(Number(row.avg_duration_ms)),
-      errorRate: Number(row.session_count) > 0
-        ? Number(row.failed_count) / Number(row.session_count)
-        : 0,
-      failedCount: Number(row.failed_count),
-      rateLimitedCount: Number(row.rate_limited_count),
-      estimatedCost: estimateCost(Number(row.total_input_tokens), Number(row.total_output_tokens)),
-    }));
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days);
+    const cutoffStr = cutoff.toISOString();
+
+    const metrics = rows.map(row => {
+      const estimatedCost = groupBy === 'model'
+        ? computeModelGroupCost(row.group_key, row)
+        : computeProviderGroupCost(backend, row.group_key, cutoffStr);
+
+      return {
+        group: row.group_key,
+        totalInputTokens: Number(row.total_input_tokens),
+        totalOutputTokens: Number(row.total_output_tokens),
+        totalCacheReadTokens: Number(row.total_cache_read_tokens),
+        totalCacheCreationTokens: Number(row.total_cache_creation_tokens),
+        totalTokens: Number(row.total_input_tokens) + Number(row.total_output_tokens),
+        sessionCount: Number(row.session_count),
+        avgDurationMs: Math.round(Number(row.avg_duration_ms)),
+        errorRate: Number(row.session_count) > 0
+          ? Number(row.failed_count) / Number(row.session_count)
+          : 0,
+        failedCount: Number(row.failed_count),
+        rateLimitedCount: Number(row.rate_limited_count),
+        estimatedCost,
+      };
+    });
+
+    const totalCost = sumCosts(metrics.map(m => m.estimatedCost));
 
     const totals = {
       totalInputTokens: metrics.reduce((sum, m) => sum + m.totalInputTokens, 0),
       totalOutputTokens: metrics.reduce((sum, m) => sum + m.totalOutputTokens, 0),
       totalTokens: metrics.reduce((sum, m) => sum + m.totalTokens, 0),
       sessionCount: metrics.reduce((sum, m) => sum + m.sessionCount, 0),
-      estimatedCost: metrics.reduce((sum, m) => sum + m.estimatedCost, 0),
+      estimatedCost: totalCost,
     };
 
     const summary: MetricsSummary = {
@@ -216,7 +341,7 @@ async function metricsHandler(
     lines.push(`  Input tokens:     ${formatNumber(totals.totalInputTokens)}`);
     lines.push(`  Output tokens:    ${formatNumber(totals.totalOutputTokens)}`);
     lines.push(`  Sessions:         ${formatNumber(totals.sessionCount)}`);
-    lines.push(`  Estimated cost:   ${formatCost(totals.estimatedCost)}`);
+    lines.push(`  Estimated cost:   ${formatCost(totals.estimatedCost.totalCost)}`);
     lines.push('');
 
     // Per-group breakdown
@@ -229,7 +354,7 @@ async function metricsHandler(
       lines.push(`    Sessions:    ${formatNumber(m.sessionCount)}`);
       lines.push(`    Avg duration: ${formatDuration(m.avgDurationMs)}`);
       lines.push(`    Error rate:  ${(m.errorRate * 100).toFixed(1)}% (${m.failedCount} failed, ${m.rateLimitedCount} rate limited)`);
-      lines.push(`    Est. cost:   ${formatCost(m.estimatedCost)}`);
+      lines.push(`    Est. cost:   ${formatCost(m.estimatedCost.totalCost)} (in: ${formatCost(m.estimatedCost.inputCost)}, out: ${formatCost(m.estimatedCost.outputCost)}, cache: ${formatCost(m.estimatedCost.cacheReadCost + m.estimatedCost.cacheCreationCost)})`);
       lines.push('');
     }
 

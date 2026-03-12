@@ -48,10 +48,11 @@ export function createMetricsRoutes(services: Services) {
       if (sessionId) {
         const sessionMetrics = services.metricsService.getBySession(sessionId);
         const metrics = sessionMetrics ? [sessionMetrics] : [];
+        const metricsWithCost = services.costService.enrichWithCosts(metrics, 'session');
         return c.json({
           timeRange: { days: 0, label: 'session' },
           groupBy: 'session',
-          metrics,
+          metrics: metricsWithCost,
         });
       }
 
@@ -74,15 +75,18 @@ export function createMetricsRoutes(services: Services) {
         aggregated = services.metricsService.aggregateByProvider(timeRange);
       }
 
+      // Enrich metrics with cost breakdowns
+      const metricsWithCost = services.costService.enrichWithCosts(aggregated, groupBy, timeRange);
+
       const result: {
         timeRange: { days: number; label: string };
         groupBy: string;
-        metrics: typeof aggregated;
+        metrics: typeof metricsWithCost;
         timeSeries?: ReturnType<typeof services.metricsService.getTimeSeries>;
       } = {
         timeRange: { days, label: `${days}d` },
         groupBy,
-        metrics: aggregated,
+        metrics: metricsWithCost,
       };
 
       if (includeSeries && (groupBy === 'provider' || groupBy === 'model')) {

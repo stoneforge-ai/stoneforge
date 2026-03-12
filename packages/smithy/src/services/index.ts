@@ -305,3 +305,12 @@ export {
   // Factory
   createMetricsService,
 } from './metrics-service.js';
+
+// Cost service
+export {
+  // Types
+  type AggregatedMetricsWithCost,
+  type CostService,
+  // Factory
+  createCostService,
+} from './cost-service.js';

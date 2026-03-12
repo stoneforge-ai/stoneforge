@@ -89,8 +89,7 @@ const PROVIDER_COLORS: string[] = [
   '#ef4444', // red
 ];
 
-/** Rough cost estimate per 1M tokens (input/output blended) */
-const ESTIMATED_COST_PER_MILLION_TOKENS = 5.0;
+// Cost estimation is now provided by the API via per-model pricing
 
 // ============================================================================
 // Helper Functions
@@ -842,7 +841,7 @@ export function MetricsPage() {
     const totalOutputTokens = providerMetrics.reduce((s, m) => s + m.totalOutputTokens, 0);
     const totalTokens = totalInputTokens + totalOutputTokens;
     const totalSessions = providerMetrics.reduce((s, m) => s + m.sessionCount, 0);
-    const estimatedCost = (totalTokens / 1_000_000) * ESTIMATED_COST_PER_MILLION_TOKENS;
+    const estimatedCost = providerMetrics.reduce((s, m) => s + (m.estimatedCost?.totalCost ?? 0), 0);
     return { totalInputTokens, totalOutputTokens, totalTokens, totalSessions, estimatedCost };
   }, [providerMetrics]);
 
@@ -1146,7 +1145,7 @@ export function MetricsPage() {
           <StatCard
             label="Estimated Cost"
             value={formatCost(providerSummary.estimatedCost)}
-            subtitle={`~$${ESTIMATED_COST_PER_MILLION_TOKENS}/M tokens`}
+            subtitle="per-model pricing"
             icon={DollarSign}
             iconColor="bg-[color-mix(in_srgb,#eab308_15%,transparent)] text-[#eab308]"
             testId="stat-estimated-cost"
