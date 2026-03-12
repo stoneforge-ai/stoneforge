@@ -14,7 +14,9 @@
     "build": "tsc --noEmit",
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
-    "test": "bun test src"
+    "test": "bun test src",
+    "test:node": "vitest run",
+    "test:all": "bun test src && vitest run"
   },
   "dependencies": {
     "@stoneforge/core": "workspace:*",
@@ -28,6 +30,7 @@
   },
   "devDependencies": {
     "@types/bun": "latest",
+    "vitest": "^4.0.18",
     "@types/ws": "^8.5.0",
     "tsx": "^4.7.0",
     "typescript": "^5.9.3",

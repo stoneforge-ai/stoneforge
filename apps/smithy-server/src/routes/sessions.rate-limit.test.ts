@@ -5,7 +5,7 @@
  * return HTTP 429 with Retry-After header when all executables are rate-limited.
  */
 
-import { describe, test, expect, beforeEach, mock } from 'bun:test';
+import { describe, test, expect, beforeEach, vi } from 'vitest';
 import { EventEmitter } from 'events';
 import { Hono } from 'hono';
 import type { EntityId } from '@stoneforge/core';
@@ -33,21 +33,21 @@ function createMockServices(overrides?: {
 
   return {
     api: {
-      get: mock(async () => null),
-      create: mock(async () => ({})),
-      update: mock(async () => ({})),
+      get: vi.fn(async () => null),
+      create: vi.fn(async () => ({})),
+      update: vi.fn(async () => ({})),
     },
     orchestratorApi: {
-      assignTaskToAgent: mock(async () => ({})),
+      assignTaskToAgent: vi.fn(async () => ({})),
     },
     agentRegistry: {
-      getAgent: mock(async () => mockAgent),
-      getDirector: mock(async () => ({ id: 'director-123' })),
-      listAgents: mock(async () => []),
+      getAgent: vi.fn(async () => mockAgent),
+      getDirector: vi.fn(async () => ({ id: 'director-123' })),
+      listAgents: vi.fn(async () => []),
     },
     sessionManager: {
-      getActiveSession: mock(() => null),
-      startSession: mock(async (agentId: EntityId) => {
+      getActiveSession: vi.fn(() => null),
+      startSession: vi.fn(async (agentId: EntityId) => {
         const session: SessionRecord = {
           id: `session-${Date.now()}`,
           agentId,
@@ -62,7 +62,7 @@ function createMockServices(overrides?: {
         };
         return { session, events: new EventEmitter() };
       }),
-      resumeSession: mock(async (agentId: EntityId) => {
+      resumeSession: vi.fn(async (agentId: EntityId) => {
         const session: SessionRecord = {
           id: `session-${Date.now()}`,
           agentId,
@@ -78,13 +78,13 @@ function createMockServices(overrides?: {
         };
         return { session, events: new EventEmitter(), uwpCheck: undefined };
       }),
-      getMostRecentResumableSession: mock(() => ({
+      getMostRecentResumableSession: vi.fn(() => ({
         id: 'session-resumable',
         providerSessionId: 'provider-123',
       })),
-      getSession: mock(() => undefined),
-      listSessions: mock(() => []),
-      getSessionHistory: mock(async () => []),
+      getSession: vi.fn(() => undefined),
+      listSessions: vi.fn(() => []),
+      getSessionHistory: vi.fn(async () => []),
     },
     spawnerService: {},
     worktreeManager: undefined,
@@ -99,21 +99,21 @@ function createMockServices(overrides?: {
     mergeStewardService: {},
     docsStewardService: {},
     dispatchDaemon: {
-      getRateLimitStatus: mock(() => ({
+      getRateLimitStatus: vi.fn(() => ({
         isPaused,
         limits: isPaused ? [{ executable: 'claude', resetsAt: soonestReset ?? new Date(Date.now() + 60_000).toISOString() }] : [],
         soonestReset,
       })),
       // Satisfy the DispatchDaemon interface enough to avoid type errors
-      start: mock(async () => {}),
-      stop: mock(async () => {}),
-      isRunning: mock(() => false),
+      start: vi.fn(async () => {}),
+      stop: vi.fn(async () => {}),
+      isRunning: vi.fn(() => false),
     },
     sessionInitialPrompts: new Map<string, string>(),
     sessionMessageService: {
-      saveMessage: mock(() => {}),
-      getSessionMessages: mock(() => []),
-      getLatestDisplayableMessages: mock(() => new Map()),
+      saveMessage: vi.fn(() => {}),
+      getSessionMessages: vi.fn(() => []),
+      getLatestDisplayableMessages: vi.fn(() => new Map()),
     },
     storageBackend: {},
   } as unknown as Services;
@@ -133,7 +133,7 @@ describe('Session Routes - Rate Limit Guard', () => {
       });
 
       const app = new Hono();
-      app.route('/', createSessionRoutes(services, mock(() => {})));
+      app.route('/', createSessionRoutes(services, vi.fn(() => {})));
 
       const response = await app.request('/api/agents/agent-test-123/start', {
         method: 'POST',
@@ -161,7 +161,7 @@ describe('Session Routes - Rate Limit Guard', () => {
       });
 
       const app = new Hono();
-      app.route('/', createSessionRoutes(services, mock(() => {})));
+      app.route('/', createSessionRoutes(services, vi.fn(() => {})));
 
       const response = await app.request('/api/agents/agent-test-123/start', {
         method: 'POST',
@@ -182,7 +182,7 @@ describe('Session Routes - Rate Limit Guard', () => {
       });
 
       const app = new Hono();
-      app.route('/', createSessionRoutes(services, mock(() => {})));
+      app.route('/', createSessionRoutes(services, vi.fn(() => {})));
 
       const response = await app.request('/api/agents/agent-test-123/start', {
         method: 'POST',
@@ -205,7 +205,7 @@ describe('Session Routes - Rate Limit Guard', () => {
       });
 
       const app = new Hono();
-      app.route('/', createSessionRoutes(services, mock(() => {})));
+      app.route('/', createSessionRoutes(services, vi.fn(() => {})));
 
       const response = await app.request('/api/agents/agent-test-123/resume', {
         method: 'POST',
@@ -231,7 +231,7 @@ describe('Session Routes - Rate Limit Guard', () => {
       });
 
       const app = new Hono();
-      app.route('/', createSessionRoutes(services, mock(() => {})));
+      app.route('/', createSessionRoutes(services, vi.fn(() => {})));
 
       const response = await app.request('/api/agents/agent-test-123/resume', {
         method: 'POST',
@@ -253,7 +253,7 @@ describe('Session Routes - Rate Limit Guard', () => {
       (services as { dispatchDaemon: undefined }).dispatchDaemon = undefined;
 
       const app = new Hono();
-      app.route('/', createSessionRoutes(services, mock(() => {})));
+      app.route('/', createSessionRoutes(services, vi.fn(() => {})));
 
       const response = await app.request('/api/agents/agent-test-123/start', {
         method: 'POST',
