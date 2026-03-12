@@ -113,11 +113,17 @@ function formatDuration(ms: number): string {
 }
 
 /**
- * Format cost as a dollar amount
+ * Format cost as a dollar amount.
+ * - < $0.01: show "< $0.01"
+ * - < $1: show "$0.XX"
+ * - < $100: show "$X.XX"
+ * - >= $100: show "$XXX"
  */
 function formatCost(cost: number): string {
-  if (cost < 0.01) return '$0.00';
-  return `$${cost.toFixed(2)}`;
+  if (cost === 0) return '$0.00';
+  if (cost < 0.01) return '< $0.01';
+  if (cost < 100) return `$${cost.toFixed(2)}`;
+  return `$${Math.round(cost)}`;
 }
 
 /**
@@ -336,12 +342,17 @@ async function metricsHandler(
     }
 
     // Summary totals
+    const totalCacheRead = metrics.reduce((s, m) => s + m.totalCacheReadTokens, 0);
+    const totalCacheCreation = metrics.reduce((s, m) => s + m.totalCacheCreationTokens, 0);
+
     lines.push('Summary:');
-    lines.push(`  Total tokens:     ${formatNumber(totals.totalTokens)}`);
-    lines.push(`  Input tokens:     ${formatNumber(totals.totalInputTokens)}`);
-    lines.push(`  Output tokens:    ${formatNumber(totals.totalOutputTokens)}`);
-    lines.push(`  Sessions:         ${formatNumber(totals.sessionCount)}`);
-    lines.push(`  Estimated cost:   ${formatCost(totals.estimatedCost.totalCost)}`);
+    lines.push(`  Total tokens:          ${formatNumber(totals.totalTokens)}`);
+    lines.push(`  Input tokens:          ${formatNumber(totals.totalInputTokens)}`);
+    lines.push(`  Output tokens:         ${formatNumber(totals.totalOutputTokens)}`);
+    lines.push(`  Cache read tokens:     ${formatNumber(totalCacheRead)}`);
+    lines.push(`  Cache creation tokens: ${formatNumber(totalCacheCreation)}`);
+    lines.push(`  Sessions:              ${formatNumber(totals.sessionCount)}`);
+    lines.push(`  Estimated cost:        ${formatCost(totals.estimatedCost.totalCost)}`);
     lines.push('');
 
     // Per-group breakdown
@@ -350,11 +361,19 @@ async function metricsHandler(
 
     for (const m of metrics) {
       lines.push(`  ${m.group}`);
-      lines.push(`    Tokens:      ${formatNumber(m.totalTokens)} (in: ${formatNumber(m.totalInputTokens)}, out: ${formatNumber(m.totalOutputTokens)})`);
-      lines.push(`    Sessions:    ${formatNumber(m.sessionCount)}`);
-      lines.push(`    Avg duration: ${formatDuration(m.avgDurationMs)}`);
-      lines.push(`    Error rate:  ${(m.errorRate * 100).toFixed(1)}% (${m.failedCount} failed, ${m.rateLimitedCount} rate limited)`);
-      lines.push(`    Est. cost:   ${formatCost(m.estimatedCost.totalCost)} (in: ${formatCost(m.estimatedCost.inputCost)}, out: ${formatCost(m.estimatedCost.outputCost)}, cache: ${formatCost(m.estimatedCost.cacheReadCost + m.estimatedCost.cacheCreationCost)})`);
+      lines.push(`    Tokens:           ${formatNumber(m.totalTokens)} total`);
+      lines.push(`      Input:          ${formatNumber(m.totalInputTokens)}`);
+      lines.push(`      Output:         ${formatNumber(m.totalOutputTokens)}`);
+      lines.push(`      Cache read:     ${formatNumber(m.totalCacheReadTokens)}`);
+      lines.push(`      Cache creation: ${formatNumber(m.totalCacheCreationTokens)}`);
+      lines.push(`    Sessions:         ${formatNumber(m.sessionCount)}`);
+      lines.push(`    Avg duration:     ${formatDuration(m.avgDurationMs)}`);
+      lines.push(`    Error rate:       ${(m.errorRate * 100).toFixed(1)}% (${m.failedCount} failed, ${m.rateLimitedCount} rate limited)`);
+      lines.push(`    Est. cost:        ${formatCost(m.estimatedCost.totalCost)}`);
+      lines.push(`      Input:          ${formatCost(m.estimatedCost.inputCost)}`);
+      lines.push(`      Output:         ${formatCost(m.estimatedCost.outputCost)}`);
+      lines.push(`      Cache read:     ${formatCost(m.estimatedCost.cacheReadCost)}`);
+      lines.push(`      Cache creation: ${formatCost(m.estimatedCost.cacheCreationCost)}`);
       lines.push('');
     }
 
