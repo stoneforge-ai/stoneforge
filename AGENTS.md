@@ -2,19 +2,45 @@
 
 Context and instructions for AI coding agents working on the Stoneforge repository.
 
+## How to Find Documentation
+
+1. **This file** — Quick task-to-file mappings below
+2. **Documentation Directory** — Full index of all workspace docs: `sf show el-30yb`
+3. **Category Index** — Browse by category: `sf show el-og6v`
+4. **Full-text search** — Find any doc by topic: `sf document search "your topic"`
+
+---
+
 ## Quick Start
 
-**Start by reading `docs/README.md`** for file paths and navigation tables.
+### Backend Tasks
 
-| I need...                  | Go to                                |
-| -------------------------- | ------------------------------------ |
-| File paths for any concept | `docs/README.md` (File Map tables)   |
-| Core type details          | `docs/reference/core-types.md`       |
-| API usage                  | `docs/reference/quarry-api.md`    |
-| CLI commands               | `docs/reference/cli.md`              |
-| Critical pitfalls          | `docs/gotchas.md`                    |
-| Architecture overview      | `docs/ARCHITECTURE.md`               |
-| Agent orchestration        | `docs/reference/orchestrator-api.md` |
+| I need... | Key Files | Reference Doc |
+|-----------|-----------|---------------|
+| Add an API endpoint | `apps/quarry-server/src/index.ts`, `apps/smithy-server/src/routes/` | `sf show el-5z1q` |
+| Add a core type | `packages/core/src/types/` | `sf show el-6c3s` |
+| Work with dependencies | `packages/quarry/src/services/dependency.ts` | `sf show el-200z` |
+| Add an orchestrator service | `packages/smithy/src/services/` | `sf show el-50ia` |
+| Use the CLI | `packages/quarry/src/cli/commands/` | `sf show el-59tr` |
+| Use the QuarryAPI | `packages/quarry/src/api/quarry-api.ts` | `sf show el-kflh` |
+| Use the OrchestratorAPI | `packages/smithy/src/api/orchestrator-api.ts` | `sf show el-3qg2` |
+| Customize agent prompts | `.stoneforge/prompts/` | `sf show el-32rb` |
+| Configure identity | `packages/quarry/src/systems/identity.ts` | `sf show el-2jw5` |
+| Understand event sourcing | `packages/core/src/types/event.ts` | `sf show el-58k3` |
+| Configure the system | `packages/quarry/src/config/` | `sf show el-z1sj` |
+
+### Frontend Tasks
+
+| I need... | Key Files | Reference Doc |
+|-----------|-----------|---------------|
+| Modify a smithy-web page | `apps/smithy-web/src/routes/{page}/` | `sf show el-4b3q` |
+| Modify a quarry-web page | `apps/quarry-web/src/routes/{page}/` | `sf show el-4iiz` |
+| Add a new frontend route | `apps/{app}/src/router.tsx` | `sf show el-232d` |
+| Modify shared UI components | `packages/ui/src/` | `sf show el-2hk5` |
+| Add a React component | `apps/{app}/src/components/` | `sf show el-3gg7` |
+| Work with API hooks (smithy) | `apps/smithy-web/src/api/hooks/` | `sf show el-4b3q` |
+| Work with API hooks (quarry) | `apps/quarry-web/src/api/hooks/` | `sf show el-4iiz` |
+| Understand frontend architecture | — | `sf show el-935d` |
 
 ---
 
@@ -35,7 +61,6 @@ apps/
 ├── smithy-server/     # Orchestrator API (port 3457)
 └── smithy-web/        # Orchestrator dashboard (port 5174)
 
-docs/                  # Diátaxis documentation (primary reference for agents)
 .stoneforge/            # Project data (stoneforge.db, elements.jsonl, config.yaml)
 ```
 
@@ -116,7 +141,7 @@ bun run --filter @stoneforge/smithy-web dev     # Orchestrator UI (port 5174)
 
 ## Critical Gotchas
 
-See `docs/gotchas.md` for the complete list. **Top 10 for agents:**
+See `sf show el-49ra` for the complete list. **Top 10 for agents:**
 
 1. **`blocked` is computed** - Never set `status: 'blocked'` directly; it's derived from dependencies
 2. **`blocks` direction** - `sf dependency add --type=blocks A B` means A is blocked BY B (B completes first)
@@ -133,18 +158,33 @@ See `docs/gotchas.md` for the complete list. **Top 10 for agents:**
 
 ## Navigation Quick Reference
 
-| I want to...                   | Key Files                                                           |
-| ------------------------------ | ------------------------------------------------------------------- |
-| Add a new core type            | `packages/core/src/types/`, `docs/how-to/add-core-type.md`          |
-| Add an API endpoint            | `apps/quarry-server/src/index.ts`, `docs/how-to/add-api-endpoint.md`       |
-| Add a React component          | `packages/ui/src/components/`, `docs/how-to/add-react-component.md` |
-| Work with dependencies         | `packages/quarry/src/services/dependency.ts`                           |
-| Understand task status         | `packages/core/src/types/task.ts`                                   |
-| Configure identity/signing     | `packages/quarry/src/systems/identity.ts`                              |
-| Work with the Orchestrator API | `packages/smithy/src/api/orchestrator-api.ts`             |
-| Customize agent prompts        | `.stoneforge/prompts/`, `docs/how-to/customize-agent-prompts.md`     |
-| Debug sync issues              | `packages/quarry/src/sync/service.ts`                                  |
-| Add a CLI command              | `packages/quarry/src/cli/commands/`                                    |
+| I want to... | Key Files |
+|--------------|-----------|
+| Add a new core type | `packages/core/src/types/` |
+| Add an API endpoint | `apps/quarry-server/src/index.ts` |
+| Add a React component | `packages/ui/src/components/` |
+| Work with dependencies | `packages/quarry/src/services/dependency.ts` |
+| Understand task status | `packages/core/src/types/task.ts` |
+| Configure identity/signing | `packages/quarry/src/systems/identity.ts` |
+| Work with the Orchestrator API | `packages/smithy/src/api/orchestrator-api.ts` |
+| Customize agent prompts | `.stoneforge/prompts/` |
+| Debug sync issues | `packages/quarry/src/sync/service.ts` |
+| Add a CLI command | `packages/quarry/src/cli/commands/` |
+| Modify the Activity page | `apps/smithy-web/src/routes/activity/`, `apps/smithy-web/src/components/activity/` |
+| Modify the Agents page | `apps/smithy-web/src/routes/agents/`, `apps/smithy-web/src/components/agent/` |
+| Modify the Tasks page (smithy) | `apps/smithy-web/src/routes/tasks/`, `apps/smithy-web/src/components/task/` |
+| Modify the Dashboard (quarry) | `apps/quarry-web/src/routes/dashboard/` |
+| Modify the Entity page | `apps/quarry-web/src/routes/entities/` |
+| Modify the Dependency Graph | `apps/quarry-web/src/routes/dependency-graph/` |
+| Modify the Workspaces page | `apps/smithy-web/src/routes/workspaces/`, `apps/smithy-web/src/components/workspace/`, `apps/smithy-web/src/components/terminal/` |
+| Modify the Editor | `apps/smithy-web/src/routes/editor/`, `apps/smithy-web/src/components/editor/` |
+| Modify the Messages page | `apps/smithy-web/src/routes/messages/` or `apps/quarry-web/src/routes/messages/` |
+| Modify the Documents page | `apps/smithy-web/src/routes/documents/` or `apps/quarry-web/src/routes/documents/` |
+| Modify the Merge Requests page | `apps/smithy-web/src/routes/merge-requests/`, `apps/smithy-web/src/components/merge-request/` |
+| Modify the Plans page | `apps/smithy-web/src/routes/plans/` or `apps/quarry-web/src/routes/plans/` |
+| Modify the Workflows page | `apps/smithy-web/src/routes/workflows/` or `apps/quarry-web/src/routes/workflows/` |
+| Modify the Settings page | `apps/smithy-web/src/routes/settings/` or `apps/quarry-web/src/routes/settings/` |
+| Modify the Metrics page | `apps/smithy-web/src/routes/metrics/` |
 
 ---
 
@@ -167,6 +207,7 @@ See `docs/gotchas.md` for the complete list. **Top 10 for agents:**
 - Tests colocated with source: `*.test.ts` next to `*.ts`
 - Integration tests use real SQLite (`:memory:` or temp files)
 - Run `bun test <path>` for specific tests
+- See `sf show el-50x1` for test runner conventions (Bun vs Vitest)
 
 ### Error Handling
 
@@ -193,6 +234,18 @@ Stewards → merge completed work, documentation scanning and fixes
 - `SessionManager` - Agent session lifecycle tracking
 
 **Prompts:** Built-in prompts in `packages/smithy/src/prompts/`, override with `.stoneforge/prompts/`
+
+---
+
+## Keeping Docs Updated
+
+When your changes affect documented behavior (APIs, config, workflows, architecture):
+
+1. **Search** for relevant docs: `sf document search "topic"`
+2. **Update** existing workspace documents: `sf document update <doc-id> --content "..."`
+3. **Create** new docs for undocumented knowledge: `sf document create --title "..." --content "..." --category reference --type markdown`
+4. **Update the Documentation Directory** (`sf show el-30yb`) when you create or significantly modify documents
+5. **Add to the Documentation library** (`sf docs add <doc-id>`) so the document is discoverable
 
 ---
 
