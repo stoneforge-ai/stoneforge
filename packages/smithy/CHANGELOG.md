@@ -1,5 +1,33 @@
 # @stoneforge/smithy
 
+## 1.17.0
+
+### Minor Changes
+
+- 713cea8: Add workflow preset-aware context to agent system prompts. Agents now receive preset-specific instructions about merge behavior, tool access, and approval requirements based on the active workflow preset (auto, review, approve).
+- 600e4fd: Capture cache read and cache creation tokens from Claude Code SDK events and update MetricsService aggregations
+- 7c63531: Add CostService for per-model cost calculation and enrich provider-metrics API with estimatedCost breakdowns
+- d3744f6: Add agent tool permission model with auto-allowed tools, configurable bash command allowlist, approval request service with SQLite storage, API endpoints for managing approval requests, and session-level permission monitoring.
+- dafa312: Add GET/PUT /api/settings/workflow-preset endpoints for reading and updating the workspace workflow preset from the frontend.
+- 705df96: Add GitHub PR merge approval flow for Approve preset. When `merge.requireApproval` is true, the merge steward creates GitHub PRs instead of auto-merging, adds `awaiting_approval` merge status, and polls for PR merge completion.
+- 6287e4d: Auto-create review branch when `merge.targetBranch` is set to a non-main branch (e.g. `stoneforge/review`). The merge steward now ensures the target branch exists before merging, creating it from main HEAD if needed.
+
+### Patch Changes
+
+- fe96d6a: Re-export SyncDirection, ProviderConfig, and ExternalSyncSettings types from smithy services barrel export
+- Updated dependencies [600e4fd]
+- Updated dependencies [7c63531]
+- Updated dependencies [7c63531]
+- Updated dependencies [d3744f6]
+- Updated dependencies [9015835]
+- Updated dependencies [b2ce7ce]
+- Updated dependencies [a77ec61]
+- Updated dependencies [3bc3e76]
+  - @stoneforge/storage@1.17.0
+  - @stoneforge/core@1.17.0
+  - @stoneforge/quarry@1.17.0
+  - @stoneforge/shared-routes@1.17.0
+
 ## 1.16.1
 
 ### Patch Changes

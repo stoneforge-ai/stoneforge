@@ -1,5 +1,11 @@
 # @stoneforge/ui
 
+## 1.17.0
+
+### Minor Changes
+
+- 705df96: Add `awaiting_approval` merge status display support with color styling and display name.
+
 ## 1.16.1
 
 ## 1.16.0
