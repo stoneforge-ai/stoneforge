@@ -30,7 +30,11 @@ import type {
 } from '@stoneforge/core';
 import { InboxStatus, createTimestamp, TaskStatus, asEntityId, asElementId, PlanStatus, canAutoComplete } from '@stoneforge/core';
 import type { QuarryAPI, InboxService } from '@stoneforge/quarry';
-import { loadTriagePrompt, loadRolePrompt, renderPromptTemplate } from '../prompts/index.js';
+import { loadTriagePrompt, loadRolePrompt, renderPromptTemplate, buildWorkflowPresetSection } from '../prompts/index.js';
+import type { WorkflowPresetContext } from '../prompts/index.js';
+import { getValue } from '@stoneforge/quarry';
+import type { WorkflowPreset, AgentPermissionModel } from '@stoneforge/quarry';
+import { AUTO_ALLOWED_TOOLS, AUTO_ALLOWED_SF_COMMANDS } from '../permissions/types.js';
 import { detectTargetBranch } from '../git/merge.js';
 import { createLogger } from '../utils/logger.js';
 import { isRateLimitMessage, parseRateLimitResetTime, getFallbackResetTime } from '../utils/rate-limit-parser.js';
@@ -2795,6 +2799,12 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       );
     }
 
+    // Add workflow preset context so the agent understands its merge and permission behavior
+    const presetSection = this.buildWorkflowPresetContextSection();
+    if (presetSection) {
+      parts.push(presetSection, '', '---', '');
+    }
+
     // Get the director ID for context
     const director = await this.agentRegistry.getDirector();
     const directorId = director?.id ?? 'unknown';
@@ -2844,6 +2854,33 @@ export class DispatchDaemonImpl implements DispatchDaemon {
   }
 
   /**
+   * Builds a workflow preset context section by reading the current config.
+   * Returns the section string, or empty string if no preset is configured.
+   */
+  private buildWorkflowPresetContextSection(): string {
+    try {
+      const preset = getValue('workflow.preset') as WorkflowPreset | null;
+      if (!preset) return '';
+
+      const permissionModel = getValue('agents.permissionModel') as AgentPermissionModel;
+      const allowedBashCommands = getValue('agents.allowedBashCommands') as string[] | undefined;
+
+      const context: WorkflowPresetContext = {
+        preset,
+        permissionModel,
+        autoAllowedTools: AUTO_ALLOWED_TOOLS,
+        autoAllowedSfCommands: AUTO_ALLOWED_SF_COMMANDS,
+        allowedBashCommands: allowedBashCommands,
+      };
+
+      return buildWorkflowPresetSection(context);
+    } catch {
+      // Config may not be loaded yet — skip silently
+      return '';
+    }
+  }
+
+  /**
    * Builds the initial prompt for a merge steward session.
    * Includes the steward role prompt (steward-merge.md) followed by task context.
    *
@@ -2873,6 +2910,12 @@ export class DispatchDaemonImpl implements DispatchDaemon {
         '---',
         ''
       );
+    }
+
+    // Add workflow preset context so the steward understands merge and permission behavior
+    const stewardPresetSection = this.buildWorkflowPresetContextSection();
+    if (stewardPresetSection) {
+      parts.push(stewardPresetSection, '', '---', '');
     }
 
     // Get orchestrator metadata for PR/branch info
@@ -3378,6 +3421,12 @@ export class DispatchDaemonImpl implements DispatchDaemon {
         '---',
         ''
       );
+    }
+
+    // Add workflow preset context so the recovery steward understands merge behavior
+    const recoveryPresetSection = this.buildWorkflowPresetContextSection();
+    if (recoveryPresetSection) {
+      parts.push(recoveryPresetSection, '', '---', '');
     }
 
     // Get the director ID for context

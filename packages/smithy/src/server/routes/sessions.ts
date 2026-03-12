@@ -9,7 +9,11 @@ import { streamSSE } from 'hono/streaming';
 import type { EntityId, ElementId, Task } from '@stoneforge/core';
 import { createTimestamp, ElementType } from '@stoneforge/core';
 import type { SessionFilter, SpawnedSessionEvent, AgentRole, WorkerMetadata, StewardMetadata } from '../../index.js';
-import { loadRolePrompt, getAgentMetadata, generateSessionBranchName, generateSessionWorktreePath, trackListeners } from '../../index.js';
+import { loadRolePrompt, buildWorkflowPresetSection, getAgentMetadata, generateSessionBranchName, generateSessionWorktreePath, trackListeners } from '../../index.js';
+import type { WorkflowPresetContext } from '../../prompts/index.js';
+import { getValue } from '@stoneforge/quarry';
+import type { WorkflowPreset, AgentPermissionModel } from '@stoneforge/quarry';
+import { AUTO_ALLOWED_TOOLS, AUTO_ALLOWED_SF_COMMANDS } from '../../permissions/types.js';
 import type { Services } from '../services.js';
 import { formatSessionRecord } from '../formatters.js';
 import { notifySSEClientsOfNewSession } from './events.js';
@@ -350,9 +354,33 @@ Please begin working on this task. Use \`sf task get ${taskResult.id}\` to see f
           // Only add here if no taskId (task prompt already includes IDs)
           idSection = `\n\n**Worker ID:** ${agentId}\n**Director ID:** ${directorId ?? 'unknown'}`;
         }
+
+        // Add workflow preset context so the agent understands merge and permission behavior
+        let presetBlock = '';
+        try {
+          const preset = getValue('workflow.preset') as WorkflowPreset | null;
+          if (preset) {
+            const permissionModel = getValue('agents.permissionModel') as AgentPermissionModel;
+            const allowedBashCommands = getValue('agents.allowedBashCommands') as string[] | undefined;
+            const presetContext: WorkflowPresetContext = {
+              preset,
+              permissionModel,
+              autoAllowedTools: AUTO_ALLOWED_TOOLS,
+              autoAllowedSfCommands: AUTO_ALLOWED_SF_COMMANDS,
+              allowedBashCommands: allowedBashCommands,
+            };
+            const section = buildWorkflowPresetSection(presetContext);
+            if (section) {
+              presetBlock = `\n\n${section}`;
+            }
+          }
+        } catch {
+          // Config may not be loaded yet — skip silently
+        }
+
         effectivePrompt = effectivePrompt
-          ? `${framedRolePrompt}${idSection}\n\n---\n\n${effectivePrompt}`
-          : `${framedRolePrompt}${idSection}`;
+          ? `${framedRolePrompt}${idSection}${presetBlock}\n\n---\n\n${effectivePrompt}`
+          : `${framedRolePrompt}${idSection}${presetBlock}`;
       }
 
       const { session, events } = await sessionManager.startSession(agentId, {
