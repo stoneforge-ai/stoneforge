@@ -27,6 +27,9 @@ import { promisify } from 'node:util';
 
 const execAsync = promisify(exec);
 
+/** Well-known default branch names that should never be auto-created */
+const MAIN_BRANCH_NAMES = new Set(['main', 'master']);
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -200,6 +203,103 @@ export async function detectTargetBranch(
 }
 
 // ============================================================================
+// Review Branch Auto-Creation
+// ============================================================================
+
+/**
+ * Ensures the target branch exists when it is a non-main branch (e.g.
+ * `stoneforge/review`). If the branch does not exist locally or on the
+ * remote, it is created from the current main branch HEAD and pushed.
+ *
+ * This is a no-op when the target branch is `main` or `master`.
+ *
+ * @param workspaceRoot - The git repository root directory
+ * @param targetBranch - The branch to ensure exists
+ * @param localOnly - Whether the repo has no remote (skip push)
+ */
+export async function ensureTargetBranchExists(
+  workspaceRoot: string,
+  targetBranch: string,
+  localOnly = false
+): Promise<void> {
+  // Never auto-create main/master — they should already exist
+  if (MAIN_BRANCH_NAMES.has(targetBranch)) {
+    return;
+  }
+
+  // Check if the branch exists locally
+  const localExists = await branchExistsLocally(workspaceRoot, targetBranch);
+
+  // Check if the branch exists on the remote
+  let remoteExists = false;
+  if (!localOnly) {
+    remoteExists = await branchExistsOnRemote(workspaceRoot, targetBranch);
+  }
+
+  // If the branch already exists somewhere, nothing to do
+  if (localExists || remoteExists) {
+    return;
+  }
+
+  // Detect the main branch to create from
+  const mainBranch = await detectTargetBranch(workspaceRoot);
+  const hasOrigin = await hasRemote(workspaceRoot);
+
+  // Determine the base ref: prefer remote main when available
+  const baseRef = hasOrigin && !localOnly ? `origin/${mainBranch}` : mainBranch;
+
+  // Create the branch locally from the main branch HEAD
+  await execAsync(`git branch ${targetBranch} ${baseRef}`, {
+    cwd: workspaceRoot,
+    encoding: 'utf8',
+  });
+
+  // Push to remote if we have one
+  if (!localOnly && hasOrigin) {
+    await execAsync(`git push -u origin ${targetBranch}`, {
+      cwd: workspaceRoot,
+      encoding: 'utf8',
+    });
+  }
+}
+
+/**
+ * Check whether a branch exists locally.
+ */
+async function branchExistsLocally(
+  workspaceRoot: string,
+  branchName: string
+): Promise<boolean> {
+  try {
+    await execAsync(`git rev-parse --verify refs/heads/${branchName}`, {
+      cwd: workspaceRoot,
+      encoding: 'utf8',
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Check whether a branch exists on origin.
+ */
+async function branchExistsOnRemote(
+  workspaceRoot: string,
+  branchName: string
+): Promise<boolean> {
+  try {
+    await execAsync(`git rev-parse --verify refs/remotes/origin/${branchName}`, {
+      cwd: workspaceRoot,
+      encoding: 'utf8',
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// ============================================================================
 // Main
 // ============================================================================
 
@@ -222,6 +322,9 @@ export async function mergeBranch(options: MergeBranchOptions): Promise<MergeBra
   const localOnly = options.localOnly ?? !(await hasRemote(workspaceRoot));
 
   const targetBranch = options.targetBranch ?? await detectTargetBranch(workspaceRoot);
+
+  // Ensure the target branch exists (auto-creates review branches from main)
+  await ensureTargetBranchExists(workspaceRoot, targetBranch, localOnly);
 
   // Build commit message
   const message = commitMessage

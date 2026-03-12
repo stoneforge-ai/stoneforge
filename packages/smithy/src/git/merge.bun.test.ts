@@ -10,7 +10,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mergeBranch, detectTargetBranch, execGitSafe, hasRemote, syncLocalBranchFromCommit } from './merge.js';
+import { mergeBranch, detectTargetBranch, execGitSafe, hasRemote, syncLocalBranchFromCommit, ensureTargetBranchExists } from './merge.js';
 
 const execAsync = promisify(exec);
 
@@ -724,6 +724,182 @@ describe('mergeBranch already-merged detection', () => {
       expect(result.commitHash).toBeDefined();
     } finally {
       cleanup(repoDir, remoteDir);
+    }
+  });
+});
+
+// ============================================================================
+// Review branch auto-creation tests
+// ============================================================================
+
+describe('ensureTargetBranchExists', () => {
+  test('creates review branch from main when it does not exist (local-only)', async () => {
+    const repoDir = await createTestRepo();
+    try {
+      await ensureTargetBranchExists(repoDir, 'stoneforge/review', true);
+
+      // Verify the branch was created
+      const { stdout } = await execAsync('git rev-parse --verify refs/heads/stoneforge/review', {
+        cwd: repoDir,
+      });
+      expect(stdout.trim()).toBeTruthy();
+
+      // Verify it points to the same commit as main
+      const { stdout: mainHash } = await execAsync('git rev-parse main', { cwd: repoDir });
+      expect(stdout.trim()).toBe(mainHash.trim());
+    } finally {
+      rmrf(repoDir);
+    }
+  });
+
+  test('creates review branch from main and pushes to remote', async () => {
+    const { repoDir, remoteDir } = await setup();
+    try {
+      await ensureTargetBranchExists(repoDir, 'stoneforge/review', false);
+
+      // Verify the branch was created locally
+      const { stdout: localHash } = await execAsync(
+        'git rev-parse --verify refs/heads/stoneforge/review',
+        { cwd: repoDir },
+      );
+      expect(localHash.trim()).toBeTruthy();
+
+      // Verify the branch was pushed to remote
+      const { stdout: remoteHash } = await execAsync(
+        `git --git-dir="${remoteDir}" rev-parse --verify refs/heads/stoneforge/review`,
+      );
+      expect(remoteHash.trim()).toBe(localHash.trim());
+    } finally {
+      cleanup(repoDir, remoteDir);
+    }
+  });
+
+  test('is a no-op when branch already exists locally', async () => {
+    const repoDir = await createTestRepo();
+    try {
+      // Create the branch manually first
+      await execAsync('git branch stoneforge/review', { cwd: repoDir });
+
+      // Should not throw
+      await ensureTargetBranchExists(repoDir, 'stoneforge/review', true);
+
+      // Should still exist
+      const { stdout } = await execAsync('git rev-parse --verify refs/heads/stoneforge/review', {
+        cwd: repoDir,
+      });
+      expect(stdout.trim()).toBeTruthy();
+    } finally {
+      rmrf(repoDir);
+    }
+  });
+
+  test('is a no-op for main branch', async () => {
+    const repoDir = await createTestRepo();
+    try {
+      // Should not throw even though we pass 'main'
+      await ensureTargetBranchExists(repoDir, 'main', true);
+    } finally {
+      rmrf(repoDir);
+    }
+  });
+
+  test('is a no-op for master branch', async () => {
+    const repoDir = await createTestRepo();
+    try {
+      await ensureTargetBranchExists(repoDir, 'master', true);
+    } finally {
+      rmrf(repoDir);
+    }
+  });
+});
+
+describe('mergeBranch with review branch target', () => {
+  test('auto-creates review branch and merges into it (local-only)', async () => {
+    const repoDir = await createTestRepo();
+    try {
+      // Create a feature branch with changes
+      await execAsync('git checkout -b feature/review-test', { cwd: repoDir });
+      fs.writeFileSync(path.join(repoDir, 'review-feature.ts'), 'export const r = 1;\n');
+      await execAsync('git add . && git commit -m "Review feature"', { cwd: repoDir });
+      await execAsync('git checkout main', { cwd: repoDir });
+
+      // Merge into stoneforge/review — branch should be auto-created
+      const result = await mergeBranch({
+        workspaceRoot: repoDir,
+        sourceBranch: 'feature/review-test',
+        targetBranch: 'stoneforge/review',
+        commitMessage: 'Merge to review branch',
+        syncLocal: true,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.hasConflict).toBe(false);
+      expect(result.commitHash).toBeDefined();
+
+      // Verify the review branch now has the merge commit
+      const { stdout: reviewHash } = await execAsync(
+        'git rev-parse stoneforge/review',
+        { cwd: repoDir },
+      );
+      expect(reviewHash.trim()).toBe(result.commitHash);
+    } finally {
+      rmrf(repoDir);
+    }
+  });
+
+  test('auto-creates review branch and merges into it (with remote)', async () => {
+    const { repoDir, remoteDir } = await setup();
+    try {
+      // Create a feature branch with changes
+      await execAsync('git checkout -b feature/review-remote', { cwd: repoDir });
+      fs.writeFileSync(path.join(repoDir, 'review-remote.ts'), 'export const s = 2;\n');
+      await execAsync('git add . && git commit -m "Review remote feature"', { cwd: repoDir });
+      await execAsync('git push origin feature/review-remote', { cwd: repoDir });
+      await execAsync('git checkout main', { cwd: repoDir });
+
+      // Merge into stoneforge/review — branch should be auto-created
+      const result = await mergeBranch({
+        workspaceRoot: repoDir,
+        sourceBranch: 'feature/review-remote',
+        targetBranch: 'stoneforge/review',
+        commitMessage: 'Merge to review (remote)',
+        syncLocal: false,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.hasConflict).toBe(false);
+      expect(result.commitHash).toBeDefined();
+
+      // Verify the review branch exists on the remote with the merge
+      const { stdout: remoteLog } = await execAsync(
+        `git --git-dir="${remoteDir}" log --oneline stoneforge/review`,
+      );
+      expect(remoteLog).toContain('Merge to review (remote)');
+    } finally {
+      cleanup(repoDir, remoteDir);
+    }
+  });
+
+  test('does not change behavior when target is main (Auto preset)', async () => {
+    const repoDir = await createTestRepo();
+    try {
+      await execAsync('git checkout -b feature/auto-preset', { cwd: repoDir });
+      fs.writeFileSync(path.join(repoDir, 'auto-preset.ts'), 'export const t = 3;\n');
+      await execAsync('git add . && git commit -m "Auto preset feature"', { cwd: repoDir });
+      await execAsync('git checkout main', { cwd: repoDir });
+
+      const result = await mergeBranch({
+        workspaceRoot: repoDir,
+        sourceBranch: 'feature/auto-preset',
+        targetBranch: 'main',
+        commitMessage: 'Normal merge to main',
+        syncLocal: false,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.commitHash).toBeDefined();
+    } finally {
+      rmrf(repoDir);
     }
   });
 });
