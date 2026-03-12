@@ -104,7 +104,7 @@ function TaskInfo({ currentTask }: { currentTask?: Task }) {
 function ElapsedAndTokens({ session, agentId }: { session: SessionRecord; agentId: string }) {
   const [elapsed, setElapsed] = useState('');
   const startTime = session.startedAt || session.createdAt;
-  const { tokens: agentTokens } = useAgentTokens(agentId);
+  const { tokens: agentTokens } = useAgentTokens(agentId, session.id);
 
   useEffect(() => {
     setElapsed(formatDuration(startTime));
