@@ -76,3 +76,7 @@ export type {
 // Image drag-and-drop hook
 export { useImageDrop } from './useImageDrop';
 export type { UseImageDropConfig, UseImageDropReturn } from './useImageDrop';
+
+// Onboarding tour hook
+export { useOnboardingTour } from './useOnboardingTour';
+export type { OnboardingTourState } from './useOnboardingTour';

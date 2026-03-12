@@ -17,9 +17,12 @@ import { CommandPalette, useCommandPalette, QuickFileOpen, useQuickFileOpen, Fil
 import { useQuery } from '@tanstack/react-query';
 import { useNotifications } from '../../api/hooks/useNotifications';
 import { usePendingApprovalCount, useApprovalRequestWatcher } from '../../api/hooks/useApprovalRequests';
-import { useGlobalKeyboardShortcuts } from '../../hooks';
+import { useGlobalKeyboardShortcuts, useOnboardingTour } from '../../hooks';
 import { useIsMobile, useIsTablet } from '@stoneforge/ui';
 import { toast } from 'sonner';
+import { OnboardingTour, type TourStep } from '../onboarding';
+import { useWorkflowPreset } from '../../api/hooks/useWorkflowPreset';
+import { useDirector } from '../../api/hooks/useAgents';
 import {
   ChevronRight,
   Activity,
@@ -299,6 +302,57 @@ function useDirectorPanelState() {
   };
 }
 
+// ============================================================================
+// Onboarding Tour Step Definitions
+// ============================================================================
+
+const ONBOARDING_STEPS: TourStep[] = [
+  {
+    id: 'activity-dashboard',
+    targetTestId: 'activity-page',
+    title: 'Activity Dashboard',
+    description:
+      'This is your command center. See all active agents and their current work.',
+  },
+  {
+    id: 'agent-cards',
+    targetTestId: 'active-agents-section',
+    title: 'Agent Cards',
+    description:
+      'Each card shows an agent\'s status, task, and output. Interactive agents have a terminal; headless agents show their latest output.',
+  },
+  {
+    id: 'system-status',
+    targetTestId: 'system-status-bar',
+    title: 'System Status Bar',
+    description:
+      'Monitor daemon health and connection status at a glance.',
+  },
+  {
+    id: 'sidebar',
+    targetTestId: 'sidebar',
+    title: 'Sidebar Navigation',
+    description:
+      'Navigate between tasks, plans, agents, workspaces, and more.',
+  },
+  {
+    id: 'notification-bell',
+    targetTestId: 'notification-center',
+    title: 'Notification Bell',
+    description:
+      'Approval requests and important alerts appear here.',
+    // Conditionally enabled based on 'approve' preset — set at render time
+  },
+  {
+    id: 'director-panel',
+    targetTestId: 'director-panel',
+    title: 'Director Panel',
+    description:
+      'Chat with the director agent to guide your workspace.',
+    // Conditionally enabled based on director config — set at render time
+  },
+];
+
 export function AppShell() {
   const {
     isMobile,
@@ -318,6 +372,84 @@ export function AppShell() {
 
   const health = useHealth();
   const router = useRouter();
+
+  // Onboarding tour
+  const workflowPreset = useWorkflowPreset();
+  const { director: directorAgent } = useDirector();
+
+  // Build steps with conditional enablement
+  const tourSteps = useMemo(() => {
+    return ONBOARDING_STEPS.map((step) => {
+      if (step.id === 'notification-bell') {
+        return { ...step, enabled: workflowPreset.preset === 'approve' };
+      }
+      if (step.id === 'director-panel') {
+        return { ...step, enabled: !!directorAgent };
+      }
+      return step;
+    });
+  }, [workflowPreset.preset, directorAgent]);
+
+  const enabledStepCount = useMemo(
+    () => tourSteps.filter((s) => s.enabled !== false).length,
+    [tourSteps]
+  );
+
+  const onboardingTour = useOnboardingTour(enabledStepCount);
+
+  // Auto-start tour on first visit after preset is configured
+  const routerState2 = useRouterState();
+  useEffect(() => {
+    if (
+      workflowPreset.isConfigured &&
+      !workflowPreset.isLoading &&
+      !onboardingTour.isCompleted &&
+      !onboardingTour.isActive &&
+      routerState2.location.pathname === '/activity'
+    ) {
+      // Small delay to let the page render before starting the tour
+      const timer = setTimeout(() => {
+        onboardingTour.start();
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+  }, [
+    workflowPreset.isConfigured,
+    workflowPreset.isLoading,
+    onboardingTour.isCompleted,
+    onboardingTour.isActive,
+    routerState2.location.pathname,
+  ]);
+
+  // Ensure target elements are visible during the tour
+  const activeSteps = useMemo(
+    () => tourSteps.filter((s) => s.enabled !== false),
+    [tourSteps]
+  );
+
+  useEffect(() => {
+    if (!onboardingTour.isActive) return;
+    const currentStepData = activeSteps[onboardingTour.currentStep];
+    if (!currentStepData) return;
+
+    // Uncollapse sidebar when highlighting it
+    if (currentStepData.id === 'sidebar' && desktopCollapsed && !isMobile) {
+      setDesktopCollapsed(false);
+    }
+    // Uncollapse director panel when highlighting it
+    if (currentStepData.id === 'director-panel' && directorCollapsed && !isMobile) {
+      setDirectorCollapsed(false);
+    }
+  }, [
+    onboardingTour.isActive,
+    onboardingTour.currentStep,
+    activeSteps,
+    desktopCollapsed,
+    directorCollapsed,
+    isMobile,
+    setDesktopCollapsed,
+    setDirectorCollapsed,
+  ]);
 
   // Notification system
   const {
@@ -633,6 +765,16 @@ export function AppShell() {
       <FileContentSearch
         open={fileContentSearchOpen}
         onOpenChange={setFileContentSearchOpen}
+      />
+
+      {/* Onboarding Tour */}
+      <OnboardingTour
+        isActive={onboardingTour.isActive}
+        currentStep={onboardingTour.currentStep}
+        steps={tourSteps}
+        onNext={onboardingTour.next}
+        onPrev={onboardingTour.prev}
+        onSkip={onboardingTour.skip}
       />
     </div>
   );

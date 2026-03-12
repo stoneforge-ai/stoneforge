@@ -6,7 +6,7 @@
  * - Workspace: Worktree directory, ephemeral retention, steward schedules
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useSearch, useNavigate } from '@tanstack/react-router';
 import {
   Settings,
@@ -32,6 +32,7 @@ import {
   Terminal,
   AlertCircle,
   Workflow,
+  Sparkles,
 } from 'lucide-react';
 import { useIsMobile, ShortcutsSection } from '@stoneforge/ui';
 import {
@@ -246,6 +247,9 @@ function PreferencesTab() {
       >
         <ShortcutsSection defaults={DEFAULT_SHORTCUTS} isMobile={isMobile} />
       </SettingsSection>
+
+      {/* Onboarding Tour */}
+      <OnboardingTourSection />
     </div>
   );
 }
@@ -403,6 +407,44 @@ function AgentDefaultsSection({ settings, setSettings, setDefaultModel, resetToD
             Reset to defaults
           </button>
         </div>
+      </div>
+    </SettingsSection>
+  );
+}
+
+// ============================================================================
+// Onboarding Tour Section
+// ============================================================================
+
+function OnboardingTourSection() {
+  const navigate = useNavigate();
+
+  const handleRestartTour = useCallback(() => {
+    // Dispatch event that the tour hook listens for
+    window.dispatchEvent(new CustomEvent('restart-onboarding-tour'));
+    // Navigate to activity page where the tour starts
+    navigate({ to: '/activity' });
+  }, [navigate]);
+
+  return (
+    <SettingsSection
+      icon={Sparkles}
+      title="Onboarding Tour"
+      description="Guided walkthrough of the dashboard"
+    >
+      <div className="space-y-3">
+        <p className="text-sm text-[var(--color-text-secondary)]">
+          Take a guided tour of the key areas of the dashboard. The tour highlights
+          the activity dashboard, agent cards, system status, navigation, and more.
+        </p>
+        <button
+          onClick={handleRestartTour}
+          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-[var(--color-primary)] bg-[var(--color-primary-muted)] border border-[var(--color-primary)] rounded-md hover:bg-[var(--color-primary)] hover:text-white transition-colors"
+          data-testid="settings-restart-onboarding"
+        >
+          <RotateCcw className="w-4 h-4" />
+          Restart Onboarding Tour
+        </button>
       </div>
     </SettingsSection>
   );

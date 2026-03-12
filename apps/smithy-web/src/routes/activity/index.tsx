@@ -139,7 +139,7 @@ export function ActivityPage() {
       <SystemStatusBar />
 
       {/* Section 2: Active Agents Dashboard */}
-      <div>
+      <div data-testid="active-agents-section">
         <h2 className="text-sm font-medium text-[var(--color-text-secondary)] mb-3">
           Active Agents
         </h2>
