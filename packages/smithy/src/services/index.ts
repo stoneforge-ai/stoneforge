@@ -257,6 +257,9 @@ export {
   // Types
   type Setting,
   type ServerAgentDefaults,
+  type SyncDirection,
+  type ProviderConfig,
+  type ExternalSyncSettings,
   type SettingsService,
   // Constants
   SETTING_KEYS,
