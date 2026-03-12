@@ -10,7 +10,7 @@ import { useState, useEffect } from 'react';
 import { Terminal, Square, Crown, Wrench, Shield, ChevronDown } from 'lucide-react';
 import type { Agent, SessionRecord, Task } from '../../api/types.js';
 import type { AgentOutput } from '../../api/hooks/useActiveAgentOutputs.js';
-import { useAgentTokens, formatTokenCount } from '../../api/hooks/useAgentTokens.js';
+import { useAgentTokens, formatTokenCount, formatCost } from '../../api/hooks/useAgentTokens.js';
 
 export interface ActiveAgentCardProps {
   agent: Agent;
@@ -117,15 +117,35 @@ function ElapsedAndTokens({ session, agentId }: { session: SessionRecord; agentI
       <span className="text-xs text-[var(--color-text-secondary)] font-mono">
         {elapsed}
       </span>
-      {agentTokens && agentTokens.totalTokens > 0 && (
-        <span
-          className="text-[10px] font-mono text-[var(--color-text-tertiary)]"
-          title={`Input: ${agentTokens.inputTokens.toLocaleString()} | Output: ${agentTokens.outputTokens.toLocaleString()}`}
-          data-testid="agent-card-token-usage"
-        >
-          {formatTokenCount(agentTokens.inputTokens)} in / {formatTokenCount(agentTokens.outputTokens)} out
-        </span>
-      )}
+      {agentTokens && agentTokens.totalTokens > 0 && (() => {
+        const tooltipParts = [
+          `Input: ${agentTokens.inputTokens.toLocaleString()}`,
+          `Output: ${agentTokens.outputTokens.toLocaleString()}`,
+        ];
+        if (agentTokens.cacheReadTokens > 0) {
+          tooltipParts.push(`Cache Read: ${agentTokens.cacheReadTokens.toLocaleString()}`);
+        }
+        if (agentTokens.cacheCreationTokens > 0) {
+          tooltipParts.push(`Cache Creation: ${agentTokens.cacheCreationTokens.toLocaleString()}`);
+        }
+        if (agentTokens.estimatedCost != null && agentTokens.estimatedCost > 0) {
+          tooltipParts.push(`Est. Cost: ${formatCost(agentTokens.estimatedCost)}`);
+        }
+        const hasCacheIndicator = agentTokens.inputTokens > 0
+          && agentTokens.cacheReadTokens / agentTokens.inputTokens > 0.1;
+        return (
+          <span
+            className="text-[10px] font-mono text-[var(--color-text-tertiary)]"
+            title={tooltipParts.join(' | ')}
+            data-testid="agent-card-token-usage"
+          >
+            {formatTokenCount(agentTokens.inputTokens)} in / {formatTokenCount(agentTokens.outputTokens)} out
+            {hasCacheIndicator && (
+              <span className="ml-1 text-[var(--color-success)]" title="High cache hit rate">⚡</span>
+            )}
+          </span>
+        );
+      })()}
     </div>
   );
 }

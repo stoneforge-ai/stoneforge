@@ -13,10 +13,16 @@ export interface AgentTokenUsage {
   inputTokens: number;
   /** Output tokens consumed */
   outputTokens: number;
+  /** Cache read input tokens */
+  cacheReadTokens: number;
+  /** Cache creation input tokens */
+  cacheCreationTokens: number;
   /** Total tokens (input + output) */
   totalTokens: number;
   /** Number of sessions included in the count */
   sessionCount: number;
+  /** Estimated total cost in USD (if available) */
+  estimatedCost?: number;
 }
 
 /**
@@ -35,6 +41,20 @@ export function formatTokenCount(count: number): string {
   }
   const m = count / 1_000_000;
   return m < 10 ? `${m.toFixed(1)}M` : `${Math.round(m)}M`;
+}
+
+/**
+ * Format a cost value as USD.
+ * - 0: "$0.00"
+ * - < $0.01: "< $0.01"
+ * - < $100: "$X.XX"
+ * - >= $100: "$XXX"
+ */
+export function formatCost(cost: number): string {
+  if (cost === 0) return '$0.00';
+  if (cost < 0.01) return '< $0.01';
+  if (cost < 100) return `$${cost.toFixed(2)}`;
+  return `$${Math.round(cost)}`;
 }
 
 /**
@@ -74,8 +94,11 @@ export function useAgentTokens(agentId: string | undefined, sessionId?: string) 
   const tokens: AgentTokenUsage = {
     inputTokens: metrics.totalInputTokens,
     outputTokens: metrics.totalOutputTokens,
+    cacheReadTokens: metrics.totalCacheReadTokens ?? 0,
+    cacheCreationTokens: metrics.totalCacheCreationTokens ?? 0,
     totalTokens: metrics.totalTokens,
     sessionCount: metrics.sessionCount,
+    estimatedCost: metrics.estimatedCost?.totalCost,
   };
 
   return { tokens, isLoading, error };
