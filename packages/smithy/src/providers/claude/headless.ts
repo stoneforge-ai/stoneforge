@@ -344,6 +344,10 @@ export class ClaudeHeadlessProvider implements HeadlessProvider {
       env.STONEFORGE_ROOT = options.stoneforgeRoot;
     }
 
+    // Clear nested-session guard so spawned Claude doesn't refuse to start.
+    // Stoneforge is an orchestrator — spawned agents are independent sessions.
+    delete env.CLAUDECODE;
+
     // Create input queue for streaming input mode
     const inputQueue = new SDKInputQueue();
 
