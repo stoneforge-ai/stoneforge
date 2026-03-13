@@ -59,21 +59,27 @@ apps/
 ├── quarry-server/     # Platform HTTP + WebSocket (port 3456)
 ├── quarry-web/        # Platform React SPA (port 5173)
 ├── smithy-server/     # Orchestrator API (port 3457)
-└── smithy-web/        # Orchestrator dashboard (port 5174)
+├── smithy-web/        # Orchestrator dashboard (port 5174)
+├── docs/              # @stoneforge/docs - Astro documentation site
+└── website/           # @stoneforge/website - Public website
 
-.stoneforge/            # Project data (stoneforge.db, elements.jsonl, config.yaml)
+.stoneforge/            # Project data (config.yaml, sync/, prompts/, uploads/)
 ```
 
 ### Package Dependency Graph
 
 ```
-@stoneforge/core        (shared types, no dependencies)
+@stoneforge/core           (shared types, no dependencies)
        ↓
-@stoneforge/storage     (SQLite backends)
+@stoneforge/storage        (SQLite backends)
+       ↓
+@stoneforge/shared-routes  (HTTP route factories)
        ↓
 @stoneforge/quarry         (API, services, sync, CLI)
        ↓
-@stoneforge/smithy  (agent orchestration)
+@stoneforge/smithy         (agent orchestration)
+
+@stoneforge/ui             (React components, hooks — depends on core, shared-routes)
 ```
 
 ---
@@ -192,7 +198,7 @@ See `sf show el-49ra` for the complete list. **Top 10 for agents:**
 
 ### Type Safety
 
-- Use branded types: `ElementId`, `TaskId`, `EntityId`, `DocumentId`
+- Use branded types: `ElementId`, `EntityId`, `DocumentId`, `ChannelId`, `WorkflowId`
 - Implement type guards: `isTask()`, `isElement()`, etc.
 - Use `asEntityId()`, `asElementId()` casts only at trust boundaries
 
@@ -230,8 +236,8 @@ Stewards → merge completed work, documentation scanning and fixes
 
 - `OrchestratorAPI` - Agent registration and management
 - `DispatchService` - Task assignment with inbox notifications
-- `SpawnerService` - Process spawning (headless/interactive modes)
-- `SessionManager` - Agent session lifecycle tracking
+- `SpawnerService` - Process spawning, headless/interactive modes (`packages/smithy/src/runtime/spawner.ts`)
+- `SessionManager` - Agent session lifecycle tracking (`packages/smithy/src/runtime/session-manager.ts`)
 
 **Prompts:** Built-in prompts in `packages/smithy/src/prompts/`, override with `.stoneforge/prompts/`
 
