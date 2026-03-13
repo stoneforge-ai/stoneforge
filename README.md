@@ -301,7 +301,7 @@ You do **not** configure API keys in Stoneforge. Authentication is configured wi
 
 ## CLI Reference
 
-The CLI is primarily used by agents internally — human operators mostly use the web dashboard. Full reference: [docs/reference/cli.md](docs/reference/cli.md).
+The CLI is primarily used by agents internally — human operators mostly use the web dashboard. Full reference: [CLI Reference](apps/docs/src/content/docs/reference/cli.mdx).
 
 ```
 sf serve                             Start server + dashboard
@@ -318,17 +318,16 @@ sf doctor                            Check system health
 
 ## Documentation
 
-| Resource                                                 | Description                       |
-| -------------------------------------------------------- | --------------------------------- |
-| [docs/README.md](docs/README.md)                         | LLM-optimized documentation index |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)             | Architecture deep-dive            |
-| [docs/ORCHESTRATION_PLAN.md](docs/ORCHESTRATION_PLAN.md) | Agent orchestration system        |
-| [docs/reference/](docs/reference)                        | API and service reference         |
-| [docs/how-to/](docs/how-to)                              | Task-oriented guides              |
-| [docs/explanation/](docs/explanation)                    | Conceptual documentation          |
-| [docs/gotchas.md](docs/gotchas.md)                       | Common pitfalls and solutions     |
+| Resource                                                                             | Description                       |
+| ------------------------------------------------------------------------------------ | --------------------------------- |
+| [Introduction](apps/docs/src/content/docs/getting-started/introduction.mdx)         | Getting started guide             |
+| [Architecture Overview](apps/docs/src/content/docs/core-concepts/overview.mdx)      | Architecture deep-dive            |
+| [Orchestration Loop](apps/docs/src/content/docs/core-concepts/orchestration-loop.mdx) | Agent orchestration system      |
+| [Reference](apps/docs/src/content/docs/reference/)                                  | API and service reference         |
+| [Guides](apps/docs/src/content/docs/guides/)                                        | Task-oriented guides              |
+| [Core Concepts](apps/docs/src/content/docs/core-concepts/)                          | Conceptual documentation          |
 
-If anything is out-dated, **always up to date** documentation can be found by running:
+The documentation site is built with Astro and lives in `apps/docs/`. For the most up-to-date internal documentation, run:
 
 ```bash
 # Clone the repo
@@ -342,7 +341,7 @@ pnpm install && sf init
 sf serve
 ```
 
-Then go to the Documents page and open the Documentation library. Use the Documentation Directory document to find relevant documentation (similar to [docs/README.md](docs/README.md)).
+Then go to the Documents page and open the Documentation library. Use the Documentation Directory document to find relevant documentation.
 
 ---
 
