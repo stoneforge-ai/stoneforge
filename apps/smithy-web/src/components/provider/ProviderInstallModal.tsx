@@ -4,6 +4,8 @@
  * Non-dismissable modal that blocks the app when one or more providers
  * required by registered agents are not installed on the machine.
  * Shows install instructions and a per-provider "Verify Installation" button.
+ * Also offers a "change provider" option so users can switch affected agents
+ * to an already-installed provider.
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -15,8 +17,10 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@stoneforge/ui';
-import { AlertTriangle, CheckCircle2, Loader2, Package } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Loader2, Package, ArrowLeftRight, AlertCircle } from 'lucide-react';
 import type { MissingProvider } from '../../hooks/useProviderCheck';
+import type { ProviderInfo, Agent } from '../../api/types';
+import { getProviderLabel } from '../../lib/providers';
 
 // ============================================================================
 // Types
@@ -25,25 +29,132 @@ import type { MissingProvider } from '../../hooks/useProviderCheck';
 export interface ProviderInstallModalProps {
   /** Providers that are missing */
   missingProviders: MissingProvider[];
+  /** Providers that are installed and available (for the change-provider UI) */
+  availableProviders: ProviderInfo[];
   /** Called when the user clicks "Verify Installation" */
   onVerify: (providerName: string) => Promise<unknown>;
   /** Whether a given provider is currently being verified */
   isVerifying: (providerName: string) => boolean;
+  /** Called when the user wants to change an agent's provider */
+  onChangeProvider: (agentId: string, newProvider: string) => Promise<unknown>;
 }
 
 // ============================================================================
 // Sub-components
 // ============================================================================
 
+/** Per-agent row showing a dropdown to switch to an available provider */
+interface AgentProviderChangeRowProps {
+  agent: Agent;
+  availableProviders: ProviderInfo[];
+  onChangeProvider: (agentId: string, newProvider: string) => Promise<unknown>;
+}
+
+function AgentProviderChangeRow({ agent, availableProviders, onChangeProvider }: AgentProviderChangeRowProps) {
+  const [selectedProvider, setSelectedProvider] = useState('');
+  const [isChanging, setIsChanging] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleChange = useCallback(async () => {
+    if (!selectedProvider) return;
+    setIsChanging(true);
+    setError(null);
+    try {
+      await onChangeProvider(agent.id, selectedProvider);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to change provider');
+    } finally {
+      setIsChanging(false);
+    }
+  }, [agent.id, selectedProvider, onChangeProvider]);
+
+  return (
+    <div
+      className="flex flex-col gap-1.5"
+      data-testid={`agent-provider-change-${agent.id}`}
+    >
+      <div className="flex items-center gap-2">
+        <span className="text-sm text-[var(--color-text)] font-medium min-w-0 truncate flex-shrink-0">
+          {agent.name}
+        </span>
+        <select
+          value={selectedProvider}
+          onChange={(e) => {
+            setSelectedProvider(e.target.value);
+            setError(null);
+          }}
+          className="
+            flex-1 min-w-0 px-2 py-1
+            text-sm
+            bg-[var(--color-surface)]
+            border border-[var(--color-border)]
+            rounded-md
+            focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30
+          "
+          data-testid={`agent-provider-select-${agent.id}`}
+        >
+          <option value="">Select provider...</option>
+          {availableProviders.map((p) => (
+            <option key={p.name} value={p.name}>
+              {getProviderLabel(p.name)}
+            </option>
+          ))}
+        </select>
+        <button
+          onClick={handleChange}
+          disabled={!selectedProvider || isChanging}
+          className={[
+            'inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium whitespace-nowrap',
+            'bg-[var(--color-surface)] border border-[var(--color-border)]',
+            'text-[var(--color-text)]',
+            'hover:bg-[var(--color-surface-hover)]',
+            'disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none',
+            'transition-colors duration-150',
+          ].join(' ')}
+          data-testid={`agent-provider-change-btn-${agent.id}`}
+        >
+          {isChanging ? (
+            <>
+              <Loader2 className="w-3 h-3 animate-spin" />
+              Changing...
+            </>
+          ) : (
+            <>
+              <ArrowLeftRight className="w-3 h-3" />
+              Change
+            </>
+          )}
+        </button>
+      </div>
+      {error && (
+        <div className="flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400">
+          <AlertCircle className="w-3 h-3 flex-shrink-0" />
+          {error}
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface ProviderCardProps {
   provider: MissingProvider;
+  availableProviders: ProviderInfo[];
   onVerify: () => void;
   isVerifying: boolean;
   isVerified: boolean;
+  onChangeProvider: (agentId: string, newProvider: string) => Promise<unknown>;
 }
 
-function ProviderCard({ provider, onVerify, isVerifying, isVerified }: ProviderCardProps) {
+function ProviderCard({
+  provider,
+  availableProviders,
+  onVerify,
+  isVerifying,
+  isVerified,
+  onChangeProvider,
+}: ProviderCardProps) {
   const agentNames = provider.agents.map((a) => a.name).join(', ');
+  const hasAlternatives = availableProviders.length > 0;
 
   return (
     <div
@@ -115,6 +226,25 @@ function ProviderCard({ provider, onVerify, isVerifying, isVerified }: ProviderC
         </div>
       )}
 
+      {/* Change provider option — only show if alternatives exist and not verified */}
+      {!isVerified && hasAlternatives && (
+        <div className="mt-4 pt-3 border-t border-[var(--color-border)]">
+          <p className="text-xs font-medium text-[var(--color-text-secondary)] mb-2 uppercase tracking-wide">
+            Or change provider
+          </p>
+          <div className="flex flex-col gap-2">
+            {provider.agents.map((agent) => (
+              <AgentProviderChangeRow
+                key={agent.id}
+                agent={agent}
+                availableProviders={availableProviders}
+                onChangeProvider={onChangeProvider}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Success feedback */}
       {isVerified && (
         <p className="mt-2 text-sm font-medium text-[var(--color-success)]">
@@ -131,8 +261,10 @@ function ProviderCard({ provider, onVerify, isVerifying, isVerified }: ProviderC
 
 export function ProviderInstallModal({
   missingProviders,
+  availableProviders,
   onVerify,
   isVerifying,
+  onChangeProvider,
 }: ProviderInstallModalProps) {
   // Track which providers have been verified (verified = was missing, now available)
   const [verifiedProviders, setVerifiedProviders] = useState<Set<string>>(new Set());
@@ -186,8 +318,8 @@ export function ProviderInstallModal({
           </div>
           <DialogDescription>
             {isPlural
-              ? 'Some providers required by your agents are not installed. Install them and click "Verify Installation" to continue.'
-              : 'A provider required by your agents is not installed. Install it and click "Verify Installation" to continue.'}
+              ? 'Some providers required by your agents are not installed. Install them and click "Verify Installation" to continue, or change affected agents to use an installed provider.'
+              : 'A provider required by your agents is not installed. Install it and click "Verify Installation" to continue, or change affected agents to use an installed provider.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -197,9 +329,11 @@ export function ProviderInstallModal({
               <ProviderCard
                 key={provider.name}
                 provider={provider}
+                availableProviders={availableProviders}
                 onVerify={() => handleVerify(provider.name)}
                 isVerifying={isVerifying(provider.name)}
                 isVerified={verifiedProviders.has(provider.name)}
+                onChangeProvider={onChangeProvider}
               />
             ))}
           </div>

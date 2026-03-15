@@ -27,6 +27,8 @@ export interface MissingProvider {
 export interface UseProviderCheckReturn {
   /** Providers that are used by at least one agent but not available */
   missingProviders: MissingProvider[];
+  /** Providers that are currently installed and available (for change-provider UI) */
+  availableProviders: ProviderInfo[];
   /** Whether agent or provider data is still loading */
   isLoading: boolean;
   /** Refetch both agents and providers */
@@ -128,6 +130,11 @@ export function useProviderCheck(): UseProviderCheckReturn {
     return missing;
   }, [agentsData?.agents, providersData?.providers]);
 
+  const availableProviders = useMemo(() => {
+    const providers = providersData?.providers ?? [];
+    return providers.filter((p) => p.available);
+  }, [providersData?.providers]);
+
   const refetch = useCallback(() => {
     refetchAgents();
     refetchProviders();
@@ -145,6 +152,7 @@ export function useProviderCheck(): UseProviderCheckReturn {
 
   return {
     missingProviders,
+    availableProviders,
     isLoading: agentsLoading || providersLoading,
     refetch,
     verifyProvider,
