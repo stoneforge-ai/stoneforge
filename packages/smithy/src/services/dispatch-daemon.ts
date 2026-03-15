@@ -2750,7 +2750,18 @@ export class DispatchDaemonImpl implements DispatchDaemon {
         updatedTask.metadata as Record<string, unknown> | undefined,
         sessionHistoryEntry
       );
-      await this.api.update<Task>(task.id, { metadata: metadataWithHistory });
+      // Set owningDirector if not already set (merge into same metadata update)
+      const existingOrcMeta = getOrchestratorTaskMeta(
+        updatedTask.metadata as Record<string, unknown> | undefined
+      );
+      let finalMetadata = metadataWithHistory;
+      if (!existingOrcMeta?.owningDirector) {
+        const owningDirector = await this.resolveOwningDirector(task);
+        if (owningDirector) {
+          finalMetadata = updateOrchestratorTaskMeta(finalMetadata, { owningDirector });
+        }
+      }
+      await this.api.update<Task>(task.id, { metadata: finalMetadata });
     }
 
     // Notify pool service that agent was spawned
@@ -2761,6 +2772,57 @@ export class DispatchDaemonImpl implements DispatchDaemon {
     this.emitter.emit('agent:spawned', workerId, worktreePath);
 
     return true;
+  }
+
+  /**
+   * Resolves the owning director for a task.
+   *
+   * Resolution order:
+   * 1. If the task belongs to a plan and plan.createdBy is a director, use that
+   * 2. If task.createdBy is a director, use that
+   * 3. Fall back to the first registered director
+   *
+   * @returns The director's entity ID, or undefined if no director found
+   */
+  private async resolveOwningDirector(task: Task): Promise<EntityId | undefined> {
+    try {
+      // Check if task belongs to a plan via parent-child dependency
+      const parentDeps = await this.api.getDependencies(task.id, ['parent-child']);
+      if (parentDeps.length > 0) {
+        const planId = parentDeps[0].blockerId;
+        const plan = await this.api.get<Plan>(planId);
+        if (plan?.createdBy) {
+          // Check if plan.createdBy is a director entity
+          const planCreator = await this.agentRegistry.getAgent(plan.createdBy);
+          if (planCreator) {
+            const creatorMeta = getAgentMetadata(planCreator);
+            if (creatorMeta?.agentRole === 'director') {
+              return asEntityId(planCreator.id);
+            }
+          }
+        }
+      }
+
+      // Check if task.createdBy is a director entity
+      if (task.createdBy) {
+        const taskCreator = await this.agentRegistry.getAgent(task.createdBy);
+        if (taskCreator) {
+          const creatorMeta = getAgentMetadata(taskCreator);
+          if (creatorMeta?.agentRole === 'director') {
+            return asEntityId(taskCreator.id);
+          }
+        }
+      }
+
+      // Fall back to first registered director
+      const director = await this.agentRegistry.getDirector();
+      return director ? asEntityId(director.id) : undefined;
+    } catch (error) {
+      logger.warn(`Failed to resolve owning director for task ${task.id}:`, error);
+      // Fall back to first registered director on error
+      const director = await this.agentRegistry.getDirector();
+      return director ? asEntityId(director.id) : undefined;
+    }
   }
 
   /**
@@ -2805,8 +2867,12 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       parts.push(presetSection, '', '---', '');
     }
 
-    // Get the director ID for context
-    const director = await this.agentRegistry.getDirector();
+    // Get the director ID for context — prefer the task's owning director
+    const taskMeta2 = getOrchestratorTaskMeta(task.metadata as Record<string, unknown> | undefined);
+    const owningDirectorId = taskMeta2?.owningDirector;
+    const director = owningDirectorId
+      ? await this.agentRegistry.getAvailableDirector(owningDirectorId)
+      : await this.agentRegistry.getDirector();
     const directorId = director?.id ?? 'unknown';
 
     parts.push(
@@ -2924,8 +2990,12 @@ export class DispatchDaemonImpl implements DispatchDaemon {
     const prUrl = orchestratorMeta?.mergeRequestUrl as string | undefined;
     const branch = orchestratorMeta?.branch as string | undefined;
 
-    // Get the director ID for context
-    const director = await this.agentRegistry.getDirector();
+    // Get the director ID for context — prefer the task's owning director
+    const taskOrcMeta = getOrchestratorTaskMeta(task.metadata as Record<string, unknown> | undefined);
+    const owningDirectorId = taskOrcMeta?.owningDirector;
+    const director = owningDirectorId
+      ? await this.agentRegistry.getAvailableDirector(owningDirectorId)
+      : await this.agentRegistry.getDirector();
     const directorId = director?.id ?? 'unknown';
 
     parts.push(
@@ -3429,8 +3499,11 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       parts.push(recoveryPresetSection, '', '---', '');
     }
 
-    // Get the director ID for context
-    const director = await this.agentRegistry.getDirector();
+    // Get the director ID for context — prefer the task's owning director
+    const owningDirectorId = taskMeta?.owningDirector;
+    const director = owningDirectorId
+      ? await this.agentRegistry.getAvailableDirector(owningDirectorId)
+      : await this.agentRegistry.getDirector();
     const directorId = director?.id ?? 'unknown';
 
     const branch = taskMeta?.branch ?? taskMeta?.handoffBranch;
@@ -3852,9 +3925,9 @@ export class DispatchDaemonImpl implements DispatchDaemon {
     const messagesBlock = formattedMessages.join('\n');
     const prompt = triageResult.prompt.replace('{{MESSAGES}}', messagesBlock);
 
-    // Get the director ID for context
-    const director = await this.agentRegistry.getDirector();
-    const directorId = director?.id ?? 'unknown';
+    // Get the director ID for context — no task context, prefer any running director
+    const director = await this.agentRegistry.getAvailableDirector();
+    const directorId = director?.id ?? (await this.agentRegistry.getDirector())?.id ?? 'unknown';
 
     return `${prompt}\n\n---\n\n**Worker ID:** ${agent.id}\n**Director ID:** ${directorId}\n**Channel:** ${channelId}\n**Agent:** ${agent.name}\n**Message count:** ${triageItems.length}`;
   }
