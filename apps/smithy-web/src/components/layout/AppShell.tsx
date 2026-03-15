@@ -22,7 +22,7 @@ import { useIsMobile, useIsTablet } from '@stoneforge/ui';
 import { toast } from 'sonner';
 import { OnboardingTour, type TourStep } from '../onboarding';
 import { useWorkflowPreset } from '../../api/hooks/useWorkflowPreset';
-import { useDirector } from '../../api/hooks/useAgents';
+import { useDirector, useChangeAgentProvider } from '../../api/hooks/useAgents';
 import { useProviderCheck } from '../../hooks/useProviderCheck';
 import { ProviderInstallModal } from '../provider/ProviderInstallModal';
 import {
@@ -378,6 +378,15 @@ export function AppShell() {
   // Provider installation check — blocks the app if providers are missing
   const providerCheck = useProviderCheck();
   const hasProviderIssues = !providerCheck.isLoading && providerCheck.missingProviders.length > 0;
+  const changeAgentProvider = useChangeAgentProvider();
+  const handleChangeAgentProvider = useCallback(
+    async (agentId: string, newProvider: string) => {
+      await changeAgentProvider.mutateAsync({ agentId, provider: newProvider });
+      // Re-run the full provider check after changing an agent's provider
+      providerCheck.refetch();
+    },
+    [changeAgentProvider, providerCheck]
+  );
 
   // Onboarding tour
   const workflowPreset = useWorkflowPreset();
@@ -779,8 +788,10 @@ export function AppShell() {
       {hasProviderIssues && (
         <ProviderInstallModal
           missingProviders={providerCheck.missingProviders}
+          availableProviders={providerCheck.availableProviders}
           onVerify={providerCheck.verifyProvider}
           isVerifying={providerCheck.isVerifying}
+          onChangeProvider={handleChangeAgentProvider}
         />
       )}
 
