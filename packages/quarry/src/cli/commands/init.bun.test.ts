@@ -696,8 +696,8 @@ describe('initCommand', () => {
       const content = readFileSync(configPath, 'utf-8');
 
       // Auto preset: autoMerge=true, no approval needed, unrestricted
-      expect(content).toMatch(/autoMerge:\s*true/);
-      expect(content).toMatch(/requireApproval:\s*false/);
+      expect(content).toMatch(/auto_merge:\s*true/);
+      expect(content).toMatch(/require_approval:\s*false/);
       expect(content).toMatch(/preset:\s*['"]?auto['"]?/);
 
       const data = result.data as { preset: string };
@@ -714,10 +714,10 @@ describe('initCommand', () => {
       const configPath = join(testDir, '.stoneforge', 'config.yaml');
       const content = readFileSync(configPath, 'utf-8');
 
-      // Review preset: autoMerge=true, targetBranch=stoneforge/review
-      expect(content).toMatch(/autoMerge:\s*true/);
-      expect(content).toMatch(/targetBranch:\s*['"]?stoneforge\/review['"]?/);
-      expect(content).toMatch(/requireApproval:\s*false/);
+      // Review preset: auto_merge=true, target_branch=stoneforge/review
+      expect(content).toMatch(/auto_merge:\s*true/);
+      expect(content).toMatch(/target_branch:\s*['"]?stoneforge\/review['"]?/);
+      expect(content).toMatch(/require_approval:\s*false/);
       expect(content).toMatch(/preset:\s*['"]?review['"]?/);
 
       const data = result.data as { preset: string };
@@ -734,11 +734,11 @@ describe('initCommand', () => {
       const configPath = join(testDir, '.stoneforge', 'config.yaml');
       const content = readFileSync(configPath, 'utf-8');
 
-      // Approve preset: autoMerge=false, requireApproval=true, restricted permissions
-      expect(content).toMatch(/autoMerge:\s*false/);
-      expect(content).toMatch(/requireApproval:\s*true/);
+      // Approve preset: auto_merge=false, require_approval=true, restricted permissions
+      expect(content).toMatch(/auto_merge:\s*false/);
+      expect(content).toMatch(/require_approval:\s*true/);
       expect(content).toMatch(/preset:\s*['"]?approve['"]?/);
-      expect(content).toMatch(/permissionModel:\s*['"]?restricted['"]?/);
+      expect(content).toMatch(/permission_model:\s*['"]?restricted['"]?/);
 
       const data = result.data as { preset: string };
       expect(data.preset).toBe('approve');
@@ -749,7 +749,7 @@ describe('initCommand', () => {
         ...DEFAULT_GLOBAL_OPTIONS,
         preset: 'invalid',
       } as any);
-      expect(result.exitCode).toBe(ExitCode.ERROR);
+      expect(result.exitCode).toBe(ExitCode.VALIDATION);
     });
 
     it('WORKFLOW_PRESET_CONFIGS defines all three presets', () => {
