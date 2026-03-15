@@ -1057,6 +1057,79 @@ Examples:
 };
 
 // ============================================================================
+// Task Set-Owner Command
+// ============================================================================
+
+async function taskSetOwnerHandler(
+  args: string[],
+  options: GlobalOptions
+): Promise<CommandResult> {
+  const [taskId, directorId] = args;
+
+  if (!taskId || !directorId) {
+    return failure(
+      'Usage: sf task set-owner <task-id> <director-id>\nExample: sf task set-owner el-abc123 el-dir01',
+      ExitCode.INVALID_ARGUMENTS
+    );
+  }
+
+  const { api, error } = await createOrchestratorApi(options);
+  if (error || !api) {
+    return failure(error ?? 'Failed to create API', ExitCode.GENERAL_ERROR);
+  }
+
+  try {
+    await api.updateTaskOrchestratorMeta(taskId as ElementId, {
+      owningDirector: directorId as unknown as import('@stoneforge/core').EntityId,
+    });
+
+    const mode = getOutputMode(options);
+
+    if (mode === 'json') {
+      return success({
+        taskId,
+        owningDirector: directorId,
+      });
+    }
+
+    if (mode === 'quiet') {
+      return success(taskId);
+    }
+
+    return success(
+      { taskId, owningDirector: directorId },
+      `Updated task ${taskId}\n  Owning Director: ${directorId}`
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message.includes('not found') || message.includes('Task not found')) {
+      return failure(`Task not found: ${taskId}`, ExitCode.GENERAL_ERROR);
+    }
+    return failure(`Failed to set task owner: ${message}`, ExitCode.GENERAL_ERROR);
+  }
+}
+
+export const taskSetOwnerCommand: Command = {
+  name: 'set-owner',
+  description: 'Set the owning director for a task',
+  usage: 'sf task set-owner <task-id> <director-id>',
+  help: `Set the owning director for a task.
+
+This command sets the owningDirector field in the task's orchestrator metadata,
+which is used for message routing in multi-director workspaces.
+
+Arguments:
+  task-id        Task identifier to update
+  director-id    Entity ID of the director that owns/created this task
+
+Examples:
+  sf task set-owner el-abc123 el-dir01
+  sf task set-owner el-abc123 el-39hd`,
+  options: [],
+  handler: taskSetOwnerHandler as Command['handler'],
+};
+
+// ============================================================================
 // Main Task Command
 // ============================================================================
 
@@ -1073,6 +1146,7 @@ Subcommands:
   reject         Mark a task merge as failed and reopen it
   sync           Sync a task branch with the main branch
   merge-status   Update the merge status of a task
+  set-owner      Set the owning director for a task
 
 Examples:
   sf task handoff el-abc123 --message "Need help with frontend"
@@ -1080,7 +1154,8 @@ Examples:
   sf task merge el-abc123
   sf task reject el-abc123 --reason "Tests failed"
   sf task sync el-abc123
-  sf task merge-status el-abc123 merged`,
+  sf task merge-status el-abc123 merged
+  sf task set-owner el-abc123 el-dir01`,
   subcommands: {
     handoff: taskHandoffCommand,
     complete: taskCompleteCommand,
@@ -1088,6 +1163,7 @@ Examples:
     reject: taskRejectCommand,
     sync: taskSyncCommand,
     'merge-status': taskMergeStatusCommand,
+    'set-owner': taskSetOwnerCommand,
   },
   handler: taskHandoffCommand.handler, // Default to handoff
   options: [],

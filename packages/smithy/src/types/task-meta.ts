@@ -41,6 +41,9 @@ export interface OrchestratorTaskMeta {
   /** Entity ID of the agent assigned to this task */
   readonly assignedAgent?: EntityId;
 
+  /** Entity ID of the director that created/owns this task for message routing */
+  readonly owningDirector?: EntityId;
+
   /** When the agent started working on this task */
   readonly startedAt?: Timestamp;
 
@@ -342,6 +345,7 @@ export function isOrchestratorTaskMeta(value: unknown): value is OrchestratorTas
   if (obj.worktree !== undefined && typeof obj.worktree !== 'string') return false;
   if (obj.sessionId !== undefined && typeof obj.sessionId !== 'string') return false;
   if (obj.assignedAgent !== undefined && typeof obj.assignedAgent !== 'string') return false;
+  if (obj.owningDirector !== undefined && typeof obj.owningDirector !== 'string') return false;
   if (obj.mergeStatus !== undefined && !isMergeStatus(obj.mergeStatus)) return false;
   if (obj.lastTestResult !== undefined && !isTestResult(obj.lastTestResult)) return false;
 
