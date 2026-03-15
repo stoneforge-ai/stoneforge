@@ -1,5 +1,16 @@
 # @stoneforge/storage
 
+## 1.17.0
+
+### Minor Changes
+
+- 600e4fd: Add cache_read_tokens and cache_creation_tokens columns to provider_metrics (migration v12)
+
+### Patch Changes
+
+- Updated dependencies [7c63531]
+  - @stoneforge/core@1.17.0
+
 ## 1.16.1
 
 ### Patch Changes

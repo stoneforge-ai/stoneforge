@@ -1,5 +1,11 @@
 # @stoneforge/core
 
+## 1.17.0
+
+### Minor Changes
+
+- 7c63531: Add model pricing configuration and shared cost calculation utilities for per-model, per-token-category cost estimation
+
 ## 1.16.1
 
 ## 1.16.0

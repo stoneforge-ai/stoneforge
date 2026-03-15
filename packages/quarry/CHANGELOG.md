@@ -1,5 +1,24 @@
 # @stoneforge/quarry
 
+## 1.17.0
+
+### Minor Changes
+
+- 7c63531: Replace hardcoded cost estimates in CLI metrics command with per-model pricing from @stoneforge/core
+- d3744f6: Add `agents.allowedBashCommands` configuration for defining which bash commands agents can run without approval in restricted permission mode.
+- 9015835: Add workflow preset selection to `sf init` with three presets (Auto, Review, Approve) that configure merge, workflow, and agent permission settings. Supports interactive prompt and `--preset` CLI flag.
+- 3bc3e76: Update CLI metrics command to show per-model 4-category token breakdown (input/output/cache_read/cache_creation) with detailed cost breakdown and improved formatCost helper
+
+### Patch Changes
+
+- b2ce7ce: Fix `sf init --name` flag being a no-op: the `--name` option now correctly sets the workspace name in `config.yaml`
+- a77ec61: Fix `sf update --help` to list all 8 valid task statuses instead of only 4
+- Updated dependencies [600e4fd]
+- Updated dependencies [7c63531]
+  - @stoneforge/storage@1.17.0
+  - @stoneforge/core@1.17.0
+  - @stoneforge/shared-routes@1.17.0
+
 ## 1.16.1
 
 ### Patch Changes

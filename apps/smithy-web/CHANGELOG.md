@@ -1,5 +1,20 @@
 # @stoneforge/smithy-web
 
+## 1.17.0
+
+### Minor Changes
+
+- 600e4fd: Add totalCacheReadTokens and totalCacheCreationTokens to AggregatedProviderMetrics frontend type
+- f68d308: Add notification sidebar with approval workflow UI. Replace the notification dropdown with a slide-in sidebar panel showing notification history and actionable approval request cards with inline approve/deny buttons.
+- 2161a30: Add onboarding guided walkthrough tour that introduces users to the dashboard's key areas on their first visit. Includes spotlight overlay, tooltip navigation, localStorage persistence, and a restart button in Settings.
+- dafa312: Add first-load preset selection modal to the activity dashboard and a Workflow Preset section to the Settings page. Users can choose Auto, Review, or Approve on first visit and change it later in Settings.
+- 3bc3e76: Add model-level token & cost breakdown table, cache hit rate card, enriched agent card tooltips with cache tokens and estimated cost
+
+### Patch Changes
+
+- Updated dependencies [705df96]
+  - @stoneforge/ui@1.17.0
+
 ## 1.16.1
 
 ### Patch Changes
