@@ -753,7 +753,7 @@ export function DirectorPanel({ collapsed = false, onToggle, isMaximized = false
       )}
 
       {/* Combined header row — tabs (left, scrollable) + active director actions + panel actions (right) */}
-      <div className="flex items-center h-10 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]" data-testid="director-panel-header">
+      <div className="flex items-center h-10 bg-[var(--color-bg-secondary)]" data-testid="director-panel-header">
         {/* Left side: scrollable tabs */}
         <div className="flex-1 min-w-0 overflow-x-auto scrollbar-hide">
           {directors.length > 0 && (
