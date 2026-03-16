@@ -13,10 +13,17 @@ import TerminalBlock from '../../../components/custom/TerminalBlock.astro';
 Initialize a new Stoneforge workspace in the current directory.
 
 ```bash
-sf init [--name <name>] [--demo] [--actor <actor>]
+sf init [--name <name>] [--demo] [--preset auto|review|approve] [--actor <actor>]
 ```
 
 Creates a `.stoneforge/` directory containing `config.yaml`, `stoneforge.db`, `.gitignore`, and a `playbooks/` directory. If `.stoneforge/` already exists (e.g. after cloning) but no database is present, it creates the database and auto-imports from existing JSONL sync files.
+
+| Option | Description |
+| --- | --- |
+| `--name <name>` | Workspace name (stored in config.yaml) |
+| `--demo` | Enable demo mode with free provider (no API keys required) |
+| `--preset <preset>` | Workflow preset: `auto` (agents merge directly), `review` (merge to review branch), or `approve` (agents need approval, merges via PRs). Skips the interactive prompt. |
+| `--actor <actor>` | Default actor for operations |
 
 ### `sf serve`
 
@@ -49,8 +56,14 @@ Start the Stoneforge server and web dashboard.
 Check system health and diagnose issues. Runs 9 diagnostic checks: workspace, database, connection, schema version, schema tables, integrity, foreign keys, blocked cache consistency, and storage size.
 
 ```bash
-sf doctor [--verbose] [--json]
+sf doctor [--fix] [--verbose] [--json]
 ```
+
+| Option | Description |
+| --- | --- |
+| `--fix` | Automatically repair detected issues (foreign key violations, blocked cache inconsistencies) |
+| `--verbose` | Show detailed diagnostic information |
+| `--json` | Output as JSON |
 
 <TerminalBlock title="sf doctor">
 System Health Check
@@ -319,3 +332,38 @@ The Documentation library must exist — run `sf docs init` first. Already-added
 sf docs add el-doc123
 sf docs add el-doc123 el-doc456 el-doc789
 ```
+
+---
+
+## Log command
+
+View operation log entries — dispatches, merges, sessions, rate-limits, steward actions, and recovery events.
+
+```bash
+sf log [--level <level>] [--category <cat>] [--since <time>] [--task <id>] [--agent <id>] [--limit <n>]
+```
+
+| Option | Description |
+| --- | --- |
+| `--level <level>` | Filter by log level: `info`, `warn`, `error` |
+| `-c, --category <cat>` | Filter by category: `dispatch`, `merge`, `session`, `rate-limit`, `steward`, `recovery` |
+| `-s, --since <time>` | Show entries since time — accepts relative time (`2h`, `30m`, `1d`, `1w`) or ISO 8601 timestamp |
+| `-t, --task <id>` | Filter by task ID |
+| `-a, --agent <id>` | Filter by agent ID |
+| `-l, --limit <n>` | Maximum entries to show (default: 20) |
+
+---
+
+## Metrics command
+
+Show provider metrics and usage statistics — token counts, estimated costs, session counts, and error rates.
+
+```bash
+sf metrics [--range <days>] [--provider <name>] [--group-by <mode>]
+```
+
+| Option | Description |
+| --- | --- |
+| `-r, --range <days>` | Time range (e.g., `7d`, `14d`, `30d`). Default: `7d` |
+| `-p, --provider <name>` | Filter by provider name (e.g., `claude-code`) |
+| `-g, --group-by <mode>` | Group by: `provider` (default) or `model` |
