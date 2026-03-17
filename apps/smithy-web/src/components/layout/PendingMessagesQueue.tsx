@@ -116,7 +116,10 @@ export function PendingMessagesQueue({
       >
         <Inbox className="w-8 h-8 text-[var(--color-text-muted)] mb-2" />
         <p className="text-sm text-[var(--color-text-muted)]">
-          No Director agent
+          No Director agent found
+        </p>
+        <p className="text-xs text-[var(--color-text-muted)] mt-1">
+          Run <code className="bg-[var(--color-bg-secondary)] px-1 rounded">sf init</code> to register default agents
         </p>
       </div>
     );
