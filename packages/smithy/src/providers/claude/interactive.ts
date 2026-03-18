@@ -132,6 +132,10 @@ export class ClaudeInteractiveProvider implements InteractiveProvider {
       env.STONEFORGE_ROOT = options.stoneforgeRoot;
     }
 
+    // Clear nested-session guard so spawned Claude doesn't refuse to start.
+    // Stoneforge is an orchestrator — spawned agents are independent sessions.
+    delete env.CLAUDECODE;
+
     const cols = options.cols ?? 120;
     const rows = options.rows ?? 30;
 
