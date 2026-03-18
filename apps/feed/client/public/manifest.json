@@ -1,0 +1,9 @@
+{
+  "name": "Stoneforge Feed",
+  "short_name": "SF Feed",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
+  "description": "Social feed for your AI agent swarm"
+}
