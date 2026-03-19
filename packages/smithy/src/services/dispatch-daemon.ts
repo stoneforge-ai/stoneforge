@@ -2750,16 +2750,33 @@ export class DispatchDaemonImpl implements DispatchDaemon {
         updatedTask.metadata as Record<string, unknown> | undefined,
         sessionHistoryEntry
       );
-      // Set owningDirector if not already set (merge into same metadata update)
+      // Set owningDirector and targetBranch if not already set (merge into same metadata update)
       const existingOrcMeta = getOrchestratorTaskMeta(
         updatedTask.metadata as Record<string, unknown> | undefined
       );
       let finalMetadata = metadataWithHistory;
-      if (!existingOrcMeta?.owningDirector) {
-        const owningDirector = await this.resolveOwningDirector(task);
-        if (owningDirector) {
-          finalMetadata = updateOrchestratorTaskMeta(finalMetadata, { owningDirector });
+      const metaUpdate: { owningDirector?: EntityId; targetBranch?: string } = {};
+
+      // Resolve owning director if not already set
+      let resolvedDirectorId = existingOrcMeta?.owningDirector;
+      if (!resolvedDirectorId) {
+        resolvedDirectorId = await this.resolveOwningDirector(task) ?? undefined;
+        if (resolvedDirectorId) {
+          metaUpdate.owningDirector = resolvedDirectorId;
         }
+      }
+
+      // Propagate director's targetBranch if not already set on task
+      if (resolvedDirectorId && !existingOrcMeta?.targetBranch) {
+        const directorEntity = await this.agentRegistry.getAgent(resolvedDirectorId);
+        const directorMeta = directorEntity ? getAgentMetadata(directorEntity) : undefined;
+        if (directorMeta?.agentRole === 'director' && directorMeta.targetBranch) {
+          metaUpdate.targetBranch = directorMeta.targetBranch;
+        }
+      }
+
+      if (Object.keys(metaUpdate).length > 0) {
+        finalMetadata = updateOrchestratorTaskMeta(finalMetadata, metaUpdate);
       }
       await this.api.update<Task>(task.id, { metadata: finalMetadata });
     }
