@@ -1,5 +1,22 @@
 # @stoneforge/smithy-web
 
+## 1.18.0
+
+### Minor Changes
+
+- 8b4d04c: Add provider installation check modal that blocks the app when required providers are missing, with per-provider install instructions and verify button
+- 036d919: Add useDirectors hook and update useAgentsByRole for multi-director support
+- 2b79b91: Add drag-and-drop tab reordering and right-click delete with confirmation to DirectorTabBar. Persist tab order in localStorage. Support reorder and delete in collapsed sidebar view.
+- 6813f5b: Update Activity Dashboard, Agents page, and AppShell for multi-director support. Director cards now pass their ID when opening the panel, Agents page renders multiple director cards in a grid, and AppShell relays director selection via events.
+- f61bc70: Add provider change option to the provider install modal. Users can now switch agents to an installed provider directly from the modal instead of being required to install the missing provider.
+- 84b375f: Redesign DirectorPanel with tabbed interface supporting N concurrent director sessions. Add DirectorTabBar and DirectorTabContent components. Use CSS display:none for inactive tabs to preserve WebSocket/PTY connections. Collapsed panel shows tiled per-director icons. Zero-director state provides Create Director button.
+
+### Patch Changes
+
+- c4495f5: Normalize legacy 'claude' provider value to 'claude-code' in CreateAgentDialog submit handler
+- c510a01: Merge director tab bar and per-director toolbar into a single combined header row. Remove redundant terminal header (macOS-style dots + name). Action buttons (sift backlog, messages toggle, session controls) now appear in the combined row for the active director. Lift messages queue visibility state to DirectorPanel.
+  - @stoneforge/ui@1.18.0
+
 ## 1.17.0
 
 ### Minor Changes

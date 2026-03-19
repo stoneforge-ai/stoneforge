@@ -1,5 +1,28 @@
 # @stoneforge/smithy-server
 
+## 1.18.0
+
+### Patch Changes
+
+- Updated dependencies [48b0069]
+- Updated dependencies [6247446]
+- Updated dependencies [2608cf1]
+- Updated dependencies [711343b]
+- Updated dependencies [ccb002b]
+- Updated dependencies [1ed1113]
+- Updated dependencies [57152b0]
+- Updated dependencies [c4495f5]
+- Updated dependencies [efc955b]
+- Updated dependencies [8cac30b]
+- Updated dependencies [8ded2a8]
+- Updated dependencies [07f3449]
+- Updated dependencies [07f3449]
+  - @stoneforge/smithy@1.18.0
+  - @stoneforge/quarry@1.18.0
+  - @stoneforge/core@1.18.0
+  - @stoneforge/storage@1.18.0
+  - @stoneforge/shared-routes@1.18.0
+
 ## 1.17.0
 
 ### Patch Changes

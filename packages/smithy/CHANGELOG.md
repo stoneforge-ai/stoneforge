@@ -1,5 +1,30 @@
 # @stoneforge/smithy
 
+## 1.18.0
+
+### Minor Changes
+
+- 48b0069: Add owningDirector field to OrchestratorTaskMeta, getDirectors()/getAvailableDirector() to AgentRegistry, and sf task set-owner CLI command for multi-director workspace support.
+- 6247446: Add POST /api/providers/:name/verify endpoint for fresh single-provider availability checks.
+- 2608cf1: Add --target-branch option to `sf agent register` CLI command for director agents. The option allows specifying a target merge branch when registering a director. Also displays target branch in `sf agent show` output.
+- 711343b: Add `targetBranch` field to `OrchestratorTaskMeta` interface for specifying the merge target branch at dispatch time
+- ccb002b: Add optional targetBranch field to DirectorMetadata and RegisterDirectorInput, allowing directors to specify the merge target branch for their tasks.
+- 1ed1113: Auto-resume all running directors on server restart instead of only the first one.
+- 57152b0: Dispatch daemon uses per-task owning director ID in worker/steward prompts and resolves owningDirector during task dispatch via plan creator or task creator.
+- efc955b: Add message fallback routing for offline directors. When a director is offline and has unread inbox messages, route those messages to another running director as a fallback. Each message is consumed exactly once.
+- 8cac30b: Refactor merge steward to resolve target branch per-task from orchestrator metadata, enabling tasks to merge to different branches (e.g. staging) while preserving the global default fallback
+- 07f3449: Inject SF_ENTITY_ID environment variable into agent sessions for correct CLI entity attribution
+
+### Patch Changes
+
+- c4495f5: Fix backward compatibility for legacy 'claude' provider alias in getOrThrow() and resolveProvider()
+- 8ded2a8: Remove CLAUDE_CODE_DISABLE_1M_CONTEXT env var workaround from spawn commands
+- Updated dependencies [07f3449]
+  - @stoneforge/quarry@1.18.0
+  - @stoneforge/core@1.18.0
+  - @stoneforge/storage@1.18.0
+  - @stoneforge/shared-routes@1.18.0
+
 ## 1.17.0
 
 ### Minor Changes

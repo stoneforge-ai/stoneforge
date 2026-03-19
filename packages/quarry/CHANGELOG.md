@@ -1,5 +1,17 @@
 # @stoneforge/quarry
 
+## 1.18.0
+
+### Minor Changes
+
+- 07f3449: Update CLI resolveActor to check SF_ENTITY_ID env var for automatic agent identity resolution
+
+### Patch Changes
+
+- @stoneforge/core@1.18.0
+- @stoneforge/storage@1.18.0
+- @stoneforge/shared-routes@1.18.0
+
 ## 1.17.0
 
 ### Minor Changes
