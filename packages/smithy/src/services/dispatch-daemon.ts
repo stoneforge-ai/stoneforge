@@ -2847,11 +2847,13 @@ export class DispatchDaemonImpl implements DispatchDaemon {
    * Includes dependency installation so workers have node_modules available.
    */
   private async createWorktreeForTask(worker: AgentEntity, task: Task): Promise<CreateWorktreeResult> {
+    const orcMeta = getOrchestratorTaskMeta(task.metadata as Record<string, unknown> | undefined);
     return this.worktreeManager.createWorktree({
       agentName: worker.name,
       taskId: task.id,
       taskTitle: task.title,
       installDependencies: true,
+      baseBranch: orcMeta?.targetBranch,
     });
   }
 
