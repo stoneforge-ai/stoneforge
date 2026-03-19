@@ -7,7 +7,7 @@
  */
 
 import React, { useState, useCallback, useMemo, Fragment, useRef, useEffect } from 'react';
-import { Group, Panel, Separator } from 'react-resizable-panels';
+import { Group, Panel, Separator, type Layout } from 'react-resizable-panels';
 import { X, Terminal, Radio, ArrowLeftRight, ArrowUpDown } from 'lucide-react';
 import type {
   WorkspacePane,
@@ -18,6 +18,7 @@ import type {
   PaneStatus,
   DragState,
 } from './types';
+import { PANEL_SIZES_STORAGE_KEY } from './types';
 import { WorkspacePane as WorkspacePaneComponent, type WorkspacePaneHandle } from './WorkspacePane';
 
 /** Role badge styles for tabs */
@@ -27,12 +28,34 @@ const tabRoleColors: Record<string, string> = {
   steward: 'text-amber-500',
 };
 
+/** Load persisted panel sizes from localStorage */
+function loadPanelSizes(): Record<string, Layout> {
+  try {
+    const saved = localStorage.getItem(PANEL_SIZES_STORAGE_KEY);
+    return saved ? JSON.parse(saved) : {};
+  } catch {
+    return {};
+  }
+}
+
+/** Save panel sizes for a specific group to localStorage */
+function savePanelGroupSizes(groupId: string, layout: Layout): void {
+  try {
+    const all = loadPanelSizes();
+    all[groupId] = layout;
+    localStorage.setItem(PANEL_SIZES_STORAGE_KEY, JSON.stringify(all));
+  } catch {
+    // Ignore storage errors
+  }
+}
+
 export interface WorkspaceGridProps {
   panes: WorkspacePane[];
   preset: LayoutPreset;
   gridOrientation?: GridOrientation;
   sectionLayout?: SectionLayout;
   activePane: PaneId | null;
+  maximizedPaneId?: PaneId;
   dragState: DragState | null;
   onPaneClose: (paneId: PaneId) => void;
   onPaneActivate: (paneId: PaneId) => void;
@@ -44,6 +67,7 @@ export interface WorkspaceGridProps {
   onSwapSections?: () => void;
   onSwapPanes?: (paneId1: PaneId, paneId2: PaneId) => void;
   onSwap2x2Rows?: () => void;
+  onMaximizedPaneChange?: (paneId: PaneId | null) => void;
 }
 
 /**
@@ -350,6 +374,7 @@ export function WorkspaceGrid({
   gridOrientation = 'horizontal',
   sectionLayout = 'single-first',
   activePane,
+  maximizedPaneId,
   dragState,
   onPaneClose,
   onPaneActivate,
@@ -361,11 +386,14 @@ export function WorkspaceGrid({
   onSwapSections,
   onSwapPanes,
   onSwap2x2Rows,
+  onMaximizedPaneChange,
 }: WorkspaceGridProps) {
   // Note: onEndDrag is kept in interface for backward compatibility but not used.
   // We use onCancelDrag instead to avoid triggering reorderPanes after swaps.
   void _onEndDrag;
-  const [maximizedPane, setMaximizedPane] = useState<PaneId | null>(null);
+
+  // Use persisted maximized pane from props (falls back to null)
+  const maximizedPane = maximizedPaneId ?? null;
 
   // If a pane is maximized, only show that pane
   const visiblePanes = maximizedPane
@@ -373,6 +401,9 @@ export function WorkspaceGrid({
     : panes;
 
   const isMaximized = maximizedPane !== null;
+
+  // Load persisted panel sizes (ref to avoid re-renders on save)
+  const panelSizesRef = useRef<Record<string, Layout>>(loadPanelSizes());
 
   // For single/tabbed mode, track which pane is selected (uses activePane or first pane)
   const selectedPaneId = activePane || panes[0]?.id || null;
@@ -430,13 +461,26 @@ export function WorkspaceGrid({
     setRefreshTrigger(t => t + 1);
   }, []);
 
-  const handleMaximize = useCallback((paneId: PaneId) => {
-    setMaximizedPane(paneId);
+  // Persist panel sizes when resize is complete (onLayoutChanged fires on pointer release)
+  const createLayoutChangedHandler = useCallback((groupId: string) => {
+    return (layout: Layout) => {
+      panelSizesRef.current[groupId] = layout;
+      savePanelGroupSizes(groupId, layout);
+    };
   }, []);
 
-  const handleMinimize = useCallback(() => {
-    setMaximizedPane(null);
+  // Get persisted default layout for a panel group
+  const getDefaultLayout = useCallback((groupId: string): Layout | undefined => {
+    return panelSizesRef.current[groupId];
   }, []);
+
+  const handleMaximize = useCallback((paneId: PaneId) => {
+    onMaximizedPaneChange?.(paneId);
+  }, [onMaximizedPaneChange]);
+
+  const handleMinimize = useCallback(() => {
+    onMaximizedPaneChange?.(null);
+  }, [onMaximizedPaneChange]);
 
   // Drag and drop handlers
   const handleDragStart = useCallback((e: React.DragEvent, paneId: PaneId) => {
@@ -697,10 +741,10 @@ export function WorkspaceGrid({
         data-orientation={gridOrientation}
         data-section-layout={sectionLayout}
       >
-        <Group orientation={isHorizontal ? 'horizontal' : 'vertical'} id="workspace-grid-3pane" onLayoutChange={handleLayoutChange}>
+        <Group orientation={isHorizontal ? 'horizontal' : 'vertical'} id="workspace-grid-3pane" defaultLayout={getDefaultLayout('workspace-grid-3pane')} onLayoutChange={handleLayoutChange} onLayoutChanged={createLayoutChangedHandler('workspace-grid-3pane')}>
           {isSingleFirst ? (
             <>
-              <Panel id="pane-single" defaultSize={50} minSize={15}>
+              <Panel id="pane-single" minSize={15}>
                 {renderPane(singlePaneIndex)}
               </Panel>
               <CustomResizeHandle
@@ -708,9 +752,9 @@ export function WorkspaceGrid({
                 onSwap={handleSwapSections}
                 swapTestId="swap-sections-btn"
               />
-              <Panel id="pane-paired" defaultSize={50} minSize={15}>
-                <Group orientation={isHorizontal ? 'vertical' : 'horizontal'} id="workspace-grid-3pane-secondary" onLayoutChange={handleLayoutChange}>
-                  <Panel id="pane-paired-0" defaultSize={50} minSize={15}>
+              <Panel id="pane-paired" minSize={15}>
+                <Group orientation={isHorizontal ? 'vertical' : 'horizontal'} id="workspace-grid-3pane-secondary" defaultLayout={getDefaultLayout('workspace-grid-3pane-secondary')} onLayoutChange={handleLayoutChange} onLayoutChanged={createLayoutChangedHandler('workspace-grid-3pane-secondary')}>
+                  <Panel id="pane-paired-0" minSize={15}>
                     {renderPane(pairedPaneIndices[0])}
                   </Panel>
                   <CustomResizeHandle
@@ -718,7 +762,7 @@ export function WorkspaceGrid({
                     onSwap={onSwapPanes ? () => handleSwapPanes(visiblePanes[pairedPaneIndices[0]].id, visiblePanes[pairedPaneIndices[1]].id) : undefined}
                     swapTestId="swap-panes-btn"
                   />
-                  <Panel id="pane-paired-1" defaultSize={50} minSize={15}>
+                  <Panel id="pane-paired-1" minSize={15}>
                     {renderPane(pairedPaneIndices[1])}
                   </Panel>
                 </Group>
@@ -726,9 +770,9 @@ export function WorkspaceGrid({
             </>
           ) : (
             <>
-              <Panel id="pane-paired" defaultSize={50} minSize={15}>
-                <Group orientation={isHorizontal ? 'vertical' : 'horizontal'} id="workspace-grid-3pane-secondary" onLayoutChange={handleLayoutChange}>
-                  <Panel id="pane-paired-0" defaultSize={50} minSize={15}>
+              <Panel id="pane-paired" minSize={15}>
+                <Group orientation={isHorizontal ? 'vertical' : 'horizontal'} id="workspace-grid-3pane-secondary" defaultLayout={getDefaultLayout('workspace-grid-3pane-secondary')} onLayoutChange={handleLayoutChange} onLayoutChanged={createLayoutChangedHandler('workspace-grid-3pane-secondary')}>
+                  <Panel id="pane-paired-0" minSize={15}>
                     {renderPane(pairedPaneIndices[0])}
                   </Panel>
                   <CustomResizeHandle
@@ -736,7 +780,7 @@ export function WorkspaceGrid({
                     onSwap={onSwapPanes ? () => handleSwapPanes(visiblePanes[pairedPaneIndices[0]].id, visiblePanes[pairedPaneIndices[1]].id) : undefined}
                     swapTestId="swap-panes-btn"
                   />
-                  <Panel id="pane-paired-1" defaultSize={50} minSize={15}>
+                  <Panel id="pane-paired-1" minSize={15}>
                     {renderPane(pairedPaneIndices[1])}
                   </Panel>
                 </Group>
@@ -746,7 +790,7 @@ export function WorkspaceGrid({
                 onSwap={handleSwapSections}
                 swapTestId="swap-sections-btn"
               />
-              <Panel id="pane-single" defaultSize={50} minSize={15}>
+              <Panel id="pane-single" minSize={15}>
                 {renderPane(singlePaneIndex)}
               </Panel>
             </>
@@ -771,7 +815,7 @@ export function WorkspaceGrid({
         data-preset={preset}
         data-pane-count={visiblePanes.length}
       >
-        <Group orientation="vertical" id={`workspace-grid-${preset}`} onLayoutChange={handleLayoutChange}>
+        <Group orientation="vertical" id={`workspace-grid-${preset}`} defaultLayout={getDefaultLayout(`workspace-grid-${preset}`)} onLayoutChange={handleLayoutChange} onLayoutChanged={createLayoutChangedHandler(`workspace-grid-${preset}`)}>
           {layoutConfig.rows.map((rowIndices, rowIndex) => (
             <Fragment key={`row-group-${rowIndex}`}>
               {rowIndex > 0 && (
@@ -790,11 +834,11 @@ export function WorkspaceGrid({
                   testId={is2x2Grid ? 'vertical-resize-handle' : undefined}
                 />
               )}
-              <Panel id={`row-${rowIndex}`} defaultSize={100 / layoutConfig.rows.length} minSize={10}>
+              <Panel id={`row-${rowIndex}`} minSize={10}>
                 {rowIndices.length === 1 ? (
                   renderPane(rowIndices[0])
                 ) : (
-                  <Group orientation="horizontal" id={`workspace-row-${rowIndex}`} onLayoutChange={handleLayoutChange}>
+                  <Group orientation="horizontal" id={`workspace-row-${rowIndex}`} defaultLayout={getDefaultLayout(`workspace-row-${rowIndex}`)} onLayoutChange={handleLayoutChange} onLayoutChanged={createLayoutChangedHandler(`workspace-row-${rowIndex}`)}>
                     {rowIndices.map((paneIndex, colIndex) => (
                       <Fragment key={`col-group-${colIndex}`}>
                         {colIndex > 0 && (
@@ -808,7 +852,7 @@ export function WorkspaceGrid({
                             swapTestId={`swap-col-${colIndex - 1}-${colIndex}-btn`}
                           />
                         )}
-                        <Panel id={`col-${rowIndex}-${colIndex}`} defaultSize={100 / rowIndices.length} minSize={15}>
+                        <Panel id={`col-${rowIndex}-${colIndex}`} minSize={15}>
                           {renderPane(paneIndex)}
                         </Panel>
                       </Fragment>
@@ -831,7 +875,7 @@ export function WorkspaceGrid({
       data-preset={preset}
       data-pane-count={visiblePanes.length}
     >
-      <Group orientation="horizontal" id={`workspace-grid-${preset}`} onLayoutChange={handleLayoutChange}>
+      <Group orientation="horizontal" id={`workspace-grid-${preset}`} defaultLayout={getDefaultLayout(`workspace-grid-${preset}`)} onLayoutChange={handleLayoutChange} onLayoutChanged={createLayoutChangedHandler(`workspace-grid-${preset}`)}>
         {layoutConfig.rows.map((columnIndices, colIndex) => (
           <Fragment key={`col-group-${colIndex}`}>
             {colIndex > 0 && (
@@ -845,11 +889,11 @@ export function WorkspaceGrid({
                 swapTestId={`swap-col-${colIndex - 1}-${colIndex}-btn`}
               />
             )}
-            <Panel id={`col-${colIndex}`} defaultSize={100 / layoutConfig.rows.length} minSize={15}>
+            <Panel id={`col-${colIndex}`} minSize={15}>
               {columnIndices.length === 1 ? (
                 renderPane(columnIndices[0])
               ) : (
-                <Group orientation="vertical" id={`workspace-col-${colIndex}`} onLayoutChange={handleLayoutChange}>
+                <Group orientation="vertical" id={`workspace-col-${colIndex}`} defaultLayout={getDefaultLayout(`workspace-col-${colIndex}`)} onLayoutChange={handleLayoutChange} onLayoutChanged={createLayoutChangedHandler(`workspace-col-${colIndex}`)}>
                   {columnIndices.map((paneIndex, rowIndex) => (
                     <Fragment key={`row-group-${rowIndex}`}>
                       {rowIndex > 0 && (
@@ -863,7 +907,7 @@ export function WorkspaceGrid({
                           swapTestId={`swap-row-${rowIndex - 1}-${rowIndex}-btn`}
                         />
                       )}
-                      <Panel id={`row-${colIndex}-${rowIndex}`} defaultSize={100 / columnIndices.length} minSize={15}>
+                      <Panel id={`row-${colIndex}-${rowIndex}`} minSize={15}>
                         {renderPane(paneIndex)}
                       </Panel>
                     </Fragment>

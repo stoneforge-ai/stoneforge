@@ -228,10 +228,14 @@ export function usePaneManager(): UsePaneManagerResult {
         newPreset = 'columns';
       }
 
+      // Clear maximized pane if it was removed
+      const maximizedPaneId = prev.maximizedPaneId === paneId ? undefined : prev.maximizedPaneId;
+
       return {
         ...prev,
         preset: newPreset,
         panes: reindexedPanes,
+        maximizedPaneId,
         modifiedAt: Date.now(),
       };
     });
@@ -379,6 +383,7 @@ export function usePaneManager(): UsePaneManagerResult {
       ...prev,
       preset: 'single',
       panes: [],
+      maximizedPaneId: undefined,
       modifiedAt: Date.now(),
     }));
     setActivePane(null);
@@ -584,6 +589,15 @@ export function usePaneManager(): UsePaneManagerResult {
     });
   }, []);
 
+  // Set maximized pane (persisted to localStorage via layout)
+  const setMaximizedPane = useCallback((paneId: PaneId | null) => {
+    setLayout(prev => ({
+      ...prev,
+      maximizedPaneId: paneId ?? undefined,
+      modifiedAt: Date.now(),
+    }));
+  }, []);
+
   return {
     // State
     layout,
@@ -619,5 +633,6 @@ export function usePaneManager(): UsePaneManagerResult {
     rotateLayout,
     swapGridSections,
     swap2x2Rows,
+    setMaximizedPane,
   };
 }

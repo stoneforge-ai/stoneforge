@@ -65,6 +65,8 @@ export interface WorkspaceLayout {
   gridOrientation?: GridOrientation;
   /** Section layout - for 3-pane grid, whether single pane is first (left/top) or last (right/bottom) */
   sectionLayout?: SectionLayout;
+  /** ID of the currently maximized pane, if any */
+  maximizedPaneId?: PaneId;
   createdAt: number;
   modifiedAt: number;
 }
@@ -125,6 +127,8 @@ export interface WorkspaceActions {
   swapGridSections: () => void;
   /** Swap rows in 2x2 grid layout (top row swaps with bottom row) */
   swap2x2Rows: () => void;
+  /** Set the maximized pane (or null to unmaximize) */
+  setMaximizedPane: (paneId: PaneId | null) => void;
 }
 
 /**
@@ -146,6 +150,11 @@ export interface StreamEvent {
  */
 export const WORKSPACE_STORAGE_KEY = 'stoneforge-workspace-layouts';
 export const ACTIVE_LAYOUT_KEY = 'stoneforge-active-workspace-layout';
+
+/**
+ * Local storage key for persisted panel sizes (react-resizable-panels)
+ */
+export const PANEL_SIZES_STORAGE_KEY = 'stoneforge-workspace-panel-sizes';
 
 /**
  * BroadcastChannel name for cross-window communication
@@ -173,7 +182,7 @@ export const MIN_PANE_SIZE_PX = 150;
 export const DEFAULT_LAYOUT: WorkspaceLayout = {
   id: 'default',
   name: 'Default',
-  preset: 'single',
+  preset: 'grid',
   panes: [],
   gridOrientation: 'horizontal',
   sectionLayout: 'single-first',

@@ -88,6 +88,7 @@ export function WorkspacesPage() {
     swapGridSections,
     swapPanes,
     swap2x2Rows,
+    setMaximizedPane,
   } = usePaneManager();
 
   // Handle agent URL parameter - open agent in pane when navigating from Agents page
@@ -340,6 +341,7 @@ export function WorkspacesPage() {
             gridOrientation={layout.gridOrientation}
             sectionLayout={layout.sectionLayout}
             activePane={activePane}
+            maximizedPaneId={layout.maximizedPaneId}
             dragState={dragState}
             onPaneClose={removePane}
             onPaneActivate={setActivePane}
@@ -351,6 +353,7 @@ export function WorkspacesPage() {
             onSwapSections={swapGridSections}
             onSwapPanes={swapPanes}
             onSwap2x2Rows={swap2x2Rows}
+            onMaximizedPaneChange={setMaximizedPane}
           />
         ) : (
           /* Empty state */
