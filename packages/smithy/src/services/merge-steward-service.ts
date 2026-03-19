@@ -483,7 +483,7 @@ export class MergeStewardServiceImpl implements MergeStewardService {
       // 2a. Check if the branch has any commits ahead of the target.
       // If the branch is already fully merged (zero commits ahead), there's
       // nothing to test or merge — mark as not_applicable and close the task.
-      const branchHasCommits = await this.branchHasCommitsAhead(orchestratorMeta.branch);
+      const branchHasCommits = await this.branchHasCommitsAhead(orchestratorMeta.branch, task);
       if (!branchHasCommits) {
         logger.info(
           `Task ${taskId} branch "${orchestratorMeta.branch}" has zero commits ahead of target — already merged`
@@ -649,7 +649,7 @@ export class MergeStewardServiceImpl implements MergeStewardService {
       }
 
       // 6. Sync local target branch (best-effort, after all bookkeeping)
-      const targetBranch = await this.getTargetBranch();
+      const targetBranch = await this.getTargetBranchForTask(task);
       const remoteExists = await hasRemote(this.config.workspaceRoot);
       if (remoteExists) {
         try {
@@ -837,7 +837,7 @@ export class MergeStewardServiceImpl implements MergeStewardService {
       };
     }
 
-    const targetBranch = await this.getTargetBranch();
+    const targetBranch = await this.getTargetBranchForTask(task);
     const sourceBranch = orchestratorMeta.branch;
 
     const defaultMessage = this.config.mergeStrategy === 'squash'
@@ -1067,7 +1067,7 @@ export class MergeStewardServiceImpl implements MergeStewardService {
           }
 
           // Sync local target branch (best-effort)
-          const targetBranch = await this.getTargetBranch();
+          const targetBranch = await this.getTargetBranchForTask(task);
           const remoteExists = await hasRemote(this.config.workspaceRoot);
           if (remoteExists) {
             try {
@@ -1261,7 +1261,7 @@ export class MergeStewardServiceImpl implements MergeStewardService {
       logger.debug(`Push attempt for ${sourceBranch}: ${pushError instanceof Error ? pushError.message : String(pushError)}`);
     }
 
-    const targetBranch = await this.getTargetBranch();
+    const targetBranch = await this.getTargetBranchForTask(task);
 
     // Build PR title with task ID prefix
     const prTitle = `[${taskId}] ${task.title}`;
@@ -1394,8 +1394,8 @@ export class MergeStewardServiceImpl implements MergeStewardService {
    * Returns true if there are commits to merge, false if the branch is
    * already fully merged (zero commits ahead).
    */
-  private async branchHasCommitsAhead(sourceBranch: string): Promise<boolean> {
-    const targetBranch = await this.getTargetBranch();
+  private async branchHasCommitsAhead(sourceBranch: string, task: Task): Promise<boolean> {
+    const targetBranch = await this.getTargetBranchForTask(task);
     const remoteExists = await hasRemote(this.config.workspaceRoot);
 
     try {
@@ -1425,6 +1425,19 @@ export class MergeStewardServiceImpl implements MergeStewardService {
       // and let the normal merge flow handle errors
       return true;
     }
+  }
+
+  /**
+   * Resolves the target branch for a specific task.
+   * Uses the task's orchestrator metadata targetBranch if set,
+   * otherwise falls back to the global getTargetBranch().
+   */
+  private async getTargetBranchForTask(task: Task): Promise<string> {
+    const orcMeta = getOrchestratorTaskMeta(task.metadata as Record<string, unknown> | undefined);
+    if (orcMeta?.targetBranch) {
+      return orcMeta.targetBranch;
+    }
+    return this.getTargetBranch();
   }
 
   private async getTargetBranch(): Promise<string> {
