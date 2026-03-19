@@ -139,7 +139,11 @@ function DirectorTabInner({
         }
         ${isDragging ? 'opacity-50' : ''}
       `}
-      title={`${info.director.name} — ${statusLabel}`}
+      title={`${info.director.name} — ${statusLabel} — ${
+        info.director.metadata?.agent?.agentRole === 'director' && info.director.metadata.agent.targetBranch
+          ? info.director.metadata.agent.targetBranch
+          : 'auto'
+      }`}
     >
       {/* Status dot */}
       <Circle className={`w-2 h-2 flex-shrink-0 ${statusColor} ${statusFill}`} />
