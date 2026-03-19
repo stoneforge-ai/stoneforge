@@ -38,9 +38,12 @@ import {
   Play,
   Square,
   RotateCcw,
+  GitBranch,
+  Check,
+  X,
 } from 'lucide-react';
 import { Tooltip } from '@stoneforge/ui';
-import { useDirectors, useDeleteAgent, useStopAgentSession, useStartAgentSession } from '../../api/hooks/useAgents';
+import { useDirectors, useDeleteAgent, useStopAgentSession, useStartAgentSession, useChangeTargetBranch } from '../../api/hooks/useAgents';
 import { useAgentInboxCount } from '../../api/hooks/useAgentInbox';
 import { DirectorTabBar } from './DirectorTabBar';
 import { DirectorTabContent } from './DirectorTabContent';
@@ -301,6 +304,7 @@ export function DirectorPanel({ collapsed = false, onToggle, isMaximized = false
   const deleteAgentMutation = useDeleteAgent();
   const stopSessionMutation = useStopAgentSession();
   const startSessionMutation = useStartAgentSession();
+  const changeTargetBranchMutation = useChangeTargetBranch();
 
   // Tab order state
   const [tabOrder, setTabOrder] = useState<string[]>(loadTabOrder);
@@ -343,6 +347,23 @@ export function DirectorPanel({ collapsed = false, onToggle, isMaximized = false
 
   // Lifted messages queue state (keyed by director ID)
   const [messagesQueueVisible, setMessagesQueueVisible] = useState<Record<string, boolean>>({});
+
+  // Branch indicator popover state
+  const [branchPopoverOpen, setBranchPopoverOpen] = useState(false);
+  const [branchInputValue, setBranchInputValue] = useState('');
+  const branchPopoverRef = useRef<HTMLDivElement>(null);
+
+  // Close branch popover on click outside
+  useEffect(() => {
+    if (!branchPopoverOpen) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (branchPopoverRef.current && !branchPopoverRef.current.contains(e.target as Node)) {
+        setBranchPopoverOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [branchPopoverOpen]);
 
   // Terminal sendInput callbacks (keyed by director ID)
   const terminalSendInputRefs = useRef<Record<string, (text: string) => void>>({});
@@ -779,6 +800,119 @@ export function DirectorPanel({ collapsed = false, onToggle, isMaximized = false
 
             return (
               <>
+                {/* Branch Indicator */}
+                {(() => {
+                  const meta = activeInfo.director.metadata?.agent;
+                  const currentBranch = meta?.agentRole === 'director' && 'targetBranch' in meta
+                    ? (meta as { targetBranch?: string }).targetBranch ?? null
+                    : null;
+                  const displayBranch = currentBranch || 'auto';
+
+                  return (
+                    <div className="relative">
+                      <Tooltip content={`Target branch: ${displayBranch}`} side="bottom">
+                        <button
+                          onClick={() => {
+                            setBranchInputValue(currentBranch ?? '');
+                            setBranchPopoverOpen((prev) => !prev);
+                          }}
+                          className="flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium
+                            bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)]
+                            hover:text-[var(--color-text)] hover:bg-[var(--color-border)]
+                            transition-colors duration-150 cursor-pointer max-w-[120px]"
+                          aria-label={`Target branch: ${displayBranch}`}
+                          data-testid={`director-branch-indicator-${activeDirectorId}`}
+                        >
+                          <GitBranch className="w-3 h-3 flex-shrink-0" />
+                          <span className="truncate">{displayBranch}</span>
+                        </button>
+                      </Tooltip>
+
+                      {/* Branch edit popover */}
+                      {branchPopoverOpen && (
+                        <div
+                          ref={branchPopoverRef}
+                          className="absolute top-full right-0 mt-1 z-50 bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg shadow-lg p-2 min-w-[200px]"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Escape') {
+                              setBranchPopoverOpen(false);
+                            }
+                          }}
+                        >
+                          <label className="block text-[10px] font-medium text-[var(--color-text-tertiary)] mb-1">
+                            Target Branch
+                          </label>
+                          <input
+                            type="text"
+                            value={branchInputValue}
+                            onChange={(e) => setBranchInputValue(e.target.value)}
+                            placeholder="auto-detect"
+                            autoFocus
+                            className="w-full px-2 py-1 text-xs rounded-md border border-[var(--color-border)]
+                              bg-[var(--color-bg-primary)] text-[var(--color-text)]
+                              placeholder:text-[var(--color-text-tertiary)]
+                              focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)]"
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                const newVal = branchInputValue.trim() || null;
+                                changeTargetBranchMutation.mutate(
+                                  { agentId: activeDirectorId!, targetBranch: newVal },
+                                  { onSuccess: () => setBranchPopoverOpen(false) }
+                                );
+                              }
+                            }}
+                            data-testid={`director-branch-input-${activeDirectorId}`}
+                          />
+                          <div className="flex items-center gap-1 mt-1.5">
+                            <button
+                              onClick={() => {
+                                const newVal = branchInputValue.trim() || null;
+                                changeTargetBranchMutation.mutate(
+                                  { agentId: activeDirectorId!, targetBranch: newVal },
+                                  { onSuccess: () => setBranchPopoverOpen(false) }
+                                );
+                              }}
+                              disabled={changeTargetBranchMutation.isPending}
+                              className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] font-medium rounded-md
+                                bg-[var(--color-primary)] text-white hover:opacity-90
+                                transition-colors duration-150 disabled:opacity-50"
+                              data-testid={`director-branch-save-${activeDirectorId}`}
+                            >
+                              <Check className="w-3 h-3" />
+                              Save
+                            </button>
+                            <button
+                              onClick={() => {
+                                changeTargetBranchMutation.mutate(
+                                  { agentId: activeDirectorId!, targetBranch: null },
+                                  {
+                                    onSuccess: () => {
+                                      setBranchInputValue('');
+                                      setBranchPopoverOpen(false);
+                                    },
+                                  }
+                                );
+                              }}
+                              disabled={changeTargetBranchMutation.isPending}
+                              className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] font-medium rounded-md
+                                text-[var(--color-text-secondary)] hover:text-[var(--color-text)]
+                                hover:bg-[var(--color-surface-hover)]
+                                transition-colors duration-150 disabled:opacity-50"
+                              data-testid={`director-branch-clear-${activeDirectorId}`}
+                            >
+                              <X className="w-3 h-3" />
+                              Clear
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Separator between branch indicator and action buttons */}
+                <div className="w-px h-4 bg-[var(--color-border)] mx-0.5" />
+
                 {/* Sift Backlog Button — only when active director has a session */}
                 {activeInfo.hasActiveSession && (
                   <Tooltip content="Sift Backlog" side="bottom">
