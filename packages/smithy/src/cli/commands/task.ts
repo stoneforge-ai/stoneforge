@@ -269,7 +269,7 @@ const taskCompleteOptions: CommandOption[] = [
   {
     name: 'baseBranch',
     short: 'b',
-    description: 'Base branch for the merge request (default: main)',
+    description: 'Base branch for the merge request (default: auto-detect from task targetBranch, then main)',
     hasValue: true,
   },
 ];

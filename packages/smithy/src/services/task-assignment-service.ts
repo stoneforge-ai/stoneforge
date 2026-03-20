@@ -514,7 +514,7 @@ export class TaskAssignmentServiceImpl implements TaskAssignmentService {
     let mergeRequestId: number | undefined;
 
     if (branch && this.mergeRequestProvider && options?.createMergeRequest !== false) {
-      const baseBranch = options?.baseBranch || 'main';
+      const baseBranch = options?.baseBranch || currentMeta?.targetBranch || 'main';
       let body = `## Task\n\n**ID:** ${task.id}\n**Title:** ${task.title}\n\n`;
       if (options?.summary) {
         body += `## Summary\n\n${options.summary}\n\n`;
