@@ -283,6 +283,7 @@ interface BaseAgentMetadata {
 
 interface DirectorMetadata extends BaseAgentMetadata {
   agentRole: 'director';
+  targetBranch?: string;  // Git branch for task merges (falls back to config or auto-detect)
 }
 
 interface WorkerMetadata extends BaseAgentMetadata {

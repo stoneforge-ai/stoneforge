@@ -21,14 +21,14 @@ Demo mode lets you try Stoneforge without any API keys or paid subscriptions. It
    npm install -g @stoneforge/smithy
    ```
 
-2. **Initialize a workspace in demo mode**
+2. **Initialize a workspace and enable demo mode**
 
    ```bash
    cd your-project
-   sf init --demo
+   sf init
    ```
 
-   The `--demo` flag creates a standard Stoneforge workspace and automatically configures all default agents (director, workers, steward) to use the free `opencode/minimax-m2.5-free` provider.
+   After initialization, enable demo mode from the dashboard Settings page or by setting `demo_mode: true` in `.stoneforge/config.yaml`. This configures all default agents (director, workers, steward) to use the free `opencode/minimax-m2.5-free` provider.
 
 3. **Start the server and dashboard**
 
@@ -55,13 +55,6 @@ When demo mode is enabled:
 Demo mode affects the provider and model settings for every agent in the workspace. All other Stoneforge features — task planning, dependency tracking, worktree isolation, auto-dispatch, merge stewards — work exactly the same.
 
 ## Enabling and disabling demo mode
-
-### Via CLI (at initialization)
-
-```bash
-# Create a new workspace with demo mode
-sf init --demo
-```
 
 ### Via the dashboard
 

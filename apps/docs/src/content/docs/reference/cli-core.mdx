@@ -13,7 +13,7 @@ import TerminalBlock from '../../../components/custom/TerminalBlock.astro';
 Initialize a new Stoneforge workspace in the current directory.
 
 ```bash
-sf init [--name <name>] [--demo] [--preset auto|review|approve] [--actor <actor>]
+sf init [--name <name>] [--actor <actor>]
 ```
 
 Creates a `.stoneforge/` directory containing `config.yaml`, `stoneforge.db`, `.gitignore`, and a `playbooks/` directory. If `.stoneforge/` already exists (e.g. after cloning) but no database is present, it creates the database and auto-imports from existing JSONL sync files.
@@ -21,8 +21,6 @@ Creates a `.stoneforge/` directory containing `config.yaml`, `stoneforge.db`, `.
 | Option | Description |
 | --- | --- |
 | `--name <name>` | Workspace name (stored in config.yaml) |
-| `--demo` | Enable demo mode with free provider (no API keys required) |
-| `--preset <preset>` | Workflow preset: `auto` (agents merge directly), `review` (merge to review branch), or `approve` (agents need approval, merges via PRs). Skips the interactive prompt. |
 | `--actor <actor>` | Default actor for operations |
 
 ### `sf serve`
@@ -162,7 +160,6 @@ sf create <type> [options]
 | `-a, --assignee <id>` | Assignee entity ID |
 | `--tag <tag>` | Add tag (repeatable) |
 | `--plan <id\|name>` | Attach to a plan |
-| `--no-auto-link` | Skip auto-linking to external services |
 
 ```bash
 sf create task --title "Fix login bug" --priority 1 --type bug
@@ -189,10 +186,10 @@ Displays detailed information about any element. Supports short IDs (prefix matc
 ### `sf update`
 
 ```bash
-sf update <id> [--title <text>] [--status <s>] [--priority <1-5>] [--complexity <1-5>] [--description <text>] [--metadata <json>] [--tag <tag>] [--add-tag <tag>] [--remove-tag <tag>] [--assignee <id>]
+sf update <id> [--title <text>] [--status <s>] [--priority <1-5>] [--complexity <1-5>] [--tag <tag>] [--add-tag <tag>] [--remove-tag <tag>] [--assignee <id>]
 ```
 
-Pass `--assignee ""` to unassign. Use `--tag` to replace all tags, or `--add-tag`/`--remove-tag` for incremental changes. Use `--description` to update a task's linked document or a document's content. Use `--metadata` to merge JSON into the element's metadata (null values remove keys).
+Pass `--assignee ""` to unassign. Use `--tag` to replace all tags, or `--add-tag`/`--remove-tag` for incremental changes.
 
 ### `sf delete`
 
@@ -332,6 +329,18 @@ The Documentation library must exist — run `sf docs init` first. Already-added
 sf docs add el-doc123
 sf docs add el-doc123 el-doc456 el-doc789
 ```
+
+### `sf docs dir`
+
+Show the Documentation Directory document.
+
+```bash
+sf docs dir [--content] [--json] [--quiet]
+```
+
+| Option | Description |
+| --- | --- |
+| `--content` | Include the full document content in output |
 
 ---
 
