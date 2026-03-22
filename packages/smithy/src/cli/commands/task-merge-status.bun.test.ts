@@ -6,6 +6,7 @@
  */
 
 import { describe, it, expect, mock } from 'bun:test';
+import { parseArgs } from '@stoneforge/quarry/cli';
 import { taskMergeStatusCommand, verifyMergeStatus } from './task.js';
 
 // ============================================================================
@@ -33,6 +34,24 @@ describe('taskMergeStatusCommand structure', () => {
   it('should document --force in help text', () => {
     expect(taskMergeStatusCommand.help).toBeDefined();
     expect(taskMergeStatusCommand.help).toContain('--force');
+  });
+
+  it('should parse --force flag from argv', () => {
+    const argv = ['task', 'merge-status', 'el-abc123', 'merged', '--force'];
+    const parsed = parseArgs(argv, taskMergeStatusCommand.options);
+    expect(parsed.commandOptions.force).toBe(true);
+  });
+
+  it('should parse -f short flag from argv', () => {
+    const argv = ['task', 'merge-status', 'el-abc123', 'merged', '-f'];
+    const parsed = parseArgs(argv, taskMergeStatusCommand.options);
+    expect(parsed.commandOptions.force).toBe(true);
+  });
+
+  it('should not set force when --force is omitted', () => {
+    const argv = ['task', 'merge-status', 'el-abc123', 'merged'];
+    const parsed = parseArgs(argv, taskMergeStatusCommand.options);
+    expect(parsed.commandOptions.force).toBeUndefined();
   });
 });
 
