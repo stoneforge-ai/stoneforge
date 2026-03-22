@@ -405,6 +405,8 @@ export class TaskAssignmentServiceImpl implements TaskAssignmentService {
       mergeStatus: 'pending' as MergeStatus,
       // Preserve handoff history from previous assignments
       handoffHistory: existingMeta?.handoffHistory,
+      // Preserve targetBranch across re-assignment/handoff
+      targetBranch: existingMeta?.targetBranch,
     };
 
     // If marking as started, add start time
