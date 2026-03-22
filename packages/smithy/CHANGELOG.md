@@ -1,5 +1,39 @@
 # @stoneforge/smithy
 
+## 1.19.0
+
+### Minor Changes
+
+- 8d83b52: Propagate director targetBranch to task orchestrator metadata at dispatch time
+- 2100736: Add push enforcement to task completion flow. `completeTask()` now auto-pushes the task branch to origin before transitioning to REVIEW status, preventing silent commit loss when workers skip or fail to push.
+- c29843a: Accept optional targetBranch in agent API routes for director creation and update
+
+### Patch Changes
+
+- bc7a574: Add safety verification to `sf task merge-status merged` to ensure source branch commits are on origin/targetBranch before allowing the status update
+- 0d778dd: Add post-merge verification to `sf task merge` CLI command. After mergeBranch() succeeds, the command now independently verifies that commits landed on the remote target branch before marking the task as merged. Returns actionable error messages if verification fails.
+- fec32d8: Ensure target branch exists before worktree creation at dispatch time. Prevents worktree creation failures when a director's targetBranch doesn't exist locally or on the remote.
+- 3d47d68: Explicitly set CLAUDECODE=1 in interactive and headless session spawn environment to ensure spawned Claude Code sessions detect managed context on all platforms
+- a79190d: Fix ensureTargetBranchExists call ordering in mergeBranch to fetch from origin before attempting to create branches from remote refs
+- 4cc779f: Fix `sf task merge-status merged` to fail when source branch is deleted and merge is unverifiable, instead of silently allowing through. Adds `--force` flag to bypass verification in legitimate edge cases.
+- b30aebc: Fix mergeBranch() alreadyMerged check to use local source ref instead of remote, preventing unpushed commits from being skipped
+- 09effc1: Fix mock.module leak: replace global mock.module for ensureTargetBranchExists with dependency injection via DispatchDaemonConfig to prevent test interference across files
+- 7f9deb4: Fix PR creation to use task's targetBranch from orchestrator metadata instead of hardcoded 'main'. PRs now correctly target the configured target branch when set.
+- bcc47d7: Fix silent push failure in mergeBranch: return failure result when git push fails instead of reporting success, and add post-push verification to confirm the commit landed on the remote.
+- b31f8ce: Fix steward-scheduler to inform scheduled stewards that tasks may target different branches. Adds a per-task target branch override note to both merge/docs and custom steward prompts, instructing stewards to check each task's targetBranch before reviewing.
+- cbd16dd: Fix sf task merge CLI command to read targetBranch from orchestrator metadata and pass it to mergeBranch(), instead of always merging to the auto-detected default branch
+- f17aee3: Fix sf task sync to use per-task targetBranch instead of always syncing against the workspace default branch
+- 26c273c: Add shell:true to installDependencies and corepack exec options to fix ENOENT errors on Windows where npm and corepack are .cmd wrappers
+- a119fb8: Pass task targetBranch as baseBranch when creating worktrees at dispatch, so workers branch from the correct base.
+- dcf3da5: Use per-task targetBranch when rendering steward prompts instead of always using the global cached target branch
+- e87abc1: Preserve targetBranch in assignToAgent orchestrator metadata rebuild to prevent loss during task re-assignment
+- e6656b1: Record merge commit hash in task orchestrator metadata after `sf task merge` succeeds, enabling downstream verification of merged tasks
+- 3772deb: Thread targetBranch through AgentRegistry.registerDirector() metadata
+  - @stoneforge/core@1.19.0
+  - @stoneforge/storage@1.19.0
+  - @stoneforge/quarry@1.19.0
+  - @stoneforge/shared-routes@1.19.0
+
 ## 1.18.0
 
 ### Minor Changes
