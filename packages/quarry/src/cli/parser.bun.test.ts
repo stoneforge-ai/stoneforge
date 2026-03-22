@@ -12,6 +12,7 @@ import {
   camelToKebab,
 } from './parser.js';
 import type { CommandOption } from './types.js';
+import { initCommand } from './commands/init.js';
 
 describe('parseArgs', () => {
   describe('basic parsing', () => {
@@ -488,6 +489,57 @@ describe('unescapeShellArtifacts', () => {
 
   it('should handle empty string', () => {
     expect(unescapeShellArtifacts('')).toBe('');
+  });
+});
+
+describe('parseArgs with init command options', () => {
+  // Use the actual init command's option definitions to verify --demo and --preset
+  // are properly recognized at the parser level (not just the handler level)
+  const initOptions = initCommand.options!;
+
+  it('should parse --demo as a boolean flag', () => {
+    const result = parseArgs(['init', '--demo'], initOptions);
+    expect(result.command).toEqual(['init']);
+    expect(result.commandOptions.demo).toBe(true);
+  });
+
+  it('should parse --preset with a value', () => {
+    const result = parseArgs(['init', '--preset', 'auto'], initOptions);
+    expect(result.command).toEqual(['init']);
+    expect(result.commandOptions.preset).toBe('auto');
+  });
+
+  it('should parse --preset=value syntax', () => {
+    const result = parseArgs(['init', '--preset=review'], initOptions);
+    expect(result.commandOptions.preset).toBe('review');
+  });
+
+  it('should parse --demo and --preset together', () => {
+    const result = parseArgs(['init', '--demo', '--preset', 'approve'], initOptions);
+    expect(result.commandOptions.demo).toBe(true);
+    expect(result.commandOptions.preset).toBe('approve');
+  });
+
+  it('should parse --name with --demo', () => {
+    const result = parseArgs(['init', '--name', 'My Project', '--demo'], initOptions);
+    expect(result.commandOptions.name).toBe('My Project');
+    expect(result.commandOptions.demo).toBe(true);
+  });
+
+  it('should not set demo when --demo is absent', () => {
+    const result = parseArgs(['init'], initOptions);
+    expect(result.commandOptions.demo).toBeUndefined();
+  });
+
+  it('should not set preset when --preset is absent', () => {
+    const result = parseArgs(['init'], initOptions);
+    expect(result.commandOptions.preset).toBeUndefined();
+  });
+
+  it('should parse --preset with global options', () => {
+    const result = parseArgs(['init', '--json', '--preset', 'review'], initOptions);
+    expect(result.options.json).toBe(true);
+    expect(result.commandOptions.preset).toBe('review');
   });
 });
 

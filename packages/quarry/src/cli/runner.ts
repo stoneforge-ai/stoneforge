@@ -383,7 +383,9 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<neve
   registerAlias('todo', 'ready');    // User-friendly alias
   registerAlias('tasks', 'ready');   // User-friendly alias
   registerAlias('done', 'close');    // User-friendly alias
-  registerAlias('complete', 'close'); // User-friendly alias
+  // NOTE: 'complete' was previously aliased to 'close', but removed to avoid
+  // confusion with 'sf task complete' (which creates a merge request and sets
+  // status to review — very different from closing/archiving a task).
   registerAlias('st', 'status');     // Short form for sync status
   registerAlias('dep', 'dependency'); // Short form
   registerAlias('msg', 'message');   // Short form

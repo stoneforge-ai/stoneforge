@@ -50,6 +50,10 @@ import type { WorktreeManager, CreateWorktreeResult, CreateWorktreeOptions } fro
 import type { StewardScheduler } from './steward-scheduler.js';
 import { getOrchestratorTaskMeta, updateOrchestratorTaskMeta, appendTaskSessionHistory, type TaskSessionHistoryEntry } from '../types/task-meta.js';
 
+// Mock ensureTargetBranchExists to prevent real git remote operations in tests.
+// Injected via DispatchDaemonConfig to avoid mock.module() which leaks globally in Bun.
+const mockEnsureTargetBranchExists = mock(async () => {});
+
 // ============================================================================
 // Mock Factories
 // ============================================================================
@@ -188,6 +192,7 @@ describe('DispatchDaemon Integration', () => {
 
     // Create daemon with short poll interval for testing
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 100, // Fast polling for tests
       workerAvailabilityPollEnabled: true,
       inboxPollEnabled: true,
@@ -429,6 +434,7 @@ describe('recoverOrphanedAssignments', () => {
     systemEntity = saved.id as unknown as EntityId;
 
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 100,
       workerAvailabilityPollEnabled: false,
       inboxPollEnabled: false,
@@ -725,6 +731,7 @@ describe('pollWorkflowTasks - merge steward dispatch', () => {
     systemEntity = saved.id as unknown as EntityId;
 
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 100,
       workerAvailabilityPollEnabled: false,
       inboxPollEnabled: false,
@@ -917,6 +924,7 @@ describe('recoverOrphanedAssignments - merge steward recovery', () => {
     systemEntity = saved.id as unknown as EntityId;
 
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 100,
       workerAvailabilityPollEnabled: false,
       inboxPollEnabled: false,
@@ -1213,6 +1221,7 @@ describe('reconcileClosedUnmergedTasks', () => {
     systemEntity = saved.id as unknown as EntityId;
 
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 100,
       workerAvailabilityPollEnabled: false,
       inboxPollEnabled: false,
@@ -1494,6 +1503,7 @@ describe('DispatchDaemon Plan Auto-Complete', () => {
 
     // Create daemon with plan auto-complete enabled, other polls disabled
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 100,
       workerAvailabilityPollEnabled: false,
       inboxPollEnabled: false,
@@ -1813,6 +1823,7 @@ describe('DispatchDaemon Rate Limit Integration', () => {
     systemEntity = saved.id as unknown as EntityId;
 
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 100,
       workerAvailabilityPollEnabled: true,
       inboxPollEnabled: false,
@@ -2192,6 +2203,7 @@ describe('wake() lastWakeAt - invalidate stale rate limit detection', () => {
     systemEntity = saved.id as unknown as EntityId;
 
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 100,
       workerAvailabilityPollEnabled: true,
       inboxPollEnabled: false,
@@ -2557,6 +2569,7 @@ describe('spawnRecoveryStewardForTask - atomic worker unassignment', () => {
     systemEntity = saved.id as unknown as EntityId;
 
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 100,
       workerAvailabilityPollEnabled: false,
       inboxPollEnabled: false,
@@ -2790,6 +2803,7 @@ describe('recoverOrphanedAssignments - recovery steward cascade prevention', () 
     systemEntity = saved.id as unknown as EntityId;
 
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 100,
       workerAvailabilityPollEnabled: false,
       inboxPollEnabled: false,
@@ -3055,6 +3069,7 @@ describe('startup non-blocking orphan recovery', () => {
 
   test('start() returns promptly even if orphan recovery takes a long time', async () => {
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 50,
       workerAvailabilityPollEnabled: true,
       inboxPollEnabled: false,
@@ -3124,6 +3139,7 @@ describe('startup non-blocking orphan recovery', () => {
 
   test('tasks are dispatched promptly once startup orphan recovery completes', async () => {
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 50,
       workerAvailabilityPollEnabled: true,
       inboxPollEnabled: false,
@@ -3192,6 +3208,7 @@ describe('startup non-blocking orphan recovery', () => {
 
   test('recoverOrphanedAssignments is never called concurrently (startup vs poll cycle)', async () => {
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 50,
       workerAvailabilityPollEnabled: true,
       inboxPollEnabled: false,
@@ -3298,6 +3315,7 @@ describe('recoverOrphanedAssignments - rate limit guard', () => {
     systemEntity = saved.id as unknown as EntityId;
 
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 100,
       workerAvailabilityPollEnabled: false,
       inboxPollEnabled: false,
@@ -3624,6 +3642,7 @@ describe('recoverOrphanedAssignments - wake resets resumeCount', () => {
     systemEntity = saved.id as unknown as EntityId;
 
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 100,
       workerAvailabilityPollEnabled: false,
       inboxPollEnabled: false,
@@ -3869,6 +3888,7 @@ describe('runPollCycle - allLimited with empty fallback chain', () => {
     systemEntity = saved.id as unknown as EntityId;
 
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 100,
       workerAvailabilityPollEnabled: true,
       inboxPollEnabled: false,
@@ -4743,6 +4763,7 @@ describe('spawnTriageSession - rate limit guard', () => {
     systemEntity = saved.id as unknown as EntityId;
 
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 100,
       workerAvailabilityPollEnabled: false,
       inboxPollEnabled: true,
@@ -4914,6 +4935,7 @@ describe('spawnRecoveryStewardForTask - rate limit session history guard', () =>
     systemEntity = saved.id as unknown as EntityId;
 
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 100,
       workerAvailabilityPollEnabled: false,
       inboxPollEnabled: false,
@@ -5333,6 +5355,7 @@ describe('spawnRecoveryStewardForTask - multi-assignment guard', () => {
     systemEntity = saved.id as unknown as EntityId;
 
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 100,
       workerAvailabilityPollEnabled: false,
       inboxPollEnabled: false,
@@ -5550,6 +5573,7 @@ describe('recoverOrphanedAssignments - recovery steward orphan recovery', () => 
     systemEntity = saved.id as unknown as EntityId;
 
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 100,
       workerAvailabilityPollEnabled: false,
       inboxPollEnabled: false,
@@ -5852,6 +5876,7 @@ describe('assignTaskToWorker - missing agent channel resilience', () => {
     systemEntity = saved.id as unknown as EntityId;
 
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 100,
       workerAvailabilityPollEnabled: true,
       inboxPollEnabled: false,
@@ -5989,6 +6014,7 @@ describe('assignTaskToWorker - per-director targetBranch propagation', () => {
     systemEntity = saved.id as unknown as EntityId;
 
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 100,
       workerAvailabilityPollEnabled: true,
       inboxPollEnabled: false,

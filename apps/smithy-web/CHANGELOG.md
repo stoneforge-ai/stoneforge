@@ -1,5 +1,17 @@
 # @stoneforge/smithy-web
 
+## 1.19.0
+
+### Minor Changes
+
+- 5cef1dd: Add clickable branch indicator in DirectorPanel header showing the active director's target branch with inline popover to change or clear it
+- 30c0c30: Add Target Branch field to CreateAgentDialog for director agents
+- 44cbb44: Add useChangeTargetBranch mutation hook for updating a director's target branch
+
+### Patch Changes
+
+- @stoneforge/ui@1.19.0
+
 ## 1.18.0
 
 ### Minor Changes

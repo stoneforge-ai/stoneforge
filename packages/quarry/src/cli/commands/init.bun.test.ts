@@ -50,10 +50,24 @@ describe('initCommand', () => {
       expect(initCommand.help).toBeTruthy();
     });
 
-    it('should have name and actor options', () => {
+    it('should have name, actor, demo, and preset options', () => {
       expect(initCommand.options).toBeDefined();
       expect(initCommand.options?.some(o => o.name === 'name')).toBe(true);
       expect(initCommand.options?.some(o => o.name === 'actor')).toBe(true);
+      expect(initCommand.options?.some(o => o.name === 'demo')).toBe(true);
+      expect(initCommand.options?.some(o => o.name === 'preset')).toBe(true);
+    });
+
+    it('should define --demo as a boolean flag (hasValue: false)', () => {
+      const demoOpt = initCommand.options?.find(o => o.name === 'demo');
+      expect(demoOpt).toBeDefined();
+      expect(demoOpt!.hasValue).toBe(false);
+    });
+
+    it('should define --preset as a value option (hasValue: true)', () => {
+      const presetOpt = initCommand.options?.find(o => o.name === 'preset');
+      expect(presetOpt).toBeDefined();
+      expect(presetOpt!.hasValue).toBe(true);
     });
   });
 

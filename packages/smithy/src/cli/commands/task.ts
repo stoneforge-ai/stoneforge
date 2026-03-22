@@ -516,6 +516,7 @@ async function taskMergeHandler(
       {
         mergeStatus: 'merged' as import('../../types/task-meta.js').MergeStatus,
         completedAt: now,
+        ...(mergeResult.commitHash ? { mergeCommitHash: mergeResult.commitHash } : {}),
         ...(options.summary ? { completionSummary: options.summary } : {}),
       }
     );
@@ -996,9 +997,95 @@ Examples:
 
 import { MergeStatusValues, isMergeStatus, type MergeStatus } from '../../types/task-meta.js';
 
+interface TaskMergeStatusOptions {
+  force?: boolean;
+}
+
+/**
+ * Verify that a task's branch content has been merged into the target branch.
+ * Returns null if verification passes, or an error message if it fails.
+ *
+ * Exported for testing.
+ */
+export async function verifyMergeStatus(params: {
+  branch: string;
+  effectiveTarget: string;
+  mergeCommitHash?: string;
+  force?: boolean;
+  execAsync: (cmd: string, opts: Record<string, unknown>) => Promise<{ stdout: string; stderr: string }>;
+  workspaceRoot: string;
+}): Promise<{ status: 'ok' | 'error' | 'forced'; message?: string }> {
+  const { branch, effectiveTarget, mergeCommitHash, force, execAsync, workspaceRoot } = params;
+
+  try {
+    // Fetch latest from origin
+    await execAsync('git fetch origin', { cwd: workspaceRoot, encoding: 'utf8', timeout: 60_000 });
+
+    // Check if the source branch has commits not on origin/{targetBranch}
+    const { stdout: countStr } = await execAsync(
+      `git rev-list --count origin/${effectiveTarget}..${branch}`,
+      { cwd: workspaceRoot, encoding: 'utf8' }
+    );
+    const count = parseInt(countStr.trim(), 10);
+
+    if (count > 0) {
+      return {
+        status: 'error',
+        message: `Cannot mark as merged: branch ${branch} has ${count} commit(s) not on origin/${effectiveTarget}. ` +
+          `Use 'sf task merge' instead to merge and push, or use 'not_applicable' if no merge is needed.`,
+      };
+    }
+    return { status: 'ok' };
+  } catch (verifyErr) {
+    const errMsg = (verifyErr as Error).message ?? '';
+    if (errMsg.includes('unknown revision') || errMsg.includes('bad revision')) {
+      // Source branch was deleted — try to verify via merge commit hash
+      if (mergeCommitHash) {
+        try {
+          await execAsync(
+            `git merge-base --is-ancestor ${mergeCommitHash} origin/${effectiveTarget}`,
+            { cwd: workspaceRoot, encoding: 'utf8' }
+          );
+          return { status: 'ok' };
+        } catch {
+          if (force) {
+            return {
+              status: 'forced',
+              message: `⚠️  Warning: --force used. Merge commit ${mergeCommitHash} is NOT on origin/${effectiveTarget}. Proceeding anyway.`,
+            };
+          }
+          return {
+            status: 'error',
+            message: `Cannot verify merge: source branch ${branch} no longer exists and merge commit ${mergeCommitHash} is not on origin/${effectiveTarget}.\n` +
+              `Use 'sf task merge' to perform the actual merge, or if the work was already merged by other means,\n` +
+              `use --force to override this check.`,
+          };
+        }
+      } else if (force) {
+        return {
+          status: 'forced',
+          message: `⚠️  Warning: --force used. Source branch ${branch} no longer exists and no merge commit hash is recorded. Proceeding anyway.`,
+        };
+      } else {
+        return {
+          status: 'error',
+          message: `Cannot verify merge: source branch ${branch} no longer exists and no merge commit hash is recorded.\n` +
+            `Use 'sf task merge' to perform the actual merge, or if the work was already merged by other means,\n` +
+            `use --force to override this check.`,
+        };
+      }
+    } else {
+      return {
+        status: 'error',
+        message: `Cannot mark as merged: verification failed: ${errMsg}`,
+      };
+    }
+  }
+}
+
 async function taskMergeStatusHandler(
   args: string[],
-  options: GlobalOptions
+  options: GlobalOptions & TaskMergeStatusOptions
 ): Promise<CommandResult> {
   const [taskId, statusArg] = args;
 
@@ -1062,34 +1149,22 @@ async function taskMergeStatusHandler(
               // Determine effective target branch
               const { detectTargetBranch } = await import('../../git/merge.js');
               const effectiveTarget = targetBranch ?? await detectTargetBranch(workspaceRoot);
+              const mergeCommitHash = orchestratorMeta?.mergeCommitHash;
 
-              try {
-                // Fetch latest from origin
-                await execAsync('git fetch origin', { cwd: workspaceRoot, encoding: 'utf8', timeout: 60_000 });
+              const result = await verifyMergeStatus({
+                branch,
+                effectiveTarget,
+                mergeCommitHash,
+                force: options.force,
+                execAsync,
+                workspaceRoot,
+              });
 
-                // Check if the source branch has commits not on origin/{targetBranch}
-                const { stdout: countStr } = await execAsync(
-                  `git rev-list --count origin/${effectiveTarget}..${branch}`,
-                  { cwd: workspaceRoot, encoding: 'utf8' }
-                );
-                const count = parseInt(countStr.trim(), 10);
-
-                if (count > 0) {
-                  return failure(
-                    `Cannot mark as merged: branch ${branch} has ${count} commit(s) not on origin/${effectiveTarget}. ` +
-                    `Use 'sf task merge' instead to merge and push, or use 'not_applicable' if no merge is needed.`,
-                    ExitCode.GENERAL_ERROR
-                  );
-                }
-              } catch (verifyErr) {
-                // If the branch ref doesn't exist (already deleted), that's fine — commits were merged
-                const errMsg = (verifyErr as Error).message ?? '';
-                if (!errMsg.includes('unknown revision') && !errMsg.includes('bad revision')) {
-                  return failure(
-                    `Cannot mark as merged: verification failed: ${errMsg}`,
-                    ExitCode.GENERAL_ERROR
-                  );
-                }
+              if (result.status === 'error') {
+                return failure(result.message!, ExitCode.GENERAL_ERROR);
+              }
+              if (result.status === 'forced' && result.message) {
+                console.warn(result.message);
               }
             }
           }
@@ -1169,11 +1244,21 @@ Valid status values:
   not_applicable      No merge needed (issue already fixed on master)
   awaiting_approval   PR created, waiting for human approval/merge
 
+Options:
+  --force    Bypass merge verification (use when branch is deleted and merge cannot be verified)
+
 Examples:
   sf task merge-status el-abc123 merged
+  sf task merge-status el-abc123 merged --force
   sf task merge-status el-abc123 pending
   sf task merge-status el-abc123 test_failed`,
-  options: [],
+  options: [
+    {
+      name: 'force',
+      short: 'f',
+      description: 'Bypass merge verification when source branch is deleted and merge cannot be verified',
+    },
+  ],
   handler: taskMergeStatusHandler as Command['handler'],
 };
 

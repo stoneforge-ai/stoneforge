@@ -468,7 +468,7 @@ const agentRegisterOptions: CommandOption[] = [
     hasValue: true,
   },
   {
-    name: 'target-branch',
+    name: 'targetBranch',
     description: 'Target branch for merge (director only, default: auto-detect)',
     hasValue: true,
   },

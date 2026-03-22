@@ -248,6 +248,22 @@ export async function ensureTargetBranchExists(
   // Determine the base ref: prefer remote main when available
   const baseRef = hasOrigin && !localOnly ? `origin/${mainBranch}` : mainBranch;
 
+  // When using a remote ref, ensure it exists locally by fetching.
+  // The remote tracking ref (e.g. origin/main) may not exist if no
+  // fetch has been performed yet in this session.
+  if (hasOrigin && !localOnly) {
+    try {
+      await execAsync(`git fetch origin ${mainBranch}`, {
+        cwd: workspaceRoot,
+        encoding: 'utf8',
+      });
+    } catch {
+      // If fetch fails (e.g. network issues), fall through and try
+      // to use whatever ref is available — git branch will fail with
+      // a clear error if the ref truly doesn't exist.
+    }
+  }
+
   // Create the branch locally from the main branch HEAD
   await execAsync(`git branch ${targetBranch} ${baseRef}`, {
     cwd: workspaceRoot,
@@ -323,6 +339,13 @@ export async function mergeBranch(options: MergeBranchOptions): Promise<MergeBra
 
   const targetBranch = options.targetBranch ?? await detectTargetBranch(workspaceRoot);
 
+  // 1. Fetch latest remote state (skip when local-only)
+  // Must happen before ensureTargetBranchExists so that origin/<mainBranch>
+  // is available as a valid ref when creating new branches from remote HEAD.
+  if (!localOnly) {
+    await execAsync('git fetch origin', { cwd: workspaceRoot, encoding: 'utf8' });
+  }
+
   // Ensure the target branch exists (auto-creates review branches from main)
   await ensureTargetBranchExists(workspaceRoot, targetBranch, localOnly);
 
@@ -331,11 +354,6 @@ export async function mergeBranch(options: MergeBranchOptions): Promise<MergeBra
     ?? (mergeStrategy === 'squash'
       ? `Squash merge ${sourceBranch} into ${targetBranch}`
       : `Merge branch '${sourceBranch}'`);
-
-  // 1. Fetch latest remote state (skip when local-only)
-  if (!localOnly) {
-    await execAsync('git fetch origin', { cwd: workspaceRoot, encoding: 'utf8' });
-  }
 
   // 1b. Check if source branch has any commits ahead of target.
   // If count is 0, the branch is already fully merged — nothing to do.

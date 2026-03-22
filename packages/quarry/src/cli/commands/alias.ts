@@ -81,7 +81,7 @@ Built-in aliases:
   ls           -> list
   s, get       -> show
   todo, tasks  -> ready
-  done, complete -> close
+  done           -> close
   st           -> status
   dep          -> dependency
   msg          -> message

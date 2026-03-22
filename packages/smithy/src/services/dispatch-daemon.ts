@@ -278,6 +278,13 @@ export interface DispatchDaemonConfig {
    * Default: 120000 (2 minutes)
    */
   readonly directorInboxIdleThresholdMs?: number;
+
+  /**
+   * Optional override for ensureTargetBranchExists.
+   * Defaults to the real implementation from ../git/merge.js.
+   * Useful for testing without triggering real git remote operations.
+   */
+  readonly ensureTargetBranchExists?: (projectRoot: string, branchName: string) => Promise<void>;
 }
 
 /**
@@ -320,6 +327,7 @@ interface NormalizedConfig {
   projectRoot: string;
   directorInboxForwardingEnabled: boolean;
   directorInboxIdleThresholdMs: number;
+  ensureTargetBranchExists: (projectRoot: string, branchName: string) => Promise<void>;
 }
 
 // ============================================================================
@@ -1915,6 +1923,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       projectRoot: config?.projectRoot ?? process.cwd(),
       directorInboxForwardingEnabled: config?.directorInboxForwardingEnabled ?? true,
       directorInboxIdleThresholdMs: config?.directorInboxIdleThresholdMs ?? 120_000,
+      ensureTargetBranchExists: config?.ensureTargetBranchExists ?? ensureTargetBranchExists,
     };
   }
 
@@ -2853,7 +2862,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
     // Ensure the target branch exists before creating worktree from it.
     // Without this, worktree creation fails if the branch doesn't exist locally or on remote.
     if (targetBranch) {
-      await ensureTargetBranchExists(this.config.projectRoot, targetBranch);
+      await this.config.ensureTargetBranchExists(this.config.projectRoot, targetBranch);
     }
 
     return this.worktreeManager.createWorktree({

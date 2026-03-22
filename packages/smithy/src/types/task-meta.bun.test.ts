@@ -155,6 +155,51 @@ describe('OrchestratorTaskMeta utilities', () => {
         branch: 'agent/alice/task-1',
       });
     });
+
+    test('records mergeCommitHash when merge completes', () => {
+      const existingMeta = {
+        orchestrator: {
+          branch: 'agent/alice/task-1',
+          worktree: '.stoneforge/.worktrees/alice-task-1',
+          mergeStatus: 'pending' as MergeStatus,
+        },
+      };
+
+      const commitHash = 'abc123def456';
+      const result = updateOrchestratorTaskMeta(existingMeta, {
+        mergeStatus: 'merged' as MergeStatus,
+        completedAt: '2024-01-15T10:00:00Z',
+        mergeCommitHash: commitHash,
+      });
+
+      const orchMeta = getOrchestratorTaskMeta(result);
+      expect(orchMeta?.mergeCommitHash).toBe(commitHash);
+      expect(orchMeta?.mergeStatus).toBe('merged');
+      expect(orchMeta?.branch).toBe('agent/alice/task-1');
+      expect(orchMeta?.worktree).toBe('.stoneforge/.worktrees/alice-task-1');
+    });
+
+    test('does not include mergeCommitHash when commitHash is absent', () => {
+      const existingMeta = {
+        orchestrator: {
+          branch: 'agent/alice/task-1',
+          mergeStatus: 'pending' as MergeStatus,
+        },
+      };
+
+      // Mirrors the conditional spread in taskMergeHandler:
+      // ...(mergeResult.commitHash ? { mergeCommitHash: mergeResult.commitHash } : {})
+      const commitHash: string | undefined = undefined;
+      const result = updateOrchestratorTaskMeta(existingMeta, {
+        mergeStatus: 'merged' as MergeStatus,
+        completedAt: '2024-01-15T10:00:00Z',
+        ...(commitHash ? { mergeCommitHash: commitHash } : {}),
+      });
+
+      const orchMeta = getOrchestratorTaskMeta(result);
+      expect(orchMeta?.mergeCommitHash).toBeUndefined();
+      expect(orchMeta?.mergeStatus).toBe('merged');
+    });
   });
 });
 

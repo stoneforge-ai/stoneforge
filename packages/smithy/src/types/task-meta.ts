@@ -129,6 +129,9 @@ export interface OrchestratorTaskMeta {
   /** Completion summary provided by the agent */
   readonly completionSummary?: string;
 
+  /** Git commit hash from the squash-merge into the target branch */
+  readonly mergeCommitHash?: string;
+
   /** Last commit hash before completion */
   readonly lastCommitHash?: string;
 
