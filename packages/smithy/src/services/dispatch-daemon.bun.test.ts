@@ -50,6 +50,17 @@ import type { WorktreeManager, CreateWorktreeResult, CreateWorktreeOptions } fro
 import type { StewardScheduler } from './steward-scheduler.js';
 import { getOrchestratorTaskMeta, updateOrchestratorTaskMeta, appendTaskSessionHistory, type TaskSessionHistoryEntry } from '../types/task-meta.js';
 
+// Mock ensureTargetBranchExists to prevent real git remote operations in tests.
+// Bun hoists mock.module() before static imports, so this applies to dispatch-daemon.ts's import.
+const mockEnsureTargetBranchExists = mock(async () => {});
+mock.module('../git/merge.js', () => {
+  const actual = require('../git/merge.js');
+  return {
+    ...actual,
+    ensureTargetBranchExists: mockEnsureTargetBranchExists,
+  };
+});
+
 // ============================================================================
 // Mock Factories
 // ============================================================================
