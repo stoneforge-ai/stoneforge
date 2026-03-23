@@ -937,6 +937,148 @@ describe('mergeBranch with review branch target', () => {
   });
 });
 
+// ============================================================================
+// Sync file protection during merge
+// ============================================================================
+
+describe('mergeBranch sync file protection', () => {
+  test('preserves target branch sync files during squash merge (local-only)', async () => {
+    const repoDir = await createTestRepo();
+    try {
+      // Create .stoneforge/sync/ with elements.jsonl on main
+      const syncDir = path.join(repoDir, '.stoneforge/sync');
+      fs.mkdirSync(syncDir, { recursive: true });
+      const targetContent = '{"id":"el-001","type":"task","title":"Task 1"}\n{"id":"el-002","type":"task","title":"Task 2"}\n{"id":"el-003","type":"task","title":"Task 3"}\n';
+      fs.writeFileSync(path.join(syncDir, 'elements.jsonl'), targetContent);
+      await execAsync('git add . && git commit -m "Add sync files"', { cwd: repoDir });
+
+      // Create feature branch
+      await execAsync('git checkout -b feature/docs-fix', { cwd: repoDir });
+
+      // Modify elements.jsonl on the feature branch (simulates agent full re-export)
+      const sourceContent = '{"id":"el-001","type":"task","title":"Task 1 MODIFIED"}\n';
+      fs.writeFileSync(path.join(syncDir, 'elements.jsonl'), sourceContent);
+
+      // Also add a legitimate file change
+      fs.writeFileSync(path.join(repoDir, 'docs.md'), '# Updated docs\n');
+      await execAsync('git add . && git commit -m "Fix docs and re-export sync"', { cwd: repoDir });
+
+      // Go back to main
+      await execAsync('git checkout main', { cwd: repoDir });
+
+      // Squash merge feature -> main
+      const result = await mergeBranch({
+        workspaceRoot: repoDir,
+        sourceBranch: 'feature/docs-fix',
+        targetBranch: 'main',
+        mergeStrategy: 'squash',
+        autoPush: false,
+        commitMessage: 'docs: automated fixes',
+        localOnly: true,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.hasConflict).toBe(false);
+
+      // The legitimate file change should be present
+      const docsContent = fs.readFileSync(path.join(repoDir, 'docs.md'), 'utf8');
+      expect(docsContent).toContain('Updated docs');
+
+      // The sync file should be PRESERVED from the target branch (main), not overwritten
+      const mergedElements = fs.readFileSync(path.join(syncDir, 'elements.jsonl'), 'utf8');
+      expect(mergedElements).toBe(targetContent);
+      expect(mergedElements).not.toContain('MODIFIED');
+    } finally {
+      rmrf(repoDir);
+    }
+  });
+
+  test('preserves sync files when source branch empties them (local-only)', async () => {
+    const repoDir = await createTestRepo();
+    try {
+      // Create .stoneforge/sync/ with elements.jsonl on main
+      const syncDir = path.join(repoDir, '.stoneforge/sync');
+      fs.mkdirSync(syncDir, { recursive: true });
+      const targetContent = '{"id":"el-001","type":"task","title":"Task 1"}\n{"id":"el-002","type":"task","title":"Task 2"}\n';
+      fs.writeFileSync(path.join(syncDir, 'elements.jsonl'), targetContent);
+      await execAsync('git add . && git commit -m "Add sync files"', { cwd: repoDir });
+
+      // Create feature branch
+      await execAsync('git checkout -b feature/empty-sync', { cwd: repoDir });
+
+      // Empty elements.jsonl (simulates empty database export)
+      fs.writeFileSync(path.join(syncDir, 'elements.jsonl'), '');
+
+      // Add a legitimate change
+      fs.writeFileSync(path.join(repoDir, 'feature.ts'), 'export const x = 1;\n');
+      await execAsync('git add . && git commit -m "Add feature and empty sync"', { cwd: repoDir });
+
+      // Go back to main
+      await execAsync('git checkout main', { cwd: repoDir });
+
+      // Squash merge
+      const result = await mergeBranch({
+        workspaceRoot: repoDir,
+        sourceBranch: 'feature/empty-sync',
+        targetBranch: 'main',
+        mergeStrategy: 'squash',
+        autoPush: false,
+        commitMessage: 'feat: add feature',
+        localOnly: true,
+      });
+
+      expect(result.success).toBe(true);
+
+      // Sync file should be preserved from main (not emptied)
+      const mergedElements = fs.readFileSync(path.join(syncDir, 'elements.jsonl'), 'utf8');
+      expect(mergedElements).toBe(targetContent);
+
+      // Feature file should be present
+      expect(fs.existsSync(path.join(repoDir, 'feature.ts'))).toBe(true);
+    } finally {
+      rmrf(repoDir);
+    }
+  });
+
+  test('does not interfere when sync files are unchanged (local-only)', async () => {
+    const repoDir = await createTestRepo();
+    try {
+      // Create .stoneforge/sync/ with elements.jsonl on main
+      const syncDir = path.join(repoDir, '.stoneforge/sync');
+      fs.mkdirSync(syncDir, { recursive: true });
+      const content = '{"id":"el-001","type":"task","title":"Task 1"}\n';
+      fs.writeFileSync(path.join(syncDir, 'elements.jsonl'), content);
+      await execAsync('git add . && git commit -m "Add sync files"', { cwd: repoDir });
+
+      // Create feature branch (don't touch sync files)
+      await execAsync('git checkout -b feature/no-sync-change', { cwd: repoDir });
+      fs.writeFileSync(path.join(repoDir, 'feature.ts'), 'export const y = 2;\n');
+      await execAsync('git add . && git commit -m "Add feature only"', { cwd: repoDir });
+
+      // Go back to main
+      await execAsync('git checkout main', { cwd: repoDir });
+
+      const result = await mergeBranch({
+        workspaceRoot: repoDir,
+        sourceBranch: 'feature/no-sync-change',
+        targetBranch: 'main',
+        mergeStrategy: 'squash',
+        autoPush: false,
+        commitMessage: 'feat: clean merge',
+        localOnly: true,
+      });
+
+      expect(result.success).toBe(true);
+
+      // Sync file should be unchanged
+      const mergedElements = fs.readFileSync(path.join(syncDir, 'elements.jsonl'), 'utf8');
+      expect(mergedElements).toBe(content);
+    } finally {
+      rmrf(repoDir);
+    }
+  });
+});
+
 describe('syncLocalBranchFromCommit', () => {
   test('updates target branch ref to commit hash when not on target branch', async () => {
     const repoDir = await createTestRepo();

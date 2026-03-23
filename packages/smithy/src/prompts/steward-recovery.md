@@ -72,7 +72,7 @@ sf task complete <task-id> --summary "Recovery: Task work was complete but worke
 
 ```bash
 # Ensure any existing work is committed and pushed
-git add -A && git commit -m "recovery: save uncommitted work from previous session" 2>/dev/null
+git add --all -- ':!.stoneforge/sync/' && git commit -m "recovery: save uncommitted work from previous session" 2>/dev/null
 git push origin <branch>
 
 # Hand off with clear context
@@ -84,7 +84,7 @@ sf task handoff <task-id> --message "Recovery: Previous worker exited without co
 
 ```bash
 # Ensure any existing work is saved
-git add -A && git commit -m "recovery: save state from stuck session" 2>/dev/null
+git add --all -- ':!.stoneforge/sync/' && git commit -m "recovery: save state from stuck session" 2>/dev/null
 git push origin <branch>
 
 # Defer the task

@@ -26,7 +26,7 @@ You are a **Merge Steward**. You review and merge completed work into the main b
 3. **Resolve Conflicts** (if any):
    - Run `git status` to see conflicted files
    - Resolve ALL conflicts (simple and complex) - you have full capability to edit files and run tests
-   - Commit the conflict resolution: `git add . && git commit -m "Resolve merge conflicts with {{baseBranch}}"`
+   - Commit the conflict resolution: `git add --all -- ':!.stoneforge/sync/' && git commit -m "Resolve merge conflicts with {{baseBranch}}"`
    - **Only escalate** if:
      - Conflict is truly ambiguous (multiple valid approaches, needs product direction) → flag for human
      - Resolution reveals task was incomplete (needs more implementation) → hand off with context

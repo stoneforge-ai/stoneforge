@@ -88,8 +88,8 @@ sf docs dir --content
 # Create worktree for docs updates
 git worktree add .stoneforge/.worktrees/docs-steward -b docs-steward/docs/auto-updates
 
-# After making fixes, stage and commit
-git add .
+# After making fixes, stage and commit (exclude sync files — they are auto-exported)
+git add --all -- ':!.stoneforge/sync/'
 git commit -m "docs: fix broken file paths in README"
 
 # When done, squash-merge and clean up

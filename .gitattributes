@@ -1,0 +1,8 @@
+# Prevent text-based three-way merge of sync files.
+# These files are auto-exported JSONL data (one JSON object per line).
+# Git's line-by-line merge of independently-exported JSONL can produce
+# empty or corrupted results. Marking as binary forces a hard conflict
+# rather than silent data loss when both sides modify sync files.
+# The mergeBranch() function handles this by always preserving the
+# target branch version of sync files.
+.stoneforge/sync/*.jsonl binary

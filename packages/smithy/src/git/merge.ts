@@ -95,6 +95,60 @@ export async function execGitSafe(
 }
 
 /**
+ * Well-known sync files that should be preserved from the target branch
+ * during merges. Source branches should never be authoritative for these
+ * files — they are maintained by the auto-export service on the target.
+ */
+const SYNC_FILES = [
+  '.stoneforge/sync/elements.jsonl',
+  '.stoneforge/sync/dependencies.jsonl',
+];
+
+/**
+ * Restore sync files to the target branch version after a merge.
+ *
+ * During squash-merges, source branches may carry divergent sync files
+ * (from auto-export in worktrees, agent `git add .`, or full re-exports).
+ * Git's text-based three-way merge of JSONL files can produce empty or
+ * corrupted results. This function restores sync files to the target
+ * branch version, since the target is always authoritative for sync state.
+ *
+ * @returns true if any files were restored (re-staged)
+ */
+async function restoreSyncFiles(
+  mergeDir: string,
+  workspaceRoot: string,
+  targetRef: string
+): Promise<boolean> {
+  let restored = false;
+
+  for (const syncFile of SYNC_FILES) {
+    try {
+      // Check if the sync file was changed by the merge
+      const { stdout: diffOutput } = await execGitSafe(
+        `diff --cached --name-only -- ${syncFile}`,
+        mergeDir,
+        workspaceRoot
+      );
+
+      if (diffOutput.trim()) {
+        // File was changed — restore target branch version
+        await execGitSafe(
+          `checkout ${targetRef} -- ${syncFile}`,
+          mergeDir,
+          workspaceRoot
+        );
+        restored = true;
+      }
+    } catch {
+      // File doesn't exist in one or both branches — skip
+    }
+  }
+
+  return restored;
+}
+
+/**
  * Check whether a named remote exists in the repo.
  *
  * Runs `git remote get-url <remoteName>` which exits 0 when the remote
@@ -435,6 +489,13 @@ export async function mergeBranch(options: MergeBranchOptions): Promise<MergeBra
 
     if (mergeStrategy === 'squash') {
       await execGitSafe(`merge --squash ${sourceBranch}`, mergeDir, workspaceRoot);
+
+      // Protect sync files: restore target branch versions after squash merge.
+      // Source branches may have divergent sync files (from auto-export or
+      // agent commits) that corrupt the target during three-way merge.
+      // The target branch is always authoritative for sync state.
+      await restoreSyncFiles(mergeDir, workspaceRoot, worktreeStartRef);
+
       await execGitSafe(`commit -m "${message.replace(/"/g, '\\"')}"`, mergeDir, workspaceRoot);
       const { stdout: hash } = await execGitSafe('rev-parse HEAD', mergeDir, workspaceRoot);
       commitHash = hash.trim();
@@ -443,6 +504,13 @@ export async function mergeBranch(options: MergeBranchOptions): Promise<MergeBra
         `merge --no-ff -m "${message.replace(/"/g, '\\"')}" ${sourceBranch}`,
         mergeDir, workspaceRoot
       );
+
+      // Protect sync files for regular merges too
+      const syncRestored = await restoreSyncFiles(mergeDir, workspaceRoot, worktreeStartRef);
+      if (syncRestored) {
+        await execGitSafe('commit --amend --no-edit', mergeDir, workspaceRoot);
+      }
+
       const { stdout: hash } = await execGitSafe('rev-parse HEAD', mergeDir, workspaceRoot);
       commitHash = hash.trim();
     }
