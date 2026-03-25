@@ -6,6 +6,7 @@
  */
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, statSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Command, GlobalOptions, CommandResult } from '../types.js';
@@ -43,7 +44,26 @@ function findSkillsSourceDir(): string | null {
     return nodeModulesSrcSkillsPath;
   }
 
-  // 3. Try to find it relative to this package (for monorepo development)
+  // 3. Try module resolution — works for all package managers (npm, pnpm, yarn, bun)
+  // both local and global installs
+  try {
+    const require = createRequire(import.meta.url);
+    const smithyPkgPath = require.resolve('@stoneforge/smithy/package.json');
+    const smithyRoot = dirname(smithyPkgPath);
+    // Check dist/skills first (published package), then src/skills (development)
+    const distSkills = join(smithyRoot, 'dist', 'skills');
+    if (existsSync(distSkills)) {
+      return distSkills;
+    }
+    const srcSkills = join(smithyRoot, 'src', 'skills');
+    if (existsSync(srcSkills)) {
+      return srcSkills;
+    }
+  } catch {
+    // Module not resolvable from this location, continue to other methods
+  }
+
+  // 4. Try to find it relative to this package (for monorepo development)
   try {
     const thisFile = fileURLToPath(import.meta.url);
     const quarryRoot = dirname(dirname(dirname(dirname(thisFile)))); // Go up from commands -> cli -> src -> quarry
@@ -53,12 +73,6 @@ function findSkillsSourceDir(): string | null {
     }
   } catch {
     // Ignore errors when trying to resolve paths
-  }
-
-  // 4. Try global node_modules
-  const globalNodeModulesPath = join(dirname(process.execPath), '..', 'lib', 'node_modules', '@stoneforge', 'smithy', 'dist', 'skills');
-  if (existsSync(globalNodeModulesPath)) {
-    return globalNodeModulesPath;
   }
 
   return null;
