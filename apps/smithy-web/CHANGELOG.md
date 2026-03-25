@@ -1,5 +1,16 @@
 # @stoneforge/smithy-web
 
+## 1.20.0
+
+### Minor Changes
+
+- 7e06e4b: Define 28-step onboarding tour with 7 sections and cross-page navigation in AppShell
+
+### Patch Changes
+
+- 7d74fe7: Polish onboarding tour edge cases: disable director steps on mobile, resume tour after browser refresh, fix restart from settings navigation
+  - @stoneforge/ui@1.20.0
+
 ## 1.19.0
 
 ### Minor Changes

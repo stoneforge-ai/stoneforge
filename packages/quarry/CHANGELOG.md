@@ -1,5 +1,14 @@
 # @stoneforge/quarry
 
+## 1.20.0
+
+### Patch Changes
+
+- 50aa516: Fix findSkillsSourceDir to resolve skills via module resolution using createRequire, replacing the broken process.execPath-based lookup that failed for pnpm, yarn, and bun global installs.
+  - @stoneforge/core@1.20.0
+  - @stoneforge/storage@1.20.0
+  - @stoneforge/shared-routes@1.20.0
+
 ## 1.19.0
 
 ### Patch Changes

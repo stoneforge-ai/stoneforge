@@ -1,5 +1,16 @@
 # @stoneforge/smithy
 
+## 1.20.0
+
+### Patch Changes
+
+- c3244fe: Fix --target-branch flag for sf agent register command: option was defined with kebab-case name causing the value to be silently ignored at runtime. Renamed to camelCase convention so the parser correctly maps --target-branch to options.targetBranch.
+- Updated dependencies [50aa516]
+  - @stoneforge/quarry@1.20.0
+  - @stoneforge/core@1.20.0
+  - @stoneforge/storage@1.20.0
+  - @stoneforge/shared-routes@1.20.0
+
 ## 1.19.0
 
 ### Minor Changes
