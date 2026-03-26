@@ -65,7 +65,7 @@ export function DocumentTagInput({
 
   return (
     <div data-testid="document-tag-input">
-      <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2 flex items-center gap-1">
+      <div className="text-xs font-medium text-[var(--color-text-muted)] uppercase tracking-wide mb-2 flex items-center gap-1">
         <Tag className="w-3 h-3" />
         Tags
       </div>
@@ -75,7 +75,7 @@ export function DocumentTagInput({
           <span
             key={tag}
             data-testid={`document-tag-${tag}`}
-            className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-100 rounded"
+            className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-[var(--color-primary-muted)] text-[var(--color-primary)] rounded"
           >
             {tag}
             {!disabled && (
@@ -102,13 +102,13 @@ export function DocumentTagInput({
               onKeyDown={handleKeyDown}
               onBlur={handleBlur}
               placeholder={placeholder}
-              className="px-2 py-0.5 text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white rounded focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 min-w-[80px]"
+              className="px-2 py-0.5 text-xs border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] rounded focus:outline-none focus:ring-1 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)] min-w-[80px]"
               data-testid="tag-input"
             />
           ) : (
             <button
               onClick={() => setIsAdding(true)}
-              className="inline-flex items-center gap-1 px-2 py-0.5 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+              className="inline-flex items-center gap-1 px-2 py-0.5 text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-elevated)] rounded transition-colors"
               data-testid="add-tag-button"
             >
               <Plus className="w-3 h-3" />
@@ -119,7 +119,7 @@ export function DocumentTagInput({
 
         {/* Empty state when no tags and disabled */}
         {tags.length === 0 && disabled && (
-          <span className="text-xs text-gray-400 dark:text-gray-500">No tags</span>
+          <span className="text-xs text-[var(--color-text-muted)]">No tags</span>
         )}
       </div>
     </div>
