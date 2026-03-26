@@ -1,5 +1,18 @@
 # @stoneforge/quarry
 
+## 1.22.0
+
+### Minor Changes
+
+- 9c9f3ec: Replace text input with interactive arrow-key selector for workflow preset in `sf init`
+
+### Patch Changes
+
+- 9c9f3ec: Fix preset menu duplication when terminal lines wrap in narrow terminals during `sf init`
+  - @stoneforge/core@1.22.0
+  - @stoneforge/storage@1.22.0
+  - @stoneforge/shared-routes@1.22.0
+
 ## 1.21.0
 
 ### Minor Changes

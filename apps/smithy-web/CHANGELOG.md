@@ -1,5 +1,16 @@
 # @stoneforge/smithy-web
 
+## 1.22.0
+
+### Minor Changes
+
+- 5fef2d8: Improve onboarding tutorial with richer descriptions and new steps for agent types, daemon toggle, emergency stop, and workflow presets
+- 2e81fbf: Wire mock data and interactive demonstrations into onboarding tour steps. Adds 4 new tour steps (tasks-detail, plans-detail, documents-detail, messages-channel) that inject mock data, collapse the director panel, and open detail panels to showcase functionality during the guided tour.
+
+### Patch Changes
+
+- @stoneforge/ui@1.22.0
+
 ## 1.21.0
 
 ### Patch Changes
