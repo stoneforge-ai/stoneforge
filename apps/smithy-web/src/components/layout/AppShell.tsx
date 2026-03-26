@@ -26,6 +26,7 @@ import {
   injectTourMockData,
   clearTourMockData,
   hasTourMockData,
+  addExampleWorkflowSteps,
 } from '../onboarding';
 import { useWorkflowPreset } from '../../api/hooks/useWorkflowPreset';
 import { useDirector, useChangeAgentProvider } from '../../api/hooks/useAgents';
@@ -611,6 +612,16 @@ const ONBOARDING_STEPS: TourStep[] = [
     route: '/workflows',
   },
   {
+    id: 'workflows-editor',
+    targetTestId: 'workflow-editor-dialog',
+    title: 'Create Workflow Templates',
+    description:
+      'Build reusable workflow templates with multiple steps. Add task steps (assigned to agents) or function steps (custom code). Define variables, set dependencies between steps, and export as YAML.',
+    section: 'Power Tools',
+    route: '/workflows',
+    noAutoAdvance: true,
+  },
+  {
     id: 'metrics-overview',
     targetTestId: 'metrics-page',
     title: 'Metrics Dashboard',
@@ -860,6 +871,35 @@ export function AppShell() {
           ...step,
           onActivate: () => {
             setDirectorCollapsed(true);
+          },
+        };
+      }
+
+      // ── Workflows editor: open editor modal with example steps ──────────
+      if (step.id === 'workflows-editor') {
+        return {
+          ...step,
+          onActivate: () => {
+            setDirectorCollapsed(true);
+            // Open the workflow editor by clicking the create button
+            setTimeout(() => {
+              const createBtn =
+                (document.querySelector('[data-testid="workflows-create"]') as HTMLButtonElement) ||
+                (document.querySelector('[data-testid="workflows-create-empty"]') as HTMLButtonElement);
+              if (createBtn) createBtn.click();
+
+              // After the editor opens, add example steps to demonstrate the UI
+              setTimeout(() => {
+                addExampleWorkflowSteps();
+              }, 500);
+            }, 300);
+          },
+          onDeactivate: () => {
+            // Close the editor when leaving this step
+            const closeBtn = document.querySelector(
+              '[data-testid="workflow-editor-close"]',
+            ) as HTMLButtonElement;
+            if (closeBtn) closeBtn.click();
           },
         };
       }

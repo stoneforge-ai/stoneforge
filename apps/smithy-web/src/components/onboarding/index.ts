@@ -5,3 +5,4 @@ export {
   hasTourMockData,
   type TourMockContext,
 } from './tourMockData';
+export { addExampleWorkflowSteps } from './tourHelpers';
