@@ -42,6 +42,10 @@ export interface TourStep {
   section?: string;
   /** Side effect before showing step (expand sidebar, etc.) */
   onActivate?: () => void;
+  /** Cleanup when leaving this step (e.g., close dialogs) */
+  onDeactivate?: () => void;
+  /** If true, never auto-advance when target is not found (wait for user) */
+  noAutoAdvance?: boolean;
 }
 
 interface OnboardingTourProps {
@@ -169,7 +173,18 @@ function calculateTooltipPosition(
 // ============================================================================
 
 function SpotlightOverlay({ targetRect }: { targetRect: DOMRect | null }) {
-  if (!targetRect) return null;
+  // When target is not found, show full backdrop overlay (no spotlight cutout)
+  // This prevents the overlay from disappearing during page transitions
+  if (!targetRect) {
+    return (
+      <svg
+        className="fixed inset-0 w-full h-full pointer-events-none"
+        style={{ zIndex: 9998 }}
+      >
+        <rect x="0" y="0" width="100%" height="100%" fill="rgba(0, 0, 0, 0.5)" />
+      </svg>
+    );
+  }
 
   const padding = 6;
   const borderRadius = 10;
@@ -537,6 +552,9 @@ export function OnboardingTour({
 }: OnboardingTourProps) {
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
   const autoAdvanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevTargetRectRef = useRef<DOMRect | null>(null);
+  const nullCountRef = useRef(0);
+  const prevStepRef = useRef<number>(currentStep);
 
   // Filter to only enabled steps
   const activeSteps = useMemo(
@@ -562,16 +580,33 @@ export function OnboardingTour({
     return result;
   }, [activeSteps]);
 
-  // Fire onActivate when step changes
+  // Fire onDeactivate for previous step and onActivate for new step when step changes
   useEffect(() => {
-    if (!isActive || !currentStepData?.onActivate) return;
-    currentStepData.onActivate();
-  }, [isActive, currentStep, currentStepData]);
+    if (!isActive) return;
+
+    // Call onDeactivate for the previous step when navigating away
+    if (prevStepRef.current !== currentStep) {
+      const prevStep = activeSteps[prevStepRef.current];
+      if (prevStep?.onDeactivate) {
+        prevStep.onDeactivate();
+      }
+      prevStepRef.current = currentStep;
+    }
+
+    // Reset null counter on step change
+    nullCountRef.current = 0;
+
+    if (currentStepData?.onActivate) {
+      currentStepData.onActivate();
+    }
+  }, [isActive, currentStep, currentStepData, activeSteps]);
 
   // Find and track the target element
   const updateTargetRect = useCallback(() => {
     if (!currentStepData) {
       setTargetRect(null);
+      prevTargetRectRef.current = null;
+      nullCountRef.current = 0;
       return;
     }
 
@@ -580,6 +615,8 @@ export function OnboardingTour({
     );
     if (el) {
       const newRect = el.getBoundingClientRect();
+      prevTargetRectRef.current = newRect;
+      nullCountRef.current = 0;
       setTargetRect((prev) => {
         if (
           prev &&
@@ -593,7 +630,13 @@ export function OnboardingTour({
         return newRect;
       });
     } else {
-      setTargetRect(null);
+      // Don't immediately null out — keep previous rect briefly during transitions
+      // Only null out after multiple consecutive misses (grace period)
+      nullCountRef.current++;
+      if (!prevTargetRectRef.current || nullCountRef.current > 6) {
+        setTargetRect(null);
+      }
+      // Otherwise keep the previous targetRect (don't update state)
     }
   }, [currentStepData]);
 
@@ -615,16 +658,19 @@ export function OnboardingTour({
     const stopPoll = setTimeout(() => clearInterval(pollTimer), pollDuration);
 
     // Auto-advance if target is not found after full polling duration
-    autoAdvanceTimerRef.current = setTimeout(() => {
-      const el = currentStepData
-        ? document.querySelector(
-            `[data-testid="${currentStepData.targetTestId}"]`
-          )
-        : null;
-      if (!el) {
-        onNext();
-      }
-    }, pollDuration + 500); // Small buffer after polling ends
+    // Skip auto-advance for steps that explicitly opt out (detail panels, etc.)
+    if (!currentStepData?.noAutoAdvance) {
+      autoAdvanceTimerRef.current = setTimeout(() => {
+        const el = currentStepData
+          ? document.querySelector(
+              `[data-testid="${currentStepData.targetTestId}"]`
+            )
+          : null;
+        if (!el) {
+          onNext();
+        }
+      }, pollDuration + 500); // Small buffer after polling ends
+    }
 
     return () => {
       window.removeEventListener('resize', updateTargetRect);

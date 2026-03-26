@@ -457,12 +457,12 @@ const ONBOARDING_STEPS: TourStep[] = [
   },
   {
     id: 'agents-settings',
-    targetTestId: 'settings-section-agent-defaults',
+    targetTestId: 'create-agent-dialog',
     title: 'Agent Provider & Model',
     description:
-      'Configure which AI provider and model your agents use. Choose the default provider here, and set model preferences per provider. New agents inherit these defaults.',
+      'Each agent can use a different AI provider and model. Select the provider (Claude, OpenAI, etc.) and specific model for this agent. These settings can be changed later from the agent\'s settings.',
     section: 'Agent Fleet',
-    route: '/settings',
+    route: '/agents',
   },
   {
     id: 'workspaces-overview',
@@ -731,6 +731,7 @@ export function AppShell() {
       if (step.id === 'tasks-detail') {
         return {
           ...step,
+          noAutoAdvance: true,
           onActivate: () => {
             setDirectorCollapsed(true);
             injectTourMockData(queryClient, 'tasks');
@@ -766,6 +767,7 @@ export function AppShell() {
       if (step.id === 'plans-detail') {
         return {
           ...step,
+          noAutoAdvance: true,
           onActivate: () => {
             setDirectorCollapsed(true);
             injectTourMockData(queryClient, 'plans');
@@ -792,6 +794,7 @@ export function AppShell() {
       if (step.id === 'messages-channel') {
         return {
           ...step,
+          noAutoAdvance: true,
           onActivate: () => {
             setDirectorCollapsed(true);
             injectTourMockData(queryClient, 'messages');
@@ -818,6 +821,7 @@ export function AppShell() {
       if (step.id === 'documents-detail') {
         return {
           ...step,
+          noAutoAdvance: true,
           onActivate: () => {
             setDirectorCollapsed(true);
             injectTourMockData(queryClient, 'documents');
@@ -841,15 +845,22 @@ export function AppShell() {
         };
       }
 
-      // ── Agent settings: ensure preferences tab is active ──────────────
+      // ── Agent settings: open Create Agent dialog to show provider/model ──
       if (step.id === 'agents-settings') {
         return {
           ...step,
           onActivate: () => {
-            const preferencesTab = document.querySelector('[data-testid="settings-tab-preferences"]');
-            if (preferencesTab instanceof HTMLElement) {
-              preferencesTab.click();
-            }
+            setDirectorCollapsed(true);
+            // Open the Create Agent dialog so provider/model dropdowns are visible
+            setTimeout(() => {
+              const createBtn = document.querySelector('[data-testid="agents-create"]') as HTMLButtonElement;
+              if (createBtn) createBtn.click();
+            }, 300);
+          },
+          onDeactivate: () => {
+            // Close the dialog when leaving this step
+            const closeBtn = document.querySelector('[data-testid="create-agent-close"]') as HTMLButtonElement;
+            if (closeBtn) closeBtn.click();
           },
         };
       }

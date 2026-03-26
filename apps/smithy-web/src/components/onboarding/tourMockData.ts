@@ -710,6 +710,18 @@ function injectTasksContext(queryClient: QueryClient): void {
   queryClient.setQueryData(['tasks', undefined], { tasks: fullTaskSet, total: fullTaskSet.length });
   keys.push(['tasks', undefined]);
 
+  // Inject individual task queries for detail panel (useTask uses ['task', taskId] → TaskResponse)
+  for (const task of fullTaskSet) {
+    queryClient.setQueryData(['task', task.id], { task });
+    keys.push(['task', task.id]);
+  }
+
+  // Inject empty dependency data for detail panel
+  for (const task of fullTaskSet) {
+    queryClient.setQueryData(['tasks', task.id, 'dependency-tasks'], { blockedBy: [], blocks: [] });
+    keys.push(['tasks', task.id, 'dependency-tasks']);
+  }
+
   // Entities for assignee resolution
   queryClient.setQueryData(ELEMENT_KEYS.entities, mockEntities);
   keys.push(ELEMENT_KEYS.entities);
@@ -728,6 +740,33 @@ function injectPlansContext(queryClient: QueryClient): void {
   queryClient.setQueryData(ELEMENT_KEYS.tasks, planTasks);
   keys.push(ELEMENT_KEYS.tasks);
 
+  // Inject individual plan queries for detail panel (usePlan uses ['plans', planId] → HydratedPlan)
+  for (const plan of mockPlans) {
+    const ownerTasks = planTasks.filter(t => t.owner === plan.id);
+    const hydratedPlan = {
+      ...plan,
+      _progress: {
+        totalTasks: ownerTasks.length,
+        completedTasks: ownerTasks.filter(t => t.status === 'closed').length,
+        inProgressTasks: ownerTasks.filter(t => t.status === 'in_progress').length,
+        blockedTasks: 0,
+        remainingTasks: ownerTasks.filter(t => t.status !== 'closed').length,
+        completionPercentage: ownerTasks.length > 0
+          ? Math.round((ownerTasks.filter(t => t.status === 'closed').length / ownerTasks.length) * 100)
+          : 0,
+      },
+    };
+    queryClient.setQueryData(['plans', plan.id], hydratedPlan);
+    keys.push(['plans', plan.id]);
+  }
+
+  // Inject plan tasks for detail panel (usePlanTasks uses ['plans', planId, 'tasks'])
+  for (const plan of mockPlans) {
+    const ownerTasks = planTasks.filter(t => t.owner === plan.id);
+    queryClient.setQueryData(['plans', plan.id, 'tasks'], ownerTasks);
+    keys.push(['plans', plan.id, 'tasks']);
+  }
+
   // Entities for assignee resolution
   queryClient.setQueryData(ELEMENT_KEYS.entities, mockEntities);
   keys.push(ELEMENT_KEYS.entities);
@@ -741,6 +780,12 @@ function injectDocumentsContext(queryClient: QueryClient): void {
   // Documents via useAllElements cache
   queryClient.setQueryData(ELEMENT_KEYS.documents, mockDocuments);
   keys.push(ELEMENT_KEYS.documents);
+
+  // Inject individual document queries for detail panel (useDocument uses ['documents', docId])
+  for (const doc of mockDocuments) {
+    queryClient.setQueryData(['documents', doc.id], doc);
+    keys.push(['documents', doc.id]);
+  }
 
   // Libraries via useAllElements cache
   queryClient.setQueryData(ELEMENT_KEYS.libraries, mockLibraries);
