@@ -27,8 +27,9 @@ import type {
   InboxItem,
   Document,
   Plan,
+  Workflow,
 } from '@stoneforge/core';
-import { InboxStatus, createTimestamp, TaskStatus, asEntityId, asElementId, PlanStatus, canAutoComplete } from '@stoneforge/core';
+import { InboxStatus, createTimestamp, TaskStatus, asEntityId, asElementId, PlanStatus, canAutoComplete, WorkflowStatus, computeWorkflowStatus, updateWorkflowStatus } from '@stoneforge/core';
 import type { QuarryAPI, InboxService } from '@stoneforge/quarry';
 import { loadTriagePrompt, loadRolePrompt, renderPromptTemplate, buildWorkflowPresetSection } from '../prompts/index.js';
 import type { WorkflowPresetContext } from '../prompts/index.js';
@@ -185,6 +186,14 @@ export interface DispatchDaemonConfig {
   readonly workflowTaskPollEnabled?: boolean;
 
   /**
+   * Whether workflow auto-transition polling is enabled.
+   * Detects workflows that should transition status based on their tasks:
+   * pending→running, running→completed, or pending|running→failed.
+   * Default: true
+   */
+  readonly workflowAutoTransitionEnabled?: boolean;
+
+  /**
    * Whether orphan recovery polling is enabled.
    * Detects workers with assigned tasks but no active session after a restart
    * and re-spawns sessions to continue the work.
@@ -314,6 +323,7 @@ interface NormalizedConfig {
   inboxPollEnabled: boolean;
   stewardTriggerPollEnabled: boolean;
   workflowTaskPollEnabled: boolean;
+  workflowAutoTransitionEnabled: boolean;
   orphanRecoveryEnabled: boolean;
   planAutoCompleteEnabled: boolean;
   closedUnmergedReconciliationEnabled: boolean;
@@ -419,6 +429,14 @@ export interface DispatchDaemon {
    * and marks them as completed.
    */
   pollPlanAutoComplete(): Promise<PollResult>;
+
+  /**
+   * Manually triggers workflow auto-transition polling.
+   * Detects workflows that should change status based on their tasks:
+   * pending→running (task started), running→completed (all closed),
+   * or pending|running→failed (task tombstoned).
+   */
+  pollWorkflowAutoTransition(): Promise<PollResult>;
 
   // ----------------------------------------
   // Rate Limiting
@@ -1810,6 +1828,85 @@ export class DispatchDaemonImpl implements DispatchDaemon {
     return result;
   }
 
+  async pollWorkflowAutoTransition(): Promise<PollResult> {
+    const startedAt = new Date().toISOString();
+    const startTime = Date.now();
+    let processed = 0;
+    let errors = 0;
+    const errorMessages: string[] = [];
+
+    this.emitter.emit('poll:start', 'workflow-auto-transition');
+
+    try {
+      // 1. List all non-terminal workflows (pending and running)
+      const allWorkflows = await this.api.list<Workflow>({ type: 'workflow' });
+      const activeWorkflows = allWorkflows.filter(
+        (w) => w.status === WorkflowStatus.PENDING || w.status === WorkflowStatus.RUNNING
+      );
+
+      // 2. Check each workflow for auto-transition eligibility
+      for (const workflow of activeWorkflows) {
+        try {
+          // Get tasks in this workflow (include deleted to detect tombstoned tasks for auto-fail)
+          const tasks = await this.api.getTasksInWorkflow(workflow.id, { includeDeleted: true });
+
+          // 3. Compute the suggested status transition
+          const suggestedStatus = computeWorkflowStatus(workflow, tasks);
+
+          if (suggestedStatus !== undefined) {
+            // Apply the transition
+            const updatedWorkflow = updateWorkflowStatus(workflow, {
+              status: suggestedStatus,
+              ...(suggestedStatus === WorkflowStatus.FAILED && {
+                failureReason: 'Auto-failed: a task was tombstoned',
+              }),
+            });
+
+            // Persist via api.update()
+            await this.api.update<Workflow>(workflow.id, {
+              status: updatedWorkflow.status,
+              updatedAt: updatedWorkflow.updatedAt,
+              ...(updatedWorkflow.startedAt && { startedAt: updatedWorkflow.startedAt }),
+              ...(updatedWorkflow.finishedAt && { finishedAt: updatedWorkflow.finishedAt }),
+              ...(updatedWorkflow.failureReason && { failureReason: updatedWorkflow.failureReason }),
+            });
+
+            processed++;
+            logger.info(
+              `Auto-transitioned workflow ${workflow.id} ("${workflow.title}") from ${workflow.status} to ${suggestedStatus}`
+            );
+          }
+        } catch (error) {
+          errors++;
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          errorMessages.push(`Workflow ${workflow.id}: ${errorMessage}`);
+          logger.error(`Error checking workflow ${workflow.id} for auto-transition:`, error);
+        }
+      }
+
+      if (processed > 0) {
+        logger.info(`Auto-transitioned ${processed} workflow(s)`);
+      }
+    } catch (error) {
+      errors++;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      errorMessages.push(errorMessage);
+      logger.error('Error in pollWorkflowAutoTransition:', error);
+    }
+
+    const result: PollResult = {
+      pollType: 'workflow-auto-transition',
+      startedAt,
+      durationMs: Date.now() - startTime,
+      processed,
+      errors,
+      errorMessages: errorMessages.length > 0 ? errorMessages : undefined,
+    };
+
+    this.emitter.emit('poll:complete', result);
+    return result;
+  }
+
   // ----------------------------------------
   // Configuration
   // ----------------------------------------
@@ -1910,6 +2007,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       inboxPollEnabled: config?.inboxPollEnabled ?? true,
       stewardTriggerPollEnabled: config?.stewardTriggerPollEnabled ?? true,
       workflowTaskPollEnabled: config?.workflowTaskPollEnabled ?? true,
+      workflowAutoTransitionEnabled: config?.workflowAutoTransitionEnabled ?? true,
       orphanRecoveryEnabled: config?.orphanRecoveryEnabled ?? true,
       planAutoCompleteEnabled: config?.planAutoCompleteEnabled ?? true,
       closedUnmergedReconciliationEnabled: config?.closedUnmergedReconciliationEnabled ?? true,
@@ -1963,6 +2061,9 @@ export class DispatchDaemonImpl implements DispatchDaemon {
         }
         if (this.config.planAutoCompleteEnabled) {
           await this.pollPlanAutoComplete();
+        }
+        if (this.config.workflowAutoTransitionEnabled) {
+          await this.pollWorkflowAutoTransition();
         }
         return;
       }
@@ -2021,6 +2122,11 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       // Auto-complete plans where all tasks are closed
       if (this.config.planAutoCompleteEnabled) {
         await this.pollPlanAutoComplete();
+      }
+
+      // Auto-transition workflows based on task statuses
+      if (this.config.workflowAutoTransitionEnabled) {
+        await this.pollWorkflowAutoTransition();
       }
     } finally {
       this.polling = false;

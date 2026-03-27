@@ -1755,6 +1755,204 @@ describe('DispatchDaemon Plan Auto-Complete', () => {
       expect(completeEvents.some(r => r.pollType === 'plan-auto-complete')).toBe(true);
     });
   });
+
+  describe('pollWorkflowAutoTransition', () => {
+    // Helper to create a test workflow
+    async function createTestWorkflow(status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' = 'pending') {
+      const { createWorkflow, WorkflowStatus: WS } = await import('@stoneforge/core');
+      const workflow = await createWorkflow({
+        title: `Test Workflow ${Date.now()}`,
+        createdBy: systemEntity,
+        status: status as any,
+      });
+      return api.create(workflow as unknown as Record<string, unknown> & { createdBy: EntityId });
+    }
+
+    // Helper to create a task as a child of a workflow
+    async function createTaskInWorkflow(workflowId: ElementId, title: string, status: TaskStatus) {
+      const task = await createTask({
+        title,
+        createdBy: systemEntity,
+        status,
+      });
+      const created = await api.create(task as unknown as Record<string, unknown> & { createdBy: EntityId }) as Task;
+      // Create parent-child dependency
+      await api.addDependency({
+        blockedId: created.id,
+        blockerId: workflowId,
+        type: 'parent-child',
+        createdBy: systemEntity,
+      });
+      return created;
+    }
+
+    test('auto-transitions workflow from running to completed when all tasks closed', async () => {
+      const workflow = await createTestWorkflow('running');
+
+      await createTaskInWorkflow(workflow.id, 'Task 1', TaskStatus.CLOSED);
+      await createTaskInWorkflow(workflow.id, 'Task 2', TaskStatus.CLOSED);
+
+      const result = await daemon.pollWorkflowAutoTransition();
+
+      expect(result.pollType).toBe('workflow-auto-transition');
+      expect(result.processed).toBe(1);
+      expect(result.errors).toBe(0);
+
+      const updated = await api.get(workflow.id);
+      expect((updated as any).status).toBe('completed');
+      expect((updated as any).finishedAt).toBeDefined();
+    });
+
+    test('auto-transitions workflow from pending to running when a task is in_progress', async () => {
+      const workflow = await createTestWorkflow('pending');
+
+      await createTaskInWorkflow(workflow.id, 'Task 1', TaskStatus.IN_PROGRESS);
+      await createTaskInWorkflow(workflow.id, 'Task 2', TaskStatus.OPEN);
+
+      const result = await daemon.pollWorkflowAutoTransition();
+
+      expect(result.processed).toBe(1);
+
+      const updated = await api.get(workflow.id);
+      expect((updated as any).status).toBe('running');
+      expect((updated as any).startedAt).toBeDefined();
+    });
+
+    test('auto-transitions workflow to failed when a task is tombstoned', async () => {
+      const workflow = await createTestWorkflow('running');
+
+      await createTaskInWorkflow(workflow.id, 'Task 1', TaskStatus.CLOSED);
+      await createTaskInWorkflow(workflow.id, 'Task 2', TaskStatus.TOMBSTONE);
+
+      const result = await daemon.pollWorkflowAutoTransition();
+
+      expect(result.processed).toBe(1);
+
+      const updated = await api.get(workflow.id);
+      expect((updated as any).status).toBe('failed');
+      expect((updated as any).failureReason).toContain('tombstoned');
+      expect((updated as any).finishedAt).toBeDefined();
+    });
+
+    test('does not transition workflow with non-closed tasks', async () => {
+      const workflow = await createTestWorkflow('running');
+
+      await createTaskInWorkflow(workflow.id, 'Task 1', TaskStatus.CLOSED);
+      await createTaskInWorkflow(workflow.id, 'Task 2', TaskStatus.OPEN);
+
+      const result = await daemon.pollWorkflowAutoTransition();
+
+      expect(result.processed).toBe(0);
+
+      const updated = await api.get(workflow.id);
+      expect((updated as any).status).toBe('running');
+    });
+
+    test('does not transition completed workflows', async () => {
+      const workflow = await createTestWorkflow('completed');
+
+      const result = await daemon.pollWorkflowAutoTransition();
+
+      expect(result.processed).toBe(0);
+    });
+
+    test('does not transition workflow with no tasks', async () => {
+      const workflow = await createTestWorkflow('running');
+
+      const result = await daemon.pollWorkflowAutoTransition();
+
+      expect(result.processed).toBe(0);
+
+      const updated = await api.get(workflow.id);
+      expect((updated as any).status).toBe('running');
+    });
+
+    test('auto-transitions multiple workflows in one cycle', async () => {
+      const workflow1 = await createTestWorkflow('running');
+      const workflow2 = await createTestWorkflow('pending');
+
+      await createTaskInWorkflow(workflow1.id, 'Task A', TaskStatus.CLOSED);
+      await createTaskInWorkflow(workflow2.id, 'Task B', TaskStatus.IN_PROGRESS);
+
+      const result = await daemon.pollWorkflowAutoTransition();
+
+      expect(result.processed).toBe(2);
+      expect(result.errors).toBe(0);
+
+      const updated1 = await api.get(workflow1.id);
+      const updated2 = await api.get(workflow2.id);
+      expect((updated1 as any).status).toBe('completed');
+      expect((updated2 as any).status).toBe('running');
+    });
+
+    test('pending workflow with tombstoned task transitions to failed', async () => {
+      const workflow = await createTestWorkflow('pending');
+
+      await createTaskInWorkflow(workflow.id, 'Task 1', TaskStatus.TOMBSTONE);
+
+      const result = await daemon.pollWorkflowAutoTransition();
+
+      expect(result.processed).toBe(1);
+
+      const updated = await api.get(workflow.id);
+      expect((updated as any).status).toBe('failed');
+    });
+
+    test('is disabled when workflowAutoTransitionEnabled is false', async () => {
+      await daemon.stop();
+
+      const disabledDaemon = createDispatchDaemon(
+        api,
+        agentRegistry,
+        sessionManager,
+        dispatchService,
+        worktreeManager,
+        taskAssignment,
+        stewardScheduler,
+        inboxService,
+        {
+          pollIntervalMs: 100,
+          workerAvailabilityPollEnabled: false,
+          inboxPollEnabled: false,
+          stewardTriggerPollEnabled: false,
+          workflowTaskPollEnabled: false,
+          workflowAutoTransitionEnabled: false,
+        }
+      );
+
+      const config = disabledDaemon.getConfig();
+      expect(config.workflowAutoTransitionEnabled).toBe(false);
+
+      // Manual poll still works
+      const workflow = await createTestWorkflow('running');
+      await createTaskInWorkflow(workflow.id, 'Task 1', TaskStatus.CLOSED);
+
+      const result = await disabledDaemon.pollWorkflowAutoTransition();
+      expect(result.processed).toBe(1);
+
+      await disabledDaemon.stop();
+    });
+
+    test('emits poll:start and poll:complete events', async () => {
+      const workflow = await createTestWorkflow('running');
+      await createTaskInWorkflow(workflow.id, 'Task 1', TaskStatus.CLOSED);
+
+      const startEvents: string[] = [];
+      const completeEvents: PollResult[] = [];
+
+      daemon.on('poll:start', (pollType: string) => {
+        startEvents.push(pollType);
+      });
+      daemon.on('poll:complete', (result: PollResult) => {
+        completeEvents.push(result);
+      });
+
+      await daemon.pollWorkflowAutoTransition();
+
+      expect(startEvents).toContain('workflow-auto-transition');
+      expect(completeEvents.some(r => r.pollType === 'workflow-auto-transition')).toBe(true);
+    });
+  });
 });
 
 // ============================================================================

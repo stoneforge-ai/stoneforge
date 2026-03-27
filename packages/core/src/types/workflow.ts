@@ -72,7 +72,7 @@ export const TERMINAL_STATUSES: WorkflowStatus[] = [
  * Key: current status, Value: array of valid target statuses
  */
 export const WORKFLOW_STATUS_TRANSITIONS: Record<WorkflowStatus, WorkflowStatus[]> = {
-  [WorkflowStatus.PENDING]: [WorkflowStatus.RUNNING, WorkflowStatus.CANCELLED],
+  [WorkflowStatus.PENDING]: [WorkflowStatus.RUNNING, WorkflowStatus.FAILED, WorkflowStatus.CANCELLED],
   [WorkflowStatus.RUNNING]: [
     WorkflowStatus.COMPLETED,
     WorkflowStatus.FAILED,
