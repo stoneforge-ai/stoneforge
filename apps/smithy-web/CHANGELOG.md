@@ -1,5 +1,12 @@
 # @stoneforge/smithy-web
 
+## 1.23.1
+
+### Patch Changes
+
+- Updated dependencies [65fe969]
+  - @stoneforge/ui@1.23.1
+
 ## 1.23.0
 
 ### Minor Changes

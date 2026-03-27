@@ -1,5 +1,15 @@
 # @stoneforge/smithy
 
+## 1.23.1
+
+### Patch Changes
+
+- afbee04: Include ephemeral workflow tasks in dispatch daemon ready() call
+  - @stoneforge/core@1.23.1
+  - @stoneforge/storage@1.23.1
+  - @stoneforge/quarry@1.23.1
+  - @stoneforge/shared-routes@1.23.1
+
 ## 1.23.0
 
 ### Patch Changes
