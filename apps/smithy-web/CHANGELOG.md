@@ -1,5 +1,17 @@
 # @stoneforge/smithy-web
 
+## 1.24.0
+
+### Minor Changes
+
+- ce71ed5: Add container-aware responsive hooks (useContainerWidth, useContainerBreakpoint, useContainerIsMobile, useContainerIsTablet, useContainerIsDesktop) that track the main content container's width via ResizeObserver instead of the viewport width
+- 3ff3f75: Migrate PageHeader and Pagination components from viewport-based breakpoints to container query breakpoints so they respond to the actual content area width when the director panel is open
+
+### Patch Changes
+
+- 0987a9d: Migrate route pages from viewport to container query breakpoints. All responsive classes in route files now use @sm/@md/@lg/@xl container queries instead of viewport-based sm/md/lg/xl, so layouts adapt to the main content area width rather than the viewport.
+  - @stoneforge/ui@1.24.0
+
 ## 1.23.1
 
 ### Patch Changes

@@ -1,5 +1,12 @@
 # @stoneforge/core
 
+## 1.24.0
+
+### Patch Changes
+
+- 28696f6: Add monotonic counter to ID generator to prevent collisions when creating elements rapidly within the same millisecond
+- 823ccb9: Add pending→failed to valid workflow status transitions, enabling workflows to auto-fail when a task is tombstoned while the workflow is still pending.
+
 ## 1.23.1
 
 ## 1.23.0
