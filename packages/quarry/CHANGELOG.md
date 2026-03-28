@@ -1,5 +1,17 @@
 # @stoneforge/quarry
 
+## 1.24.0
+
+### Patch Changes
+
+- cd0997b: Exempt workflows from parent-child blocking in blocked cache so that tasks inside a workflow are not blocked by the workflow's pending/running status. Workflows, like plans, are collections and should not act as blocking parents.
+- fe994c8: Skip opening a new browser tab on `sf serve` when the dashboard is already connected via WebSocket
+- Updated dependencies [28696f6]
+- Updated dependencies [823ccb9]
+  - @stoneforge/core@1.24.0
+  - @stoneforge/shared-routes@1.24.0
+  - @stoneforge/storage@1.24.0
+
 ## 1.23.1
 
 ### Patch Changes
