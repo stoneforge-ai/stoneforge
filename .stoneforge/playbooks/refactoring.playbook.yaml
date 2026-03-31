@@ -1,0 +1,49 @@
+name: refactoring
+title: Code Refactoring Workflow
+version: 1
+
+variables:
+  - name: target
+    type: string
+    required: true
+    description: "Module or file path being refactored"
+  - name: goal
+    type: string
+    required: true
+    description: "What the refactoring achieves (e.g. extract auth into separate services)"
+
+steps:
+  - id: audit
+    title: "Audit {{target}}"
+    description: "Analyze current structure of {{target}}. Map all consumers and dependencies. Document what needs to change and what the new structure looks like."
+    step_type: task
+    task_type: chore
+    priority: 3
+    complexity: 2
+
+  - id: refactor
+    title: "Refactor {{target}}: {{goal}}"
+    description: "Perform the refactoring. Keep existing tests passing throughout. Commit incrementally."
+    step_type: task
+    task_type: chore
+    priority: 3
+    complexity: 4
+    depends_on: [audit]
+
+  - id: update-consumers
+    title: "Update consumers of {{target}}"
+    description: "Update all imports and references to use the new structure. Run tests after each file change to catch breakage early."
+    step_type: task
+    task_type: chore
+    priority: 3
+    complexity: 3
+    depends_on: [refactor]
+
+  - id: validate
+    title: "Validate refactoring of {{target}}"
+    description: "Run full build (pnpm build) and test suite (pnpm test). Verify no regressions. Check typecheck passes (pnpm typecheck)."
+    step_type: task
+    task_type: task
+    priority: 2
+    complexity: 1
+    depends_on: [update-consumers]

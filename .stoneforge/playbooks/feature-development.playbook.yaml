@@ -1,0 +1,56 @@
+name: feature-development
+title: Feature Development Workflow
+version: 1
+
+variables:
+  - name: feature_name
+    type: string
+    required: true
+    description: "Short name for the feature (used in task titles)"
+  - name: package
+    type: string
+    required: false
+    default: core
+    description: "Primary package being modified (e.g. core, quarry, smithy, ui)"
+  - name: needs_ui
+    type: boolean
+    required: false
+    default: false
+    description: "Whether the feature requires UI changes"
+
+steps:
+  - id: plan
+    title: "Plan {{feature_name}} implementation"
+    description: "Break down the feature into subtasks. Identify affected files in packages/{{package}}. Define acceptance criteria. Consult existing architecture docs with sf document commands."
+    step_type: task
+    task_type: task
+    priority: 2
+    complexity: 2
+
+  - id: implement
+    title: "Implement {{feature_name}}"
+    description: "Implement the core logic in packages/{{package}}. Write unit tests for all new functions. Follow existing patterns in the package."
+    step_type: task
+    task_type: feature
+    priority: 2
+    complexity: 3
+    depends_on: [plan]
+
+  - id: implement-ui
+    title: "Implement UI for {{feature_name}}"
+    description: "Build React components in packages/ui or the relevant app. Integrate with the backend changes from the implement step."
+    step_type: task
+    task_type: feature
+    priority: 3
+    complexity: 3
+    depends_on: [implement]
+    condition: "needs_ui == true"
+
+  - id: test
+    title: "Test {{feature_name}} end-to-end"
+    description: "Run full test suite with pnpm test. Verify no regressions. Add integration tests if the feature spans multiple packages."
+    step_type: task
+    task_type: task
+    priority: 2
+    complexity: 2
+    depends_on: [implement]
