@@ -22,6 +22,13 @@ describe('serve command', () => {
       expect(noOpenOpt!.hasValue).toBe(false);
     });
 
+    test('has open option to force browser open', () => {
+      const openOpt = serveCommand.options?.find((o) => o.name === 'open');
+      expect(openOpt).toBeDefined();
+      expect(openOpt!.description).toContain('Force');
+      expect(openOpt!.hasValue).toBe(false);
+    });
+
     test('has port option', () => {
       const portOpt = serveCommand.options?.find((o) => o.name === 'port');
       expect(portOpt).toBeDefined();

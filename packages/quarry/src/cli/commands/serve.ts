@@ -7,7 +7,7 @@
  *   sf serve smithy    - Start the smithy server
  */
 
-import { existsSync, writeFileSync, unlinkSync, mkdirSync } from 'node:fs';
+import { existsSync, writeFileSync, unlinkSync, mkdirSync, statSync } from 'node:fs';
 import { exec } from 'node:child_process';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -237,13 +237,29 @@ function writeDashboardMarker(): void {
   }
 }
 
+/** Maximum age (in ms) before a marker file is considered stale — 24 hours. */
+const MARKER_STALE_MS = 24 * 60 * 60 * 1000;
+
 /**
- * Check whether a dashboard marker file exists, indicating a tab
- * was previously opened.
+ * Check whether a fresh dashboard marker file exists, indicating a tab
+ * was previously opened. Markers older than 24 hours are treated as stale
+ * (the browser tab was likely closed long ago).
  */
 function hasDashboardMarker(): boolean {
   const markerPath = getDashboardMarkerPath();
-  return markerPath !== null && existsSync(markerPath);
+  if (!markerPath || !existsSync(markerPath)) return false;
+  try {
+    const stat = statSync(markerPath);
+    const ageMs = Date.now() - stat.mtimeMs;
+    if (ageMs > MARKER_STALE_MS) {
+      // Stale marker — treat as non-existent
+      try { unlinkSync(markerPath); } catch { /* ignore */ }
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -273,43 +289,20 @@ function registerMarkerCleanup(): void {
 }
 
 /**
- * Determine whether to open a browser tab, using a combination of:
- * 1. Marker file — if no marker exists, this is a first-time start → open immediately
- * 2. WebSocket client polling — if marker exists, poll for reconnecting clients
- *    (existing tabs reconnect after server restart)
+ * Determine whether to open a browser tab based on the marker file.
  *
- * @param hasClients Function that returns true if WebSocket clients are connected
- * @returns true if a new browser tab should be opened
+ * - No marker file → first-time start → open browser
+ * - Fresh marker file → tab was previously opened and likely still exists → skip
+ * - Stale marker (>24h) → tab was likely closed long ago → open browser
+ * - `--open` flag → always open regardless of marker state
+ *
+ * This replaces the previous WebSocket polling approach which suffered from
+ * race conditions (the 5-second polling window expired before background
+ * browser tabs could reconnect their WebSocket).
  */
-async function shouldOpenBrowser(
-  hasClients: (() => boolean) | null,
-): Promise<boolean> {
-  // First-time start — no previous dashboard was ever opened
-  if (!hasDashboardMarker()) {
-    return true;
-  }
-
-  // Marker exists — a tab was previously opened. Poll for WebSocket reconnection.
-  if (hasClients) {
-    // Poll every 500ms for up to 5 seconds to allow client reconnection.
-    // The frontend WebSocket client reconnects with 1000ms initial delay
-    // and exponential backoff, so 5s gives ample time.
-    const POLL_INTERVAL = 500;
-    const MAX_WAIT = 5000;
-    let elapsed = 0;
-
-    while (elapsed < MAX_WAIT) {
-      await new Promise(r => setTimeout(r, POLL_INTERVAL));
-      elapsed += POLL_INTERVAL;
-      if (hasClients()) {
-        // A dashboard tab reconnected — no need to open a new one
-        return false;
-      }
-    }
-  }
-
-  // No clients reconnected within the window — the tab was likely closed
-  return true;
+function shouldOpenBrowser(forceOpen: boolean): boolean {
+  if (forceOpen) return true;
+  return !hasDashboardMarker();
 }
 
 // ============================================================================
@@ -360,12 +353,13 @@ async function startQuarry(options: GlobalOptions): Promise<CommandResult> {
   }
 
   if (!options['no-open']) {
-    // Quarry mode has no WebSocket client tracking, so just use marker file
-    if (!hasDashboardMarker()) {
+    const forceOpen = Boolean(options['open']);
+    if (shouldOpenBrowser(forceOpen)) {
       openInBrowser(quarryUrl);
-      writeDashboardMarker();
-      registerMarkerCleanup();
     }
+    // Always write marker & register cleanup so future restarts know a tab was opened
+    writeDashboardMarker();
+    registerMarkerCleanup();
   }
   return await new Promise<never>(() => {});
 }
@@ -449,15 +443,8 @@ async function startSmithy(options: GlobalOptions): Promise<CommandResult> {
   }
 
   if (!options['no-open']) {
-    // Check if a dashboard tab is already connected via WebSocket.
-    // After a server restart, existing tabs automatically reconnect to /ws/events.
-    // Use marker file + WebSocket polling to reliably detect existing tabs.
-    const hasClients = (result && typeof result === 'object' && 'hasConnectedClients' in result)
-      ? (result as { hasConnectedClients: () => boolean }).hasConnectedClients
-      : null;
-
-    const shouldOpen = await shouldOpenBrowser(hasClients);
-    if (shouldOpen) {
+    const forceOpen = Boolean(options['open']);
+    if (shouldOpenBrowser(forceOpen)) {
       openInBrowser(smithyUrl);
     }
     // Always write marker & register cleanup so future restarts know a tab was opened
@@ -479,6 +466,7 @@ export const serveCommand: Command = {
     { name: 'port', short: 'p', description: 'Port to listen on', hasValue: true },
     { name: 'host', short: 'H', description: 'Host to bind to', hasValue: true, defaultValue: 'localhost' },
     { name: 'no-open', description: 'Do not open browser automatically', hasValue: false },
+    { name: 'open', description: 'Force open a new browser tab even if one was previously opened', hasValue: false },
   ],
   handler: async (args: string[], options: GlobalOptions): Promise<CommandResult> => {
     const target = args[0];
