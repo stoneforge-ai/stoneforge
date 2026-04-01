@@ -13,7 +13,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useSearch, useNavigate } from '@tanstack/react-router';
 import { Plus } from 'lucide-react';
 import { toast } from 'sonner';
-import { useIsMobile } from '../../hooks/useBreakpoint';
+import { useContainerIsMobile } from '../../hooks';
 import { CreateChannelModal } from '@stoneforge/ui';
 import { useAllChannels } from '../../api/hooks/useAllElements';
 import { createChannelFilter } from '../../hooks/usePaginatedData';
@@ -32,7 +32,7 @@ import type { Channel } from '../../api/hooks/useAllElements';
 export function MessagesPage() {
   const navigate = useNavigate();
   const search = useSearch({ from: '/messages' });
-  const isMobile = useIsMobile();
+  const isMobile = useContainerIsMobile();
   const { currentUser } = useCurrentUser();
 
   const [searchQuery, setSearchQuery] = useState('');

@@ -34,7 +34,8 @@ import {
   Workflow,
   Sparkles,
 } from 'lucide-react';
-import { useIsMobile, ShortcutsSection } from '@stoneforge/ui';
+import { ShortcutsSection } from '@stoneforge/ui';
+import { useContainerIsMobile } from '../../hooks';
 import {
   useSettings,
   useExecutablePathSettings,
@@ -124,7 +125,7 @@ export function SettingsPage() {
 
 function PreferencesTab() {
   const { theme, notifications, agentDefaults } = useSettings();
-  const isMobile = useIsMobile();
+  const isMobile = useContainerIsMobile();
 
   return (
     <div className="space-y-6 max-w-2xl" data-testid="settings-preferences">

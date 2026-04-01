@@ -33,7 +33,7 @@ import {
 } from 'lucide-react';
 import { VirtualizedList } from '../../components/shared/VirtualizedList';
 import { PageHeader } from '../../components/shared/PageHeader';
-import { useIsMobile } from '../../hooks/useBreakpoint';
+import { useContainerIsMobile } from '../../hooks';
 import { useCurrentUser } from '../../contexts';
 import { useRealtimeEvents } from '../../api/hooks/useRealtimeEvents';
 import type { WebSocketEvent } from '@stoneforge/ui';
@@ -1084,7 +1084,7 @@ export function InboxPage() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyNavigation]);
 
-  const isMobile = useIsMobile();
+  const isMobile = useContainerIsMobile();
 
   // Handle reply submission
   const handleSendReply = useCallback(async () => {
