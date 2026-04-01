@@ -275,20 +275,48 @@ function registerMarkerCleanup(): void {
 }
 
 /**
- * Determine whether to open a browser tab based on the marker file.
- *
- * - No marker file → first-time start → open browser
- * - Fresh marker file → tab was previously opened and likely still exists → skip
- * - Stale marker (>24h) → tab was likely closed long ago → open browser
- * - `--open` flag → always open regardless of marker state
- *
- * This replaces the previous WebSocket polling approach which suffered from
- * race conditions (the 5-second polling window expired before background
- * browser tabs could reconnect their WebSocket).
+ * Wait for an existing browser tab to reconnect via WebSocket.
+ * Returns true if a client connected within the timeout.
  */
-function shouldOpenBrowser(forceOpen: boolean): boolean {
+function waitForReconnect(hasConnectedClients: () => boolean, timeoutMs = 8000, intervalMs = 250): Promise<boolean> {
+  return new Promise((resolve) => {
+    const start = Date.now();
+    const check = () => {
+      if (hasConnectedClients()) {
+        resolve(true);
+        return;
+      }
+      if (Date.now() - start >= timeoutMs) {
+        resolve(false);
+        return;
+      }
+      setTimeout(check, intervalMs);
+    };
+    check();
+  });
+}
+
+/**
+ * Determine whether to open a browser tab.
+ *
+ * - `--open` flag → always open regardless
+ * - No marker file → first-time start → open browser
+ * - Fresh marker exists → a tab was previously opened → wait for WebSocket
+ *   reconnect, only open if no client connects within timeout
+ * - Stale marker (>24h) → tab was likely closed long ago → open browser
+ */
+async function shouldOpenBrowser(
+  forceOpen: boolean,
+  hasConnectedClients?: () => boolean,
+): Promise<boolean> {
   if (forceOpen) return true;
-  return !hasDashboardMarker();
+  if (!hasDashboardMarker()) return true;
+  // Marker exists — an old tab may still be open. Wait for it to reconnect.
+  if (hasConnectedClients) {
+    const reconnected = await waitForReconnect(hasConnectedClients);
+    return !reconnected;
+  }
+  return false;
 }
 
 // ============================================================================
@@ -340,10 +368,10 @@ async function startQuarry(options: GlobalOptions): Promise<CommandResult> {
 
   if (!options['no-open']) {
     const forceOpen = Boolean(options['open']);
-    if (shouldOpenBrowser(forceOpen)) {
+    if (await shouldOpenBrowser(forceOpen)) {
       openInBrowser(quarryUrl);
     }
-    // Always write marker & register cleanup so future restarts know a tab was opened
+    // Always write marker so future restarts know a tab was opened
     writeDashboardMarker();
     registerMarkerCleanup();
   }
@@ -430,10 +458,13 @@ async function startSmithy(options: GlobalOptions): Promise<CommandResult> {
 
   if (!options['no-open']) {
     const forceOpen = Boolean(options['open']);
-    if (shouldOpenBrowser(forceOpen)) {
+    const hasConnectedClients = (result && typeof result === 'object' && 'hasConnectedClients' in result)
+      ? (result as { hasConnectedClients: () => boolean }).hasConnectedClients
+      : undefined;
+    if (await shouldOpenBrowser(forceOpen, hasConnectedClients)) {
       openInBrowser(smithyUrl);
     }
-    // Always write marker & register cleanup so future restarts know a tab was opened
+    // Always write marker so future restarts know a tab was opened
     writeDashboardMarker();
     registerMarkerCleanup();
   }
