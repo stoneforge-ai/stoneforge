@@ -142,6 +142,13 @@ The merge runs in two phases to avoid branch locking issues:
 
 Phase B is best-effort — if it fails, the merge is still successful (the push in Phase A is what matters).
 
+If the intended changes were already published to the target branch by another route, Stoneforge can now reconcile that too. The steward and `sf task merge` both treat a branch as already integrated when either:
+
+1. The branch is already an ancestor of the target branch.
+2. The branch still has unique commits, but its final tree matches the target branch exactly (for example after a manual squash publish).
+
+That keeps review tasks from getting stuck when publication succeeded but the normal closeout step did not.
+
 ## Handling merge conflicts
 
 When the steward detects a merge conflict:

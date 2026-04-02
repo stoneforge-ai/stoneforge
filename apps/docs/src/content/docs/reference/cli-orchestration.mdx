@@ -332,6 +332,8 @@ sf task merge <task-id> [--summary <text>]
 
 Validates the task is in REVIEW status, performs the squash-merge, pushes, sets merge status to `merged`, closes the task, and cleans up the branch and worktree.
 
+If the task branch was already published by another path (for example a manual squash publish to `main`), `sf task merge` now reconciles that state too. When the branch tree already matches the target branch tree, Stoneforge treats it as already integrated, finishes closeout, and still performs best-effort cleanup.
+
 #### `sf task reject`
 
 Mark a task merge as failed and reopen it.
@@ -364,6 +366,8 @@ sf task merge-status <task-id> <status>
 ```
 
 Valid statuses: `pending`, `testing`, `merging`, `merged`, `conflict`, `test_failed`, `failed`, `not_applicable`. Terminal statuses (`merged`, `not_applicable`) automatically close the task.
+
+When marking a task as `merged`, Stoneforge verifies either commit ancestry or final tree equivalence on `origin/<target>`. That lets already-published squash merges reconcile cleanly without `--force`. Reserve `--force` for cases where the branch history can no longer be verified, such as a deleted source branch.
 
 #### `sf task set-owner`
 

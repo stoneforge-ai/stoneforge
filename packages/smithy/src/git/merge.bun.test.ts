@@ -10,7 +10,15 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mergeBranch, detectTargetBranch, execGitSafe, hasRemote, syncLocalBranchFromCommit, ensureTargetBranchExists } from './merge.js';
+import {
+  mergeBranch,
+  detectTargetBranch,
+  execGitSafe,
+  hasRemote,
+  syncLocalBranch,
+  syncLocalBranchFromCommit,
+  ensureTargetBranchExists,
+} from './merge.js';
 
 const execAsync = promisify(exec);
 
@@ -759,6 +767,43 @@ describe('mergeBranch already-merged detection', () => {
       cleanup(repoDir, remoteDir);
     }
   });
+
+  test('returns alreadyMerged when branch was squash-published and trees match', async () => {
+    const { repoDir, remoteDir } = await setup();
+    try {
+      await execAsync('git checkout -b feature/squash-published', { cwd: repoDir });
+      fs.writeFileSync(path.join(repoDir, 'published.ts'), 'export const published = 1;\n');
+      await execAsync('git add . && git commit -m "Feature commit 1"', { cwd: repoDir });
+      fs.writeFileSync(path.join(repoDir, 'published.ts'), 'export const published = 2;\n');
+      await execAsync('git add . && git commit -m "Feature commit 2"', { cwd: repoDir });
+      await execAsync('git push origin feature/squash-published', { cwd: repoDir });
+
+      await execAsync('git checkout main', { cwd: repoDir });
+      fs.writeFileSync(path.join(repoDir, 'published.ts'), 'export const published = 2;\n');
+      await execAsync('git add . && git commit -m "Manual squash publish"', { cwd: repoDir });
+      await execAsync('git push origin main', { cwd: repoDir });
+
+      const { stdout: aheadCount } = await execAsync(
+        'git rev-list --count origin/main..feature/squash-published',
+        { cwd: repoDir }
+      );
+      expect(parseInt(aheadCount.trim(), 10)).toBeGreaterThan(0);
+
+      const result = await mergeBranch({
+        workspaceRoot: repoDir,
+        sourceBranch: 'feature/squash-published',
+        targetBranch: 'main',
+        commitMessage: 'Should reconcile already-published squash merge',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.alreadyMerged).toBe(true);
+      expect(result.hasConflict).toBe(false);
+      expect(result.commitHash).toBeUndefined();
+    } finally {
+      cleanup(repoDir, remoteDir);
+    }
+  });
 });
 
 // ============================================================================
@@ -957,6 +1002,36 @@ describe('syncLocalBranchFromCommit', () => {
       expect(mainHash.trim()).toBe(featureHash.trim());
     } finally {
       rmrf(repoDir);
+    }
+  });
+});
+
+describe('syncLocalBranch', () => {
+  test('updates the local target ref while detached', async () => {
+    const { repoDir, remoteDir } = await setup();
+    const otherClone = `${repoDir}-secondary`;
+    try {
+      await execAsync(`git clone "${remoteDir}" "${otherClone}"`);
+      await execAsync('git config user.email "test@test.com"', { cwd: otherClone });
+      await execAsync('git config user.name "Test"', { cwd: otherClone });
+
+      fs.writeFileSync(path.join(otherClone, 'detached-sync.ts'), 'export const detached = true;\n');
+      await execAsync('git add . && git commit -m "Advance main remotely"', { cwd: otherClone });
+      await execAsync('git push origin main', { cwd: otherClone });
+
+      const { stdout: oldMainHash } = await execAsync('git rev-parse main', { cwd: repoDir });
+      await execAsync('git checkout --detach', { cwd: repoDir });
+
+      await syncLocalBranch(repoDir, 'main');
+
+      const { stdout: newMainHash } = await execAsync('git rev-parse main', { cwd: repoDir });
+      const { stdout: originMainHash } = await execAsync('git rev-parse origin/main', { cwd: repoDir });
+
+      expect(newMainHash.trim()).toBe(originMainHash.trim());
+      expect(newMainHash.trim()).not.toBe(oldMainHash.trim());
+    } finally {
+      rmrf(otherClone);
+      cleanup(repoDir, remoteDir);
     }
   });
 });

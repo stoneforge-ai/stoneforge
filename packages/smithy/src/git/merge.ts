@@ -73,6 +73,15 @@ export interface MergeBranchResult {
   alreadyMerged?: boolean;
 }
 
+export interface BranchIntegrationStatus {
+  /** Whether the source branch is already effectively integrated into the target */
+  integrated: boolean;
+  /** How many commits the source branch is ahead of the target */
+  aheadCount: number;
+  /** Why the branch is considered integrated */
+  reason?: 'ancestor' | 'tree-equivalent';
+}
+
 // ============================================================================
 // Helpers
 // ============================================================================
@@ -315,6 +324,58 @@ async function branchExistsOnRemote(
   }
 }
 
+/**
+ * Compare a source branch against a target ref and determine whether the source
+ * is already effectively integrated.
+ *
+ * Integration is true when either:
+ * - the source has zero commits ahead of the target (ancestry merge), or
+ * - the source and target resolve to the same tree object (squash/manual publish).
+ */
+export async function getBranchIntegrationStatus(
+  workspaceRoot: string,
+  sourceBranch: string,
+  targetRef: string
+): Promise<BranchIntegrationStatus> {
+  const { stdout: countStr } = await execAsync(
+    `git rev-list --count ${targetRef}..${sourceBranch}`,
+    { cwd: workspaceRoot, encoding: 'utf8' }
+  );
+  const aheadCount = parseInt(countStr.trim(), 10);
+
+  if (aheadCount === 0) {
+    return {
+      integrated: true,
+      aheadCount,
+      reason: 'ancestor',
+    };
+  }
+
+  const [{ stdout: targetTree }, { stdout: sourceTree }] = await Promise.all([
+    execAsync(`git rev-parse ${targetRef}^{tree}`, {
+      cwd: workspaceRoot,
+      encoding: 'utf8',
+    }),
+    execAsync(`git rev-parse ${sourceBranch}^{tree}`, {
+      cwd: workspaceRoot,
+      encoding: 'utf8',
+    }),
+  ]);
+
+  if (targetTree.trim() === sourceTree.trim()) {
+    return {
+      integrated: true,
+      aheadCount,
+      reason: 'tree-equivalent',
+    };
+  }
+
+  return {
+    integrated: false,
+    aheadCount,
+  };
+}
+
 // ============================================================================
 // Main
 // ============================================================================
@@ -355,20 +416,17 @@ export async function mergeBranch(options: MergeBranchOptions): Promise<MergeBra
       ? `Squash merge ${sourceBranch} into ${targetBranch}`
       : `Merge branch '${sourceBranch}'`);
 
-  // 1b. Check if source branch has any commits ahead of target.
-  // If count is 0, the branch is already fully merged — nothing to do.
+  // 1b. Check if source branch is already effectively integrated into target.
+  // This handles both true ancestry merges and squash/manual publishes where
+  // the branch tree already matches the target branch tree.
   try {
     const targetRef = localOnly ? targetBranch : `origin/${targetBranch}`;
-    // Always use local source ref — the actual merge (squash or no-ff) at line ~416
-    // operates on the local sourceBranch, so the pre-check must match.
-    // Using origin/${sourceBranch} would miss unpushed local commits.
-    const sourceRef = sourceBranch;
-    const { stdout: countStr } = await execAsync(
-      `git rev-list --count ${targetRef}..${sourceRef}`,
-      { cwd: workspaceRoot, encoding: 'utf8' }
+    const integration = await getBranchIntegrationStatus(
+      workspaceRoot,
+      sourceBranch,
+      targetRef
     );
-    const commitsAhead = parseInt(countStr.trim(), 10);
-    if (commitsAhead === 0) {
+    if (integration.integrated) {
       return {
         success: true,
         hasConflict: false,
@@ -573,7 +631,11 @@ export async function syncLocalBranch(
     }
 
     if (!currentBranch) {
-      console.warn('[git/merge] WARNING: workspace is in detached HEAD state during syncLocalBranch. Skipping sync. Run `git checkout master` to fix.');
+      // Detached HEAD is safe to treat like "not on the target branch":
+      // update the local ref directly without touching the working tree.
+      await execAsync(`git fetch origin ${targetBranch}:${targetBranch}`, {
+        cwd: workspaceRoot, encoding: 'utf8',
+      });
       return;
     }
 

@@ -430,8 +430,7 @@ async function taskMergeHandler(
     const workspaceRoot = path.dirname(stoneforgeDir);
 
     // 3. Call mergeBranch() with syncLocal disabled (we'll do it after bookkeeping)
-    const { mergeBranch, syncLocalBranch } = await import('../../git/merge.js');
-    const { detectTargetBranch } = await import('../../git/merge.js');
+    const { mergeBranch, syncLocalBranch, detectTargetBranch, getBranchIntegrationStatus } = await import('../../git/merge.js');
     const commitMessage = `${task.title} (${taskId})`;
 
     const mergeResult = await mergeBranch({
@@ -484,18 +483,21 @@ async function taskMergeHandler(
         );
       }
     } else if (mergeResult.alreadyMerged) {
-      // Verify the local source branch has no commits ahead of origin/{targetBranch}
+      // Verify the branch is already effectively integrated into origin/{targetBranch}.
+      // This accepts both ancestry merges and squash/manual publishes where the
+      // source branch tree already matches the target branch tree.
       try {
-        const { stdout: countStr } = await execVerify(
-          `git rev-list --count origin/${effectiveTargetForVerify}..${sourceBranch}`,
-          { cwd: workspaceRoot, encoding: 'utf8' }
+        const integration = await getBranchIntegrationStatus(
+          workspaceRoot,
+          sourceBranch,
+          `origin/${effectiveTargetForVerify}`
         );
-        const aheadCount = parseInt(countStr.trim(), 10);
-        if (aheadCount > 0) {
+        if (!integration.integrated) {
           return failure(
-            `Post-merge verification failed: source branch ${sourceBranch} has ${aheadCount} commit(s) ` +
+            `Post-merge verification failed: source branch ${sourceBranch} has ${integration.aheadCount} commit(s) ` +
             `not on origin/${effectiveTargetForVerify} despite being reported as already merged. ` +
-            `The commits may not have been delivered to the remote. Please retry or push manually.`,
+            `Its effective tree also differs from origin/${effectiveTargetForVerify}. ` +
+            `The changes may not have been delivered to the remote. Please retry or push manually.`,
             ExitCode.GENERAL_ERROR
           );
         }
@@ -1037,17 +1039,18 @@ export async function verifyMergeStatus(params: {
     // Fetch latest from origin
     await execAsync('git fetch origin', { cwd: workspaceRoot, encoding: 'utf8', timeout: 60_000 });
 
-    // Check if the source branch has commits not on origin/{targetBranch}
-    const { stdout: countStr } = await execAsync(
-      `git rev-list --count origin/${effectiveTarget}..${branch}`,
-      { cwd: workspaceRoot, encoding: 'utf8' }
-    );
-    const count = parseInt(countStr.trim(), 10);
+    const integration = await getBranchIntegrationStatusForVerification({
+      branch,
+      effectiveTarget,
+      execAsync,
+      workspaceRoot,
+    });
 
-    if (count > 0) {
+    if (!integration.integrated) {
       return {
         status: 'error',
-        message: `Cannot mark as merged: branch ${branch} has ${count} commit(s) not on origin/${effectiveTarget}. ` +
+        message: `Cannot mark as merged: branch ${branch} has ${integration.aheadCount} commit(s) not on origin/${effectiveTarget}, ` +
+          `and its effective tree does not match origin/${effectiveTarget}. ` +
           `Use 'sf task merge' instead to merge and push, or use 'not_applicable' if no merge is needed.`,
       };
     }
@@ -1097,6 +1100,41 @@ export async function verifyMergeStatus(params: {
       };
     }
   }
+}
+
+async function getBranchIntegrationStatusForVerification(params: {
+  branch: string;
+  effectiveTarget: string;
+  execAsync: (cmd: string, opts: Record<string, unknown>) => Promise<{ stdout: string; stderr: string }>;
+  workspaceRoot: string;
+}): Promise<{ integrated: boolean; aheadCount: number }> {
+  const { branch, effectiveTarget, execAsync, workspaceRoot } = params;
+  const targetRef = `origin/${effectiveTarget}`;
+  const { stdout: countStr } = await execAsync(
+    `git rev-list --count ${targetRef}..${branch}`,
+    { cwd: workspaceRoot, encoding: 'utf8' }
+  );
+  const aheadCount = parseInt(countStr.trim(), 10);
+
+  if (aheadCount === 0) {
+    return { integrated: true, aheadCount };
+  }
+
+  const [{ stdout: targetTree }, { stdout: branchTree }] = await Promise.all([
+    execAsync(`git rev-parse ${targetRef}^{tree}`, {
+      cwd: workspaceRoot,
+      encoding: 'utf8',
+    }),
+    execAsync(`git rev-parse ${branch}^{tree}`, {
+      cwd: workspaceRoot,
+      encoding: 'utf8',
+    }),
+  ]);
+
+  return {
+    integrated: targetTree.trim() === branchTree.trim(),
+    aheadCount,
+  };
 }
 
 async function taskMergeStatusHandler(
@@ -1272,7 +1310,7 @@ Examples:
     {
       name: 'force',
       short: 'f',
-      description: 'Bypass merge verification when source branch is deleted and merge cannot be verified',
+      description: 'Bypass merge verification when source branch history cannot be verified',
     },
   ],
   handler: taskMergeStatusHandler as Command['handler'],

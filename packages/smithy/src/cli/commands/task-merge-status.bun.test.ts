@@ -102,6 +102,8 @@ describe('verifyMergeStatus', () => {
       const execAsync = createMockExec({
         'git fetch origin': { stdout: '' },
         'git rev-list --count': { stdout: '3\n' },
+        'git rev-parse origin/master^{tree}': { stdout: 'tree-a\n' },
+        'git rev-parse feature/my-branch^{tree}': { stdout: 'tree-b\n' },
       });
 
       const result = await verifyMergeStatus({
@@ -111,7 +113,24 @@ describe('verifyMergeStatus', () => {
 
       expect(result.status).toBe('error');
       expect(result.message).toContain('3 commit(s) not on origin/master');
+      expect(result.message).toContain('effective tree does not match');
       expect(result.message).toContain('sf task merge');
+    });
+
+    it('should return ok when branch was squash-merged and trees match', async () => {
+      const execAsync = createMockExec({
+        'git fetch origin': { stdout: '' },
+        'git rev-list --count': { stdout: '2\n' },
+        'git rev-parse origin/master^{tree}': { stdout: 'tree-a\n' },
+        'git rev-parse feature/my-branch^{tree}': { stdout: 'tree-a\n' },
+      });
+
+      const result = await verifyMergeStatus({
+        ...baseParams,
+        execAsync,
+      });
+
+      expect(result.status).toBe('ok');
     });
   });
 
