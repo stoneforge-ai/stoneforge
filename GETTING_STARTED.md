@@ -49,6 +49,8 @@ This single script handles everything:
 
 **It takes 2-3 minutes.** When it finishes, you'll see "Setup complete!"
 
+> **Windows users:** After `setup.bat` finishes, **close your terminal and open a new one**. This is needed so Windows can find the `sf` command.
+
 ---
 
 ## Start the Dashboard

@@ -111,7 +111,27 @@ if not exist "%SF_BIN%" (
 echo @echo off> "%~dp0sf.bat"
 echo node "%SF_BIN%" %%*>> "%~dp0sf.bat"
 
-echo [ok]    Created sf.bat (run "sf" from this folder)
+echo [ok]    Created sf.bat
+
+REM Add repo folder to user PATH so "sf" works from anywhere
+echo [info]  Adding Stoneforge to PATH...
+set "REPO_DIR=%~dp0"
+REM Remove trailing backslash for cleaner PATH entry
+if "%REPO_DIR:~-1%"=="\" set "REPO_DIR=%REPO_DIR:~0,-1%"
+
+echo %PATH% | findstr /i /c:"%REPO_DIR%" >nul 2>nul
+if %errorlevel% neq 0 (
+    for /f "tokens=2*" %%A in ('reg query "HKCU\Environment" /v Path 2^>nul') do set "USER_PATH=%%B"
+    if defined USER_PATH (
+        setx PATH "%USER_PATH%;%REPO_DIR%" >nul 2>nul
+    ) else (
+        setx PATH "%REPO_DIR%" >nul 2>nul
+    )
+    set "PATH=%PATH%;%REPO_DIR%"
+    echo [ok]    Added to PATH
+) else (
+    echo [ok]    Already in PATH
+)
 
 REM --------------------------------------------------------------------------
 REM Step 7: Initialize workspace
@@ -153,16 +173,21 @@ echo ======================================
 echo   Setup complete!
 echo ======================================
 echo.
-echo   Start the dashboard:
+echo   IMPORTANT: Close this terminal and open a new one!
+echo   (This is needed so your computer can find the "sf" command.)
+echo.
+echo   Then run:
 echo.
 echo     sf serve
 echo.
 echo   Then open http://localhost:3457 in your browser.
 echo.
 echo   What's next:
-echo   1. Open the dashboard
-echo   2. Go to Work -^> Tasks -^> + New Task
-echo   3. Create a task and watch your agents work
+echo   1. Close this terminal, open a new one
+echo   2. Run: sf serve
+echo   3. Open http://localhost:3457 in your browser
+echo   4. Go to Work -^> Tasks -^> + New Task
+echo   5. Create a task and watch your agents work
 echo.
 echo   Read more: GETTING_STARTED.md
 echo.
