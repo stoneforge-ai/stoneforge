@@ -5,8 +5,9 @@
  */
 
 import { useMemo } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query';
 import type {
+  Agent,
   AgentRole,
   AgentsResponse,
   AgentResponse,
@@ -143,7 +144,7 @@ export function useAgentsByRole() {
   const result = useMemo(() => {
     const agents = data?.agents ?? [];
 
-    const director = agents.find(a => a.metadata?.agent?.agentRole === 'director');
+    const directors = agents.filter(a => a.metadata?.agent?.agentRole === 'director');
     const workers = agents.filter(a => a.metadata?.agent?.agentRole === 'worker');
     const stewards = agents.filter(a => a.metadata?.agent?.agentRole === 'steward');
 
@@ -158,7 +159,8 @@ export function useAgentsByRole() {
     });
 
     return {
-      director,
+      director: directors[0],    // backward compat
+      directors,                  // all directors
       workers,
       ephemeralWorkers,
       persistentWorkers,
@@ -176,36 +178,88 @@ export function useAgentsByRole() {
 }
 
 /**
- * Hook to get the Director agent with status
- * Combines agent data and status for the Director agent panel
+ * Status information for a single director agent
  */
-export function useDirector() {
-  const { director, isLoading: agentsLoading, error: agentsError, refetch: refetchAgents } = useAgentsByRole();
+export interface DirectorInfo {
+  director: Agent;
+  hasActiveSession: boolean;
+  activeSession: unknown | null;
+  recentHistory: unknown[];
+  lastResumableSession: unknown | null;
+  hasResumableSession: boolean;
+  isLoading: boolean;
+  error: Error | null;
+}
 
-  const {
-    data: statusData,
-    isLoading: statusLoading,
-    error: statusError
-  } = useAgentStatus(director?.id);
+/**
+ * Hook to get all Director agents with their status
+ * Uses useQueries to fetch status for N directors in parallel
+ */
+export function useDirectors(): {
+  directors: DirectorInfo[];
+  isLoading: boolean;
+  error: Error | null;
+  refetch: () => void;
+} {
+  const { directors: directorAgents, isLoading: agentsLoading, error: agentsError, refetch: refetchAgents } = useAgentsByRole();
 
-  // Find the most recent session with a providerSessionId (resumable)
-  const lastResumableSession = useMemo(() => {
-    const history = statusData?.recentHistory ?? [];
-    return history.find((h) => !!h.providerSessionId) ?? null;
-  }, [statusData?.recentHistory]);
+  const statusQueries = useQueries({
+    queries: (directorAgents ?? []).map((director) => ({
+      queryKey: ['agent-status', director.id],
+      queryFn: () => fetchApi<AgentStatusResponse>(`/agents/${director.id}/status`),
+      refetchInterval: 5000,
+    })),
+  });
 
-  const hasResumableSession = lastResumableSession !== null;
+  const directors: DirectorInfo[] = useMemo(() => {
+    return (directorAgents ?? []).map((director, i) => {
+      const query = statusQueries[i];
+      const statusData = query?.data;
+      const history = statusData?.recentHistory ?? [];
+      const lastResumableSession = history.find((h) => !!h.providerSessionId) ?? null;
+
+      return {
+        director,
+        hasActiveSession: statusData?.hasActiveSession ?? false,
+        activeSession: statusData?.activeSession ?? null,
+        recentHistory: history,
+        lastResumableSession,
+        hasResumableSession: lastResumableSession !== null,
+        isLoading: query?.isLoading ?? true,
+        error: (query?.error as Error) ?? null,
+      };
+    });
+  }, [directorAgents, statusQueries]);
+
+  const isLoading = agentsLoading || statusQueries.some(q => q.isLoading);
+  const combinedError = agentsError ?? statusQueries.find(q => q.error)?.error ?? null;
 
   return {
-    director,
-    hasActiveSession: statusData?.hasActiveSession ?? false,
-    activeSession: statusData?.activeSession ?? null,
-    recentHistory: statusData?.recentHistory ?? [],
-    lastResumableSession,
-    hasResumableSession,
-    isLoading: agentsLoading || statusLoading,
-    error: agentsError || statusError,
+    directors,
+    isLoading,
+    error: combinedError as Error | null,
     refetch: refetchAgents,
+  };
+}
+
+/**
+ * Hook to get the Director agent with status (backward-compatible wrapper)
+ * Delegates to useDirectors() and returns the first director's data
+ */
+export function useDirector() {
+  const { directors, isLoading, error, refetch } = useDirectors();
+  const first = directors[0];
+
+  return {
+    director: first?.director,
+    hasActiveSession: first?.hasActiveSession ?? false,
+    activeSession: first?.activeSession ?? null,
+    recentHistory: first?.recentHistory ?? [],
+    lastResumableSession: first?.lastResumableSession ?? null,
+    hasResumableSession: first?.hasResumableSession ?? false,
+    isLoading,
+    error,
+    refetch,
   };
 }
 
@@ -367,6 +421,26 @@ export function useChangeAgentProvider() {
       return fetchApi<AgentResponse>(`/agents/${agentId}`, {
         method: 'PATCH',
         body: JSON.stringify(body),
+      });
+    },
+    onSuccess: (_, { agentId }) => {
+      queryClient.invalidateQueries({ queryKey: ['agents'] });
+      queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
+    },
+  });
+}
+
+/**
+ * Hook to change a director's target branch
+ */
+export function useChangeTargetBranch() {
+  const queryClient = useQueryClient();
+
+  return useMutation<AgentResponse, Error, { agentId: string; targetBranch: string | null }>({
+    mutationFn: async ({ agentId, targetBranch }) => {
+      return fetchApi<AgentResponse>(`/agents/${agentId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ targetBranch }),
       });
     },
     onSuccess: (_, { agentId }) => {

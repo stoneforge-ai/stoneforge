@@ -41,8 +41,7 @@ export const MAX_TEAM_MEMBERS = 1000;
 /**
  * Branded type for Team IDs (for use in references)
  */
-declare const TeamIdBrand: unique symbol;
-export type TeamId = ElementId & { readonly [TeamIdBrand]: typeof TeamIdBrand };
+export type TeamId = ElementId & { readonly __teamIdBrand: 'TeamId' };
 
 // ============================================================================
 // Team Interface

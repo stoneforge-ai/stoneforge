@@ -10,13 +10,13 @@ import { useActiveAgentOutputs } from '../../api/hooks/useActiveAgentOutputs.js'
 import type { RunningSessionInfo } from '../../api/hooks/useActiveAgentOutputs.js';
 import { useLatestSessionMessages } from '../../api/hooks/useLatestSessionMessages.js';
 import { useDaemonStatus } from '../../api/hooks/useDaemon.js';
-import { ActiveAgentCard } from './ActiveAgentCard.js';
+import { InteractiveAgentCard, HeadlessAgentCard, isInteractiveSession } from './ActiveAgentCard.js';
 import type { Agent, SessionRecord, Task } from '../../api/types.js';
 import type { AgentOutput } from '../../api/hooks/useActiveAgentOutputs.js';
 
 interface ActiveAgentsDashboardProps {
   onOpenTerminal: (agentId: string) => void;
-  onOpenDirectorPanel: () => void;
+  onOpenDirectorPanel: (agentId?: string) => void;
   onStopAgent: (agentId: string) => Promise<void>;
 }
 
@@ -123,7 +123,7 @@ export function ActiveAgentsDashboard({ onOpenTerminal, onOpenDirectorPanel, onS
 
   return (
     <div
-      className="grid gap-3 grid-cols-1 @md:grid-cols-2 @xl:grid-cols-3"
+      className="flex flex-col gap-3"
       data-testid="active-agents-dashboard"
     >
       {activeAgents.map(({ agent, session, task }) => {
@@ -153,8 +153,12 @@ export function ActiveAgentsDashboard({ onOpenTerminal, onOpenDirectorPanel, onS
           };
         }
 
+        const CardComponent = isInteractiveSession(session)
+          ? InteractiveAgentCard
+          : HeadlessAgentCard;
+
         return (
-          <ActiveAgentCard
+          <CardComponent
             key={session.id}
             agent={agent}
             session={session}
@@ -162,7 +166,7 @@ export function ActiveAgentsDashboard({ onOpenTerminal, onOpenDirectorPanel, onS
             lastOutput={effectiveOutput}
             onOpenTerminal={
               session.agentRole === 'director'
-                ? () => onOpenDirectorPanel()
+                ? () => onOpenDirectorPanel(agent.id)
                 : () => onOpenTerminal(agent.id)
             }
             onStop={handleStop}

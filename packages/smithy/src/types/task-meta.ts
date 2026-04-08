@@ -35,11 +35,20 @@ export interface OrchestratorTaskMeta {
   /** Path to the worktree where the agent is working (e.g., ".stoneforge/.worktrees/alice-implement-feature/") */
   readonly worktree?: string;
 
+  /**
+   * Target branch for merging this task. Inherited from the owning director
+   * at dispatch time. If not set, falls back to workspace default.
+   */
+  readonly targetBranch?: string;
+
   /** Claude Code session ID for this task, enabling session resumption */
   readonly sessionId?: string;
 
   /** Entity ID of the agent assigned to this task */
   readonly assignedAgent?: EntityId;
+
+  /** Entity ID of the director that created/owns this task for message routing */
+  readonly owningDirector?: EntityId;
 
   /** When the agent started working on this task */
   readonly startedAt?: Timestamp;
@@ -119,6 +128,9 @@ export interface OrchestratorTaskMeta {
 
   /** Completion summary provided by the agent */
   readonly completionSummary?: string;
+
+  /** Git commit hash from the squash-merge into the target branch */
+  readonly mergeCommitHash?: string;
 
   /** Last commit hash before completion */
   readonly lastCommitHash?: string;
@@ -206,14 +218,15 @@ export interface TaskSessionHistoryEntry {
  * Status of the merge process for a completed task's branch
  */
 export type MergeStatus =
-  | 'pending'         // Task completed, awaiting merge
-  | 'testing'         // Steward is running tests on the branch
-  | 'merging'         // Tests passed, merge in progress
-  | 'merged'          // Successfully merged
-  | 'conflict'        // Merge conflict detected
-  | 'test_failed'     // Tests failed, needs attention
-  | 'failed'          // Merge failed for other reason
-  | 'not_applicable'; // No merge needed (e.g., fix already existed on master)
+  | 'pending'            // Task completed, awaiting merge
+  | 'testing'            // Steward is running tests on the branch
+  | 'merging'            // Tests passed, merge in progress
+  | 'merged'             // Successfully merged
+  | 'conflict'           // Merge conflict detected
+  | 'test_failed'        // Tests failed, needs attention
+  | 'failed'             // Merge failed for other reason
+  | 'not_applicable'     // No merge needed (e.g., fix already existed on master)
+  | 'awaiting_approval'; // PR created, waiting for human approval/merge
 
 /**
  * All valid merge status values
@@ -227,6 +240,7 @@ export const MergeStatusValues = [
   'test_failed',
   'failed',
   'not_applicable',
+  'awaiting_approval',
 ] as const;
 
 /**
@@ -338,8 +352,10 @@ export function isOrchestratorTaskMeta(value: unknown): value is OrchestratorTas
   // All fields are optional, so we just check types if present
   if (obj.branch !== undefined && typeof obj.branch !== 'string') return false;
   if (obj.worktree !== undefined && typeof obj.worktree !== 'string') return false;
+  if (obj.targetBranch !== undefined && typeof obj.targetBranch !== 'string') return false;
   if (obj.sessionId !== undefined && typeof obj.sessionId !== 'string') return false;
   if (obj.assignedAgent !== undefined && typeof obj.assignedAgent !== 'string') return false;
+  if (obj.owningDirector !== undefined && typeof obj.owningDirector !== 'string') return false;
   if (obj.mergeStatus !== undefined && !isMergeStatus(obj.mergeStatus)) return false;
   if (obj.lastTestResult !== undefined && !isTestResult(obj.lastTestResult)) return false;
 

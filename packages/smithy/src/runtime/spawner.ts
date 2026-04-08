@@ -25,6 +25,8 @@ import type {
   HeadlessSession,
   InteractiveSession,
   AgentMessage,
+  SDKHookCallbackMatcher,
+  SDKHookEvent,
 } from '../providers/types.js';
 import { ClaudeAgentProvider } from '../providers/claude/index.js';
 import { isRateLimitMessage, parseRateLimitResetTime } from '../utils/rate-limit-parser.js';
@@ -47,6 +49,13 @@ export function shellQuote(s: string): string {
 export type SpawnMode = 'headless' | 'interactive';
 
 /**
+ * Factory function that creates SDK hooks for a given agent session.
+ * Called by the spawner before spawning each headless session.
+ */
+export type SDKHookFactory = (agentId: EntityId, sessionId: string) =>
+  Partial<Record<SDKHookEvent, SDKHookCallbackMatcher[]>> | undefined;
+
+/**
  * Configuration for spawn behavior
  */
 export interface SpawnConfig {
@@ -62,6 +71,8 @@ export interface SpawnConfig {
   readonly timeout?: number;
   /** Root directory for stoneforge (passed as STONEFORGE_ROOT) */
   readonly stoneforgeRoot?: string;
+  /** Factory for creating SDK hooks (e.g., permission enforcement) for headless sessions */
+  readonly sdkHookFactory?: SDKHookFactory;
 }
 
 /**
@@ -916,6 +927,9 @@ export class SpawnerServiceImpl implements SpawnerService {
     // can identify which executable was limited.
     session.executablePath = options?.claudePath ?? this.defaultConfig.claudePath;
 
+    // Create SDK hooks for this session if a hook factory is configured
+    const hooks = this.defaultConfig.sdkHookFactory?.(session.agentId, session.id);
+
     try {
       const headlessSession = await headlessProvider.spawn({
         workingDirectory: session.workingDirectory,
@@ -928,6 +942,7 @@ export class SpawnerServiceImpl implements SpawnerService {
         stoneforgeRoot: options?.stoneforgeRoot ?? this.defaultConfig.stoneforgeRoot,
         timeout: options?.timeout ?? this.defaultConfig.timeout,
         model: options?.model,
+        hooks,
       });
 
       session.headlessSession = headlessSession;

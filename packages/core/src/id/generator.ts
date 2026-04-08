@@ -588,6 +588,12 @@ export async function generateIdHash(components: IdComponents): Promise<string> 
 }
 
 /**
+ * Monotonic counter to ensure uniqueness when multiple IDs are generated
+ * within the same millisecond / performance.now() resolution window.
+ */
+let timestampCounter = 0;
+
+/**
  * Gets current timestamp in nanoseconds
  */
 function getTimestampNs(date?: Date): bigint {
@@ -595,7 +601,10 @@ function getTimestampNs(date?: Date): bigint {
   // Convert to nanoseconds and add high-resolution timer for uniqueness
   const hrTime = typeof performance !== 'undefined' ? performance.now() : 0;
   const nanos = BigInt(Math.floor(hrTime * 1000000) % 1000000);
-  return BigInt(ms) * BigInt(1000000) + nanos;
+  // Add a monotonic counter to prevent collisions when called rapidly
+  // (performance.now() may not advance between successive calls on some platforms)
+  const counter = BigInt(timestampCounter++ % 1000);
+  return BigInt(ms) * BigInt(1000000) + nanos + counter;
 }
 
 /**

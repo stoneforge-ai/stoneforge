@@ -20,6 +20,8 @@ function createMockServices() {
         group: 'claude-code',
         totalInputTokens: 10000,
         totalOutputTokens: 5000,
+        totalCacheReadTokens: 3000,
+        totalCacheCreationTokens: 500,
         totalTokens: 15000,
         sessionCount: 10,
         avgDurationMs: 5000,
@@ -33,6 +35,8 @@ function createMockServices() {
         group: 'claude-sonnet-4',
         totalInputTokens: 8000,
         totalOutputTokens: 4000,
+        totalCacheReadTokens: 2000,
+        totalCacheCreationTokens: 400,
         totalTokens: 12000,
         sessionCount: 8,
         avgDurationMs: 4500,
@@ -46,6 +50,8 @@ function createMockServices() {
         group: 'el-w1',
         totalInputTokens: 12000,
         totalOutputTokens: 6000,
+        totalCacheReadTokens: 4000,
+        totalCacheCreationTokens: 800,
         totalTokens: 18000,
         sessionCount: 5,
         avgDurationMs: 6000,
@@ -58,6 +64,8 @@ function createMockServices() {
         group: 'el-w2',
         totalInputTokens: 3000,
         totalOutputTokens: 1500,
+        totalCacheReadTokens: 1000,
+        totalCacheCreationTokens: 200,
         totalTokens: 4500,
         sessionCount: 2,
         avgDurationMs: 4000,
@@ -71,6 +79,8 @@ function createMockServices() {
       group: 'session-abc',
       totalInputTokens: 2000,
       totalOutputTokens: 1000,
+      totalCacheReadTokens: 600,
+      totalCacheCreationTokens: 150,
       totalTokens: 3000,
       sessionCount: 1,
       avgDurationMs: 5000,
@@ -90,8 +100,31 @@ function createMockServices() {
     ]),
   };
 
+  const costService = {
+    calculateCost: vi.fn().mockReturnValue({
+      inputCost: 0.03,
+      outputCost: 0.075,
+      cacheReadCost: 0.001,
+      cacheCreationCost: 0.002,
+      totalCost: 0.108,
+    }),
+    enrichWithCosts: vi.fn().mockImplementation((metrics: Array<Record<string, unknown>>) =>
+      metrics.map(m => ({
+        ...m,
+        estimatedCost: {
+          inputCost: 0.03,
+          outputCost: 0.075,
+          cacheReadCost: 0.001,
+          cacheCreationCost: 0.002,
+          totalCost: 0.108,
+        },
+      }))
+    ),
+  };
+
   return {
     metricsService,
+    costService,
   } as unknown as Services;
 }
 

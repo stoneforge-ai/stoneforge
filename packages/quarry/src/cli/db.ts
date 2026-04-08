@@ -62,7 +62,7 @@ export function resolveDatabasePath(options: GlobalOptions, requireExists: boole
  * Gets actor from options or default
  */
 export function resolveActor(options: GlobalOptions): EntityId {
-  return (options.actor ?? DEFAULT_ACTOR) as EntityId;
+  return (options.actor ?? process.env.SF_ENTITY_ID ?? DEFAULT_ACTOR) as EntityId;
 }
 
 /**

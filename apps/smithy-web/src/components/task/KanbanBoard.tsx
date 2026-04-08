@@ -338,6 +338,7 @@ function MergeStatusBadge({ status }: { status: MergeStatus }) {
     test_failed: 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300',
     failed: 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300',
     not_applicable: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400',
+    awaiting_approval: 'bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300',
   };
 
   return (

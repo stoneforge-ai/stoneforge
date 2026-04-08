@@ -14,7 +14,7 @@ import type { Migration, MigrationResult, StorageBackend } from './index.js';
 /**
  * Current schema version
  */
-export const CURRENT_SCHEMA_VERSION = 11;
+export const CURRENT_SCHEMA_VERSION = 12;
 
 // ============================================================================
 // Migrations
@@ -533,9 +533,30 @@ CREATE INDEX idx_inbox_message ON inbox_items(message_id);
 };
 
 /**
+ * Migration 12: Add cache token columns to provider_metrics
+ *
+ * Adds cache_read_tokens and cache_creation_tokens columns to track
+ * Anthropic API cache usage alongside regular input/output tokens.
+ */
+const migration012: Migration = {
+  version: 12,
+  description: 'Add cache_read_tokens and cache_creation_tokens columns to provider_metrics',
+  up: `
+-- Add cache token tracking columns to provider_metrics
+ALTER TABLE provider_metrics ADD COLUMN cache_read_tokens INTEGER DEFAULT 0;
+ALTER TABLE provider_metrics ADD COLUMN cache_creation_tokens INTEGER DEFAULT 0;
+`,
+  down: `
+-- SQLite 3.35.0+ supports DROP COLUMN
+ALTER TABLE provider_metrics DROP COLUMN cache_read_tokens;
+ALTER TABLE provider_metrics DROP COLUMN cache_creation_tokens;
+`,
+};
+
+/**
  * All migrations in order
  */
-export const MIGRATIONS: readonly Migration[] = [migration001, migration002, migration003, migration004, migration005, migration006, migration007, migration008, migration009, migration010, migration011];
+export const MIGRATIONS: readonly Migration[] = [migration001, migration002, migration003, migration004, migration005, migration006, migration007, migration008, migration009, migration010, migration011, migration012];
 
 // ============================================================================
 // Schema Functions

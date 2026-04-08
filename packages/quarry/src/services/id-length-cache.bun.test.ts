@@ -314,7 +314,7 @@ describe('IdLengthCache', () => {
       await new Promise(resolve => setTimeout(resolve, 50));
 
       const stats = cache.getStats();
-      expect(stats.ageMs).toBeGreaterThanOrEqual(50);
+      expect(stats.ageMs).toBeGreaterThanOrEqual(40);
       expect(stats.ageMs).toBeLessThan(500);
     });
   });

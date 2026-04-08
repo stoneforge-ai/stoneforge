@@ -70,6 +70,25 @@ export interface HeadlessSession {
   close(): void;
 }
 
+/** SDK hook callback type (simplified - matches @anthropic-ai/claude-agent-sdk HookCallback) */
+export type SDKHookCallback = (
+  input: Record<string, unknown>,
+  toolUseId: string | undefined,
+  options: { signal: AbortSignal }
+) => Promise<Record<string, unknown>>;
+
+/** SDK hook callback matcher (matches @anthropic-ai/claude-agent-sdk HookCallbackMatcher) */
+export interface SDKHookCallbackMatcher {
+  matcher?: string;
+  hooks: SDKHookCallback[];
+  timeout?: number;
+}
+
+/** SDK hook event names */
+export type SDKHookEvent = 'PreToolUse' | 'PostToolUse' | 'PostToolUseFailure' | 'Notification' |
+  'UserPromptSubmit' | 'SessionStart' | 'SessionEnd' | 'Stop' | 'SubagentStart' | 'SubagentStop' |
+  'PreCompact' | 'PermissionRequest' | 'Setup' | 'TeammateIdle' | 'TaskCompleted';
+
 /** Options for spawning a headless session */
 export interface HeadlessSpawnOptions {
   readonly workingDirectory: string;
@@ -80,6 +99,8 @@ export interface HeadlessSpawnOptions {
   readonly timeout?: number;
   /** Model identifier to use (e.g., 'claude-sonnet-4-20250514'). If not set, uses provider default. */
   readonly model?: string;
+  /** SDK hooks to register for this session (e.g., PreToolUse for permission enforcement) */
+  readonly hooks?: Partial<Record<SDKHookEvent, SDKHookCallbackMatcher[]>>;
 }
 
 /** Headless agent provider (SDK/API-based) */

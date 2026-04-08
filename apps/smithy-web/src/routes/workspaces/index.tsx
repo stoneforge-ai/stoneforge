@@ -178,7 +178,7 @@ export function WorkspacesPage() {
               data-testid="workspaces-layout-btn"
             >
               <currentPreset.icon className="w-4 h-4" />
-              <span className="hidden sm:inline">{currentPreset.label}</span>
+              <span className="hidden @sm:inline">{currentPreset.label}</span>
               <ChevronDown className="w-3.5 h-3.5 opacity-50" />
             </button>
 
@@ -305,7 +305,7 @@ export function WorkspacesPage() {
               data-testid="workspaces-rotate-btn"
             >
               <RotateCw className="w-4 h-4" />
-              <span className="hidden sm:inline">Rotate</span>
+              <span className="hidden @sm:inline">Rotate</span>
             </button>
           )}
 
@@ -323,8 +323,8 @@ export function WorkspacesPage() {
             data-testid="workspaces-add-pane"
           >
             <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">Add Pane</span>
-            <kbd className="hidden sm:inline ml-1 text-xs bg-[var(--color-primary-700)]/50 text-white px-1 py-0.5 rounded">
+            <span className="hidden @sm:inline">Add Pane</span>
+            <kbd className="hidden @sm:inline ml-1 text-xs bg-[var(--color-primary-700)]/50 text-white px-1 py-0.5 rounded">
               {formatKeyBinding(getCurrentBinding('action.addPane'))}
             </kbd>
           </button>

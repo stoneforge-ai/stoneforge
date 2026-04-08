@@ -27,6 +27,9 @@ import { promisify } from 'node:util';
 
 const execAsync = promisify(exec);
 
+/** Well-known default branch names that should never be auto-created */
+const MAIN_BRANCH_NAMES = new Set(['main', 'master']);
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -200,6 +203,119 @@ export async function detectTargetBranch(
 }
 
 // ============================================================================
+// Review Branch Auto-Creation
+// ============================================================================
+
+/**
+ * Ensures the target branch exists when it is a non-main branch (e.g.
+ * `stoneforge/review`). If the branch does not exist locally or on the
+ * remote, it is created from the current main branch HEAD and pushed.
+ *
+ * This is a no-op when the target branch is `main` or `master`.
+ *
+ * @param workspaceRoot - The git repository root directory
+ * @param targetBranch - The branch to ensure exists
+ * @param localOnly - Whether the repo has no remote (skip push)
+ */
+export async function ensureTargetBranchExists(
+  workspaceRoot: string,
+  targetBranch: string,
+  localOnly = false
+): Promise<void> {
+  // Never auto-create main/master — they should already exist
+  if (MAIN_BRANCH_NAMES.has(targetBranch)) {
+    return;
+  }
+
+  // Check if the branch exists locally
+  const localExists = await branchExistsLocally(workspaceRoot, targetBranch);
+
+  // Check if the branch exists on the remote
+  let remoteExists = false;
+  if (!localOnly) {
+    remoteExists = await branchExistsOnRemote(workspaceRoot, targetBranch);
+  }
+
+  // If the branch already exists somewhere, nothing to do
+  if (localExists || remoteExists) {
+    return;
+  }
+
+  // Detect the main branch to create from
+  const mainBranch = await detectTargetBranch(workspaceRoot);
+  const hasOrigin = await hasRemote(workspaceRoot);
+
+  // Determine the base ref: prefer remote main when available
+  const baseRef = hasOrigin && !localOnly ? `origin/${mainBranch}` : mainBranch;
+
+  // When using a remote ref, ensure it exists locally by fetching.
+  // The remote tracking ref (e.g. origin/main) may not exist if no
+  // fetch has been performed yet in this session.
+  if (hasOrigin && !localOnly) {
+    try {
+      await execAsync(`git fetch origin ${mainBranch}`, {
+        cwd: workspaceRoot,
+        encoding: 'utf8',
+      });
+    } catch {
+      // If fetch fails (e.g. network issues), fall through and try
+      // to use whatever ref is available — git branch will fail with
+      // a clear error if the ref truly doesn't exist.
+    }
+  }
+
+  // Create the branch locally from the main branch HEAD
+  await execAsync(`git branch ${targetBranch} ${baseRef}`, {
+    cwd: workspaceRoot,
+    encoding: 'utf8',
+  });
+
+  // Push to remote if we have one
+  if (!localOnly && hasOrigin) {
+    await execAsync(`git push -u origin ${targetBranch}`, {
+      cwd: workspaceRoot,
+      encoding: 'utf8',
+    });
+  }
+}
+
+/**
+ * Check whether a branch exists locally.
+ */
+async function branchExistsLocally(
+  workspaceRoot: string,
+  branchName: string
+): Promise<boolean> {
+  try {
+    await execAsync(`git rev-parse --verify refs/heads/${branchName}`, {
+      cwd: workspaceRoot,
+      encoding: 'utf8',
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Check whether a branch exists on origin.
+ */
+async function branchExistsOnRemote(
+  workspaceRoot: string,
+  branchName: string
+): Promise<boolean> {
+  try {
+    await execAsync(`git rev-parse --verify refs/remotes/origin/${branchName}`, {
+      cwd: workspaceRoot,
+      encoding: 'utf8',
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// ============================================================================
 // Main
 // ============================================================================
 
@@ -223,22 +339,30 @@ export async function mergeBranch(options: MergeBranchOptions): Promise<MergeBra
 
   const targetBranch = options.targetBranch ?? await detectTargetBranch(workspaceRoot);
 
+  // 1. Fetch latest remote state (skip when local-only)
+  // Must happen before ensureTargetBranchExists so that origin/<mainBranch>
+  // is available as a valid ref when creating new branches from remote HEAD.
+  if (!localOnly) {
+    await execAsync('git fetch origin', { cwd: workspaceRoot, encoding: 'utf8' });
+  }
+
+  // Ensure the target branch exists (auto-creates review branches from main)
+  await ensureTargetBranchExists(workspaceRoot, targetBranch, localOnly);
+
   // Build commit message
   const message = commitMessage
     ?? (mergeStrategy === 'squash'
       ? `Squash merge ${sourceBranch} into ${targetBranch}`
       : `Merge branch '${sourceBranch}'`);
 
-  // 1. Fetch latest remote state (skip when local-only)
-  if (!localOnly) {
-    await execAsync('git fetch origin', { cwd: workspaceRoot, encoding: 'utf8' });
-  }
-
   // 1b. Check if source branch has any commits ahead of target.
   // If count is 0, the branch is already fully merged — nothing to do.
   try {
     const targetRef = localOnly ? targetBranch : `origin/${targetBranch}`;
-    const sourceRef = localOnly ? sourceBranch : `origin/${sourceBranch}`;
+    // Always use local source ref — the actual merge (squash or no-ff) at line ~416
+    // operates on the local sourceBranch, so the pre-check must match.
+    // Using origin/${sourceBranch} would miss unpushed local commits.
+    const sourceRef = sourceBranch;
     const { stdout: countStr } = await execAsync(
       `git rev-list --count ${targetRef}..${sourceRef}`,
       { cwd: workspaceRoot, encoding: 'utf8' }
@@ -304,7 +428,7 @@ export async function mergeBranch(options: MergeBranchOptions): Promise<MergeBra
     cwd: workspaceRoot, encoding: 'utf8',
   });
 
-  let mergeResult: MergeBranchResult;
+  let mergeResult: MergeBranchResult = { success: false, hasConflict: false, error: 'Merge did not complete' };
 
   try {
     let commitHash: string;
@@ -324,16 +448,42 @@ export async function mergeBranch(options: MergeBranchOptions): Promise<MergeBra
     }
 
     // 6. Push to remote (skip when local-only or push disabled)
+    let pushFailed = false;
     if (autoPush && !localOnly) {
       try {
         await execGitSafe(`push origin HEAD:${targetBranch}`, mergeDir, workspaceRoot);
+
+        // Verify push landed on remote
+        try {
+          await execAsync(`git fetch origin ${targetBranch}`, { cwd: workspaceRoot, encoding: 'utf8' });
+          // git merge-base --is-ancestor exits 0 if commitHash is ancestor of origin/targetBranch
+          await execAsync(`git merge-base --is-ancestor ${commitHash} origin/${targetBranch}`, {
+            cwd: workspaceRoot, encoding: 'utf8',
+          });
+        } catch {
+          pushFailed = true;
+          mergeResult = {
+            success: false,
+            commitHash,
+            hasConflict: false,
+            error: `Merge succeeded locally and push appeared to succeed, but post-push verification failed: commit ${commitHash} is not on origin/${targetBranch}. The merge commit may not have been delivered to the remote. Retry the push or re-merge.`,
+          };
+        }
       } catch (pushError) {
         const pushErrorMsg = pushError instanceof Error ? pushError.message : String(pushError);
-        console.warn(`[git/merge] Failed to push to remote: ${pushErrorMsg}`);
+        pushFailed = true;
+        mergeResult = {
+          success: false,
+          commitHash,
+          hasConflict: false,
+          error: `Merge succeeded locally but push to origin failed: ${pushErrorMsg}. The merge commit (${commitHash}) was not delivered to the remote. Retry the push or re-merge.`,
+        };
       }
     }
 
-    mergeResult = { success: true, commitHash, hasConflict: false };
+    if (!pushFailed) {
+      mergeResult = { success: true, commitHash, hasConflict: false };
+    }
   } catch (error) {
     const execError = error as { stdout?: string; stderr?: string; message?: string };
     const output = (execError.stdout ?? '') + (execError.stderr ?? '') + (execError.message ?? '');

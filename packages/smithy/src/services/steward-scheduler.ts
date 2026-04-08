@@ -34,7 +34,11 @@ import {
   isEventTrigger,
 } from '../types/index.js';
 import type { SessionManager } from '../runtime/session-manager.js';
-import { loadRolePrompt, renderPromptTemplate } from '../prompts/index.js';
+import { loadRolePrompt, renderPromptTemplate, buildWorkflowPresetSection } from '../prompts/index.js';
+import type { WorkflowPresetContext } from '../prompts/index.js';
+import { getValue } from '@stoneforge/quarry';
+import type { WorkflowPreset, AgentPermissionModel } from '@stoneforge/quarry';
+import { AUTO_ALLOWED_TOOLS, AUTO_ALLOWED_SF_COMMANDS } from '../permissions/types.js';
 import { detectTargetBranch } from '../git/merge.js';
 import type { AgentRegistry, AgentEntity } from './agent-registry.js';
 import { getAgentMetadata } from './agent-registry.js';
@@ -1401,6 +1405,32 @@ function monitorStewardSession(
  * Each case is wrapped in try/catch so one failing steward doesn't crash
  * the scheduler.
  */
+/**
+ * Reads workflow preset config and builds a preset context section for prompts.
+ * Returns the section string, or empty string if no preset is configured.
+ */
+function getWorkflowPresetSection(): string {
+  try {
+    const preset = getValue('workflow.preset') as WorkflowPreset | null;
+    if (!preset) return '';
+
+    const permissionModel = getValue('agents.permissionModel') as AgentPermissionModel;
+    const allowedBashCommands = getValue('agents.allowedBashCommands') as string[] | undefined;
+
+    const context: WorkflowPresetContext = {
+      preset,
+      permissionModel,
+      autoAllowedTools: AUTO_ALLOWED_TOOLS,
+      autoAllowedSfCommands: AUTO_ALLOWED_SF_COMMANDS,
+      allowedBashCommands: allowedBashCommands,
+    };
+
+    return buildWorkflowPresetSection(context);
+  } catch {
+    return '';
+  }
+}
+
 export function createStewardExecutor(deps: StewardExecutorDeps): StewardExecutor {
   return async (steward, _context) => {
     const metadata = getAgentMetadata(steward) as StewardMetadata;
@@ -1411,11 +1441,22 @@ export function createStewardExecutor(deps: StewardExecutorDeps): StewardExecuto
       case 'merge': {
         try {
           const result = await deps.mergeStewardService.processAllPending();
+
+          // Also check pending PR approvals (for requireApproval mode)
+          let approvalsMerged = 0;
+          try {
+            const approvalResults = await deps.mergeStewardService.checkPendingApprovals();
+            approvalsMerged = approvalResults.filter(r => r.merged).length;
+          } catch {
+            // Best-effort — approval checking failure should not break the merge steward
+          }
+
+          const approvalInfo = approvalsMerged > 0 ? `, ${approvalsMerged} PRs approved` : '';
           return {
             success: true,
-            output: `Processed ${result.totalProcessed} tasks (${result.mergedCount} merged, ${result.errorCount} failed)`,
+            output: `Processed ${result.totalProcessed} tasks (${result.mergedCount} merged, ${result.errorCount} failed${approvalInfo})`,
             durationMs: Date.now() - startTime,
-            itemsProcessed: result.totalProcessed,
+            itemsProcessed: result.totalProcessed + approvalsMerged,
           };
         } catch (error) {
           return {
@@ -1460,9 +1501,20 @@ export function createStewardExecutor(deps: StewardExecutorDeps): StewardExecuto
           });
           // Render template variables (e.g. {{baseBranch}}) in the prompt
           const baseBranch = await detectTargetBranch(deps.projectRoot);
-          const initialPrompt = roleResult?.prompt
+          let initialPrompt = roleResult?.prompt
             ? renderPromptTemplate(roleResult.prompt, { baseBranch })
             : '';
+
+          // Add per-task branch override note for scheduled stewards
+          // The global baseBranch may not match individual tasks' target branches
+          initialPrompt += `\n\n> **Per-task target branch:** The instructions above use \`${baseBranch}\` as the default target branch. However, individual tasks may target a different branch (e.g., staging). Before reviewing or merging each task, check its target branch by running \`sf show <task-id>\` — look for targetBranch in the orchestrator metadata. If a task has a different targetBranch, use that instead of \`${baseBranch}\` for all git diff, git log, and merge commands. The \`sf task merge\` command handles this automatically.`;
+
+          // Add workflow preset context
+          const schedulerPresetSection = getWorkflowPresetSection();
+          if (schedulerPresetSection && initialPrompt) {
+            initialPrompt = `${initialPrompt}\n\n${schedulerPresetSection}`;
+          }
+
           const { session, events } = await deps.sessionManager.startSession(stewardId, {
             workingDirectory: deps.projectRoot,
             initialPrompt,
@@ -1550,13 +1602,23 @@ export function createStewardExecutor(deps: StewardExecutorDeps): StewardExecuto
           });
           // Render template variables (e.g. {{baseBranch}}) in the base prompt
           const customBaseBranch = await detectTargetBranch(deps.projectRoot);
-          const basePrompt = roleResult?.prompt
+          let basePrompt = roleResult?.prompt
             ? renderPromptTemplate(roleResult.prompt, { baseBranch: customBaseBranch })
             : '';
 
+          // Add per-task branch override note for scheduled custom stewards
+          // The global baseBranch may not match individual tasks' target branches
+          basePrompt += `\n\n> **Per-task target branch:** The instructions above use \`${customBaseBranch}\` as the default target branch. However, individual tasks may target a different branch (e.g., staging). Before reviewing or merging each task, check its target branch by running \`sf show <task-id>\` — look for targetBranch in the orchestrator metadata. If a task has a different targetBranch, use that instead of \`${customBaseBranch}\` for all git diff, git log, and merge commands. The \`sf task merge\` command handles this automatically.`;
+
+          // Add workflow preset context to base prompt
+          const customPresetSection = getWorkflowPresetSection();
+          const baseWithPreset = customPresetSection && basePrompt
+            ? `${basePrompt}\n\n${customPresetSection}`
+            : basePrompt;
+
           // Combine base steward prompt with the custom playbook
-          const initialPrompt = basePrompt
-            ? `${basePrompt}\n\n---\n\n## Custom Steward Playbook\n\n${playbook}`
+          const initialPrompt = baseWithPreset
+            ? `${baseWithPreset}\n\n---\n\n## Custom Steward Playbook\n\n${playbook}`
             : `## Custom Steward Playbook\n\n${playbook}`;
 
           const { session, events } = await deps.sessionManager.startSession(stewardId, {

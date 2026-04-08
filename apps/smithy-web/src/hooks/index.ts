@@ -39,6 +39,18 @@ export {
 
 export type { Breakpoint, DeviceType } from './useBreakpoint';
 
+// Container-aware responsive hooks (use container width, not viewport)
+export {
+  useContainerWidth,
+  useContainerBreakpoint,
+  useContainerIsMobile,
+  useContainerIsTablet,
+  useContainerIsDesktop,
+  useContainerWidthObserver,
+  ContainerWidthProvider,
+  ContainerWidthContext,
+} from './useContainerBreakpoint';
+
 // Deep-link navigation hook
 export { useDeepLink } from './useDeepLink';
 export type { UseDeepLinkOptions, UseDeepLinkResult } from './useDeepLink';
@@ -76,3 +88,11 @@ export type {
 // Image drag-and-drop hook
 export { useImageDrop } from './useImageDrop';
 export type { UseImageDropConfig, UseImageDropReturn } from './useImageDrop';
+
+// Onboarding tour hook
+export { useOnboardingTour } from './useOnboardingTour';
+export type { OnboardingTourState, TourSection } from './useOnboardingTour';
+
+// Provider installation check hook
+export { useProviderCheck } from './useProviderCheck';
+export type { MissingProvider, UseProviderCheckReturn } from './useProviderCheck';

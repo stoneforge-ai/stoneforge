@@ -27,11 +27,16 @@ import type {
   InboxItem,
   Document,
   Plan,
+  Workflow,
 } from '@stoneforge/core';
-import { InboxStatus, createTimestamp, TaskStatus, asEntityId, asElementId, PlanStatus, canAutoComplete } from '@stoneforge/core';
+import { InboxStatus, createTimestamp, TaskStatus, asEntityId, asElementId, PlanStatus, canAutoComplete, WorkflowStatus, computeWorkflowStatus, updateWorkflowStatus } from '@stoneforge/core';
 import type { QuarryAPI, InboxService } from '@stoneforge/quarry';
-import { loadTriagePrompt, loadRolePrompt, renderPromptTemplate } from '../prompts/index.js';
-import { detectTargetBranch } from '../git/merge.js';
+import { loadTriagePrompt, loadRolePrompt, renderPromptTemplate, buildWorkflowPresetSection } from '../prompts/index.js';
+import type { WorkflowPresetContext } from '../prompts/index.js';
+import { getValue } from '@stoneforge/quarry';
+import type { WorkflowPreset, AgentPermissionModel } from '@stoneforge/quarry';
+import { AUTO_ALLOWED_TOOLS, AUTO_ALLOWED_SF_COMMANDS } from '../permissions/types.js';
+import { detectTargetBranch, ensureTargetBranchExists } from '../git/merge.js';
 import { createLogger } from '../utils/logger.js';
 import { isRateLimitMessage, parseRateLimitResetTime, getFallbackResetTime } from '../utils/rate-limit-parser.js';
 
@@ -181,6 +186,14 @@ export interface DispatchDaemonConfig {
   readonly workflowTaskPollEnabled?: boolean;
 
   /**
+   * Whether workflow auto-transition polling is enabled.
+   * Detects workflows that should transition status based on their tasks:
+   * pending→running, running→completed, or pending|running→failed.
+   * Default: true
+   */
+  readonly workflowAutoTransitionEnabled?: boolean;
+
+  /**
    * Whether orphan recovery polling is enabled.
    * Detects workers with assigned tasks but no active session after a restart
    * and re-spawns sessions to continue the work.
@@ -274,6 +287,13 @@ export interface DispatchDaemonConfig {
    * Default: 120000 (2 minutes)
    */
   readonly directorInboxIdleThresholdMs?: number;
+
+  /**
+   * Optional override for ensureTargetBranchExists.
+   * Defaults to the real implementation from ../git/merge.js.
+   * Useful for testing without triggering real git remote operations.
+   */
+  readonly ensureTargetBranchExists?: (projectRoot: string, branchName: string) => Promise<void>;
 }
 
 /**
@@ -281,7 +301,7 @@ export interface DispatchDaemonConfig {
  */
 export interface PollResult {
   /** The poll type */
-  readonly pollType: 'worker-availability' | 'inbox' | 'steward-trigger' | 'workflow-task' | 'orphan-recovery' | 'closed-unmerged-reconciliation' | 'stuck-merge-recovery' | 'plan-auto-complete';
+  readonly pollType: 'worker-availability' | 'inbox' | 'steward-trigger' | 'workflow-task' | 'orphan-recovery' | 'closed-unmerged-reconciliation' | 'stuck-merge-recovery' | 'plan-auto-complete' | 'workflow-auto-transition';
   /** Timestamp when the poll started */
   readonly startedAt: string;
   /** Duration of the poll in milliseconds */
@@ -303,6 +323,7 @@ interface NormalizedConfig {
   inboxPollEnabled: boolean;
   stewardTriggerPollEnabled: boolean;
   workflowTaskPollEnabled: boolean;
+  workflowAutoTransitionEnabled: boolean;
   orphanRecoveryEnabled: boolean;
   planAutoCompleteEnabled: boolean;
   closedUnmergedReconciliationEnabled: boolean;
@@ -316,6 +337,7 @@ interface NormalizedConfig {
   projectRoot: string;
   directorInboxForwardingEnabled: boolean;
   directorInboxIdleThresholdMs: number;
+  ensureTargetBranchExists: (projectRoot: string, branchName: string) => Promise<void>;
 }
 
 // ============================================================================
@@ -407,6 +429,14 @@ export interface DispatchDaemon {
    * and marks them as completed.
    */
   pollPlanAutoComplete(): Promise<PollResult>;
+
+  /**
+   * Manually triggers workflow auto-transition polling.
+   * Detects workflows that should change status based on their tasks:
+   * pending→running (task started), running→completed (all closed),
+   * or pending|running→failed (task tombstoned).
+   */
+  pollWorkflowAutoTransition(): Promise<PollResult>;
 
   // ----------------------------------------
   // Rate Limiting
@@ -1798,6 +1828,85 @@ export class DispatchDaemonImpl implements DispatchDaemon {
     return result;
   }
 
+  async pollWorkflowAutoTransition(): Promise<PollResult> {
+    const startedAt = new Date().toISOString();
+    const startTime = Date.now();
+    let processed = 0;
+    let errors = 0;
+    const errorMessages: string[] = [];
+
+    this.emitter.emit('poll:start', 'workflow-auto-transition');
+
+    try {
+      // 1. List all non-terminal workflows (pending and running)
+      const allWorkflows = await this.api.list<Workflow>({ type: 'workflow' });
+      const activeWorkflows = allWorkflows.filter(
+        (w) => w.status === WorkflowStatus.PENDING || w.status === WorkflowStatus.RUNNING
+      );
+
+      // 2. Check each workflow for auto-transition eligibility
+      for (const workflow of activeWorkflows) {
+        try {
+          // Get tasks in this workflow (include deleted to detect tombstoned tasks for auto-fail)
+          const tasks = await this.api.getTasksInWorkflow(workflow.id, { includeDeleted: true });
+
+          // 3. Compute the suggested status transition
+          const suggestedStatus = computeWorkflowStatus(workflow, tasks);
+
+          if (suggestedStatus !== undefined) {
+            // Apply the transition
+            const updatedWorkflow = updateWorkflowStatus(workflow, {
+              status: suggestedStatus,
+              ...(suggestedStatus === WorkflowStatus.FAILED && {
+                failureReason: 'Auto-failed: a task was tombstoned',
+              }),
+            });
+
+            // Persist via api.update()
+            await this.api.update<Workflow>(workflow.id, {
+              status: updatedWorkflow.status,
+              updatedAt: updatedWorkflow.updatedAt,
+              ...(updatedWorkflow.startedAt && { startedAt: updatedWorkflow.startedAt }),
+              ...(updatedWorkflow.finishedAt && { finishedAt: updatedWorkflow.finishedAt }),
+              ...(updatedWorkflow.failureReason && { failureReason: updatedWorkflow.failureReason }),
+            });
+
+            processed++;
+            logger.info(
+              `Auto-transitioned workflow ${workflow.id} ("${workflow.title}") from ${workflow.status} to ${suggestedStatus}`
+            );
+          }
+        } catch (error) {
+          errors++;
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          errorMessages.push(`Workflow ${workflow.id}: ${errorMessage}`);
+          logger.error(`Error checking workflow ${workflow.id} for auto-transition:`, error);
+        }
+      }
+
+      if (processed > 0) {
+        logger.info(`Auto-transitioned ${processed} workflow(s)`);
+      }
+    } catch (error) {
+      errors++;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      errorMessages.push(errorMessage);
+      logger.error('Error in pollWorkflowAutoTransition:', error);
+    }
+
+    const result: PollResult = {
+      pollType: 'workflow-auto-transition',
+      startedAt,
+      durationMs: Date.now() - startTime,
+      processed,
+      errors,
+      errorMessages: errorMessages.length > 0 ? errorMessages : undefined,
+    };
+
+    this.emitter.emit('poll:complete', result);
+    return result;
+  }
+
   // ----------------------------------------
   // Configuration
   // ----------------------------------------
@@ -1898,6 +2007,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       inboxPollEnabled: config?.inboxPollEnabled ?? true,
       stewardTriggerPollEnabled: config?.stewardTriggerPollEnabled ?? true,
       workflowTaskPollEnabled: config?.workflowTaskPollEnabled ?? true,
+      workflowAutoTransitionEnabled: config?.workflowAutoTransitionEnabled ?? true,
       orphanRecoveryEnabled: config?.orphanRecoveryEnabled ?? true,
       planAutoCompleteEnabled: config?.planAutoCompleteEnabled ?? true,
       closedUnmergedReconciliationEnabled: config?.closedUnmergedReconciliationEnabled ?? true,
@@ -1911,6 +2021,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       projectRoot: config?.projectRoot ?? process.cwd(),
       directorInboxForwardingEnabled: config?.directorInboxForwardingEnabled ?? true,
       directorInboxIdleThresholdMs: config?.directorInboxIdleThresholdMs ?? 120_000,
+      ensureTargetBranchExists: config?.ensureTargetBranchExists ?? ensureTargetBranchExists,
     };
   }
 
@@ -1950,6 +2061,9 @@ export class DispatchDaemonImpl implements DispatchDaemon {
         }
         if (this.config.planAutoCompleteEnabled) {
           await this.pollPlanAutoComplete();
+        }
+        if (this.config.workflowAutoTransitionEnabled) {
+          await this.pollWorkflowAutoTransition();
         }
         return;
       }
@@ -2008,6 +2122,11 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       // Auto-complete plans where all tasks are closed
       if (this.config.planAutoCompleteEnabled) {
         await this.pollPlanAutoComplete();
+      }
+
+      // Auto-transition workflows based on task statuses
+      if (this.config.workflowAutoTransitionEnabled) {
+        await this.pollWorkflowAutoTransition();
       }
     } finally {
       this.polling = false;
@@ -2587,7 +2706,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
   private async assignTaskToWorker(worker: AgentEntity): Promise<boolean> {
     // Get ready tasks (already filtered for blocked, draft plans, future-scheduled, etc.)
     // and sorted by effective priority via api.ready()
-    const readyTasks = await this.api.ready();
+    const readyTasks = await this.api.ready({ includeEphemeral: true });
     const unassignedTasks = readyTasks.filter((t) => !t.assignee);
 
     if (unassignedTasks.length === 0) {
@@ -2746,7 +2865,35 @@ export class DispatchDaemonImpl implements DispatchDaemon {
         updatedTask.metadata as Record<string, unknown> | undefined,
         sessionHistoryEntry
       );
-      await this.api.update<Task>(task.id, { metadata: metadataWithHistory });
+      // Set owningDirector and targetBranch if not already set (merge into same metadata update)
+      const existingOrcMeta = getOrchestratorTaskMeta(
+        updatedTask.metadata as Record<string, unknown> | undefined
+      );
+      let finalMetadata = metadataWithHistory;
+      const metaUpdate: { owningDirector?: EntityId; targetBranch?: string } = {};
+
+      // Resolve owning director if not already set
+      let resolvedDirectorId = existingOrcMeta?.owningDirector;
+      if (!resolvedDirectorId) {
+        resolvedDirectorId = await this.resolveOwningDirector(task) ?? undefined;
+        if (resolvedDirectorId) {
+          metaUpdate.owningDirector = resolvedDirectorId;
+        }
+      }
+
+      // Propagate director's targetBranch if not already set on task
+      if (resolvedDirectorId && !existingOrcMeta?.targetBranch) {
+        const directorEntity = await this.agentRegistry.getAgent(resolvedDirectorId);
+        const directorMeta = directorEntity ? getAgentMetadata(directorEntity) : undefined;
+        if (directorMeta?.agentRole === 'director' && directorMeta.targetBranch) {
+          metaUpdate.targetBranch = directorMeta.targetBranch;
+        }
+      }
+
+      if (Object.keys(metaUpdate).length > 0) {
+        finalMetadata = updateOrchestratorTaskMeta(finalMetadata, metaUpdate);
+      }
+      await this.api.update<Task>(task.id, { metadata: finalMetadata });
     }
 
     // Notify pool service that agent was spawned
@@ -2760,15 +2907,76 @@ export class DispatchDaemonImpl implements DispatchDaemon {
   }
 
   /**
+   * Resolves the owning director for a task.
+   *
+   * Resolution order:
+   * 1. If the task belongs to a plan and plan.createdBy is a director, use that
+   * 2. If task.createdBy is a director, use that
+   * 3. Fall back to the first registered director
+   *
+   * @returns The director's entity ID, or undefined if no director found
+   */
+  private async resolveOwningDirector(task: Task): Promise<EntityId | undefined> {
+    try {
+      // Check if task belongs to a plan via parent-child dependency
+      const parentDeps = await this.api.getDependencies(task.id, ['parent-child']);
+      if (parentDeps.length > 0) {
+        const planId = parentDeps[0].blockerId;
+        const plan = await this.api.get<Plan>(planId);
+        if (plan?.createdBy) {
+          // Check if plan.createdBy is a director entity
+          const planCreator = await this.agentRegistry.getAgent(plan.createdBy);
+          if (planCreator) {
+            const creatorMeta = getAgentMetadata(planCreator);
+            if (creatorMeta?.agentRole === 'director') {
+              return asEntityId(planCreator.id);
+            }
+          }
+        }
+      }
+
+      // Check if task.createdBy is a director entity
+      if (task.createdBy) {
+        const taskCreator = await this.agentRegistry.getAgent(task.createdBy);
+        if (taskCreator) {
+          const creatorMeta = getAgentMetadata(taskCreator);
+          if (creatorMeta?.agentRole === 'director') {
+            return asEntityId(taskCreator.id);
+          }
+        }
+      }
+
+      // Fall back to first registered director
+      const director = await this.agentRegistry.getDirector();
+      return director ? asEntityId(director.id) : undefined;
+    } catch (error) {
+      logger.warn(`Failed to resolve owning director for task ${task.id}:`, error);
+      // Fall back to first registered director on error
+      const director = await this.agentRegistry.getDirector();
+      return director ? asEntityId(director.id) : undefined;
+    }
+  }
+
+  /**
    * Creates a worktree for a task assignment.
    * Includes dependency installation so workers have node_modules available.
    */
   private async createWorktreeForTask(worker: AgentEntity, task: Task): Promise<CreateWorktreeResult> {
+    const orcMeta = getOrchestratorTaskMeta(task.metadata as Record<string, unknown> | undefined);
+    const targetBranch = orcMeta?.targetBranch;
+
+    // Ensure the target branch exists before creating worktree from it.
+    // Without this, worktree creation fails if the branch doesn't exist locally or on remote.
+    if (targetBranch) {
+      await this.config.ensureTargetBranchExists(this.config.projectRoot, targetBranch);
+    }
+
     return this.worktreeManager.createWorktree({
       agentName: worker.name,
       taskId: task.id,
       taskTitle: task.title,
       installDependencies: true,
+      baseBranch: targetBranch,
     });
   }
 
@@ -2795,8 +3003,18 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       );
     }
 
-    // Get the director ID for context
-    const director = await this.agentRegistry.getDirector();
+    // Add workflow preset context so the agent understands its merge and permission behavior
+    const presetSection = this.buildWorkflowPresetContextSection();
+    if (presetSection) {
+      parts.push(presetSection, '', '---', '');
+    }
+
+    // Get the director ID for context — prefer the task's owning director
+    const taskMeta2 = getOrchestratorTaskMeta(task.metadata as Record<string, unknown> | undefined);
+    const owningDirectorId = taskMeta2?.owningDirector;
+    const director = owningDirectorId
+      ? await this.agentRegistry.getAvailableDirector(owningDirectorId)
+      : await this.agentRegistry.getDirector();
     const directorId = director?.id ?? 'unknown';
 
     parts.push(
@@ -2844,6 +3062,33 @@ export class DispatchDaemonImpl implements DispatchDaemon {
   }
 
   /**
+   * Builds a workflow preset context section by reading the current config.
+   * Returns the section string, or empty string if no preset is configured.
+   */
+  private buildWorkflowPresetContextSection(): string {
+    try {
+      const preset = getValue('workflow.preset') as WorkflowPreset | null;
+      if (!preset) return '';
+
+      const permissionModel = getValue('agents.permissionModel') as AgentPermissionModel;
+      const allowedBashCommands = getValue('agents.allowedBashCommands') as string[] | undefined;
+
+      const context: WorkflowPresetContext = {
+        preset,
+        permissionModel,
+        autoAllowedTools: AUTO_ALLOWED_TOOLS,
+        autoAllowedSfCommands: AUTO_ALLOWED_SF_COMMANDS,
+        allowedBashCommands: allowedBashCommands,
+      };
+
+      return buildWorkflowPresetSection(context);
+    } catch {
+      // Config may not be loaded yet — skip silently
+      return '';
+    }
+  }
+
+  /**
    * Builds the initial prompt for a merge steward session.
    * Includes the steward role prompt (steward-merge.md) followed by task context.
    *
@@ -2862,8 +3107,13 @@ export class DispatchDaemonImpl implements DispatchDaemon {
 
     // Load and include the steward role prompt, rendering template variables
     const roleResult = loadRolePrompt('steward', stewardFocus, { projectRoot: this.config.projectRoot });
+    // Get orchestrator metadata early — needed for baseBranch and later for PR/branch info
+    const taskMeta = task.metadata as Record<string, unknown> | undefined;
+    const orchestratorMeta = taskMeta?.orchestrator as Record<string, unknown> | undefined;
+    const taskOrcMeta = getOrchestratorTaskMeta(task.metadata as Record<string, unknown> | undefined);
+
     if (roleResult) {
-      const baseBranch = await this.getTargetBranch();
+      const baseBranch = taskOrcMeta?.targetBranch ?? await this.getTargetBranch();
       const renderedPrompt = renderPromptTemplate(roleResult.prompt, { baseBranch });
       parts.push(
         'Please read and internalize the following operating instructions. These define your role and how you should behave:',
@@ -2875,14 +3125,19 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       );
     }
 
-    // Get orchestrator metadata for PR/branch info
-    const taskMeta = task.metadata as Record<string, unknown> | undefined;
-    const orchestratorMeta = taskMeta?.orchestrator as Record<string, unknown> | undefined;
+    // Add workflow preset context so the steward understands merge and permission behavior
+    const stewardPresetSection = this.buildWorkflowPresetContextSection();
+    if (stewardPresetSection) {
+      parts.push(stewardPresetSection, '', '---', '');
+    }
+
+    // Get PR/branch info from orchestrator metadata
     const prUrl = orchestratorMeta?.mergeRequestUrl as string | undefined;
     const branch = orchestratorMeta?.branch as string | undefined;
-
-    // Get the director ID for context
-    const director = await this.agentRegistry.getDirector();
+    const owningDirectorId = taskOrcMeta?.owningDirector;
+    const director = owningDirectorId
+      ? await this.agentRegistry.getAvailableDirector(owningDirectorId)
+      : await this.agentRegistry.getDirector();
     const directorId = director?.id ?? 'unknown';
 
     parts.push(
@@ -3368,7 +3623,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
     // Load the recovery steward role prompt, rendering template variables
     const roleResult = loadRolePrompt('steward', 'recovery' as StewardFocus, { projectRoot: this.config.projectRoot });
     if (roleResult) {
-      const baseBranch = await this.getTargetBranch();
+      const baseBranch = taskMeta?.targetBranch ?? await this.getTargetBranch();
       const renderedPrompt = renderPromptTemplate(roleResult.prompt, { baseBranch });
       parts.push(
         'Please read and internalize the following operating instructions. These define your role and how you should behave:',
@@ -3380,8 +3635,17 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       );
     }
 
-    // Get the director ID for context
-    const director = await this.agentRegistry.getDirector();
+    // Add workflow preset context so the recovery steward understands merge behavior
+    const recoveryPresetSection = this.buildWorkflowPresetContextSection();
+    if (recoveryPresetSection) {
+      parts.push(recoveryPresetSection, '', '---', '');
+    }
+
+    // Get the director ID for context — prefer the task's owning director
+    const owningDirectorId = taskMeta?.owningDirector;
+    const director = owningDirectorId
+      ? await this.agentRegistry.getAvailableDirector(owningDirectorId)
+      : await this.agentRegistry.getDirector();
     const directorId = director?.id ?? 'unknown';
 
     const branch = taskMeta?.branch ?? taskMeta?.handoffBranch;
@@ -3494,7 +3758,25 @@ export class DispatchDaemonImpl implements DispatchDaemon {
             return false;
           }
         }
-        return this.processPersistentAgentMessage(agent, message, item, activeSession);
+
+        // Try the target director first
+        const result = await this.processPersistentAgentMessage(agent, message, item, activeSession);
+        if (result) {
+          return true;
+        }
+
+        // Target director is offline — attempt fallback to another running director
+        const fallbackDirector = await this.agentRegistry.getAvailableDirector();
+        if (fallbackDirector && fallbackDirector.id !== agent.id) {
+          const fallbackSession = this.sessionManager.getActiveSession(asEntityId(fallbackDirector.id));
+          if (fallbackSession) {
+            // Forward to fallback director's session, marking original inbox item as read
+            return this.processPersistentAgentMessage(fallbackDirector, message, item, fallbackSession);
+          }
+        }
+
+        // No fallback available — leave unread until a director comes online
+        return false;
       }
       // Default: leave inbox items unread for manual sf inbox checks
       return false;
@@ -3803,9 +4085,9 @@ export class DispatchDaemonImpl implements DispatchDaemon {
     const messagesBlock = formattedMessages.join('\n');
     const prompt = triageResult.prompt.replace('{{MESSAGES}}', messagesBlock);
 
-    // Get the director ID for context
-    const director = await this.agentRegistry.getDirector();
-    const directorId = director?.id ?? 'unknown';
+    // Get the director ID for context — no task context, prefer any running director
+    const director = await this.agentRegistry.getAvailableDirector();
+    const directorId = director?.id ?? (await this.agentRegistry.getDirector())?.id ?? 'unknown';
 
     return `${prompt}\n\n---\n\n**Worker ID:** ${agent.id}\n**Director ID:** ${directorId}\n**Channel:** ${channelId}\n**Agent:** ${agent.name}\n**Message count:** ${triageItems.length}`;
   }
@@ -3876,6 +4158,17 @@ export class DispatchDaemonImpl implements DispatchDaemon {
     const fullWorktreePath = path.isAbsolute(worktreePath)
       ? worktreePath
       : path.join(workspaceRoot, worktreePath);
+
+    const remoteAvailable = await this.worktreeManager.ensureWorktreeRemote(fullWorktreePath);
+    if (!remoteAvailable) {
+      return {
+        success: false,
+        error: 'No origin remote is configured for this workspace or worktree',
+        message: 'Git origin remote is not configured',
+        worktreePath,
+        branch,
+      };
+    }
 
     // Fetch from origin
     try {

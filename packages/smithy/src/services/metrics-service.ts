@@ -30,6 +30,8 @@ export interface RecordMetricInput {
   taskId?: string;
   inputTokens: number;
   outputTokens: number;
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
   durationMs: number;
   outcome: MetricOutcome;
 }
@@ -52,6 +54,10 @@ export interface AggregatedMetrics {
   totalInputTokens: number;
   /** Total output tokens */
   totalOutputTokens: number;
+  /** Total cache read tokens */
+  totalCacheReadTokens: number;
+  /** Total cache creation tokens */
+  totalCacheCreationTokens: number;
   /** Total tokens (input + output) */
   totalTokens: number;
   /** Number of sessions */
@@ -99,6 +105,8 @@ interface DbMetricRow {
   task_id: string | null;
   input_tokens: number;
   output_tokens: number;
+  cache_read_tokens: number;
+  cache_creation_tokens: number;
   duration_ms: number;
   outcome: string;
 }
@@ -111,6 +119,8 @@ interface DbAggregateRow {
   group_key: string;
   total_input_tokens: number;
   total_output_tokens: number;
+  total_cache_read_tokens: number;
+  total_cache_creation_tokens: number;
   session_count: number;
   avg_duration_ms: number;
   failed_count: number;
@@ -221,8 +231,8 @@ export function createMetricsService(storage: StorageBackend): MetricsService {
 
       try {
         storage.run(
-          `INSERT INTO provider_metrics (id, timestamp, provider, model, session_id, task_id, input_tokens, output_tokens, duration_ms, outcome)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO provider_metrics (id, timestamp, provider, model, session_id, task_id, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, duration_ms, outcome)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             id,
             timestamp,
@@ -232,6 +242,8 @@ export function createMetricsService(storage: StorageBackend): MetricsService {
             input.taskId ?? null,
             input.inputTokens,
             input.outputTokens,
+            input.cacheReadTokens ?? 0,
+            input.cacheCreationTokens ?? 0,
             input.durationMs,
             input.outcome,
           ]
@@ -247,7 +259,7 @@ export function createMetricsService(storage: StorageBackend): MetricsService {
       try {
         // Check if a row already exists for this session
         const existing = storage.query<DbMetricRow>(
-          `SELECT id, input_tokens, output_tokens FROM provider_metrics WHERE session_id = ? LIMIT 1`,
+          `SELECT id, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens FROM provider_metrics WHERE session_id = ? LIMIT 1`,
           [input.sessionId]
         );
 
@@ -256,15 +268,20 @@ export function createMetricsService(storage: StorageBackend): MetricsService {
           const row = existing[0];
           const newInputTokens = Math.max(Number(row.input_tokens), input.inputTokens);
           const newOutputTokens = Math.max(Number(row.output_tokens), input.outputTokens);
+          const newCacheReadTokens = Math.max(Number(row.cache_read_tokens), input.cacheReadTokens ?? 0);
+          const newCacheCreationTokens = Math.max(Number(row.cache_creation_tokens), input.cacheCreationTokens ?? 0);
 
           storage.run(
             `UPDATE provider_metrics
-             SET input_tokens = ?, output_tokens = ?, duration_ms = ?, outcome = ?,
+             SET input_tokens = ?, output_tokens = ?, cache_read_tokens = ?, cache_creation_tokens = ?,
+                 duration_ms = ?, outcome = ?,
                  model = COALESCE(?, model)
              WHERE id = ?`,
             [
               newInputTokens,
               newOutputTokens,
+              newCacheReadTokens,
+              newCacheCreationTokens,
               input.durationMs,
               input.outcome,
               input.model ?? null,
@@ -279,8 +296,8 @@ export function createMetricsService(storage: StorageBackend): MetricsService {
           const timestamp = new Date().toISOString();
 
           storage.run(
-            `INSERT INTO provider_metrics (id, timestamp, provider, model, session_id, task_id, input_tokens, output_tokens, duration_ms, outcome)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO provider_metrics (id, timestamp, provider, model, session_id, task_id, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, duration_ms, outcome)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               id,
               timestamp,
@@ -290,6 +307,8 @@ export function createMetricsService(storage: StorageBackend): MetricsService {
               input.taskId ?? null,
               input.inputTokens,
               input.outputTokens,
+              input.cacheReadTokens ?? 0,
+              input.cacheCreationTokens ?? 0,
               input.durationMs,
               input.outcome,
             ]
@@ -310,6 +329,8 @@ export function createMetricsService(storage: StorageBackend): MetricsService {
            provider AS group_key,
            COALESCE(SUM(input_tokens), 0) AS total_input_tokens,
            COALESCE(SUM(output_tokens), 0) AS total_output_tokens,
+           COALESCE(SUM(cache_read_tokens), 0) AS total_cache_read_tokens,
+           COALESCE(SUM(cache_creation_tokens), 0) AS total_cache_creation_tokens,
            COUNT(*) AS session_count,
            COALESCE(AVG(duration_ms), 0) AS avg_duration_ms,
            COALESCE(SUM(CASE WHEN outcome = 'failed' THEN 1 ELSE 0 END), 0) AS failed_count,
@@ -325,6 +346,8 @@ export function createMetricsService(storage: StorageBackend): MetricsService {
         group: row.group_key,
         totalInputTokens: Number(row.total_input_tokens),
         totalOutputTokens: Number(row.total_output_tokens),
+        totalCacheReadTokens: Number(row.total_cache_read_tokens),
+        totalCacheCreationTokens: Number(row.total_cache_creation_tokens),
         totalTokens: Number(row.total_input_tokens) + Number(row.total_output_tokens),
         sessionCount: Number(row.session_count),
         avgDurationMs: Math.round(Number(row.avg_duration_ms)),
@@ -344,6 +367,8 @@ export function createMetricsService(storage: StorageBackend): MetricsService {
            COALESCE(model, 'unknown') AS group_key,
            COALESCE(SUM(input_tokens), 0) AS total_input_tokens,
            COALESCE(SUM(output_tokens), 0) AS total_output_tokens,
+           COALESCE(SUM(cache_read_tokens), 0) AS total_cache_read_tokens,
+           COALESCE(SUM(cache_creation_tokens), 0) AS total_cache_creation_tokens,
            COUNT(*) AS session_count,
            COALESCE(AVG(duration_ms), 0) AS avg_duration_ms,
            COALESCE(SUM(CASE WHEN outcome = 'failed' THEN 1 ELSE 0 END), 0) AS failed_count,
@@ -359,6 +384,8 @@ export function createMetricsService(storage: StorageBackend): MetricsService {
         group: row.group_key,
         totalInputTokens: Number(row.total_input_tokens),
         totalOutputTokens: Number(row.total_output_tokens),
+        totalCacheReadTokens: Number(row.total_cache_read_tokens),
+        totalCacheCreationTokens: Number(row.total_cache_creation_tokens),
         totalTokens: Number(row.total_input_tokens) + Number(row.total_output_tokens),
         sessionCount: Number(row.session_count),
         avgDurationMs: Math.round(Number(row.avg_duration_ms)),
@@ -378,6 +405,8 @@ export function createMetricsService(storage: StorageBackend): MetricsService {
            sm.agent_id AS group_key,
            COALESCE(SUM(pm.input_tokens), 0) AS total_input_tokens,
            COALESCE(SUM(pm.output_tokens), 0) AS total_output_tokens,
+           COALESCE(SUM(pm.cache_read_tokens), 0) AS total_cache_read_tokens,
+           COALESCE(SUM(pm.cache_creation_tokens), 0) AS total_cache_creation_tokens,
            COUNT(*) AS session_count,
            COALESCE(AVG(pm.duration_ms), 0) AS avg_duration_ms,
            COALESCE(SUM(pm.duration_ms), 0) AS total_duration_ms,
@@ -398,6 +427,8 @@ export function createMetricsService(storage: StorageBackend): MetricsService {
         group: row.group_key,
         totalInputTokens: Number(row.total_input_tokens),
         totalOutputTokens: Number(row.total_output_tokens),
+        totalCacheReadTokens: Number(row.total_cache_read_tokens),
+        totalCacheCreationTokens: Number(row.total_cache_creation_tokens),
         totalTokens: Number(row.total_input_tokens) + Number(row.total_output_tokens),
         sessionCount: Number(row.session_count),
         avgDurationMs: Math.round(Number(row.avg_duration_ms)),
@@ -417,6 +448,8 @@ export function createMetricsService(storage: StorageBackend): MetricsService {
              session_id AS group_key,
              COALESCE(SUM(input_tokens), 0) AS total_input_tokens,
              COALESCE(SUM(output_tokens), 0) AS total_output_tokens,
+             COALESCE(SUM(cache_read_tokens), 0) AS total_cache_read_tokens,
+             COALESCE(SUM(cache_creation_tokens), 0) AS total_cache_creation_tokens,
              COUNT(*) AS session_count,
              COALESCE(AVG(duration_ms), 0) AS avg_duration_ms,
              COALESCE(SUM(CASE WHEN outcome = 'failed' THEN 1 ELSE 0 END), 0) AS failed_count,
@@ -434,6 +467,8 @@ export function createMetricsService(storage: StorageBackend): MetricsService {
           group: row.group_key,
           totalInputTokens: Number(row.total_input_tokens),
           totalOutputTokens: Number(row.total_output_tokens),
+          totalCacheReadTokens: Number(row.total_cache_read_tokens),
+          totalCacheCreationTokens: Number(row.total_cache_creation_tokens),
           totalTokens: Number(row.total_input_tokens) + Number(row.total_output_tokens),
           sessionCount: Number(row.session_count),
           avgDurationMs: Math.round(Number(row.avg_duration_ms)),

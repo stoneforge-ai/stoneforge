@@ -194,6 +194,11 @@ export interface BaseAgentMetadata {
  */
 export interface DirectorMetadata extends BaseAgentMetadata {
   readonly agentRole: 'director';
+  /**
+   * Git branch that tasks created by this director should target for merging.
+   * If not set, falls back to workspace-level baseBranch config or auto-detection.
+   */
+  readonly targetBranch?: string;
 }
 
 /**
@@ -284,6 +289,8 @@ export interface RegisterDirectorInput {
   readonly model?: string;
   /** Custom executable path for the agent's provider CLI. If not set, uses provider default. */
   readonly executablePath?: string;
+  /** Target branch for task merges. Optional — when unset, uses workspace default. */
+  readonly targetBranch?: string;
 }
 
 /**

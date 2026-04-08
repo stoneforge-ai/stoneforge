@@ -108,6 +108,18 @@ export function mergeConfiguration(
       autoLinkDocumentProvider: partial.externalSync?.autoLinkDocumentProvider !== undefined ? partial.externalSync.autoLinkDocumentProvider : base.externalSync.autoLinkDocumentProvider,
     },
     demoMode: partial.demoMode !== undefined ? partial.demoMode : base.demoMode,
+    merge: {
+      autoMerge: partial.merge?.autoMerge !== undefined ? partial.merge.autoMerge : base.merge.autoMerge,
+      targetBranch: partial.merge?.targetBranch !== undefined ? partial.merge.targetBranch : base.merge.targetBranch,
+      requireApproval: partial.merge?.requireApproval !== undefined ? partial.merge.requireApproval : base.merge.requireApproval,
+    },
+    workflow: {
+      preset: partial.workflow?.preset !== undefined ? partial.workflow.preset : base.workflow.preset,
+    },
+    agents: {
+      permissionModel: partial.agents?.permissionModel !== undefined ? partial.agents.permissionModel : base.agents.permissionModel,
+      allowedBashCommands: partial.agents?.allowedBashCommands !== undefined ? partial.agents.allowedBashCommands : base.agents.allowedBashCommands,
+    },
   };
   return result;
 }
@@ -188,6 +200,18 @@ export function cloneConfiguration(config: Configuration): Configuration {
       autoLinkDocumentProvider: config.externalSync.autoLinkDocumentProvider,
     },
     demoMode: config.demoMode,
+    merge: {
+      autoMerge: config.merge.autoMerge,
+      targetBranch: config.merge.targetBranch,
+      requireApproval: config.merge.requireApproval,
+    },
+    workflow: {
+      preset: config.workflow.preset,
+    },
+    agents: {
+      permissionModel: config.agents.permissionModel,
+      allowedBashCommands: config.agents.allowedBashCommands,
+    },
   };
 }
 
@@ -303,6 +327,38 @@ export function diffConfigurations(
     diff.demoMode = b.demoMode;
   }
 
+  // Merge diff
+  const mergeDiff: Partial<Configuration['merge']> = {};
+  if (a.merge.autoMerge !== b.merge.autoMerge) {
+    mergeDiff.autoMerge = b.merge.autoMerge;
+  }
+  if (a.merge.targetBranch !== b.merge.targetBranch) {
+    mergeDiff.targetBranch = b.merge.targetBranch;
+  }
+  if (a.merge.requireApproval !== b.merge.requireApproval) {
+    mergeDiff.requireApproval = b.merge.requireApproval;
+  }
+  if (Object.keys(mergeDiff).length > 0) {
+    diff.merge = mergeDiff;
+  }
+
+  // Workflow diff
+  if (a.workflow.preset !== b.workflow.preset) {
+    diff.workflow = { preset: b.workflow.preset };
+  }
+
+  // Agents diff
+  const agentsDiff: Partial<import('./types.js').AgentsConfig> = {};
+  if (a.agents.permissionModel !== b.agents.permissionModel) {
+    agentsDiff.permissionModel = b.agents.permissionModel;
+  }
+  if (JSON.stringify(a.agents.allowedBashCommands) !== JSON.stringify(b.agents.allowedBashCommands)) {
+    agentsDiff.allowedBashCommands = b.agents.allowedBashCommands;
+  }
+  if (Object.keys(agentsDiff).length > 0) {
+    diff.agents = agentsDiff;
+  }
+
   return diff;
 }
 
@@ -334,6 +390,12 @@ export function configurationsEqual(a: Configuration, b: Configuration): boolean
     a.externalSync.autoLink === b.externalSync.autoLink &&
     a.externalSync.autoLinkProvider === b.externalSync.autoLinkProvider &&
     a.externalSync.autoLinkDocumentProvider === b.externalSync.autoLinkDocumentProvider &&
-    a.demoMode === b.demoMode
+    a.demoMode === b.demoMode &&
+    a.merge.autoMerge === b.merge.autoMerge &&
+    a.merge.targetBranch === b.merge.targetBranch &&
+    a.merge.requireApproval === b.merge.requireApproval &&
+    a.workflow.preset === b.workflow.preset &&
+    a.agents.permissionModel === b.agents.permissionModel &&
+    JSON.stringify(a.agents.allowedBashCommands) === JSON.stringify(b.agents.allowedBashCommands)
   );
 }

@@ -1,6 +1,6 @@
 {
   "name": "@stoneforge/core",
-  "version": "1.16.1",
+  "version": "1.23.1",
   "type": "module",
   "description": "Core types, errors, ID generation, and utilities for Stoneforge",
   "main": "dist/index.js",
@@ -35,6 +35,12 @@
       "bun": "./src/utils/index.ts",
       "import": "./dist/utils/index.js",
       "default": "./dist/utils/index.js"
+    },
+    "./config": {
+      "types": "./src/config/index.ts",
+      "bun": "./src/config/index.ts",
+      "import": "./dist/config/index.js",
+      "default": "./dist/config/index.js"
     },
     "./package.json": "./package.json"
   },

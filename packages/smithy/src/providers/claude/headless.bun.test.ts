@@ -338,24 +338,6 @@ describe('ClaudeHeadlessProvider', () => {
     });
   });
 
-  describe('environment variables', () => {
-    it('should set CLAUDE_CODE_DISABLE_1M_CONTEXT=1 in spawned env', async () => {
-      const { ClaudeHeadlessProvider } = await import('./headless.js');
-      const provider = new ClaudeHeadlessProvider();
-      const options: HeadlessSpawnOptions = {
-        workingDirectory: '/test/dir',
-      };
-
-      const session = await provider.spawn(options);
-      session.close();
-
-      expect(capturedSdkOptions).toBeDefined();
-      const env = capturedSdkOptions!.env as Record<string, string> | undefined;
-      expect(env).toBeDefined();
-      expect(env!.CLAUDE_CODE_DISABLE_1M_CONTEXT).toBe('1');
-    });
-  });
-
   describe('provider setup', () => {
     it('should have correct provider name', async () => {
       const { ClaudeHeadlessProvider } = await import('./headless.js');

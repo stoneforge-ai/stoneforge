@@ -11,7 +11,7 @@
  */
 
 import { type LucideIcon } from 'lucide-react';
-import { useIsMobile } from '../../hooks';
+import { useContainerIsMobile } from '../../hooks';
 
 export interface PageHeaderAction {
   label: string;
@@ -61,7 +61,7 @@ export function PageHeader({
   bordered = false,
   className = '',
 }: PageHeaderProps) {
-  const isMobile = useIsMobile();
+  const isMobile = useContainerIsMobile();
 
   const renderCount = () => {
     if (count === undefined) return null;
@@ -102,11 +102,11 @@ export function PageHeader({
               data-testid={action.testId}
             >
               {ActionIcon && <ActionIcon className="w-4 h-4" />}
-              <span className={isMobile && action.shortLabel ? 'hidden sm:inline' : ''}>
+              <span className={isMobile && action.shortLabel ? 'hidden @sm:inline' : ''}>
                 {action.label}
               </span>
               {isMobile && action.shortLabel && (
-                <span className="sm:hidden">{action.shortLabel}</span>
+                <span className="@sm:hidden">{action.shortLabel}</span>
               )}
               {action.shortcut && !isMobile && (
                 <kbd className="ml-1 text-xs bg-[var(--color-primary-700)]/50 text-white px-1 py-0.5 rounded">
@@ -123,7 +123,7 @@ export function PageHeader({
   // Wrapper classes depend on whether we want bordered style
   const wrapperClasses = bordered
     ? `border-b border-[var(--color-border)] bg-[var(--color-surface)] ${isMobile ? 'p-3' : 'p-4'} ${className}`
-    : `mb-4 sm:mb-6 ${className}`;
+    : `mb-4 @sm:mb-6 ${className}`;
 
   return (
     <div data-testid={testId} className={wrapperClasses}>
@@ -131,10 +131,10 @@ export function PageHeader({
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
           {Icon && (
-            <Icon className={`w-5 h-5 sm:w-6 sm:h-6 ${iconColor} flex-shrink-0`} />
+            <Icon className={`w-5 h-5 @sm:w-6 @sm:h-6 ${iconColor} flex-shrink-0`} />
           )}
           <div className="flex items-center gap-2 min-w-0">
-            <h1 className="text-lg sm:text-xl font-semibold text-[var(--color-text)] truncate">
+            <h1 className="text-lg @sm:text-xl font-semibold text-[var(--color-text)] truncate">
               {title}
             </h1>
             {!isMobile && renderCount()}
@@ -159,7 +159,7 @@ export function PageHeader({
 
       {/* Additional content (filters, search, etc.) */}
       {children && (
-        <div className={bordered ? 'mt-3' : 'mt-3 sm:mt-4'}>
+        <div className={bordered ? 'mt-3' : 'mt-3 @sm:mt-4'}>
           {children}
         </div>
       )}

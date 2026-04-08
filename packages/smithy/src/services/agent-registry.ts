@@ -170,9 +170,22 @@ export interface AgentRegistry {
   getStewards(): Promise<AgentEntity[]>;
 
   /**
-   * Gets the Director agent (there should be only one per workspace)
+   * Gets the Director agent.
+   * Returns the first registered director; prefer getDirectors() for multi-director workspaces.
    */
   getDirector(): Promise<AgentEntity | undefined>;
+
+  /**
+   * Gets all Director agents registered in the workspace.
+   */
+  getDirectors(): Promise<AgentEntity[]>;
+
+  /**
+   * Gets an available (running) director, preferring the one with the given ID.
+   * Returns the preferred director if it is running, otherwise any running director,
+   * or undefined if no directors are running.
+   */
+  getAvailableDirector(preferredId?: EntityId): Promise<AgentEntity | undefined>;
 
   // ----------------------------------------
   // Agent Session Management
@@ -291,6 +304,7 @@ export class AgentRegistryImpl implements AgentRegistry {
       provider: input.provider,
       model: input.model,
       executablePath: input.executablePath,
+      targetBranch: input.targetBranch,
     };
 
     const entity = await createEntity({
@@ -436,6 +450,23 @@ export class AgentRegistryImpl implements AgentRegistry {
   async getDirector(): Promise<AgentEntity | undefined> {
     const directors = await this.listAgents({ role: 'director' });
     return directors[0];
+  }
+
+  async getDirectors(): Promise<AgentEntity[]> {
+    return this.listAgents({ role: 'director' });
+  }
+
+  async getAvailableDirector(preferredId?: EntityId): Promise<AgentEntity | undefined> {
+    const directors = await this.getDirectors();
+    const running = directors.filter(d => {
+      const meta = getAgentMetadata(d);
+      return meta?.sessionStatus === 'running';
+    });
+    if (preferredId) {
+      const preferred = running.find(d => d.id === asElementId(preferredId));
+      if (preferred) return preferred;
+    }
+    return running[0];
   }
 
   // ----------------------------------------

@@ -42,7 +42,7 @@ export function ChannelListItem({
     <button
       data-testid={`channel-item-${channel.id}`}
       onClick={onClick}
-      className={`w-full flex items-center gap-2 sm:gap-2 rounded-md text-left transition-colors touch-target ${
+      className={`w-full flex items-center gap-2 @sm:gap-2 rounded-md text-left transition-colors touch-target ${
         isMobile ? 'px-4 py-3 gap-3' : 'px-3 py-2'
       } ${
         isSelected

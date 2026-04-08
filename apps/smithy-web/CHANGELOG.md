@@ -1,5 +1,105 @@
 # @stoneforge/smithy-web
 
+## 1.23.1
+
+### Patch Changes
+
+- Updated dependencies [65fe969]
+  - @stoneforge/ui@1.23.1
+
+## 1.23.0
+
+### Minor Changes
+
+- 337769a: Add onboarding tour step: Workflow Template editor with pre-populated example steps
+
+### Patch Changes
+
+- 7657d9d: Fix onboarding tour agent settings step to expand Settings & Tags section in Create Agent dialog, making Provider and Model dropdowns visible and highlighted
+- 1ef2d97: Fix onboarding tour: inject individual item query keys for detail panels, retarget agent settings step to Create Agent dialog, persist overlay during transitions, and disable auto-advance on detail steps
+- 455fcf7: Fix two cosmetic onboarding tour issues: add mock merge request data to the Merge Requests step and set Activity page as background for Director section steps
+- Updated dependencies [b074b03]
+  - @stoneforge/ui@1.23.0
+
+## 1.22.0
+
+### Minor Changes
+
+- 5fef2d8: Improve onboarding tutorial with richer descriptions and new steps for agent types, daemon toggle, emergency stop, and workflow presets
+- 2e81fbf: Wire mock data and interactive demonstrations into onboarding tour steps. Adds 4 new tour steps (tasks-detail, plans-detail, documents-detail, messages-channel) that inject mock data, collapse the director panel, and open detail panels to showcase functionality during the guided tour.
+
+### Patch Changes
+
+- @stoneforge/ui@1.22.0
+
+## 1.21.0
+
+### Patch Changes
+
+- @stoneforge/ui@1.21.0
+
+## 1.20.1
+
+### Patch Changes
+
+- de90f4c: Fix onboarding tour flickering, back-button close, missing overlay, and auto-advance bugs
+  - @stoneforge/ui@1.20.1
+
+## 1.20.0
+
+### Minor Changes
+
+- 7e06e4b: Define 28-step onboarding tour with 7 sections and cross-page navigation in AppShell
+
+### Patch Changes
+
+- 7d74fe7: Polish onboarding tour edge cases: disable director steps on mobile, resume tour after browser refresh, fix restart from settings navigation
+  - @stoneforge/ui@1.20.0
+
+## 1.19.0
+
+### Minor Changes
+
+- 5cef1dd: Add clickable branch indicator in DirectorPanel header showing the active director's target branch with inline popover to change or clear it
+- 30c0c30: Add Target Branch field to CreateAgentDialog for director agents
+- 44cbb44: Add useChangeTargetBranch mutation hook for updating a director's target branch
+
+### Patch Changes
+
+- @stoneforge/ui@1.19.0
+
+## 1.18.0
+
+### Minor Changes
+
+- 8b4d04c: Add provider installation check modal that blocks the app when required providers are missing, with per-provider install instructions and verify button
+- 036d919: Add useDirectors hook and update useAgentsByRole for multi-director support
+- 2b79b91: Add drag-and-drop tab reordering and right-click delete with confirmation to DirectorTabBar. Persist tab order in localStorage. Support reorder and delete in collapsed sidebar view.
+- 6813f5b: Update Activity Dashboard, Agents page, and AppShell for multi-director support. Director cards now pass their ID when opening the panel, Agents page renders multiple director cards in a grid, and AppShell relays director selection via events.
+- f61bc70: Add provider change option to the provider install modal. Users can now switch agents to an installed provider directly from the modal instead of being required to install the missing provider.
+- 84b375f: Redesign DirectorPanel with tabbed interface supporting N concurrent director sessions. Add DirectorTabBar and DirectorTabContent components. Use CSS display:none for inactive tabs to preserve WebSocket/PTY connections. Collapsed panel shows tiled per-director icons. Zero-director state provides Create Director button.
+
+### Patch Changes
+
+- c4495f5: Normalize legacy 'claude' provider value to 'claude-code' in CreateAgentDialog submit handler
+- c510a01: Merge director tab bar and per-director toolbar into a single combined header row. Remove redundant terminal header (macOS-style dots + name). Action buttons (sift backlog, messages toggle, session controls) now appear in the combined row for the active director. Lift messages queue visibility state to DirectorPanel.
+  - @stoneforge/ui@1.18.0
+
+## 1.17.0
+
+### Minor Changes
+
+- 600e4fd: Add totalCacheReadTokens and totalCacheCreationTokens to AggregatedProviderMetrics frontend type
+- f68d308: Add notification sidebar with approval workflow UI. Replace the notification dropdown with a slide-in sidebar panel showing notification history and actionable approval request cards with inline approve/deny buttons.
+- 2161a30: Add onboarding guided walkthrough tour that introduces users to the dashboard's key areas on their first visit. Includes spotlight overlay, tooltip navigation, localStorage persistence, and a restart button in Settings.
+- dafa312: Add first-load preset selection modal to the activity dashboard and a Workflow Preset section to the Settings page. Users can choose Auto, Review, or Approve on first visit and change it later in Settings.
+- 3bc3e76: Add model-level token & cost breakdown table, cache hit rate card, enriched agent card tooltips with cache tokens and estimated cost
+
+### Patch Changes
+
+- Updated dependencies [705df96]
+  - @stoneforge/ui@1.17.0
+
 ## 1.16.1
 
 ### Patch Changes

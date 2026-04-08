@@ -64,6 +64,7 @@ const channelCreateOptions: CommandOption[] = [
   },
   {
     name: 'visibility',
+    short: 'V',
     description: 'Visibility: public or private (default)',
     hasValue: true,
   },
@@ -200,7 +201,7 @@ Options:
   -n, --name <name>         Channel name (required for group)
   -D, --description <desc>  Channel description
   -t, --type <type>         Type: group (default) or direct
-  -V, --visibility <vis>    Visibility: public or private (default)
+      --visibility <vis>    Visibility: public or private (default)
   -p, --policy <policy>     Join policy: open, invite-only (default), request
   -m, --member <entity>     Add member (can be repeated)
   -d, --direct <entity>     Create direct channel with entity

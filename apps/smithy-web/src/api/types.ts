@@ -52,6 +52,7 @@ export interface BaseAgentMetadata {
 
 export interface DirectorMetadata extends BaseAgentMetadata {
   agentRole: 'director';
+  targetBranch?: string;
 }
 
 export interface WorkerMetadata extends BaseAgentMetadata {
@@ -204,6 +205,8 @@ export interface CreateAgentInput {
   model?: string;
   // Custom executable path for the provider CLI (if not set, uses default)
   executablePath?: string;
+  // Target branch for director agents (if not set, auto-detects master/main)
+  targetBranch?: string;
 }
 
 // ============================================================================
@@ -244,7 +247,7 @@ export type TaskStatus = 'backlog' | 'open' | 'in_progress' | 'blocked' | 'revie
 export type Priority = 1 | 2 | 3 | 4 | 5;
 export type Complexity = 1 | 2 | 3 | 4 | 5;
 export type TaskTypeValue = 'bug' | 'feature' | 'task' | 'chore';
-export type MergeStatus = 'pending' | 'testing' | 'merging' | 'merged' | 'conflict' | 'test_failed' | 'failed' | 'not_applicable';
+export type MergeStatus = 'pending' | 'testing' | 'merging' | 'merged' | 'conflict' | 'test_failed' | 'failed' | 'not_applicable' | 'awaiting_approval';
 
 /**
  * Orchestrator-specific metadata attached to tasks
@@ -588,8 +591,54 @@ export interface PlaybookFilter {
 }
 
 // ============================================================================
+// Approval Request Types
+// ============================================================================
+
+export type ApprovalRequestStatus = 'pending' | 'approved' | 'denied';
+
+export interface ApprovalRequest {
+  id: string;
+  agentId: EntityId;
+  sessionId: string;
+  toolName: string;
+  toolArgs: unknown;
+  status: ApprovalRequestStatus;
+  requestedAt: number;
+  resolvedAt?: number;
+  resolvedBy?: string;
+  /** Agent name, populated client-side from agent lookup */
+  agentName?: string;
+  /** Agent role, populated client-side from agent lookup */
+  agentRole?: AgentRole;
+}
+
+export interface ApprovalRequestsResponse {
+  requests: ApprovalRequest[];
+}
+
+export interface ApprovalRequestResponse {
+  request: ApprovalRequest;
+}
+
+// ============================================================================
 // Provider Metrics Types
 // ============================================================================
+
+/**
+ * Breakdown of costs by token category
+ */
+export interface CostBreakdown {
+  /** Cost from input tokens */
+  inputCost: number;
+  /** Cost from output tokens */
+  outputCost: number;
+  /** Cost from cache read tokens */
+  cacheReadCost: number;
+  /** Cost from cache creation tokens */
+  cacheCreationCost: number;
+  /** Total cost (sum of all categories) */
+  totalCost: number;
+}
 
 /**
  * Aggregated metrics for a single provider, model, or agent group
@@ -601,6 +650,10 @@ export interface AggregatedProviderMetrics {
   totalInputTokens: number;
   /** Total output tokens */
   totalOutputTokens: number;
+  /** Total cache read tokens */
+  totalCacheReadTokens: number;
+  /** Total cache creation tokens */
+  totalCacheCreationTokens: number;
   /** Total tokens (input + output) */
   totalTokens: number;
   /** Number of sessions */
@@ -615,6 +668,8 @@ export interface AggregatedProviderMetrics {
   failedCount: number;
   /** Number of rate-limited sessions */
   rateLimitedCount: number;
+  /** Estimated cost breakdown computed from model pricing */
+  estimatedCost?: CostBreakdown;
 }
 
 /**

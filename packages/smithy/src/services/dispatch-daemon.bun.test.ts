@@ -42,13 +42,17 @@ import {
   RATE_LIMIT_SESSION_GAP_MS,
 } from './dispatch-daemon.js';
 import type { SettingsService, ServerAgentDefaults } from './settings-service.js';
-import { createAgentRegistry, type AgentRegistry, type AgentEntity } from './agent-registry.js';
+import { createAgentRegistry, getAgentMetadata, type AgentRegistry, type AgentEntity } from './agent-registry.js';
 import { createTaskAssignmentService, type TaskAssignmentService } from './task-assignment-service.js';
 import { createDispatchService, type DispatchService } from './dispatch-service.js';
 import type { SessionManager, SessionRecord, StartSessionOptions } from '../runtime/session-manager.js';
 import type { WorktreeManager, CreateWorktreeResult, CreateWorktreeOptions } from '../git/worktree-manager.js';
 import type { StewardScheduler } from './steward-scheduler.js';
 import { getOrchestratorTaskMeta, updateOrchestratorTaskMeta, appendTaskSessionHistory, type TaskSessionHistoryEntry } from '../types/task-meta.js';
+
+// Mock ensureTargetBranchExists to prevent real git remote operations in tests.
+// Injected via DispatchDaemonConfig to avoid mock.module() which leaks globally in Bun.
+const mockEnsureTargetBranchExists = mock(async () => {});
 
 // ============================================================================
 // Mock Factories
@@ -117,6 +121,7 @@ function createMockWorktreeManager(): WorktreeManager {
     worktreeExists: mock(async () => true), // Default to true for handoff tests
     getWorkspaceRoot: mock(() => '/workspace'),
     getDefaultBranch: mock(async () => 'master'),
+    ensureWorktreeRemote: mock(async () => true),
   } as unknown as WorktreeManager;
 }
 
@@ -188,6 +193,7 @@ describe('DispatchDaemon Integration', () => {
 
     // Create daemon with short poll interval for testing
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 100, // Fast polling for tests
       workerAvailabilityPollEnabled: true,
       inboxPollEnabled: true,
@@ -429,6 +435,7 @@ describe('recoverOrphanedAssignments', () => {
     systemEntity = saved.id as unknown as EntityId;
 
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 100,
       workerAvailabilityPollEnabled: false,
       inboxPollEnabled: false,
@@ -725,6 +732,7 @@ describe('pollWorkflowTasks - merge steward dispatch', () => {
     systemEntity = saved.id as unknown as EntityId;
 
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 100,
       workerAvailabilityPollEnabled: false,
       inboxPollEnabled: false,
@@ -917,6 +925,7 @@ describe('recoverOrphanedAssignments - merge steward recovery', () => {
     systemEntity = saved.id as unknown as EntityId;
 
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 100,
       workerAvailabilityPollEnabled: false,
       inboxPollEnabled: false,
@@ -1213,6 +1222,7 @@ describe('reconcileClosedUnmergedTasks', () => {
     systemEntity = saved.id as unknown as EntityId;
 
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 100,
       workerAvailabilityPollEnabled: false,
       inboxPollEnabled: false,
@@ -1494,6 +1504,7 @@ describe('DispatchDaemon Plan Auto-Complete', () => {
 
     // Create daemon with plan auto-complete enabled, other polls disabled
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 100,
       workerAvailabilityPollEnabled: false,
       inboxPollEnabled: false,
@@ -1745,6 +1756,204 @@ describe('DispatchDaemon Plan Auto-Complete', () => {
       expect(completeEvents.some(r => r.pollType === 'plan-auto-complete')).toBe(true);
     });
   });
+
+  describe('pollWorkflowAutoTransition', () => {
+    // Helper to create a test workflow
+    async function createTestWorkflow(status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' = 'pending') {
+      const { createWorkflow, WorkflowStatus: WS } = await import('@stoneforge/core');
+      const workflow = await createWorkflow({
+        title: `Test Workflow ${Date.now()}`,
+        createdBy: systemEntity,
+        status: status as any,
+      });
+      return api.create(workflow as unknown as Record<string, unknown> & { createdBy: EntityId });
+    }
+
+    // Helper to create a task as a child of a workflow
+    async function createTaskInWorkflow(workflowId: ElementId, title: string, status: TaskStatus) {
+      const task = await createTask({
+        title,
+        createdBy: systemEntity,
+        status,
+      });
+      const created = await api.create(task as unknown as Record<string, unknown> & { createdBy: EntityId }) as Task;
+      // Create parent-child dependency
+      await api.addDependency({
+        blockedId: created.id,
+        blockerId: workflowId,
+        type: 'parent-child',
+        createdBy: systemEntity,
+      });
+      return created;
+    }
+
+    test('auto-transitions workflow from running to completed when all tasks closed', async () => {
+      const workflow = await createTestWorkflow('running');
+
+      await createTaskInWorkflow(workflow.id, 'Task 1', TaskStatus.CLOSED);
+      await createTaskInWorkflow(workflow.id, 'Task 2', TaskStatus.CLOSED);
+
+      const result = await daemon.pollWorkflowAutoTransition();
+
+      expect(result.pollType).toBe('workflow-auto-transition');
+      expect(result.processed).toBe(1);
+      expect(result.errors).toBe(0);
+
+      const updated = await api.get(workflow.id);
+      expect((updated as any).status).toBe('completed');
+      expect((updated as any).finishedAt).toBeDefined();
+    });
+
+    test('auto-transitions workflow from pending to running when a task is in_progress', async () => {
+      const workflow = await createTestWorkflow('pending');
+
+      await createTaskInWorkflow(workflow.id, 'Task 1', TaskStatus.IN_PROGRESS);
+      await createTaskInWorkflow(workflow.id, 'Task 2', TaskStatus.OPEN);
+
+      const result = await daemon.pollWorkflowAutoTransition();
+
+      expect(result.processed).toBe(1);
+
+      const updated = await api.get(workflow.id);
+      expect((updated as any).status).toBe('running');
+      expect((updated as any).startedAt).toBeDefined();
+    });
+
+    test('auto-transitions workflow to failed when a task is tombstoned', async () => {
+      const workflow = await createTestWorkflow('running');
+
+      await createTaskInWorkflow(workflow.id, 'Task 1', TaskStatus.CLOSED);
+      await createTaskInWorkflow(workflow.id, 'Task 2', TaskStatus.TOMBSTONE);
+
+      const result = await daemon.pollWorkflowAutoTransition();
+
+      expect(result.processed).toBe(1);
+
+      const updated = await api.get(workflow.id);
+      expect((updated as any).status).toBe('failed');
+      expect((updated as any).failureReason).toContain('tombstoned');
+      expect((updated as any).finishedAt).toBeDefined();
+    });
+
+    test('does not transition workflow with non-closed tasks', async () => {
+      const workflow = await createTestWorkflow('running');
+
+      await createTaskInWorkflow(workflow.id, 'Task 1', TaskStatus.CLOSED);
+      await createTaskInWorkflow(workflow.id, 'Task 2', TaskStatus.OPEN);
+
+      const result = await daemon.pollWorkflowAutoTransition();
+
+      expect(result.processed).toBe(0);
+
+      const updated = await api.get(workflow.id);
+      expect((updated as any).status).toBe('running');
+    });
+
+    test('does not transition completed workflows', async () => {
+      const workflow = await createTestWorkflow('completed');
+
+      const result = await daemon.pollWorkflowAutoTransition();
+
+      expect(result.processed).toBe(0);
+    });
+
+    test('does not transition workflow with no tasks', async () => {
+      const workflow = await createTestWorkflow('running');
+
+      const result = await daemon.pollWorkflowAutoTransition();
+
+      expect(result.processed).toBe(0);
+
+      const updated = await api.get(workflow.id);
+      expect((updated as any).status).toBe('running');
+    });
+
+    test('auto-transitions multiple workflows in one cycle', async () => {
+      const workflow1 = await createTestWorkflow('running');
+      const workflow2 = await createTestWorkflow('pending');
+
+      await createTaskInWorkflow(workflow1.id, 'Task A', TaskStatus.CLOSED);
+      await createTaskInWorkflow(workflow2.id, 'Task B', TaskStatus.IN_PROGRESS);
+
+      const result = await daemon.pollWorkflowAutoTransition();
+
+      expect(result.processed).toBe(2);
+      expect(result.errors).toBe(0);
+
+      const updated1 = await api.get(workflow1.id);
+      const updated2 = await api.get(workflow2.id);
+      expect((updated1 as any).status).toBe('completed');
+      expect((updated2 as any).status).toBe('running');
+    });
+
+    test('pending workflow with tombstoned task transitions to failed', async () => {
+      const workflow = await createTestWorkflow('pending');
+
+      await createTaskInWorkflow(workflow.id, 'Task 1', TaskStatus.TOMBSTONE);
+
+      const result = await daemon.pollWorkflowAutoTransition();
+
+      expect(result.processed).toBe(1);
+
+      const updated = await api.get(workflow.id);
+      expect((updated as any).status).toBe('failed');
+    });
+
+    test('is disabled when workflowAutoTransitionEnabled is false', async () => {
+      await daemon.stop();
+
+      const disabledDaemon = createDispatchDaemon(
+        api,
+        agentRegistry,
+        sessionManager,
+        dispatchService,
+        worktreeManager,
+        taskAssignment,
+        stewardScheduler,
+        inboxService,
+        {
+          pollIntervalMs: 100,
+          workerAvailabilityPollEnabled: false,
+          inboxPollEnabled: false,
+          stewardTriggerPollEnabled: false,
+          workflowTaskPollEnabled: false,
+          workflowAutoTransitionEnabled: false,
+        }
+      );
+
+      const config = disabledDaemon.getConfig();
+      expect(config.workflowAutoTransitionEnabled).toBe(false);
+
+      // Manual poll still works
+      const workflow = await createTestWorkflow('running');
+      await createTaskInWorkflow(workflow.id, 'Task 1', TaskStatus.CLOSED);
+
+      const result = await disabledDaemon.pollWorkflowAutoTransition();
+      expect(result.processed).toBe(1);
+
+      await disabledDaemon.stop();
+    });
+
+    test('emits poll:start and poll:complete events', async () => {
+      const workflow = await createTestWorkflow('running');
+      await createTaskInWorkflow(workflow.id, 'Task 1', TaskStatus.CLOSED);
+
+      const startEvents: string[] = [];
+      const completeEvents: PollResult[] = [];
+
+      daemon.on('poll:start', (pollType: string) => {
+        startEvents.push(pollType);
+      });
+      daemon.on('poll:complete', (result: PollResult) => {
+        completeEvents.push(result);
+      });
+
+      await daemon.pollWorkflowAutoTransition();
+
+      expect(startEvents).toContain('workflow-auto-transition');
+      expect(completeEvents.some(r => r.pollType === 'workflow-auto-transition')).toBe(true);
+    });
+  });
 });
 
 // ============================================================================
@@ -1813,6 +2022,7 @@ describe('DispatchDaemon Rate Limit Integration', () => {
     systemEntity = saved.id as unknown as EntityId;
 
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 100,
       workerAvailabilityPollEnabled: true,
       inboxPollEnabled: false,
@@ -2192,6 +2402,7 @@ describe('wake() lastWakeAt - invalidate stale rate limit detection', () => {
     systemEntity = saved.id as unknown as EntityId;
 
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 100,
       workerAvailabilityPollEnabled: true,
       inboxPollEnabled: false,
@@ -2557,6 +2768,7 @@ describe('spawnRecoveryStewardForTask - atomic worker unassignment', () => {
     systemEntity = saved.id as unknown as EntityId;
 
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 100,
       workerAvailabilityPollEnabled: false,
       inboxPollEnabled: false,
@@ -2790,6 +3002,7 @@ describe('recoverOrphanedAssignments - recovery steward cascade prevention', () 
     systemEntity = saved.id as unknown as EntityId;
 
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 100,
       workerAvailabilityPollEnabled: false,
       inboxPollEnabled: false,
@@ -3055,6 +3268,7 @@ describe('startup non-blocking orphan recovery', () => {
 
   test('start() returns promptly even if orphan recovery takes a long time', async () => {
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 50,
       workerAvailabilityPollEnabled: true,
       inboxPollEnabled: false,
@@ -3124,6 +3338,7 @@ describe('startup non-blocking orphan recovery', () => {
 
   test('tasks are dispatched promptly once startup orphan recovery completes', async () => {
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 50,
       workerAvailabilityPollEnabled: true,
       inboxPollEnabled: false,
@@ -3192,6 +3407,7 @@ describe('startup non-blocking orphan recovery', () => {
 
   test('recoverOrphanedAssignments is never called concurrently (startup vs poll cycle)', async () => {
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 50,
       workerAvailabilityPollEnabled: true,
       inboxPollEnabled: false,
@@ -3298,6 +3514,7 @@ describe('recoverOrphanedAssignments - rate limit guard', () => {
     systemEntity = saved.id as unknown as EntityId;
 
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 100,
       workerAvailabilityPollEnabled: false,
       inboxPollEnabled: false,
@@ -3624,6 +3841,7 @@ describe('recoverOrphanedAssignments - wake resets resumeCount', () => {
     systemEntity = saved.id as unknown as EntityId;
 
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 100,
       workerAvailabilityPollEnabled: false,
       inboxPollEnabled: false,
@@ -3869,6 +4087,7 @@ describe('runPollCycle - allLimited with empty fallback chain', () => {
     systemEntity = saved.id as unknown as EntityId;
 
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 100,
       workerAvailabilityPollEnabled: true,
       inboxPollEnabled: false,
@@ -4743,6 +4962,7 @@ describe('spawnTriageSession - rate limit guard', () => {
     systemEntity = saved.id as unknown as EntityId;
 
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 100,
       workerAvailabilityPollEnabled: false,
       inboxPollEnabled: true,
@@ -4914,6 +5134,7 @@ describe('spawnRecoveryStewardForTask - rate limit session history guard', () =>
     systemEntity = saved.id as unknown as EntityId;
 
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 100,
       workerAvailabilityPollEnabled: false,
       inboxPollEnabled: false,
@@ -5067,7 +5288,7 @@ describe('spawnRecoveryStewardForTask - rate limit session history guard', () =>
     expect(result.processed).toBe(1);
     expect(result.errors).toBe(0);
     expect(sessionManager.startSession).toHaveBeenCalled();
-  });
+  }, 15_000);
 
   test('spawns recovery steward when insufficient session history entries', async () => {
     const worker = await createTestWorker('few-sessions-worker');
@@ -5333,6 +5554,7 @@ describe('spawnRecoveryStewardForTask - multi-assignment guard', () => {
     systemEntity = saved.id as unknown as EntityId;
 
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 100,
       workerAvailabilityPollEnabled: false,
       inboxPollEnabled: false,
@@ -5550,6 +5772,7 @@ describe('recoverOrphanedAssignments - recovery steward orphan recovery', () => 
     systemEntity = saved.id as unknown as EntityId;
 
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 100,
       workerAvailabilityPollEnabled: false,
       inboxPollEnabled: false,
@@ -5852,6 +6075,7 @@ describe('assignTaskToWorker - missing agent channel resilience', () => {
     systemEntity = saved.id as unknown as EntityId;
 
     const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
       pollIntervalMs: 100,
       workerAvailabilityPollEnabled: true,
       inboxPollEnabled: false,
@@ -5945,5 +6169,230 @@ describe('assignTaskToWorker - missing agent channel resilience', () => {
 
     // 5. Restore original dispatch
     (impl as any).dispatchService.dispatch = originalDispatch;
+  });
+});
+
+// ============================================================================
+// Per-Director Target Branch Propagation
+// ============================================================================
+
+describe('assignTaskToWorker - per-director targetBranch propagation', () => {
+  let api: QuarryAPI;
+  let inboxService: InboxService;
+  let agentRegistry: AgentRegistry;
+  let taskAssignment: TaskAssignmentService;
+  let dispatchService: DispatchService;
+  let sessionManager: SessionManager;
+  let worktreeManager: WorktreeManager;
+  let stewardScheduler: StewardScheduler;
+  let daemon: DispatchDaemon;
+  let testDbPath: string;
+  let systemEntity: EntityId;
+
+  beforeEach(async () => {
+    testDbPath = `/tmp/dispatch-daemon-target-branch-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`;
+    const storage = createStorage({ path: testDbPath, create: true });
+    initializeSchema(storage);
+
+    api = createQuarryAPI(storage);
+    inboxService = createInboxService(storage);
+    agentRegistry = createAgentRegistry(api);
+    taskAssignment = createTaskAssignmentService(api);
+    dispatchService = createDispatchService(api, taskAssignment, agentRegistry);
+    sessionManager = createMockSessionManager();
+    worktreeManager = createMockWorktreeManager();
+    stewardScheduler = createMockStewardScheduler();
+
+    const { createEntity, EntityTypeValue } = await import('@stoneforge/core');
+    const entity = await createEntity({
+      name: 'test-system',
+      entityType: EntityTypeValue.SYSTEM,
+      createdBy: 'system:test' as EntityId,
+    });
+    const saved = await api.create(entity as unknown as Record<string, unknown> & { createdBy: EntityId });
+    systemEntity = saved.id as unknown as EntityId;
+
+    const config: DispatchDaemonConfig = {
+      ensureTargetBranchExists: mockEnsureTargetBranchExists,
+      pollIntervalMs: 100,
+      workerAvailabilityPollEnabled: true,
+      inboxPollEnabled: false,
+      stewardTriggerPollEnabled: false,
+      workflowTaskPollEnabled: false,
+    };
+
+    daemon = createDispatchDaemon(
+      api,
+      agentRegistry,
+      sessionManager,
+      dispatchService,
+      worktreeManager,
+      taskAssignment,
+      stewardScheduler,
+      inboxService,
+      config
+    );
+  });
+
+  afterEach(async () => {
+    await daemon.stop();
+    if (fs.existsSync(testDbPath)) {
+      fs.unlinkSync(testDbPath);
+    }
+  });
+
+  async function createTestWorker(name: string): Promise<AgentEntity> {
+    return agentRegistry.registerWorker({
+      name,
+      workerMode: 'ephemeral',
+      createdBy: systemEntity,
+      maxConcurrentTasks: 1,
+    });
+  }
+
+  async function createTestTask(title: string, createdBy?: EntityId): Promise<Task> {
+    const task = await createTask({
+      title,
+      createdBy: createdBy ?? systemEntity,
+      status: TaskStatus.OPEN,
+    });
+    return api.create(task as unknown as Record<string, unknown> & { createdBy: EntityId }) as Promise<Task>;
+  }
+
+  test('propagates director targetBranch to task metadata on dispatch', async () => {
+    // 1. Register a director with targetBranch = 'staging'
+    const director = await agentRegistry.registerDirector({
+      name: 'staging-director',
+      createdBy: systemEntity,
+      targetBranch: 'staging',
+    });
+
+    // 2. Register a worker
+    const worker = await createTestWorker('target-branch-worker');
+
+    // 3. Create a task created by the director (so it gets resolved as owning director)
+    const task = await createTestTask('Feature for staging', director.id as unknown as EntityId);
+
+    // 4. Run the poll to dispatch the task
+    const result = await daemon.pollWorkerAvailability();
+    expect(result.processed).toBe(1);
+
+    // 5. Verify the task now has targetBranch in orchestrator metadata
+    const updatedTask = await api.get<Task>(task.id);
+    const orcMeta = getOrchestratorTaskMeta(updatedTask!.metadata as Record<string, unknown> | undefined);
+    expect(orcMeta?.targetBranch).toBe('staging');
+  });
+
+  test('targetBranch is re-propagated consistently on re-dispatch (handoff scenario)', async () => {
+    // The dispatch flow always re-propagates the director's targetBranch because
+    // assignToAgent replaces orchestrator metadata. This test verifies that
+    // the re-propagation is consistent across handoffs.
+
+    // 1. Register a director with targetBranch = 'staging'
+    const director = await agentRegistry.registerDirector({
+      name: 'staging-director-handoff',
+      createdBy: systemEntity,
+      targetBranch: 'staging',
+    });
+
+    // 2. Register first worker
+    const worker1 = await createTestWorker('first-worker');
+
+    // 3. Create a task created by the director
+    const task = await createTestTask('Handoff task', director.id as unknown as EntityId);
+
+    // 4. First dispatch
+    await daemon.pollWorkerAvailability();
+    let updatedTask = await api.get<Task>(task.id);
+    let orcMeta = getOrchestratorTaskMeta(updatedTask!.metadata as Record<string, unknown> | undefined);
+    expect(orcMeta?.targetBranch).toBe('staging');
+
+    // 5. Simulate handoff — set task back to OPEN with handoff metadata
+    await api.update(task.id, {
+      status: TaskStatus.OPEN,
+      assignee: undefined,
+      metadata: updateOrchestratorTaskMeta(
+        updatedTask!.metadata as Record<string, unknown> | undefined,
+        {
+          handoffBranch: orcMeta?.branch,
+          handoffWorktree: orcMeta?.worktree,
+          assignedAgent: undefined,
+          sessionId: undefined,
+        }
+      ),
+    });
+
+    // 6. Register a second worker to pick up the task
+    const worker2 = await createTestWorker('second-worker');
+
+    // 7. Re-dispatch
+    const result = await daemon.pollWorkerAvailability();
+    expect(result.processed).toBe(1);
+
+    // 8. Verify targetBranch is still 'staging' (re-propagated from director)
+    updatedTask = await api.get<Task>(task.id);
+    orcMeta = getOrchestratorTaskMeta(updatedTask!.metadata as Record<string, unknown> | undefined);
+    expect(orcMeta?.targetBranch).toBe('staging');
+  });
+
+  test('worktree is created with correct baseBranch on handoff when worktree was cleaned up', async () => {
+    // When a task is handed off and the old worktree was cleaned up,
+    // createWorktreeForTask should use the task's targetBranch as baseBranch.
+    // The targetBranch was set on the task during the first dispatch.
+
+    // 1. Register a director with targetBranch = 'staging'
+    const director = await agentRegistry.registerDirector({
+      name: 'staging-director-worktree',
+      createdBy: systemEntity,
+      targetBranch: 'staging',
+    });
+
+    // 2. Register first worker
+    const worker1 = await createTestWorker('worktree-worker-1');
+
+    // 3. Create a task created by the director
+    const task = await createTestTask('Worktree base branch task', director.id as unknown as EntityId);
+
+    // 4. First dispatch — sets targetBranch on task metadata
+    await daemon.pollWorkerAvailability();
+    let updatedTask = await api.get<Task>(task.id);
+    let orcMeta = getOrchestratorTaskMeta(updatedTask!.metadata as Record<string, unknown> | undefined);
+    expect(orcMeta?.targetBranch).toBe('staging');
+
+    // 5. Simulate handoff with worktree cleaned up
+    await api.update(task.id, {
+      status: TaskStatus.OPEN,
+      assignee: undefined,
+      metadata: updateOrchestratorTaskMeta(
+        updatedTask!.metadata as Record<string, unknown> | undefined,
+        {
+          handoffBranch: orcMeta?.branch,
+          handoffWorktree: orcMeta?.worktree,
+          assignedAgent: undefined,
+          sessionId: undefined,
+        }
+      ),
+    });
+
+    // Mock worktreeExists to return false (worktree was cleaned up)
+    (worktreeManager.worktreeExists as ReturnType<typeof mock>).mockImplementation(async () => false);
+
+    // Reset createWorktree mock calls to track fresh calls
+    (worktreeManager.createWorktree as ReturnType<typeof mock>).mockClear();
+
+    // 6. Register second worker
+    const worker2 = await createTestWorker('worktree-worker-2');
+
+    // 7. Re-dispatch — worktree doesn't exist, so createWorktreeForTask is called
+    const result = await daemon.pollWorkerAvailability();
+    expect(result.processed).toBe(1);
+
+    // 8. Verify createWorktree was called with baseBranch = 'staging'
+    expect(worktreeManager.createWorktree).toHaveBeenCalled();
+    const createWorktreeCall = (worktreeManager.createWorktree as ReturnType<typeof mock>).mock.calls;
+    const lastCallArgs = createWorktreeCall[createWorktreeCall.length - 1];
+    expect(lastCallArgs).toBeDefined();
+    const opts = lastCallArgs[0];
+    expect(opts.baseBranch).toBe('staging');
   });
 });

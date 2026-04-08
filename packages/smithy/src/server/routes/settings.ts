@@ -8,6 +8,14 @@
 import { Hono } from 'hono';
 import type { Services } from '../services.js';
 import type { ServerAgentDefaults } from '../../services/settings-service.js';
+import {
+  getValue,
+  updateConfigFile,
+  getConfigPath,
+  reloadConfig,
+  type WorkflowPreset,
+  VALID_WORKFLOW_PRESETS,
+} from '@stoneforge/quarry';
 import { createLogger } from '../../utils/logger.js';
 
 const logger = createLogger('settings-routes');
@@ -137,6 +145,87 @@ export function createSettingsRoutes(services: Services) {
       return c.json(result);
     } catch (error) {
       logger.error('Failed to disable demo mode:', error);
+      return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
+    }
+  });
+
+  // ==========================================================================
+  // Workflow Preset
+  // ==========================================================================
+
+  /**
+   * Maps each workflow preset to its full configuration values.
+   * Mirrors WORKFLOW_PRESET_CONFIGS from the init command.
+   */
+  const PRESET_CONFIGS: Record<WorkflowPreset, {
+    merge: { autoMerge: boolean; targetBranch: string | null; requireApproval: boolean };
+    workflow: { preset: WorkflowPreset };
+    agents: { permissionModel: 'unrestricted' | 'restricted' };
+  }> = {
+    auto: {
+      merge: { autoMerge: true, targetBranch: null, requireApproval: false },
+      workflow: { preset: 'auto' },
+      agents: { permissionModel: 'unrestricted' },
+    },
+    review: {
+      merge: { autoMerge: true, targetBranch: 'stoneforge/review', requireApproval: false },
+      workflow: { preset: 'review' },
+      agents: { permissionModel: 'unrestricted' },
+    },
+    approve: {
+      merge: { autoMerge: false, targetBranch: null, requireApproval: true },
+      workflow: { preset: 'approve' },
+      agents: { permissionModel: 'restricted' },
+    },
+  };
+
+  // GET /api/settings/workflow-preset
+  app.get('/api/settings/workflow-preset', (c) => {
+    try {
+      const preset = getValue('workflow.preset');
+      return c.json({ preset: preset ?? null });
+    } catch (error) {
+      logger.error('Failed to get workflow preset:', error);
+      return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
+    }
+  });
+
+  // PUT /api/settings/workflow-preset
+  app.put('/api/settings/workflow-preset', async (c) => {
+    try {
+      const body = await c.req.json() as { preset: string };
+
+      if (!body || typeof body.preset !== 'string') {
+        return c.json(
+          { error: { code: 'INVALID_INPUT', message: 'Request body must include a "preset" string' } },
+          400
+        );
+      }
+
+      if (!VALID_WORKFLOW_PRESETS.includes(body.preset as WorkflowPreset)) {
+        return c.json(
+          { error: { code: 'INVALID_INPUT', message: `Invalid preset "${body.preset}". Must be one of: ${VALID_WORKFLOW_PRESETS.join(', ')}` } },
+          400
+        );
+      }
+
+      const preset = body.preset as WorkflowPreset;
+      const presetConfig = PRESET_CONFIGS[preset];
+      const configPath = getConfigPath();
+
+      if (!configPath) {
+        return c.json(
+          { error: { code: 'NOT_CONFIGURED', message: 'No config file found. Run "sf init" first.' } },
+          400
+        );
+      }
+
+      updateConfigFile(configPath, presetConfig);
+      reloadConfig();
+
+      return c.json({ preset, applied: presetConfig });
+    } catch (error) {
+      logger.error('Failed to update workflow preset:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });

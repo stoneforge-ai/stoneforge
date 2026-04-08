@@ -29,9 +29,11 @@ import {
   createDocsStewardService,
   createSettingsService,
   createMetricsService,
+  createCostService,
   createRateLimitTracker,
   createExternalSyncDaemon,
   createDemoModeService,
+  createGitHubMergeProvider,
   GitRepositoryNotFoundError,
   type OrchestratorAPI,
   type AgentRegistry,
@@ -54,7 +56,11 @@ import {
   type OnSessionStartedCallback,
   type ExternalSyncDaemon,
   type DemoModeService,
+  type CostService,
   trackListeners,
+  createApprovalService,
+  type ApprovalService,
+  createPermissionHook,
 } from '../index.js';
 import { createSyncEngine, createConfiguredProviderRegistry } from '@stoneforge/quarry';
 import { attachSessionEventSaver } from './routes/sessions.js';
@@ -96,7 +102,9 @@ export interface Services {
   sessionMessageService: SessionMessageService;
   settingsService: SettingsService;
   metricsService: MetricsService;
+  costService: CostService;
   demoModeService: DemoModeService;
+  approvalService: ApprovalService;
   storageBackend: StorageBackend;
 }
 
@@ -120,10 +128,30 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
   const claudePath = getClaudePath();
   logger.info(`Using Claude CLI at: ${claudePath}`);
 
+  // Create approval service early so the permission hook factory can use it
+  const approvalService = createApprovalService(storageBackend);
+
+  // Load config for permission model settings
+  const config = loadConfig();
+
   const spawnerService = createSpawnerService({
     workingDirectory: projectRoot,
     stoneforgeRoot: projectRoot,
     claudePath,
+    // Create a hook factory that injects permission enforcement into headless sessions
+    sdkHookFactory: (agentId, _sessionId) => {
+      const hook = createPermissionHook(agentId, {
+        permissionModel: config.agents.permissionModel,
+        allowedBashCommands: config.agents.allowedBashCommands,
+        approvalService,
+      });
+      if (!hook) return undefined;
+      return {
+        PreToolUse: [{
+          hooks: [hook],
+        }],
+      };
+    },
   });
 
   // Create settings service early so it can be injected into session manager
@@ -131,6 +159,9 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
 
   // Create metrics service for provider usage tracking
   const metricsService = createMetricsService(storageBackend);
+
+  // Create cost service for pricing calculations
+  const costService = createCostService(storageBackend);
 
   const sessionManager = createSessionManager(spawnerService, api, agentRegistry, settingsService);
   const sessionInitialPrompts = new Map<string, string>();
@@ -146,7 +177,7 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
   }
   logger.info(`Loaded session state for ${agents.length} agents`);
 
-  const taskAssignmentService = createTaskAssignmentService(api);
+  const taskAssignmentService = createTaskAssignmentService(api, undefined, projectRoot);
   const dispatchService = createDispatchService(api, taskAssignmentService, agentRegistry);
   const roleDefinitionService = createRoleDefinitionService(api);
 
@@ -176,12 +207,17 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
   );
 
   // Create steward services (before executor/scheduler so they can be passed to the executor)
+  const requireApproval = config.merge?.requireApproval ?? false;
   const mergeStewardService = createMergeStewardService(
     api,
     taskAssignmentService,
     dispatchService,
     agentRegistry,
-    { workspaceRoot: projectRoot },
+    {
+      workspaceRoot: projectRoot,
+      requireApproval,
+      mergeRequestProvider: requireApproval ? createGitHubMergeProvider() : undefined,
+    },
     worktreeManager
   );
 
@@ -243,7 +279,6 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
   // Create sync and auto-export services
   const { resolve } = await import('node:path');
   const syncService = createSyncService(storageBackend);
-  const config = loadConfig();
   const autoExportService = createAutoExportService({
     syncService,
     backend: storageBackend,
@@ -261,6 +296,10 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
     const onSessionStarted: OnSessionStartedCallback = (session, events, agentId, initialPrompt) => {
       // Attach event saver to capture all agent events
       attachSessionEventSaver(events, session.id, agentId, sessionMessageService);
+
+      // Permission enforcement is handled via SDK PreToolUse hooks injected by
+      // the spawner's sdkHookFactory (configured above during spawner creation).
+      // This ensures restricted tools are blocked BEFORE execution, not just monitored.
 
       // Notify SSE stream clients so they dynamically subscribe to this session's events
       notifySSEClientsOfNewSession({
@@ -303,6 +342,8 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
       let sessionOutcome: MetricOutcome = 'completed';
       let sessionInputTokens = 0;
       let sessionOutputTokens = 0;
+      let sessionCacheReadTokens = 0;
+      let sessionCacheCreationTokens = 0;
       let sessionModel: string | undefined;
 
       // Resolved task ID cache (looked up once, reused for all upserts)
@@ -335,6 +376,8 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
             taskId,
             inputTokens: sessionInputTokens,
             outputTokens: sessionOutputTokens,
+            cacheReadTokens: sessionCacheReadTokens,
+            cacheCreationTokens: sessionCacheCreationTokens,
             durationMs,
             outcome: sessionOutcome,
           });
@@ -346,6 +389,8 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
             sessionId: session.id,
             inputTokens: sessionInputTokens,
             outputTokens: sessionOutputTokens,
+            cacheReadTokens: sessionCacheReadTokens,
+            cacheCreationTokens: sessionCacheCreationTokens,
             durationMs,
             outcome: sessionOutcome,
           });
@@ -365,10 +410,12 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
         // Accumulate tokens from assistant events (each BetaMessage has usage)
         // This provides a running total in case the session exits without a result event
         if (event.type === 'assistant') {
-          const rawMsg = event.raw?.message as { usage?: { input_tokens?: number; output_tokens?: number }; model?: string } | undefined;
+          const rawMsg = event.raw?.message as { usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number }; model?: string } | undefined;
           if (rawMsg?.usage) {
             sessionInputTokens += rawMsg.usage.input_tokens ?? 0;
             sessionOutputTokens += rawMsg.usage.output_tokens ?? 0;
+            sessionCacheReadTokens += rawMsg.usage.cache_read_input_tokens ?? 0;
+            sessionCacheCreationTokens += rawMsg.usage.cache_creation_input_tokens ?? 0;
           }
           // Capture model from the first assistant message that has it
           if (rawMsg?.model && !sessionModel) {
@@ -389,12 +436,25 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
           }
 
           // Extract model from modelUsage keys (Record<string, ModelUsage>)
-          const modelUsage = event.raw?.modelUsage as Record<string, unknown> | undefined;
+          // Also reconcile cache tokens from modelUsage (SDK camelCase format)
+          const modelUsage = event.raw?.modelUsage as Record<string, { cacheReadInputTokens?: number; cacheCreationInputTokens?: number } | unknown> | undefined;
           if (modelUsage) {
             const models = Object.keys(modelUsage);
             if (models.length > 0 && !sessionModel) {
               sessionModel = models[0];
             }
+            // Sum cache tokens across all models in the result
+            let resultCacheReadTokens = 0;
+            let resultCacheCreationTokens = 0;
+            for (const model of models) {
+              const mu = modelUsage[model] as { cacheReadInputTokens?: number; cacheCreationInputTokens?: number } | undefined;
+              if (mu) {
+                resultCacheReadTokens += mu.cacheReadInputTokens ?? 0;
+                resultCacheCreationTokens += mu.cacheCreationInputTokens ?? 0;
+              }
+            }
+            sessionCacheReadTokens = Math.max(sessionCacheReadTokens, resultCacheReadTokens);
+            sessionCacheCreationTokens = Math.max(sessionCacheCreationTokens, resultCacheCreationTokens);
           }
 
           sessionOutcome = 'completed';
@@ -522,7 +582,9 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
     sessionMessageService,
     settingsService,
     metricsService,
+    costService,
     demoModeService,
+    approvalService,
     storageBackend,
   };
 }

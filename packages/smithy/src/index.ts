@@ -42,3 +42,6 @@ export type { Logger, LogLevel } from './utils/logger.js';
 
 // Re-export rate limit parser utility
 export { parseRateLimitResetTime } from './utils/rate-limit-parser.js';
+
+// Re-export permissions module
+export * from './permissions/index.js';

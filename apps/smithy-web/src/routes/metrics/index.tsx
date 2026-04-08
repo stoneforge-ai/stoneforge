@@ -29,7 +29,6 @@ import {
   Cpu,
   DollarSign,
   Hash,
-  Layers,
 } from 'lucide-react';
 import {
   StatusPieChart,
@@ -89,8 +88,7 @@ const PROVIDER_COLORS: string[] = [
   '#ef4444', // red
 ];
 
-/** Rough cost estimate per 1M tokens (input/output blended) */
-const ESTIMATED_COST_PER_MILLION_TOKENS = 5.0;
+// Cost estimation is now provided by the API via per-model pricing
 
 // ============================================================================
 // Helper Functions
@@ -151,11 +149,20 @@ function formatTokenCount(count: number): string {
   return String(count);
 }
 
+/**
+ * Format cost as USD.
+ * - 0: "$0.00"
+ * - < $0.01: "< $0.01"
+ * - < $100: "$X.XX"
+ * - >= $100: "$XXX"
+ * - >= $1000: "$X.XK"
+ */
 function formatCost(amount: number): string {
+  if (amount === 0) return '$0.00';
+  if (amount < 0.01) return '< $0.01';
+  if (amount < 100) return `$${amount.toFixed(2)}`;
   if (amount >= 1000) return `$${(amount / 1000).toFixed(1)}K`;
-  if (amount >= 1) return `$${amount.toFixed(2)}`;
-  if (amount > 0) return `$${amount.toFixed(4)}`;
-  return '$0.00';
+  return `$${Math.round(amount)}`;
 }
 
 // ============================================================================
@@ -333,7 +340,7 @@ function PlanProgressSection({
 
   if (isLoading) {
     return (
-      <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 sm:p-5">
+      <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 @sm:p-5">
         <h3 className="text-sm font-semibold text-[var(--color-text)] mb-4">Plan Progress</h3>
         <div className="space-y-3">
           {[1, 2, 3].map(i => (
@@ -349,7 +356,7 @@ function PlanProgressSection({
 
   if (planProgress.length === 0) {
     return (
-      <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 sm:p-5">
+      <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 @sm:p-5">
         <h3 className="text-sm font-semibold text-[var(--color-text)] mb-4">Plan Progress</h3>
         <div className="flex flex-col items-center justify-center py-8 text-[var(--color-text-tertiary)]">
           <Target className="w-8 h-8 mb-2 opacity-50" />
@@ -360,7 +367,7 @@ function PlanProgressSection({
   }
 
   return (
-    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 sm:p-5">
+    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 @sm:p-5">
       <h3 className="text-sm font-semibold text-[var(--color-text)] mb-4">Plan Progress</h3>
       <div className="space-y-4">
         {planProgress.map(plan => (
@@ -437,7 +444,7 @@ function MergePipelineCard({
   ];
 
   return (
-    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 sm:p-5">
+    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 @sm:p-5">
       <h3 className="text-sm font-semibold text-[var(--color-text)] mb-4">Merge Pipeline</h3>
       {isLoading ? (
         <div className="space-y-3 animate-pulse">
@@ -518,7 +525,7 @@ function QueueHealthCard({
   ];
 
   return (
-    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 sm:p-5">
+    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-card-bg)] p-4 @sm:p-5">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold text-[var(--color-text)]">Queue Health</h3>
         <span className={`text-lg font-bold tabular-nums ${healthColor}`}>{healthScore}%</span>
@@ -840,11 +847,24 @@ export function MetricsPage() {
   const providerSummary = useMemo(() => {
     const totalInputTokens = providerMetrics.reduce((s, m) => s + m.totalInputTokens, 0);
     const totalOutputTokens = providerMetrics.reduce((s, m) => s + m.totalOutputTokens, 0);
+    const totalCacheReadTokens = providerMetrics.reduce((s, m) => s + (m.totalCacheReadTokens ?? 0), 0);
+    const totalCacheCreationTokens = providerMetrics.reduce((s, m) => s + (m.totalCacheCreationTokens ?? 0), 0);
     const totalTokens = totalInputTokens + totalOutputTokens;
     const totalSessions = providerMetrics.reduce((s, m) => s + m.sessionCount, 0);
-    const estimatedCost = (totalTokens / 1_000_000) * ESTIMATED_COST_PER_MILLION_TOKENS;
-    return { totalInputTokens, totalOutputTokens, totalTokens, totalSessions, estimatedCost };
+    const estimatedCost = providerMetrics.reduce((s, m) => s + (m.estimatedCost?.totalCost ?? 0), 0);
+    // Cache hit rate: cache read tokens as % of total input tokens (input includes cache)
+    const cacheHitRate = totalInputTokens > 0
+      ? Math.round((totalCacheReadTokens / totalInputTokens) * 100)
+      : 0;
+    return {
+      totalInputTokens, totalOutputTokens, totalCacheReadTokens,
+      totalCacheCreationTokens, totalTokens, totalSessions, estimatedCost,
+      cacheHitRate,
+    };
   }, [providerMetrics]);
+
+  // Model-level breakdown for the token/cost table
+  const modelMetrics = modelMetricsData?.metrics ?? [];
 
   // Token usage trend line chart — aggregate time series across all models
   const tokenTrendData = useMemo((): LineChartDataPoint[] => {
@@ -922,7 +942,7 @@ export function MetricsPage() {
       {/* Summary Stats Row */}
       {/* ================================================================ */}
       <div
-        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3"
+        className="grid grid-cols-1 @sm:grid-cols-2 @lg:grid-cols-3 @xl:grid-cols-6 gap-3"
         data-testid="stats-cards"
       >
         <StatCard
@@ -983,7 +1003,7 @@ export function MetricsPage() {
       <div>
         <SectionHeader title="Activity & Distribution" icon={TrendingUp} />
         <div
-          className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4"
+          className="grid grid-cols-1 @lg:grid-cols-2 @xl:grid-cols-3 gap-4"
           data-testid="charts-grid-activity"
         >
           <TrendLineChart
@@ -1028,7 +1048,7 @@ export function MetricsPage() {
       <div>
         <SectionHeader title="Agent Performance" icon={Zap} />
         <div
-          className="grid grid-cols-1 lg:grid-cols-2 gap-4"
+          className="grid grid-cols-1 @lg:grid-cols-2 gap-4"
           data-testid="charts-grid-agents"
         >
           <HorizontalBarChart
@@ -1065,7 +1085,7 @@ export function MetricsPage() {
       <div>
         <SectionHeader title="Plans & Pipeline" icon={Target} />
         <div
-          className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"
+          className="grid grid-cols-1 @md:grid-cols-2 @xl:grid-cols-3 gap-4"
           data-testid="charts-grid-health"
         >
           <PlanProgressSection
@@ -1092,7 +1112,7 @@ export function MetricsPage() {
       <div>
         <SectionHeader title="Priority Analysis" icon={AlertTriangle} />
         <div
-          className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4"
+          className="grid grid-cols-1 @lg:grid-cols-2 @xl:grid-cols-3 gap-4"
           data-testid="charts-grid-priority"
         >
           <StatusPieChart
@@ -1116,7 +1136,7 @@ export function MetricsPage() {
 
         {/* Summary cards row */}
         <div
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4"
+          className="grid grid-cols-1 @sm:grid-cols-2 @lg:grid-cols-4 gap-3 mb-4"
           data-testid="provider-stats-cards"
         >
           <StatCard
@@ -1128,12 +1148,12 @@ export function MetricsPage() {
             testId="stat-total-tokens"
           />
           <StatCard
-            label="Input Tokens"
-            value={formatTokenCount(providerSummary.totalInputTokens)}
-            subtitle={`${timeRange.label}`}
-            icon={Layers}
+            label="Cache Hit Rate"
+            value={`${providerSummary.cacheHitRate}%`}
+            subtitle={`${formatTokenCount(providerSummary.totalCacheReadTokens)} cache read tokens`}
+            icon={Zap}
             iconColor="bg-[color-mix(in_srgb,#8b5cf6_15%,transparent)] text-[#8b5cf6]"
-            testId="stat-input-tokens"
+            testId="stat-cache-hit-rate"
           />
           <StatCard
             label="Total Sessions"
@@ -1146,7 +1166,7 @@ export function MetricsPage() {
           <StatCard
             label="Estimated Cost"
             value={formatCost(providerSummary.estimatedCost)}
-            subtitle={`~$${ESTIMATED_COST_PER_MILLION_TOKENS}/M tokens`}
+            subtitle="per-model pricing"
             icon={DollarSign}
             iconColor="bg-[color-mix(in_srgb,#eab308_15%,transparent)] text-[#eab308]"
             testId="stat-estimated-cost"
@@ -1155,7 +1175,7 @@ export function MetricsPage() {
 
         {/* Charts row */}
         <div
-          className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4"
+          className="grid grid-cols-1 @lg:grid-cols-2 @xl:grid-cols-3 gap-4"
           data-testid="charts-grid-provider"
         >
           <TrendLineChart
@@ -1194,6 +1214,63 @@ export function MetricsPage() {
             maxBars={8}
           />
         </div>
+
+        {/* Model-level token & cost breakdown table */}
+        {modelMetrics.length > 0 && (
+          <div className="mt-4" data-testid="model-cost-breakdown">
+            <h3 className="text-sm font-semibold text-[var(--color-text)] mb-2">
+              Token &amp; Cost Breakdown by Model
+            </h3>
+            <div className="overflow-x-auto rounded-lg border border-[var(--color-border)]">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)]">
+                    <th className="text-left px-3 py-2 font-medium">Model</th>
+                    <th className="text-right px-3 py-2 font-medium">Input</th>
+                    <th className="text-right px-3 py-2 font-medium">Output</th>
+                    <th className="text-right px-3 py-2 font-medium">Cache Read</th>
+                    <th className="text-right px-3 py-2 font-medium">Cache Create</th>
+                    <th className="text-right px-3 py-2 font-medium">Cache %</th>
+                    <th className="text-right px-3 py-2 font-medium">Cost</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--color-border)]">
+                  {modelMetrics.map((m) => {
+                    const cacheRate = m.totalInputTokens > 0
+                      ? Math.round((m.totalCacheReadTokens / m.totalInputTokens) * 100)
+                      : 0;
+                    return (
+                      <tr key={m.group} className="hover:bg-[var(--color-surface-hover)] text-[var(--color-text)]">
+                        <td className="px-3 py-2 font-mono">{m.group}</td>
+                        <td className="text-right px-3 py-2 font-mono">{formatTokenCount(m.totalInputTokens)}</td>
+                        <td className="text-right px-3 py-2 font-mono">{formatTokenCount(m.totalOutputTokens)}</td>
+                        <td className="text-right px-3 py-2 font-mono">{formatTokenCount(m.totalCacheReadTokens)}</td>
+                        <td className="text-right px-3 py-2 font-mono">{formatTokenCount(m.totalCacheCreationTokens)}</td>
+                        <td className="text-right px-3 py-2 font-mono">
+                          <span className={cacheRate > 50 ? 'text-[var(--color-success)]' : cacheRate > 10 ? 'text-[var(--color-warning)]' : ''}>
+                            {cacheRate}%
+                          </span>
+                        </td>
+                        <td className="text-right px-3 py-2 font-mono font-medium">{formatCost(m.estimatedCost?.totalCost ?? 0)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-[var(--color-surface-hover)] font-medium text-[var(--color-text)]">
+                    <td className="px-3 py-2">Total</td>
+                    <td className="text-right px-3 py-2 font-mono">{formatTokenCount(providerSummary.totalInputTokens)}</td>
+                    <td className="text-right px-3 py-2 font-mono">{formatTokenCount(providerSummary.totalOutputTokens)}</td>
+                    <td className="text-right px-3 py-2 font-mono">{formatTokenCount(providerSummary.totalCacheReadTokens)}</td>
+                    <td className="text-right px-3 py-2 font-mono">{formatTokenCount(providerSummary.totalCacheCreationTokens)}</td>
+                    <td className="text-right px-3 py-2 font-mono">{providerSummary.cacheHitRate}%</td>
+                    <td className="text-right px-3 py-2 font-mono">{formatCost(providerSummary.estimatedCost)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1797,6 +1797,200 @@ describe('MergeStewardService', () => {
   });
 
   // ----------------------------------------
+  // Per-Task Target Branch (getTargetBranchForTask)
+  // ----------------------------------------
+
+  describe('per-task targetBranch', () => {
+    const isBun = typeof globalThis.Bun !== 'undefined';
+    const itGit = isBun ? it.skip : it;
+
+    itGit('getTargetBranchForTask reads targetBranch from task orchestrator metadata', async () => {
+      // Task with explicit targetBranch in orchestrator metadata
+      const taskWithTargetBranch = createMockTask({
+        status: TaskStatus.REVIEW,
+        metadata: {
+          orchestrator: {
+            branch: 'agent/worker/task-branch',
+            assignedAgent: 'agent-worker-001',
+            mergeStatus: 'pending',
+            targetBranch: 'staging',
+          },
+        },
+      });
+
+      (api.get as MockInstance).mockResolvedValue(taskWithTargetBranch);
+      (api.update as MockInstance).mockImplementation((_id, updates) =>
+        Promise.resolve({ ...taskWithTargetBranch, ...updates } as Task)
+      );
+
+      // Mock exec to simulate branchHasCommitsAhead returning >0
+      const cp = await import('node:child_process');
+      (cp.exec as unknown as MockInstance).mockImplementation(
+        (cmd: string, _opts: unknown, cb?: Function) => {
+          const callback = typeof _opts === 'function' ? (_opts as unknown as Function) : cb;
+          if (callback) {
+            if ((cmd as string).includes('rev-list --count')) {
+              // Verify the command uses 'staging' (the task's targetBranch), not 'main'
+              expect((cmd as string)).toContain('staging');
+              callback(null, { stdout: '0\n', stderr: '' });
+            } else if ((cmd as string).includes('remote get-url')) {
+              callback(new Error('no remote'), { stdout: '', stderr: '' });
+            } else {
+              callback(null, { stdout: '', stderr: '' });
+            }
+          }
+        }
+      );
+
+      const result = await service.processTask(taskWithTargetBranch.id);
+
+      // Should have used 'staging' as the target branch (not_applicable because 0 commits)
+      expect(result.status).toBe('not_applicable');
+    });
+
+    itGit('getTargetBranchForTask falls back to global when task has no targetBranch', async () => {
+      // Task WITHOUT targetBranch in orchestrator metadata
+      const taskWithoutTargetBranch = createMockTask({
+        status: TaskStatus.REVIEW,
+        metadata: {
+          orchestrator: {
+            branch: 'agent/worker/task-branch',
+            assignedAgent: 'agent-worker-001',
+            mergeStatus: 'pending',
+            // No targetBranch
+          },
+        },
+      });
+
+      (api.get as MockInstance).mockResolvedValue(taskWithoutTargetBranch);
+      (api.update as MockInstance).mockImplementation((_id, updates) =>
+        Promise.resolve({ ...taskWithoutTargetBranch, ...updates } as Task)
+      );
+
+      // Mock exec — the fallback should use the detected default branch ('main')
+      const cp = await import('node:child_process');
+      (cp.exec as unknown as MockInstance).mockImplementation(
+        (cmd: string, _opts: unknown, cb?: Function) => {
+          const callback = typeof _opts === 'function' ? (_opts as unknown as Function) : cb;
+          if (callback) {
+            if ((cmd as string).includes('rev-list --count')) {
+              // Should fall back to 'main' (detected default branch) instead of any task-specific branch
+              expect((cmd as string)).toContain('main');
+              callback(null, { stdout: '0\n', stderr: '' });
+            } else if ((cmd as string).includes('remote get-url')) {
+              callback(new Error('no remote'), { stdout: '', stderr: '' });
+            } else if ((cmd as string).includes('symbolic-ref')) {
+              callback(null, { stdout: 'refs/heads/main\n', stderr: '' });
+            } else if ((cmd as string).includes('rev-parse --verify')) {
+              callback(null, { stdout: 'abc123\n', stderr: '' });
+            } else {
+              callback(null, { stdout: '', stderr: '' });
+            }
+          }
+        }
+      );
+
+      const result = await service.processTask(taskWithoutTargetBranch.id);
+
+      expect(result.status).toBe('not_applicable');
+    });
+
+    itGit('attemptMerge merges to the task targetBranch', async () => {
+      const taskWithTargetBranch = createMockTask({
+        metadata: {
+          orchestrator: {
+            branch: 'agent/worker/task-branch',
+            worktree: '.stoneforge/.worktrees/worker-test',
+            assignedAgent: 'agent-worker-001',
+            mergeStatus: 'pending',
+            targetBranch: 'staging',
+          },
+        },
+      });
+
+      (api.get as MockInstance).mockResolvedValue(taskWithTargetBranch);
+
+      const cp = await import('node:child_process');
+      const execCalls: string[] = [];
+      (cp.exec as unknown as MockInstance).mockImplementation(
+        (cmd: string, opts: unknown, cb?: Function) => {
+          const callback = typeof opts === 'function' ? (opts as unknown as Function) : cb;
+          execCalls.push(cmd as string);
+          if (callback) {
+            if ((cmd as string).includes('merge-base')) {
+              callback(null, { stdout: 'abc123\n', stderr: '' });
+            } else if ((cmd as string).includes('merge-tree')) {
+              callback(null, { stdout: '', stderr: '' });
+            } else if ((cmd as string).includes('symbolic-ref')) {
+              callback(null, { stdout: 'agent/worker/some-branch\n', stderr: '' });
+            } else if ((cmd as string).includes('rev-parse HEAD')) {
+              callback(null, { stdout: 'def456\n', stderr: '' });
+            } else {
+              callback(null, { stdout: '', stderr: '' });
+            }
+          }
+        }
+      );
+
+      const result = await service.attemptMerge(taskWithTargetBranch.id);
+
+      expect(result.success).toBe(true);
+      // Verify merge commands reference 'staging', not 'main'
+      const worktreeCmd = execCalls.find(c => c.includes('worktree add'));
+      expect(worktreeCmd).toBeDefined();
+      expect(worktreeCmd).toContain('origin/staging');
+
+      const pushCmd = execCalls.find(c => c.includes('push origin'));
+      expect(pushCmd).toBeDefined();
+      expect(pushCmd).toContain('push origin HEAD:staging');
+    });
+
+    itGit('branchHasCommitsAhead compares against the task targetBranch', async () => {
+      const taskWithTargetBranch = createMockTask({
+        status: TaskStatus.REVIEW,
+        metadata: {
+          orchestrator: {
+            branch: 'agent/worker/task-branch',
+            assignedAgent: 'agent-worker-001',
+            mergeStatus: 'pending',
+            targetBranch: 'develop',
+          },
+        },
+      });
+
+      (api.get as MockInstance).mockResolvedValue(taskWithTargetBranch);
+      (api.update as MockInstance).mockImplementation((_id, updates) =>
+        Promise.resolve({ ...taskWithTargetBranch, ...updates } as Task)
+      );
+
+      const cp = await import('node:child_process');
+      let revListCmd: string | undefined;
+      (cp.exec as unknown as MockInstance).mockImplementation(
+        (cmd: string, _opts: unknown, cb?: Function) => {
+          const callback = typeof _opts === 'function' ? (_opts as unknown as Function) : cb;
+          if (callback) {
+            if ((cmd as string).includes('rev-list --count')) {
+              revListCmd = cmd as string;
+              callback(null, { stdout: '0\n', stderr: '' });
+            } else if ((cmd as string).includes('remote get-url')) {
+              callback(new Error('no remote'), { stdout: '', stderr: '' });
+            } else {
+              callback(null, { stdout: '', stderr: '' });
+            }
+          }
+        }
+      );
+
+      await service.processTask(taskWithTargetBranch.id);
+
+      // Verify the rev-list command compared against 'develop' (the task's targetBranch)
+      expect(revListCmd).toBeDefined();
+      expect(revListCmd).toContain('develop');
+      expect(revListCmd).not.toContain('main');
+    });
+  });
+
+  // ----------------------------------------
   // MergeStatusConflictError
   // ----------------------------------------
 

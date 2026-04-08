@@ -27,16 +27,14 @@ import { DocumentId } from './document.js';
 /**
  * Branded type for Message IDs (for use in threading)
  */
-declare const MessageIdBrand: unique symbol;
-export type MessageId = ElementId & { readonly [MessageIdBrand]: typeof MessageIdBrand };
+export type MessageId = ElementId & { readonly __messageIdBrand: 'MessageId' };
 
 /**
  * Branded type for Channel IDs
  * Note: This is also exported from channel.ts for the Channel type.
  * We keep a separate definition here to avoid circular imports.
  */
-declare const ChannelIdBrand: unique symbol;
-export type ChannelId = ElementId & { readonly [ChannelIdBrand]: typeof ChannelIdBrand };
+export type ChannelId = ElementId & { readonly __channelIdBrand: 'ChannelId' };
 
 // ============================================================================
 // Validation Constants

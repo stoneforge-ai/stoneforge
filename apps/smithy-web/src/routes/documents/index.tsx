@@ -28,8 +28,7 @@ import { ElementNotFound } from '../../components/shared/ElementNotFound';
 import { MobileDetailSheet } from '../../components/shared/MobileDetailSheet';
 import { CreateDocumentModal } from '../../components/document/CreateDocumentModal';
 import { CreateLibraryModal } from '../../components/document/CreateLibraryModal';
-import { useDeepLink, useShortcutVersion } from '../../hooks';
-import { useIsMobile } from '../../hooks/useBreakpoint';
+import { useDeepLink, useShortcutVersion, useContainerIsMobile } from '../../hooks';
 import { useAllDocuments as useAllDocumentsPreloaded } from '../../api/hooks/useAllElements';
 import { DeleteLibraryModal } from '@stoneforge/ui/documents';
 
@@ -54,7 +53,7 @@ import {
 export function DocumentsPage() {
   const navigate = useNavigate();
   const search = useSearch({ from: '/documents' });
-  const isMobile = useIsMobile();
+  const isMobile = useContainerIsMobile();
   useShortcutVersion();
 
   const queryClient = useQueryClient();

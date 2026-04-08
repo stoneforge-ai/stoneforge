@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, test, expect, beforeEach, afterEach } from 'vitest';
 import { ApiClient, ApiError, createApiClient } from './api-client';
 
 // Mock fetch

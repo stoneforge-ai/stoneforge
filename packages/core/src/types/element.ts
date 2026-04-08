@@ -19,14 +19,12 @@ import { ErrorCode } from '../errors/codes.js';
  * Branded type for Element IDs
  * Format: el-{hash} or el-{hash}.{n} for hierarchical
  */
-declare const ElementIdBrand: unique symbol;
-export type ElementId = string & { readonly [ElementIdBrand]: typeof ElementIdBrand };
+export type ElementId = string & { readonly __elementIdBrand: 'ElementId' };
 
 /**
  * Branded type for Entity IDs (creators)
  */
-declare const EntityIdBrand: unique symbol;
-export type EntityId = string & { readonly [EntityIdBrand]: typeof EntityIdBrand };
+export type EntityId = string & { readonly __entityIdBrand: 'EntityId' };
 
 /**
  * Timestamp type - ISO 8601 formatted string

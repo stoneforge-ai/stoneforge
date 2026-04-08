@@ -222,6 +222,7 @@ function OptionToggle({ active, onClick, icon: Icon, label, shortLabel }: Option
       title={label}
     >
       <Icon className="w-3.5 h-3.5" />
+      {/* viewport-based: renders in fixed overlay outside @container */}
       {shortLabel && <span className="hidden sm:inline">{shortLabel}</span>}
     </button>
   );

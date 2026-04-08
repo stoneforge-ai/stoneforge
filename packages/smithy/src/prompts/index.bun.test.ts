@@ -6,7 +6,9 @@ import {
   listBuiltInPrompts,
   buildAgentPrompt,
   renderPromptTemplate,
+  buildWorkflowPresetSection,
 } from "./index.js";
+import type { WorkflowPresetContext } from "./index.js";
 
 describe("Prompt Loading", () => {
   describe("hasBuiltInPrompt", () => {
@@ -370,5 +372,118 @@ describe("renderPromptTemplate", () => {
     const rendered = renderPromptTemplate(prompt!, { baseBranch: "develop" });
     expect(rendered).not.toContain("{{baseBranch}}");
     expect(rendered).toContain("origin/develop:<path/to/file>");
+  });
+});
+
+describe("buildWorkflowPresetSection", () => {
+  it("returns auto-merge instructions for auto preset", () => {
+    const context: WorkflowPresetContext = {
+      preset: "auto",
+      permissionModel: "unrestricted",
+    };
+    const section = buildWorkflowPresetSection(context);
+    expect(section).toContain("Workflow Context");
+    expect(section).toContain("auto-merged to the main branch");
+    expect(section).toContain("unrestricted tool access");
+  });
+
+  it("returns review branch instructions for review preset", () => {
+    const context: WorkflowPresetContext = {
+      preset: "review",
+      permissionModel: "unrestricted",
+    };
+    const section = buildWorkflowPresetSection(context);
+    expect(section).toContain("Workflow Context");
+    expect(section).toContain("stoneforge/review");
+    expect(section).toContain("human will review");
+    expect(section).toContain("unrestricted tool access");
+  });
+
+  it("returns restricted mode instructions for approve preset", () => {
+    const context: WorkflowPresetContext = {
+      preset: "approve",
+      permissionModel: "restricted",
+      autoAllowedTools: ["Read", "Write", "Edit"],
+      autoAllowedSfCommands: ["task", "document"],
+      allowedBashCommands: ["git status", "ls"],
+    };
+    const section = buildWorkflowPresetSection(context);
+    expect(section).toContain("Workflow Context");
+    expect(section).toContain("restricted mode");
+    expect(section).toContain("Read, Write, Edit");
+    expect(section).toContain("sf task, sf document");
+    expect(section).toContain("git status, ls");
+    expect(section).toContain("GitHub PR for human review");
+    expect(section).toContain("do not retry the same action");
+    expect(section).toContain("auto-allowed tools when possible");
+  });
+
+  it("uses default tool lists when not provided for approve preset", () => {
+    const context: WorkflowPresetContext = {
+      preset: "approve",
+      permissionModel: "restricted",
+    };
+    const section = buildWorkflowPresetSection(context);
+    expect(section).toContain("Read, Write, Edit, Glob, Grep");
+    expect(section).toContain("sf task, sf document, sf message");
+  });
+
+  it("adds note for restricted permission on non-approve preset", () => {
+    const context: WorkflowPresetContext = {
+      preset: "auto",
+      permissionModel: "restricted",
+    };
+    const section = buildWorkflowPresetSection(context);
+    expect(section).toContain("tool access is restricted");
+    expect(section).toContain("not \"approve\"");
+  });
+
+  it("returns empty string for unknown preset", () => {
+    const context: WorkflowPresetContext = {
+      preset: "unknown" as any,
+      permissionModel: "unrestricted",
+    };
+    const section = buildWorkflowPresetSection(context);
+    expect(section).toBe("");
+  });
+});
+
+describe("buildAgentPrompt with workflow preset", () => {
+  it("includes preset section when workflowPresetContext is provided", () => {
+    const prompt = buildAgentPrompt({
+      role: "worker",
+      workflowPresetContext: {
+        preset: "review",
+        permissionModel: "unrestricted",
+      },
+    });
+    expect(prompt).toBeDefined();
+    expect(prompt).toContain("You are an **Ephemeral Worker**");
+    expect(prompt).toContain("Workflow Context");
+    expect(prompt).toContain("stoneforge/review");
+  });
+
+  it("does not include preset section when workflowPresetContext is not provided", () => {
+    const prompt = buildAgentPrompt({
+      role: "worker",
+    });
+    expect(prompt).toBeDefined();
+    expect(prompt).not.toContain("Workflow Context");
+  });
+
+  it("places preset section between role prompt and task context", () => {
+    const prompt = buildAgentPrompt({
+      role: "worker",
+      taskContext: "Implement feature X",
+      workflowPresetContext: {
+        preset: "auto",
+        permissionModel: "unrestricted",
+      },
+    });
+    expect(prompt).toBeDefined();
+    const workflowIdx = prompt!.indexOf("Workflow Context");
+    const taskIdx = prompt!.indexOf("# Current Task");
+    expect(workflowIdx).toBeGreaterThan(0);
+    expect(taskIdx).toBeGreaterThan(workflowIdx);
   });
 });

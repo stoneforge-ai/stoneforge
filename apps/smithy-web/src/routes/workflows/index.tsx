@@ -376,7 +376,7 @@ export function WorkflowsPage() {
               )}
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" data-testid="playbooks-grid">
+            <div className="grid grid-cols-1 @md:grid-cols-2 @lg:grid-cols-3 gap-4" data-testid="playbooks-grid">
               {filteredPlaybooks.map((playbook: Playbook) => (
                 <PlaybookCard
                   key={playbook.id}
@@ -424,7 +424,7 @@ export function WorkflowsPage() {
                   <h2 className="text-sm font-medium text-[var(--color-text-secondary)] mb-3">
                     Active ({filteredActiveWorkflows.length})
                   </h2>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" data-testid="active-workflows-grid">
+                  <div className="grid grid-cols-1 @md:grid-cols-2 @lg:grid-cols-3 gap-4" data-testid="active-workflows-grid">
                     {filteredActiveWorkflows.map((workflow: WorkflowType) => (
                       <WorkflowCard
                         key={workflow.id}
@@ -444,7 +444,7 @@ export function WorkflowsPage() {
                   <h2 className="text-sm font-medium text-[var(--color-text-secondary)] mb-3">
                     Recent ({filteredTerminalWorkflows.length})
                   </h2>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" data-testid="terminal-workflows-grid">
+                  <div className="grid grid-cols-1 @md:grid-cols-2 @lg:grid-cols-3 gap-4" data-testid="terminal-workflows-grid">
                     {filteredTerminalWorkflows.slice(0, 9).map((workflow: WorkflowType) => (
                       <WorkflowCard
                         key={workflow.id}

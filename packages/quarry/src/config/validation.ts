@@ -24,6 +24,8 @@ import {
   VALID_CONFLICT_STRATEGIES,
   VALID_SYNC_DIRECTIONS,
   VALID_AUTO_LINK_PROVIDERS,
+  VALID_WORKFLOW_PRESETS,
+  VALID_PERMISSION_MODELS,
 } from './types.js';
 // Note: ExternalSyncConflictStrategy and SyncDirection types are validated via the VALID_* arrays
 import { validateDurationRange, formatDuration } from './duration.js';
@@ -520,6 +522,87 @@ export function validateConfiguration(config: unknown): Configuration {
     }
   }
 
+  // Validate merge
+  if (typeof obj.merge !== 'object' || obj.merge === null) {
+    throw new ValidationError(
+      'Configuration must include merge object',
+      ErrorCode.MISSING_REQUIRED_FIELD,
+      { field: 'merge' }
+    );
+  }
+  const merge = obj.merge as Record<string, unknown>;
+  if (typeof merge.autoMerge !== 'boolean') {
+    throw new ValidationError(
+      'merge.autoMerge must be a boolean',
+      ErrorCode.INVALID_INPUT,
+      { field: 'merge.autoMerge', value: merge.autoMerge, expected: 'boolean' }
+    );
+  }
+  if (merge.targetBranch !== null && typeof merge.targetBranch !== 'string') {
+    throw new ValidationError(
+      'merge.targetBranch must be a string or null',
+      ErrorCode.INVALID_INPUT,
+      { field: 'merge.targetBranch', value: merge.targetBranch, expected: 'string | null' }
+    );
+  }
+  if (typeof merge.requireApproval !== 'boolean') {
+    throw new ValidationError(
+      'merge.requireApproval must be a boolean',
+      ErrorCode.INVALID_INPUT,
+      { field: 'merge.requireApproval', value: merge.requireApproval, expected: 'boolean' }
+    );
+  }
+
+  // Validate workflow
+  if (typeof obj.workflow !== 'object' || obj.workflow === null) {
+    throw new ValidationError(
+      'Configuration must include workflow object',
+      ErrorCode.MISSING_REQUIRED_FIELD,
+      { field: 'workflow' }
+    );
+  }
+  const workflow = obj.workflow as Record<string, unknown>;
+  if (workflow.preset !== null && !VALID_WORKFLOW_PRESETS.includes(workflow.preset as string as never)) {
+    throw new ValidationError(
+      `workflow.preset must be one of: ${VALID_WORKFLOW_PRESETS.join(', ')}, or null`,
+      ErrorCode.INVALID_INPUT,
+      { field: 'workflow.preset', value: workflow.preset, expected: VALID_WORKFLOW_PRESETS }
+    );
+  }
+
+  // Validate agents
+  if (typeof obj.agents !== 'object' || obj.agents === null) {
+    throw new ValidationError(
+      'Configuration must include agents object',
+      ErrorCode.MISSING_REQUIRED_FIELD,
+      { field: 'agents' }
+    );
+  }
+  const agents = obj.agents as Record<string, unknown>;
+  if (!VALID_PERMISSION_MODELS.includes(agents.permissionModel as string as never)) {
+    throw new ValidationError(
+      `agents.permissionModel must be one of: ${VALID_PERMISSION_MODELS.join(', ')}`,
+      ErrorCode.INVALID_INPUT,
+      { field: 'agents.permissionModel', value: agents.permissionModel, expected: VALID_PERMISSION_MODELS }
+    );
+  }
+  if (!Array.isArray(agents.allowedBashCommands)) {
+    throw new ValidationError(
+      'agents.allowedBashCommands must be an array of strings',
+      ErrorCode.INVALID_INPUT,
+      { field: 'agents.allowedBashCommands', value: agents.allowedBashCommands, expected: 'array of strings' }
+    );
+  }
+  for (let i = 0; i < (agents.allowedBashCommands as unknown[]).length; i++) {
+    if (typeof (agents.allowedBashCommands as unknown[])[i] !== 'string') {
+      throw new ValidationError(
+        `agents.allowedBashCommands[${i}] must be a string`,
+        ErrorCode.INVALID_INPUT,
+        { field: `agents.allowedBashCommands[${i}]`, value: (agents.allowedBashCommands as unknown[])[i], expected: 'string' }
+      );
+    }
+  }
+
   // Validate demoMode
   if (typeof obj.demoMode !== 'boolean') {
     throw new ValidationError(
@@ -653,6 +736,66 @@ export function validatePartialConfiguration(config: PartialConfiguration): void
         ErrorCode.INVALID_INPUT,
         { field: 'externalSync.autoLinkDocumentProvider', value: config.externalSync.autoLinkDocumentProvider, expected: VALID_AUTO_LINK_PROVIDERS }
       );
+    }
+  }
+  // Validate merge fields
+  if (config.merge?.autoMerge !== undefined && typeof config.merge.autoMerge !== 'boolean') {
+    throw new ValidationError(
+      'merge.autoMerge must be a boolean',
+      ErrorCode.INVALID_INPUT,
+      { field: 'merge.autoMerge', value: config.merge.autoMerge, expected: 'boolean' }
+    );
+  }
+  if (config.merge?.targetBranch !== undefined && config.merge.targetBranch !== null && typeof config.merge.targetBranch !== 'string') {
+    throw new ValidationError(
+      'merge.targetBranch must be a string or null',
+      ErrorCode.INVALID_INPUT,
+      { field: 'merge.targetBranch', value: config.merge.targetBranch, expected: 'string | null' }
+    );
+  }
+  if (config.merge?.requireApproval !== undefined && typeof config.merge.requireApproval !== 'boolean') {
+    throw new ValidationError(
+      'merge.requireApproval must be a boolean',
+      ErrorCode.INVALID_INPUT,
+      { field: 'merge.requireApproval', value: config.merge.requireApproval, expected: 'boolean' }
+    );
+  }
+  // Validate workflow fields
+  if (config.workflow?.preset !== undefined && config.workflow.preset !== null) {
+    if (!VALID_WORKFLOW_PRESETS.includes(config.workflow.preset as never)) {
+      throw new ValidationError(
+        `workflow.preset must be one of: ${VALID_WORKFLOW_PRESETS.join(', ')}, or null`,
+        ErrorCode.INVALID_INPUT,
+        { field: 'workflow.preset', value: config.workflow.preset, expected: VALID_WORKFLOW_PRESETS }
+      );
+    }
+  }
+  // Validate agents fields
+  if (config.agents?.permissionModel !== undefined) {
+    if (!VALID_PERMISSION_MODELS.includes(config.agents.permissionModel as never)) {
+      throw new ValidationError(
+        `agents.permissionModel must be one of: ${VALID_PERMISSION_MODELS.join(', ')}`,
+        ErrorCode.INVALID_INPUT,
+        { field: 'agents.permissionModel', value: config.agents.permissionModel, expected: VALID_PERMISSION_MODELS }
+      );
+    }
+  }
+  if (config.agents?.allowedBashCommands !== undefined) {
+    if (!Array.isArray(config.agents.allowedBashCommands)) {
+      throw new ValidationError(
+        'agents.allowedBashCommands must be an array of strings',
+        ErrorCode.INVALID_INPUT,
+        { field: 'agents.allowedBashCommands', value: config.agents.allowedBashCommands, expected: 'array of strings' }
+      );
+    }
+    for (let i = 0; i < config.agents.allowedBashCommands.length; i++) {
+      if (typeof config.agents.allowedBashCommands[i] !== 'string') {
+        throw new ValidationError(
+          `agents.allowedBashCommands[${i}] must be a string`,
+          ErrorCode.INVALID_INPUT,
+          { field: `agents.allowedBashCommands[${i}]`, value: config.agents.allowedBashCommands[i], expected: 'string' }
+        );
+      }
     }
   }
   if (config.demoMode !== undefined && typeof config.demoMode !== 'boolean') {

@@ -337,7 +337,7 @@ export class ClaudeHeadlessProvider implements HeadlessProvider {
     // Build environment
     const env: Record<string, string> = {
       ...(process.env as Record<string, string>),
-      CLAUDE_CODE_DISABLE_1M_CONTEXT: '1',
+      CLAUDECODE: '1',
       ...options.environmentVariables,
     };
     if (options.stoneforgeRoot) {
@@ -396,6 +396,11 @@ export class ClaudeHeadlessProvider implements HeadlessProvider {
     // Pass model if specified
     if (options.model) {
       sdkOptions.model = options.model;
+    }
+
+    // Pass hooks if specified (e.g., PreToolUse for permission enforcement)
+    if (options.hooks) {
+      sdkOptions.hooks = options.hooks;
     }
 
     // Resume if we have a session ID

@@ -44,7 +44,9 @@ async function createTaskAssignmentService(options: GlobalOptions): Promise<{
     initializeSchema(backend);
     const api = new QuarryAPIImpl(backend);
     const mergeProvider = createLocalMergeProvider();
-    const service = createService(api, mergeProvider);
+    const { dirname } = await import('node:path');
+    const workspaceRoot = dirname(stoneforgeDir);
+    const service = createService(api, mergeProvider, workspaceRoot);
 
     return { service };
   } catch (err) {
@@ -269,7 +271,7 @@ const taskCompleteOptions: CommandOption[] = [
   {
     name: 'baseBranch',
     short: 'b',
-    description: 'Base branch for the merge request (default: main)',
+    description: 'Base branch for the merge request (default: auto-detect from task targetBranch, then main)',
     hasValue: true,
   },
 ];
@@ -412,6 +414,7 @@ async function taskMergeHandler(
     const { getOrchestratorTaskMeta, updateOrchestratorTaskMeta } = await import('../../types/task-meta.js');
     const orchestratorMeta = getOrchestratorTaskMeta(task.metadata as Record<string, unknown>);
     const sourceBranch = orchestratorMeta?.branch;
+    const targetBranch = orchestratorMeta?.targetBranch;
 
     if (!sourceBranch) {
       return failure(`Task ${taskId} has no branch in orchestrator metadata.`, ExitCode.GENERAL_ERROR);
@@ -434,6 +437,7 @@ async function taskMergeHandler(
     const mergeResult = await mergeBranch({
       workspaceRoot,
       sourceBranch,
+      targetBranch,
       commitMessage,
       syncLocal: false,
     });
@@ -449,6 +453,62 @@ async function taskMergeHandler(
       return failure(lines.join('\n'), ExitCode.GENERAL_ERROR);
     }
 
+    // 3b. Post-merge verification: confirm commits landed on origin before marking as merged
+    const { exec: execCb } = await import('node:child_process');
+    const { promisify: promisifyUtil } = await import('node:util');
+    const execVerify = promisifyUtil(execCb);
+    const effectiveTargetForVerify = targetBranch ?? await detectTargetBranch(workspaceRoot);
+
+    try {
+      await execVerify(`git fetch origin ${effectiveTargetForVerify}`, { cwd: workspaceRoot });
+    } catch (fetchErr) {
+      const fetchMsg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
+      return failure(
+        `Post-merge verification failed: could not fetch origin/${effectiveTargetForVerify}. ${fetchMsg}`,
+        ExitCode.GENERAL_ERROR
+      );
+    }
+
+    if (mergeResult.commitHash) {
+      // Verify the merge commit is an ancestor of origin/{targetBranch}
+      try {
+        await execVerify(
+          `git merge-base --is-ancestor ${mergeResult.commitHash} origin/${effectiveTargetForVerify}`,
+          { cwd: workspaceRoot }
+        );
+      } catch {
+        return failure(
+          `Post-merge verification failed: commit ${mergeResult.commitHash} is not on origin/${effectiveTargetForVerify}. ` +
+          `The merge commit may not have been delivered to the remote. Please retry or push manually.`,
+          ExitCode.GENERAL_ERROR
+        );
+      }
+    } else if (mergeResult.alreadyMerged) {
+      // Verify the local source branch has no commits ahead of origin/{targetBranch}
+      try {
+        const { stdout: countStr } = await execVerify(
+          `git rev-list --count origin/${effectiveTargetForVerify}..${sourceBranch}`,
+          { cwd: workspaceRoot, encoding: 'utf8' }
+        );
+        const aheadCount = parseInt(countStr.trim(), 10);
+        if (aheadCount > 0) {
+          return failure(
+            `Post-merge verification failed: source branch ${sourceBranch} has ${aheadCount} commit(s) ` +
+            `not on origin/${effectiveTargetForVerify} despite being reported as already merged. ` +
+            `The commits may not have been delivered to the remote. Please retry or push manually.`,
+            ExitCode.GENERAL_ERROR
+          );
+        }
+      } catch (revListErr) {
+        const revListMsg = revListErr instanceof Error ? revListErr.message : String(revListErr);
+        return failure(
+          `Post-merge verification failed: could not verify source branch ${sourceBranch} against ` +
+          `origin/${effectiveTargetForVerify}. ${revListMsg}`,
+          ExitCode.GENERAL_ERROR
+        );
+      }
+    }
+
     // 4. Atomic status update: set mergeStatus + close in one call
     const now = createTimestamp();
     const newMeta = updateOrchestratorTaskMeta(
@@ -456,6 +516,7 @@ async function taskMergeHandler(
       {
         mergeStatus: 'merged' as import('../../types/task-meta.js').MergeStatus,
         completedAt: now,
+        ...(mergeResult.commitHash ? { mergeCommitHash: mergeResult.commitHash } : {}),
         ...(options.summary ? { completionSummary: options.summary } : {}),
       }
     );
@@ -468,31 +529,26 @@ async function taskMergeHandler(
     });
 
     // 5. Clean up: delete source branch and remove task worktree (best-effort)
-    const { exec } = await import('node:child_process');
-    const { promisify } = await import('node:util');
-    const execAsync = promisify(exec);
-
     try {
-      await execAsync(`git branch -D ${sourceBranch}`, { cwd: workspaceRoot });
+      await execVerify(`git branch -D ${sourceBranch}`, { cwd: workspaceRoot });
     } catch { /* branch may not exist locally */ }
 
     try {
-      await execAsync(`git push origin --delete ${sourceBranch}`, { cwd: workspaceRoot });
+      await execVerify(`git push origin --delete ${sourceBranch}`, { cwd: workspaceRoot });
     } catch { /* branch may not exist on remote */ }
 
     const worktreePath = orchestratorMeta?.worktree;
     if (worktreePath) {
       try {
-        await execAsync(`git worktree remove --force "${worktreePath}"`, { cwd: workspaceRoot });
+        await execVerify(`git worktree remove --force "${worktreePath}"`, { cwd: workspaceRoot });
       } catch { /* worktree may already be gone */ }
     }
 
     // 6. Sync local target branch (best-effort, after all bookkeeping is done)
-    const targetBranch = await detectTargetBranch(workspaceRoot);
     try {
-      await execAsync('git fetch origin', { cwd: workspaceRoot, encoding: 'utf8' });
+      await execVerify('git fetch origin', { cwd: workspaceRoot, encoding: 'utf8' });
     } catch { /* best-effort */ }
-    await syncLocalBranch(workspaceRoot, targetBranch);
+    await syncLocalBranch(workspaceRoot, effectiveTargetForVerify);
 
     // 7. Output result
     const mode = getOutputMode(options);
@@ -770,6 +826,22 @@ async function taskSyncHandler(
       ? worktreePath
       : path.join(workspaceRoot, worktreePath);
 
+    const remoteAvailable = await worktreeManager.ensureWorktreeRemote(fullWorktreePath);
+    if (!remoteAvailable) {
+      const syncResult: SyncResult = {
+        success: false,
+        error: 'No origin remote is configured for this workspace or worktree',
+        message: 'Git origin remote is not configured',
+        worktreePath,
+        branch,
+      };
+      const mode = getOutputMode(options);
+      if (mode === 'json') {
+        return success(syncResult);
+      }
+      return failure(syncResult.message, ExitCode.GENERAL_ERROR);
+    }
+
     // Fetch from origin
     try {
       await execFileAsync('git', ['fetch', 'origin'], {
@@ -792,9 +864,10 @@ async function taskSyncHandler(
       return failure(syncResult.message, ExitCode.GENERAL_ERROR);
     }
 
-    // Detect the default branch (main or master)
-    const defaultBranch = await worktreeManager.getDefaultBranch();
-    const remoteBranch = `origin/${defaultBranch}`;
+    // Use the task's targetBranch if set, otherwise fall back to default branch
+    const targetBranch = orchestratorMeta?.targetBranch as string | undefined;
+    const syncBranch = targetBranch ?? await worktreeManager.getDefaultBranch();
+    const remoteBranch = `origin/${syncBranch}`;
 
     // Attempt to merge
     try {
@@ -940,9 +1013,95 @@ Examples:
 
 import { MergeStatusValues, isMergeStatus, type MergeStatus } from '../../types/task-meta.js';
 
+interface TaskMergeStatusOptions {
+  force?: boolean;
+}
+
+/**
+ * Verify that a task's branch content has been merged into the target branch.
+ * Returns null if verification passes, or an error message if it fails.
+ *
+ * Exported for testing.
+ */
+export async function verifyMergeStatus(params: {
+  branch: string;
+  effectiveTarget: string;
+  mergeCommitHash?: string;
+  force?: boolean;
+  execAsync: (cmd: string, opts: Record<string, unknown>) => Promise<{ stdout: string; stderr: string }>;
+  workspaceRoot: string;
+}): Promise<{ status: 'ok' | 'error' | 'forced'; message?: string }> {
+  const { branch, effectiveTarget, mergeCommitHash, force, execAsync, workspaceRoot } = params;
+
+  try {
+    // Fetch latest from origin
+    await execAsync('git fetch origin', { cwd: workspaceRoot, encoding: 'utf8', timeout: 60_000 });
+
+    // Check if the source branch has commits not on origin/{targetBranch}
+    const { stdout: countStr } = await execAsync(
+      `git rev-list --count origin/${effectiveTarget}..${branch}`,
+      { cwd: workspaceRoot, encoding: 'utf8' }
+    );
+    const count = parseInt(countStr.trim(), 10);
+
+    if (count > 0) {
+      return {
+        status: 'error',
+        message: `Cannot mark as merged: branch ${branch} has ${count} commit(s) not on origin/${effectiveTarget}. ` +
+          `Use 'sf task merge' instead to merge and push, or use 'not_applicable' if no merge is needed.`,
+      };
+    }
+    return { status: 'ok' };
+  } catch (verifyErr) {
+    const errMsg = (verifyErr as Error).message ?? '';
+    if (errMsg.includes('unknown revision') || errMsg.includes('bad revision')) {
+      // Source branch was deleted — try to verify via merge commit hash
+      if (mergeCommitHash) {
+        try {
+          await execAsync(
+            `git merge-base --is-ancestor ${mergeCommitHash} origin/${effectiveTarget}`,
+            { cwd: workspaceRoot, encoding: 'utf8' }
+          );
+          return { status: 'ok' };
+        } catch {
+          if (force) {
+            return {
+              status: 'forced',
+              message: `⚠️  Warning: --force used. Merge commit ${mergeCommitHash} is NOT on origin/${effectiveTarget}. Proceeding anyway.`,
+            };
+          }
+          return {
+            status: 'error',
+            message: `Cannot verify merge: source branch ${branch} no longer exists and merge commit ${mergeCommitHash} is not on origin/${effectiveTarget}.\n` +
+              `Use 'sf task merge' to perform the actual merge, or if the work was already merged by other means,\n` +
+              `use --force to override this check.`,
+          };
+        }
+      } else if (force) {
+        return {
+          status: 'forced',
+          message: `⚠️  Warning: --force used. Source branch ${branch} no longer exists and no merge commit hash is recorded. Proceeding anyway.`,
+        };
+      } else {
+        return {
+          status: 'error',
+          message: `Cannot verify merge: source branch ${branch} no longer exists and no merge commit hash is recorded.\n` +
+            `Use 'sf task merge' to perform the actual merge, or if the work was already merged by other means,\n` +
+            `use --force to override this check.`,
+        };
+      }
+    } else {
+      return {
+        status: 'error',
+        message: `Cannot mark as merged: verification failed: ${errMsg}`,
+      };
+    }
+  }
+}
+
 async function taskMergeStatusHandler(
   args: string[],
-  options: GlobalOptions
+  options: GlobalOptions & TaskMergeStatusOptions
 ): Promise<CommandResult> {
   const [taskId, statusArg] = args;
 
@@ -974,6 +1133,58 @@ async function taskMergeStatusHandler(
       const task = await api.get<Task>(taskId as ElementId);
       if (!task) {
         return failure(`Task not found: ${taskId}`, ExitCode.GENERAL_ERROR);
+      }
+
+      // Safety verification: when marking as 'merged', verify commits are actually on origin/target
+      if (status === 'merged') {
+        const { getOrchestratorTaskMeta } = await import('../../types/task-meta.js');
+        const orchestratorMeta = getOrchestratorTaskMeta(task.metadata as Record<string, unknown>);
+        const branch = orchestratorMeta?.branch;
+        const targetBranch = orchestratorMeta?.targetBranch;
+
+        // Only verify if the task has branch metadata (skip for legacy/edge cases)
+        if (branch) {
+          const { findStoneforgeDir } = await import('@stoneforge/quarry');
+          const stoneforgeDir = findStoneforgeDir(process.cwd());
+
+          if (stoneforgeDir) {
+            const { default: path } = await import('node:path');
+            const { exec } = await import('node:child_process');
+            const { promisify } = await import('node:util');
+            const execAsync = promisify(exec);
+            const workspaceRoot = path.dirname(stoneforgeDir);
+
+            // Check if a remote exists (skip verification for local-only workspaces)
+            let hasRemote = false;
+            try {
+              const { stdout } = await execAsync('git remote', { cwd: workspaceRoot, encoding: 'utf8' });
+              hasRemote = stdout.trim().length > 0;
+            } catch { /* no remote */ }
+
+            if (hasRemote) {
+              // Determine effective target branch
+              const { detectTargetBranch } = await import('../../git/merge.js');
+              const effectiveTarget = targetBranch ?? await detectTargetBranch(workspaceRoot);
+              const mergeCommitHash = orchestratorMeta?.mergeCommitHash;
+
+              const result = await verifyMergeStatus({
+                branch,
+                effectiveTarget,
+                mergeCommitHash,
+                force: options.force,
+                execAsync,
+                workspaceRoot,
+              });
+
+              if (result.status === 'error') {
+                return failure(result.message!, ExitCode.GENERAL_ERROR);
+              }
+              if (result.status === 'forced' && result.message) {
+                console.warn(result.message);
+              }
+            }
+          }
+        }
       }
 
       const { updateOrchestratorTaskMeta } = await import('../../types/task-meta.js');
@@ -1046,14 +1257,98 @@ Valid status values:
   conflict        Merge conflict detected
   test_failed     Tests failed, needs attention
   failed          Merge failed for other reason
-  not_applicable  No merge needed (issue already fixed on master)
+  not_applicable      No merge needed (issue already fixed on master)
+  awaiting_approval   PR created, waiting for human approval/merge
+
+Options:
+  --force    Bypass merge verification (use when branch is deleted and merge cannot be verified)
 
 Examples:
   sf task merge-status el-abc123 merged
+  sf task merge-status el-abc123 merged --force
   sf task merge-status el-abc123 pending
   sf task merge-status el-abc123 test_failed`,
-  options: [],
+  options: [
+    {
+      name: 'force',
+      short: 'f',
+      description: 'Bypass merge verification when source branch is deleted and merge cannot be verified',
+    },
+  ],
   handler: taskMergeStatusHandler as Command['handler'],
+};
+
+// ============================================================================
+// Task Set-Owner Command
+// ============================================================================
+
+async function taskSetOwnerHandler(
+  args: string[],
+  options: GlobalOptions
+): Promise<CommandResult> {
+  const [taskId, directorId] = args;
+
+  if (!taskId || !directorId) {
+    return failure(
+      'Usage: sf task set-owner <task-id> <director-id>\nExample: sf task set-owner el-abc123 el-dir01',
+      ExitCode.INVALID_ARGUMENTS
+    );
+  }
+
+  const { api, error } = await createOrchestratorApi(options);
+  if (error || !api) {
+    return failure(error ?? 'Failed to create API', ExitCode.GENERAL_ERROR);
+  }
+
+  try {
+    await api.updateTaskOrchestratorMeta(taskId as ElementId, {
+      owningDirector: directorId as unknown as import('@stoneforge/core').EntityId,
+    });
+
+    const mode = getOutputMode(options);
+
+    if (mode === 'json') {
+      return success({
+        taskId,
+        owningDirector: directorId,
+      });
+    }
+
+    if (mode === 'quiet') {
+      return success(taskId);
+    }
+
+    return success(
+      { taskId, owningDirector: directorId },
+      `Updated task ${taskId}\n  Owning Director: ${directorId}`
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message.includes('not found') || message.includes('Task not found')) {
+      return failure(`Task not found: ${taskId}`, ExitCode.GENERAL_ERROR);
+    }
+    return failure(`Failed to set task owner: ${message}`, ExitCode.GENERAL_ERROR);
+  }
+}
+
+export const taskSetOwnerCommand: Command = {
+  name: 'set-owner',
+  description: 'Set the owning director for a task',
+  usage: 'sf task set-owner <task-id> <director-id>',
+  help: `Set the owning director for a task.
+
+This command sets the owningDirector field in the task's orchestrator metadata,
+which is used for message routing in multi-director workspaces.
+
+Arguments:
+  task-id        Task identifier to update
+  director-id    Entity ID of the director that owns/created this task
+
+Examples:
+  sf task set-owner el-abc123 el-dir01
+  sf task set-owner el-abc123 el-39hd`,
+  options: [],
+  handler: taskSetOwnerHandler as Command['handler'],
 };
 
 // ============================================================================
@@ -1073,6 +1368,7 @@ Subcommands:
   reject         Mark a task merge as failed and reopen it
   sync           Sync a task branch with the main branch
   merge-status   Update the merge status of a task
+  set-owner      Set the owning director for a task
 
 Examples:
   sf task handoff el-abc123 --message "Need help with frontend"
@@ -1080,7 +1376,8 @@ Examples:
   sf task merge el-abc123
   sf task reject el-abc123 --reason "Tests failed"
   sf task sync el-abc123
-  sf task merge-status el-abc123 merged`,
+  sf task merge-status el-abc123 merged
+  sf task set-owner el-abc123 el-dir01`,
   subcommands: {
     handoff: taskHandoffCommand,
     complete: taskCompleteCommand,
@@ -1088,6 +1385,7 @@ Examples:
     reject: taskRejectCommand,
     sync: taskSyncCommand,
     'merge-status': taskMergeStatusCommand,
+    'set-owner': taskSetOwnerCommand,
   },
   handler: taskHandoffCommand.handler, // Default to handoff
   options: [],

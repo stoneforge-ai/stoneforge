@@ -6,7 +6,7 @@
 
 import { createStorage, initializeSchema } from '@stoneforge/storage';
 import type { StorageBackend } from '@stoneforge/storage';
-import { createQuarryAPI, createInboxService } from '@stoneforge/quarry';
+import { createQuarryAPI, createInboxService, loadConfig } from '@stoneforge/quarry';
 import type { QuarryAPI, InboxService } from '@stoneforge/quarry';
 import { createSessionMessageService, type SessionMessageService } from './services/session-messages.js';
 import type { EntityId } from '@stoneforge/core';
@@ -28,6 +28,7 @@ import {
   createAgentPoolService,
   createMergeStewardService,
   createDocsStewardService,
+  createGitHubMergeProvider,
   GitRepositoryNotFoundError,
   type OrchestratorAPI,
   type AgentRegistry,
@@ -116,7 +117,7 @@ export async function initializeServices(): Promise<Services> {
   }
   logger.info(`Loaded session state for ${agents.length} agents`);
 
-  const taskAssignmentService = createTaskAssignmentService(api);
+  const taskAssignmentService = createTaskAssignmentService(api, undefined, PROJECT_ROOT);
   const dispatchService = createDispatchService(api, taskAssignmentService, agentRegistry);
   const roleDefinitionService = createRoleDefinitionService(api);
 
@@ -146,12 +147,19 @@ export async function initializeServices(): Promise<Services> {
   );
 
   // Create steward services (before executor/scheduler so they can be passed to the executor)
+  // Load merge config to check requireApproval setting
+  const mergeConfig = loadConfig();
+  const requireApproval = mergeConfig.merge?.requireApproval ?? false;
   const mergeStewardService = createMergeStewardService(
     api,
     taskAssignmentService,
     dispatchService,
     agentRegistry,
-    { workspaceRoot: PROJECT_ROOT },
+    {
+      workspaceRoot: PROJECT_ROOT,
+      requireApproval,
+      mergeRequestProvider: requireApproval ? createGitHubMergeProvider() : undefined,
+    },
     worktreeManager
   );
 

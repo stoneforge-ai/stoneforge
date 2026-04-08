@@ -23,6 +23,7 @@ export default defineConfig({
       '**/node_modules/**',
       '**/dist/**',
       '**/*.bun.test.ts',
+      '**/.stoneforge/.worktrees/**',
     ],
   },
 });

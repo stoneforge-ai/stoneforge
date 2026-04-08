@@ -1,5 +1,62 @@
 # @stoneforge/quarry-web
 
+## 1.23.1
+
+### Patch Changes
+
+- Updated dependencies [65fe969]
+  - @stoneforge/ui@1.23.1
+
+## 1.23.0
+
+### Patch Changes
+
+- Updated dependencies [b074b03]
+  - @stoneforge/ui@1.23.0
+
+## 1.22.0
+
+### Patch Changes
+
+- @stoneforge/ui@1.22.0
+
+## 1.21.0
+
+### Patch Changes
+
+- @stoneforge/ui@1.21.0
+
+## 1.20.1
+
+### Patch Changes
+
+- @stoneforge/ui@1.20.1
+
+## 1.20.0
+
+### Patch Changes
+
+- @stoneforge/ui@1.20.0
+
+## 1.19.0
+
+### Patch Changes
+
+- @stoneforge/ui@1.19.0
+
+## 1.18.0
+
+### Patch Changes
+
+- @stoneforge/ui@1.18.0
+
+## 1.17.0
+
+### Patch Changes
+
+- Updated dependencies [705df96]
+  - @stoneforge/ui@1.17.0
+
 ## 1.16.1
 
 ### Patch Changes

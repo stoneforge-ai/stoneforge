@@ -81,7 +81,8 @@ export function RateLimitBanner() {
 
   return (
     <div
-      className="flex items-center gap-3 px-4 md:px-6 py-2 bg-[var(--color-warning-bg)] border-b border-[var(--color-warning)]/30"
+      /* container-based: responds to main content column @container width */
+      className="flex items-center gap-3 px-4 @md:px-6 py-2 bg-[var(--color-warning-bg)] border-b border-[var(--color-warning)]/30"
       role="alert"
       data-testid="rate-limit-banner"
     >
@@ -89,7 +90,7 @@ export function RateLimitBanner() {
 
       <p className="flex-1 text-sm text-[var(--color-warning-text)]">
         <span className="font-medium">Dispatch paused</span>
-        <span className="hidden sm:inline">{rateLimitDetail}</span>
+        <span className="hidden @sm:inline">{rateLimitDetail}</span>
         {' '}Waking {wakeTimeText}.
       </p>
 
@@ -105,7 +106,7 @@ export function RateLimitBanner() {
         data-testid="rate-limit-configure-button"
       >
         <Settings className="w-3 h-3" />
-        <span className="hidden md:inline">Configure</span>
+        <span className="hidden @md:inline">Configure</span>
       </Link>
 
       <button

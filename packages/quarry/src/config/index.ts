@@ -48,6 +48,11 @@ export type {
   ConfigPathTypes,
   LoadConfigOptions,
   EnvVar,
+  WorkflowPreset,
+  AgentPermissionModel,
+  MergeConfig,
+  WorkflowConfig,
+  AgentsConfig,
 } from './types.js';
 
 export {
@@ -58,6 +63,8 @@ export {
   VALID_SYNC_DIRECTIONS,
   VALID_AUTO_LINK_PROVIDERS,
   isValidConfigPath,
+  VALID_WORKFLOW_PRESETS,
+  VALID_PERMISSION_MODELS,
 } from './types.js';
 
 // Defaults
@@ -69,6 +76,9 @@ export {
   DEFAULT_IDENTITY_CONFIG,
   DEFAULT_PLUGINS_CONFIG,
   DEFAULT_EXTERNAL_SYNC_CONFIG,
+  DEFAULT_MERGE_CONFIG,
+  DEFAULT_WORKFLOW_CONFIG,
+  DEFAULT_AGENTS_CONFIG,
   getDefaultConfig,
   ONE_SECOND,
   ONE_MINUTE,

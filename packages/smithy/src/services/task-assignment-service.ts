@@ -37,6 +37,11 @@ import {
   getAgentMetadata,
 } from '../api/orchestrator-api.js';
 import type { MergeRequestProvider } from './merge-request-provider.js';
+import { hasRemote } from '../git/merge.js';
+import { exec } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const execAsync = promisify(exec);
 
 // ============================================================================
 // Types
@@ -345,10 +350,12 @@ export interface TaskAssignmentService {
 export class TaskAssignmentServiceImpl implements TaskAssignmentService {
   private readonly api: QuarryAPI;
   private readonly mergeRequestProvider?: MergeRequestProvider;
+  private readonly workspaceRoot?: string;
 
-  constructor(api: QuarryAPI, mergeRequestProvider?: MergeRequestProvider) {
+  constructor(api: QuarryAPI, mergeRequestProvider?: MergeRequestProvider, workspaceRoot?: string) {
     this.api = api;
     this.mergeRequestProvider = mergeRequestProvider;
+    this.workspaceRoot = workspaceRoot;
   }
 
   // ----------------------------------------
@@ -398,6 +405,8 @@ export class TaskAssignmentServiceImpl implements TaskAssignmentService {
       mergeStatus: 'pending' as MergeStatus,
       // Preserve handoff history from previous assignments
       handoffHistory: existingMeta?.handoffHistory,
+      // Preserve targetBranch across re-assignment/handoff
+      targetBranch: existingMeta?.targetBranch,
     };
 
     // If marking as started, add start time
@@ -484,6 +493,47 @@ export class TaskAssignmentServiceImpl implements TaskAssignmentService {
     const branch = currentMeta?.branch;
     const currentSessionId = currentMeta?.sessionId;
 
+    // Enforce push to remote before completing
+    if (branch) {
+      const pushCwd = currentMeta?.worktree || this.workspaceRoot;
+      if (pushCwd) {
+        const remoteExists = await hasRemote(pushCwd);
+        if (remoteExists) {
+          // Fetch latest remote state
+          try {
+            await execAsync('git fetch origin', { cwd: pushCwd, encoding: 'utf8' });
+          } catch {
+            // fetch failure is non-fatal — continue to check unpushed commits
+          }
+
+          // Check if the remote branch exists and if there are unpushed commits
+          let needsPush = false;
+          try {
+            const { stdout } = await execAsync(
+              `git rev-list --count origin/${branch}..${branch}`,
+              { cwd: pushCwd, encoding: 'utf8' }
+            );
+            const unpushedCount = parseInt(stdout.trim(), 10);
+            needsPush = unpushedCount > 0;
+          } catch {
+            // Remote branch doesn't exist yet — needs push
+            needsPush = true;
+          }
+
+          if (needsPush) {
+            try {
+              await execAsync(`git push origin ${branch}`, { cwd: pushCwd, encoding: 'utf8' });
+            } catch (pushErr) {
+              const pushMessage = pushErr instanceof Error ? pushErr.message : String(pushErr);
+              throw new Error(
+                `Cannot complete task: branch ${branch} has unpushed commits and push to origin failed: ${pushMessage}. Please push manually and retry.`
+              );
+            }
+          }
+        }
+      }
+    }
+
     // Close the current session's history entry
     let metadataWithClosedSession = task.metadata as Record<string, unknown> | undefined;
     if (currentSessionId) {
@@ -514,7 +564,7 @@ export class TaskAssignmentServiceImpl implements TaskAssignmentService {
     let mergeRequestId: number | undefined;
 
     if (branch && this.mergeRequestProvider && options?.createMergeRequest !== false) {
-      const baseBranch = options?.baseBranch || 'main';
+      const baseBranch = options?.baseBranch || currentMeta?.targetBranch || 'main';
       let body = `## Task\n\n**ID:** ${task.id}\n**Title:** ${task.title}\n\n`;
       if (options?.summary) {
         body += `## Summary\n\n${options.summary}\n\n`;
@@ -876,10 +926,13 @@ export class TaskAssignmentServiceImpl implements TaskAssignmentService {
  * @param api - The QuarryAPI instance
  * @param mergeRequestProvider - Optional provider for creating merge requests.
  *   When omitted, merge request creation is silently skipped.
+ * @param workspaceRoot - Optional workspace root path. When provided, completeTask()
+ *   will auto-push the task branch to origin before transitioning to REVIEW status.
  */
 export function createTaskAssignmentService(
   api: QuarryAPI,
   mergeRequestProvider?: MergeRequestProvider,
+  workspaceRoot?: string,
 ): TaskAssignmentService {
-  return new TaskAssignmentServiceImpl(api, mergeRequestProvider);
+  return new TaskAssignmentServiceImpl(api, mergeRequestProvider, workspaceRoot);
 }

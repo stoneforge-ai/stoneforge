@@ -33,11 +33,36 @@ export interface CreateMergeRequestOptions {
 }
 
 /**
+ * Status of a merge request on the remote provider
+ */
+export type MergeRequestState = 'open' | 'merged' | 'closed';
+
+/**
+ * Result of checking the status of a merge request
+ */
+export interface MergeRequestStatusResult {
+  /** Current state of the merge request */
+  readonly state: MergeRequestState;
+  /** Whether the PR has been merged */
+  readonly merged: boolean;
+  /** The merge commit SHA (if merged) */
+  readonly mergeCommitSha?: string;
+  /** URL of the merge request */
+  readonly url?: string;
+}
+
+/**
  * Interface that all merge-request backends must implement
  */
 export interface MergeRequestProvider {
   readonly name: string;
   createMergeRequest(task: Task, options: CreateMergeRequestOptions): Promise<MergeRequestResult>;
+
+  /**
+   * Check the status of an existing merge request.
+   * Returns undefined if the provider does not support status checks.
+   */
+  getMergeRequestStatus?(prNumber: number): Promise<MergeRequestStatusResult>;
 }
 
 // ============================================================================
@@ -112,6 +137,34 @@ export class GitHubMergeProvider implements MergeRequestProvider {
         reject(new Error(`Failed to spawn gh: ${err.message}`));
       });
     });
+  }
+
+  async getMergeRequestStatus(prNumber: number): Promise<MergeRequestStatusResult> {
+    const { promisify } = await import('node:util');
+    const { exec } = await import('node:child_process');
+    const execAsync = promisify(exec);
+
+    // Use gh pr view to get PR status as JSON
+    const { stdout } = await execAsync(
+      `gh pr view ${prNumber} --json state,mergeCommit,url`,
+      { encoding: 'utf8', timeout: 30_000 }
+    );
+
+    const data = JSON.parse(stdout.trim()) as {
+      state: string;
+      mergeCommit?: { oid?: string };
+      url?: string;
+    };
+
+    const state = data.state?.toLowerCase();
+    const merged = state === 'merged';
+
+    return {
+      state: (merged ? 'merged' : state === 'closed' ? 'closed' : 'open') as MergeRequestState,
+      merged,
+      mergeCommitSha: data.mergeCommit?.oid,
+      url: data.url,
+    };
   }
 
   private buildDefaultBody(task: Task): string {

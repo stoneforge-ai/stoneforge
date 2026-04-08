@@ -294,10 +294,12 @@ Orchestrates bidirectional sync between Stoneforge elements and external systems
 import { SyncEngine } from '@stoneforge/quarry/external-sync';
 
 const engine = new SyncEngine({
-  storage,
-  providerRegistry,
-  settingsService,
-  conflictStrategy: 'last_write_wins',
+  api,                                    // SyncEngineAPI (QuarryAPI-compatible)
+  registry,                               // ProviderRegistry
+  settings,                               // SyncEngineSettings (optional)
+  defaultConflictStrategy: 'last_write_wins',  // ConflictStrategy (optional)
+  conflictResolver,                       // SyncConflictResolver (optional)
+  providerConfigs,                        // ProviderConfig[] (optional)
 });
 ```
 
@@ -305,16 +307,14 @@ const engine = new SyncEngine({
 
 ```typescript
 // Push local changes to external systems
-await engine.push({ all: true });                    // All linked elements
-await engine.push({ elementIds: ['el-3a8f'] });      // Specific elements
-await engine.push({ all: true, type: 'task' });       // Tasks only
-await engine.push({ all: true, force: true });         // Skip hash comparison
+await engine.push({ all: true });                                // All linked elements
+await engine.push({ taskIds: ['el-3a8f'] });                     // Specific elements
+await engine.push({ all: true, adapterTypes: ['task'] });        // Tasks only
+await engine.push({ all: true, force: true });                   // Skip hash comparison
 
 // Pull changes from external systems
-await engine.pull();                                   // All providers
-await engine.pull({ provider: 'github' });             // Specific provider
-await engine.pull({ discover: true });                 // Import unlinked items
-await engine.pull({ type: 'document' });               // Documents only
+await engine.pull();                                              // All providers
+await engine.pull({ adapterTypes: ['document'] });                // Documents only
 
 // Bidirectional sync (push then pull)
 await engine.sync({ all: true });
@@ -323,14 +323,19 @@ await engine.sync({ dryRun: true });
 
 #### Results
 
-All operations return a `SyncResult`:
+All operations return an `ExternalSyncResult`:
 
 ```typescript
-interface SyncResult {
-  pushed: SyncResultItem[];
-  pulled: SyncResultItem[];
-  conflicts: SyncConflict[];
-  errors: SyncError[];
+interface ExternalSyncResult {
+  success: boolean;
+  provider: string;
+  project: string;
+  adapterType: SyncAdapterType;
+  pushed: number;
+  pulled: number;
+  skipped: number;
+  conflicts: readonly ExternalSyncConflict[];
+  errors: readonly ExternalSyncError[];
 }
 ```
 

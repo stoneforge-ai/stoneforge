@@ -167,6 +167,8 @@ interface FormState {
   model: string;
   // Custom executable path (empty string means use default)
   executablePath: string;
+  // Target branch for director (empty string means auto-detect)
+  targetBranch: string;
 }
 
 /** Default executable name per provider (used as placeholder text) */
@@ -187,6 +189,7 @@ const defaultState: FormState = {
   provider: 'claude-code',
   model: '',
   executablePath: '',
+  targetBranch: '',
 };
 
 export function CreateAgentDialog({
@@ -253,6 +256,13 @@ export function CreateAgentDialog({
     }
   }, [isOpen]);
 
+  // Reset targetBranch when role changes away from director
+  useEffect(() => {
+    if (form.role !== 'director') {
+      setForm(prev => prev.targetBranch ? { ...prev, targetBranch: '' } : prev);
+    }
+  }, [form.role]);
+
   // Apply agent default settings when dialog opens
   useEffect(() => {
     if (isOpen) {
@@ -307,9 +317,14 @@ export function CreateAgentDialog({
       name: form.name.trim(),
       role: form.role,
       tags: form.tags.trim() ? form.tags.split(',').map(t => t.trim()).filter(Boolean) : undefined,
-      provider: form.provider !== 'claude-code' ? form.provider : undefined,
+      provider: (() => {
+        // Normalize legacy 'claude' -> 'claude-code' before comparison
+        const normalizedProvider = form.provider === 'claude' ? 'claude-code' : form.provider;
+        return normalizedProvider !== 'claude-code' ? normalizedProvider : undefined;
+      })(),
       model: form.model || undefined, // Only include if not empty (not using default)
       executablePath: form.executablePath.trim() || undefined, // Only include if not empty (not using default)
+      targetBranch: form.role === 'director' && form.targetBranch.trim() ? form.targetBranch.trim() : undefined,
     };
 
     // Add role-specific fields
@@ -772,79 +787,81 @@ export function CreateAgentDialog({
                       data-testid="agent-tags"
                     />
                   </div>
-                  {hasMultipleProviders && (
+                  <div data-testid="agent-provider-model-section" className="space-y-3">
+                    {hasMultipleProviders && (
+                      <div className="space-y-1">
+                        <label htmlFor="agent-provider" className="text-xs font-medium text-[var(--color-text-secondary)]">
+                          Provider
+                        </label>
+                        <div className="relative">
+                          <select
+                            id="agent-provider"
+                            value={form.provider}
+                            onChange={e => handleProviderChange(e.target.value)}
+                            className="
+                              w-full px-3 py-1.5 pr-8
+                              text-sm
+                              bg-[var(--color-surface)]
+                              border border-[var(--color-border)]
+                              rounded-lg
+                              appearance-none
+                              focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30
+                            "
+                            data-testid="agent-provider"
+                          >
+                            {providers.map(p => (
+                              <option key={p.name} value={p.name} disabled={!p.available}>
+                                {getProviderLabel(p.name)}{!p.available ? ' (not installed)' : ''}
+                              </option>
+                            ))}
+                          </select>
+                          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-tertiary)] pointer-events-none" />
+                        </div>
+                      </div>
+                    )}
+                    {/* Model selector */}
                     <div className="space-y-1">
-                      <label htmlFor="agent-provider" className="text-xs font-medium text-[var(--color-text-secondary)]">
-                        Provider
+                      <label htmlFor="agent-model" className="text-xs font-medium text-[var(--color-text-secondary)]">
+                        Model
                       </label>
                       <div className="relative">
-                        <select
-                          id="agent-provider"
-                          value={form.provider}
-                          onChange={e => handleProviderChange(e.target.value)}
-                          className="
-                            w-full px-3 py-1.5 pr-8
-                            text-sm
-                            bg-[var(--color-surface)]
-                            border border-[var(--color-border)]
-                            rounded-lg
-                            appearance-none
-                            focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30
-                          "
-                          data-testid="agent-provider"
-                        >
-                          {providers.map(p => (
-                            <option key={p.name} value={p.name} disabled={!p.available}>
-                              {getProviderLabel(p.name)}{!p.available ? ' (not installed)' : ''}
+                        {modelsLoading ? (
+                          <div className="flex items-center gap-2 py-1.5 text-xs text-[var(--color-text-tertiary)]">
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            Loading models...
+                          </div>
+                        ) : (
+                          <select
+                            id="agent-model"
+                            value={form.model}
+                            onChange={e => setForm(prev => ({ ...prev, model: e.target.value }))}
+                            disabled={!form.provider}
+                            className="
+                              w-full px-3 py-1.5 pr-8
+                              text-sm
+                              bg-[var(--color-surface)]
+                              border border-[var(--color-border)]
+                              rounded-lg
+                              appearance-none
+                              focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30
+                              disabled:opacity-50 disabled:cursor-not-allowed
+                            "
+                            data-testid="agent-model"
+                          >
+                            <option value="">
+                              {defaultModel ? `Default (${defaultModel.displayName})` : '(Default)'}
                             </option>
-                          ))}
-                        </select>
-                        <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-tertiary)] pointer-events-none" />
+                            {models.map(m => (
+                              <option key={m.id} value={m.id}>
+                                {m.providerName ? `${m.displayName}  —  ${m.providerName}` : m.displayName}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                        {!modelsLoading && (
+                          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-tertiary)] pointer-events-none" />
+                        )}
                       </div>
-                    </div>
-                  )}
-                  {/* Model selector */}
-                  <div className="space-y-1">
-                    <label htmlFor="agent-model" className="text-xs font-medium text-[var(--color-text-secondary)]">
-                      Model
-                    </label>
-                    <div className="relative">
-                      {modelsLoading ? (
-                        <div className="flex items-center gap-2 py-1.5 text-xs text-[var(--color-text-tertiary)]">
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                          Loading models...
-                        </div>
-                      ) : (
-                        <select
-                          id="agent-model"
-                          value={form.model}
-                          onChange={e => setForm(prev => ({ ...prev, model: e.target.value }))}
-                          disabled={!form.provider}
-                          className="
-                            w-full px-3 py-1.5 pr-8
-                            text-sm
-                            bg-[var(--color-surface)]
-                            border border-[var(--color-border)]
-                            rounded-lg
-                            appearance-none
-                            focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30
-                            disabled:opacity-50 disabled:cursor-not-allowed
-                          "
-                          data-testid="agent-model"
-                        >
-                          <option value="">
-                            {defaultModel ? `Default (${defaultModel.displayName})` : '(Default)'}
-                          </option>
-                          {models.map(m => (
-                            <option key={m.id} value={m.id}>
-                              {m.providerName ? `${m.displayName}  —  ${m.providerName}` : m.displayName}
-                            </option>
-                          ))}
-                        </select>
-                      )}
-                      {!modelsLoading && (
-                        <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-tertiary)] pointer-events-none" />
-                      )}
                     </div>
                   </div>
                   {/* Executable path */}
@@ -873,6 +890,34 @@ export function CreateAgentDialog({
                       Custom path to the provider CLI executable. Leave empty to use the default.
                     </p>
                   </div>
+                  {/* Target Branch (director only) */}
+                  {form.role === 'director' && (
+                    <div className="space-y-1">
+                      <label htmlFor="agent-target-branch" className="text-xs font-medium text-[var(--color-text-secondary)]">
+                        Target Branch (optional)
+                      </label>
+                      <input
+                        id="agent-target-branch"
+                        type="text"
+                        value={form.targetBranch}
+                        onChange={e => setForm(prev => ({ ...prev, targetBranch: e.target.value }))}
+                        placeholder="auto-detect (master/main)"
+                        className="
+                          w-full px-3 py-1.5
+                          text-sm
+                          bg-[var(--color-surface)]
+                          border border-[var(--color-border)]
+                          rounded-lg
+                          placeholder:text-[var(--color-text-tertiary)]
+                          focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30
+                        "
+                        data-testid="agent-target-branch"
+                      />
+                      <p className="text-xs text-[var(--color-text-tertiary)]">
+                        Branch to use as the base for task branches. Leave empty to auto-detect.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

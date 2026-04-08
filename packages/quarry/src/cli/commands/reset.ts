@@ -21,7 +21,7 @@ import { success, failure, ExitCode } from '../types.js';
 
 const STONEFORGE_DIR = '.stoneforge';
 const WORKTREES_DIR = '.stoneforge/.worktrees';
-const DEFAULT_SERVER_URL = 'http://localhost:3456';
+const DEFAULT_SMITHY_URL = 'http://localhost:3457';
 
 // ============================================================================
 // Helpers
@@ -231,7 +231,7 @@ async function resetHandler(
   const results: string[] = [];
 
   // 1. Stop daemon
-  const serverUrl = options.server ?? DEFAULT_SERVER_URL;
+  const serverUrl = options.server ?? process.env.ORCHESTRATOR_URL ?? DEFAULT_SMITHY_URL;
   const daemonResult = await tryStopDaemon(serverUrl);
   if (daemonResult.stopped) {
     results.push('Stopped daemon');
@@ -323,7 +323,7 @@ With --full, this command will:
 Options:
   --force, -f           Skip confirmation prompt
   --full                Delete everything and reinitialize
-  --server, -s <url>    Orchestrator server URL (default: ${DEFAULT_SERVER_URL})
+  --server, -s <url>    Orchestrator server URL (default: ${DEFAULT_SMITHY_URL})
 
 Examples:
   sf reset              # Interactive confirmation, preserve config
@@ -343,7 +343,7 @@ Examples:
     {
       name: 'server',
       short: 's',
-      description: `Orchestrator server URL (default: ${DEFAULT_SERVER_URL})`,
+      description: `Orchestrator server URL (default: ${DEFAULT_SMITHY_URL})`,
       hasValue: true,
     },
   ],

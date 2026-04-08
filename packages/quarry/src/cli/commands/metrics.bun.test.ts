@@ -160,7 +160,11 @@ describe('metrics command', () => {
       timeRange: { days: number; label: string };
       groupBy: string;
       metrics: unknown[];
-      totals: { totalTokens: number; sessionCount: number; estimatedCost: number };
+      totals: {
+        totalTokens: number;
+        sessionCount: number;
+        estimatedCost: { totalCost: number; inputCost: number; outputCost: number; cacheReadCost: number; cacheCreationCost: number };
+      };
     };
 
     expect(data.timeRange.days).toBe(7);
@@ -168,7 +172,7 @@ describe('metrics command', () => {
     expect(data.metrics.length).toBeGreaterThan(0);
     expect(data.totals.totalTokens).toBeGreaterThan(0);
     expect(data.totals.sessionCount).toBe(4);
-    expect(data.totals.estimatedCost).toBeGreaterThan(0);
+    expect(data.totals.estimatedCost.totalCost).toBeGreaterThan(0);
   });
 
   test('shows estimated cost', async () => {

@@ -1,5 +1,160 @@
 # @stoneforge/smithy-server
 
+## 1.23.1
+
+### Patch Changes
+
+- Updated dependencies [afbee04]
+  - @stoneforge/smithy@1.23.1
+  - @stoneforge/core@1.23.1
+  - @stoneforge/storage@1.23.1
+  - @stoneforge/quarry@1.23.1
+  - @stoneforge/shared-routes@1.23.1
+
+## 1.23.0
+
+### Patch Changes
+
+- Updated dependencies [d9137d7]
+- Updated dependencies [d9137d7]
+- Updated dependencies [99e75d8]
+- Updated dependencies [f365a2d]
+  - @stoneforge/core@1.23.0
+  - @stoneforge/quarry@1.23.0
+  - @stoneforge/shared-routes@1.23.0
+  - @stoneforge/smithy@1.23.0
+  - @stoneforge/storage@1.23.0
+
+## 1.22.0
+
+### Patch Changes
+
+- Updated dependencies [9c9f3ec]
+- Updated dependencies [9c9f3ec]
+  - @stoneforge/quarry@1.22.0
+  - @stoneforge/smithy@1.22.0
+  - @stoneforge/core@1.22.0
+  - @stoneforge/storage@1.22.0
+  - @stoneforge/shared-routes@1.22.0
+
+## 1.21.0
+
+### Patch Changes
+
+- Updated dependencies [a2ef9af]
+- Updated dependencies [e36265c]
+- Updated dependencies [d93c864]
+- Updated dependencies [00a58d3]
+- Updated dependencies [d93c864]
+  - @stoneforge/quarry@1.21.0
+  - @stoneforge/smithy@1.21.0
+  - @stoneforge/core@1.21.0
+  - @stoneforge/storage@1.21.0
+  - @stoneforge/shared-routes@1.21.0
+
+## 1.20.1
+
+### Patch Changes
+
+- @stoneforge/core@1.20.1
+- @stoneforge/storage@1.20.1
+- @stoneforge/quarry@1.20.1
+- @stoneforge/smithy@1.20.1
+- @stoneforge/shared-routes@1.20.1
+
+## 1.20.0
+
+### Patch Changes
+
+- Updated dependencies [50aa516]
+- Updated dependencies [c3244fe]
+  - @stoneforge/quarry@1.20.0
+  - @stoneforge/smithy@1.20.0
+  - @stoneforge/core@1.20.0
+  - @stoneforge/storage@1.20.0
+  - @stoneforge/shared-routes@1.20.0
+
+## 1.19.0
+
+### Patch Changes
+
+- Updated dependencies [bc7a574]
+- Updated dependencies [0d778dd]
+- Updated dependencies [fec32d8]
+- Updated dependencies [3d47d68]
+- Updated dependencies [a79190d]
+- Updated dependencies [4cc779f]
+- Updated dependencies [b30aebc]
+- Updated dependencies [09effc1]
+- Updated dependencies [7f9deb4]
+- Updated dependencies [bcc47d7]
+- Updated dependencies [b31f8ce]
+- Updated dependencies [cbd16dd]
+- Updated dependencies [f17aee3]
+- Updated dependencies [26c273c]
+- Updated dependencies [a119fb8]
+- Updated dependencies [dcf3da5]
+- Updated dependencies [e87abc1]
+- Updated dependencies [8d83b52]
+- Updated dependencies [2100736]
+- Updated dependencies [e6656b1]
+- Updated dependencies [3772deb]
+- Updated dependencies [c29843a]
+  - @stoneforge/smithy@1.19.0
+  - @stoneforge/core@1.19.0
+  - @stoneforge/storage@1.19.0
+  - @stoneforge/quarry@1.19.0
+  - @stoneforge/shared-routes@1.19.0
+
+## 1.18.0
+
+### Patch Changes
+
+- Updated dependencies [48b0069]
+- Updated dependencies [6247446]
+- Updated dependencies [2608cf1]
+- Updated dependencies [711343b]
+- Updated dependencies [ccb002b]
+- Updated dependencies [1ed1113]
+- Updated dependencies [57152b0]
+- Updated dependencies [c4495f5]
+- Updated dependencies [efc955b]
+- Updated dependencies [8cac30b]
+- Updated dependencies [8ded2a8]
+- Updated dependencies [07f3449]
+- Updated dependencies [07f3449]
+  - @stoneforge/smithy@1.18.0
+  - @stoneforge/quarry@1.18.0
+  - @stoneforge/core@1.18.0
+  - @stoneforge/storage@1.18.0
+  - @stoneforge/shared-routes@1.18.0
+
+## 1.17.0
+
+### Patch Changes
+
+- Updated dependencies [713cea8]
+- Updated dependencies [600e4fd]
+- Updated dependencies [600e4fd]
+- Updated dependencies [7c63531]
+- Updated dependencies [7c63531]
+- Updated dependencies [7c63531]
+- Updated dependencies [d3744f6]
+- Updated dependencies [d3744f6]
+- Updated dependencies [dafa312]
+- Updated dependencies [9015835]
+- Updated dependencies [b2ce7ce]
+- Updated dependencies [a77ec61]
+- Updated dependencies [705df96]
+- Updated dependencies [fe96d6a]
+- Updated dependencies [6287e4d]
+- Updated dependencies [3bc3e76]
+  - @stoneforge/smithy@1.17.0
+  - @stoneforge/storage@1.17.0
+  - @stoneforge/core@1.17.0
+  - @stoneforge/quarry@1.17.0
+  - @stoneforge/shared-routes@1.17.0
+
 ## 1.16.1
 
 ### Patch Changes

@@ -9,6 +9,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { EntityId } from '@stoneforge/core';
 import { getAgentMetadata } from '../index.js';
+import type { AgentEntity } from '../api/orchestrator-api.js';
 import { createLogger, getLogLevel } from '../utils/logger.js';
 import { CORS_ORIGINS as DEFAULT_CORS_ORIGINS, PORT as DEFAULT_PORT, HOST as DEFAULT_HOST, PROJECT_ROOT as DEFAULT_PROJECT_ROOT, DB_PATH as DEFAULT_DB_PATH } from './config.js';
 import { initializeServices, type Services } from './services.js';
@@ -32,6 +33,7 @@ import {
   createMetricsRoutes,
   createDiagnosticsRoutes,
   createExternalSyncRoutes,
+  createApprovalRoutes,
   markDaemonAsServerManaged,
 } from './routes/index.js';
 // Shared collaborate routes
@@ -55,6 +57,7 @@ import { createLspManager } from './services/lsp-manager.js';
 import { createLspRoutes } from './routes/lsp.js';
 import { initializeBroadcaster } from '@stoneforge/shared-routes';
 import { registerStaticMiddleware } from './static.js';
+import { getEventsClientCount } from './events-websocket.js';
 
 const logger = createLogger('orchestrator');
 
@@ -70,6 +73,12 @@ export interface SmithyServerOptions {
 export interface SmithyServerResult {
   services: Services;
   port: number;
+  /** Number of agents loaded in the registry */
+  agentCount: number;
+  /** Status of the dispatch daemon */
+  daemonStatus: 'running' | 'disabled' | 'no-git' | 'stopped-by-user';
+  /** Check if any dashboard clients are connected via WebSocket */
+  hasConnectedClients: () => boolean;
 }
 
 export async function startSmithyServer(options: SmithyServerOptions = {}): Promise<SmithyServerResult> {
@@ -87,15 +96,15 @@ export async function startSmithyServer(options: SmithyServerOptions = {}): Prom
 
   const services = await initializeServices({ dbPath, projectRoot });
 
-  // Before reconciliation, capture director's session info if it was running
-  // This allows us to auto-resume the director after server restart
-  let directorSessionId: string | undefined;
-  const director = await services.agentRegistry.getDirector();
-  if (director) {
-    const meta = getAgentMetadata(director);
+  // Before reconciliation, capture all directors' session info if they were running
+  // This allows us to auto-resume all directors after server restart
+  const directorResumes: Array<{ agent: AgentEntity; sessionId: string }> = [];
+  const directors = await services.agentRegistry.getDirectors();
+  for (const dir of directors) {
+    const meta = getAgentMetadata(dir);
     if (meta?.sessionStatus === 'running' && meta?.sessionId) {
-      directorSessionId = meta.sessionId;
-      logger.debug(`Director was running with session ${directorSessionId} before restart`);
+      directorResumes.push({ agent: dir, sessionId: meta.sessionId });
+      logger.debug(`Director ${dir.name} was running with session ${meta.sessionId} before restart`);
     }
   }
 
@@ -149,6 +158,7 @@ export async function startSmithyServer(options: SmithyServerOptions = {}): Prom
   app.route('/', createMetricsRoutes(services));
   app.route('/', createDiagnosticsRoutes(services));
   app.route('/', createExternalSyncRoutes(services));
+  app.route('/', createApprovalRoutes(services));
 
   app.route('/', createElementsRoutes(collaborateServices));
   app.route('/', createEntityRoutes(collaborateServices));
@@ -186,14 +196,15 @@ export async function startSmithyServer(options: SmithyServerOptions = {}): Prom
     );
   }
 
-  // Auto-resume director session if it was running before server restart
+  // Auto-resume all director sessions that were running before server restart
   // This must happen after startServer() so HTTP/WS infrastructure is ready for clients
-  if (directorSessionId && director) {
+  // Resume sequentially to avoid overwhelming the spawner
+  for (const { agent: director, sessionId } of directorResumes) {
     const directorId = director.id as unknown as EntityId;
-    logger.debug(`Attempting to auto-resume director session ${directorSessionId}`);
+    logger.debug(`Attempting to auto-resume director ${director.name} session ${sessionId}`);
     try {
       const { session, events } = await services.sessionManager.resumeSession(directorId, {
-        providerSessionId: directorSessionId,
+        providerSessionId: sessionId,
         resumePrompt: 'Server restarted. You have been automatically reconnected to your previous session. Check your inbox for any pending messages.',
       });
 
@@ -211,11 +222,10 @@ export async function startSmithyServer(options: SmithyServerOptions = {}): Prom
         events,
       });
 
-      logger.info(`Director session auto-resumed successfully (session: ${session.id})`);
+      logger.info(`Director ${director.name} session auto-resumed successfully (session: ${session.id})`);
     } catch (error) {
       // Resume failed - director will stay idle and can be started manually via UI
-      logger.warn('Failed to auto-resume director session:', error instanceof Error ? error.message : String(error));
-      logger.info('Director will remain idle - can be started manually via UI');
+      logger.warn(`Failed to auto-resume director ${director.name}:`, error instanceof Error ? error.message : String(error));
     }
   }
 
@@ -225,17 +235,22 @@ export async function startSmithyServer(options: SmithyServerOptions = {}): Prom
   const envDisabled = process.env.DAEMON_AUTO_START === 'false';
   const persistedShouldRun = shouldDaemonAutoStart();
 
+  let daemonStatus: SmithyServerResult['daemonStatus'];
   if (!services.dispatchDaemon) {
     logger.info('Dispatch daemon not available (no git repository)');
+    daemonStatus = 'no-git';
   } else if (envDisabled) {
     logger.info('Dispatch daemon auto-start disabled (DAEMON_AUTO_START=false)');
+    daemonStatus = 'disabled';
   } else if (!persistedShouldRun) {
     logger.info('Dispatch daemon not started (was stopped by user, state persisted)');
+    daemonStatus = 'stopped-by-user';
   } else {
     services.dispatchDaemon.start();
     saveDaemonState(true, 'server-startup');
     markDaemonAsServerManaged();
     logger.info('Dispatch daemon auto-started');
+    daemonStatus = 'running';
   }
 
   // Conditionally start external sync daemon
@@ -248,5 +263,9 @@ export async function startSmithyServer(options: SmithyServerOptions = {}): Prom
     logger.info('External sync daemon auto-started');
   }
 
-  return { services, port: actualPort };
+  // Count loaded agents for the startup summary
+  const allAgents = await services.agentRegistry.listAgents();
+  const agentCount = allAgents.length;
+
+  return { services, port: actualPort, agentCount, daemonStatus, hasConnectedClients: () => getEventsClientCount() > 0 };
 }

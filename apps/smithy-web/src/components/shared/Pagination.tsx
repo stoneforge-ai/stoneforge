@@ -77,8 +77,8 @@ export function Pagination({
 
   if (totalPages <= 1 && !showPageSizeSelector) {
     return (
-      <div className="flex items-center justify-center sm:justify-between px-3 sm:px-4 py-3 border-t border-[var(--color-border)] bg-[var(--color-surface)]">
-        <span className="text-xs sm:text-sm text-[var(--color-text-tertiary)]">
+      <div className="flex items-center justify-center @sm:justify-between px-3 @sm:px-4 py-3 border-t border-[var(--color-border)] bg-[var(--color-surface)]">
+        <span className="text-xs @sm:text-sm text-[var(--color-text-tertiary)]">
           {totalItems === 0 ? 'No items' : `Showing ${totalItems} item${totalItems !== 1 ? 's' : ''}`}
         </span>
       </div>
@@ -87,7 +87,7 @@ export function Pagination({
 
   return (
     <div
-      className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 border-t border-[var(--color-border)] bg-[var(--color-surface)]"
+      className="flex flex-col @sm:flex-row items-center justify-between gap-3 px-4 py-3 border-t border-[var(--color-border)] bg-[var(--color-surface)]"
       data-testid="pagination"
     >
       {/* Left side: Item count + page size */}

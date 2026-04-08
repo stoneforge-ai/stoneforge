@@ -28,8 +28,7 @@ import { Priority, Complexity, TaskTypeValue } from './task.js';
 /**
  * Branded type for Playbook IDs
  */
-declare const PlaybookIdBrand: unique symbol;
-export type PlaybookId = ElementId & { readonly [PlaybookIdBrand]: typeof PlaybookIdBrand };
+export type PlaybookId = ElementId & { readonly __playbookIdBrand: 'PlaybookId' };
 
 // ============================================================================
 // Variable Types

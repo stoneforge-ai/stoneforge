@@ -120,6 +120,14 @@ export function handleEventsWSMessage(ws: ServerWebSocket<EventsWSClientData>, m
 }
 
 /**
+ * Return the number of active event-subscription WebSocket clients.
+ * Used to detect whether a dashboard tab is already connected.
+ */
+export function getEventsClientCount(): number {
+  return eventsClients.size;
+}
+
+/**
  * Handle event-subscription WebSocket close
  */
 export function handleEventsWSClose(ws: ServerWebSocket<EventsWSClientData>): void {

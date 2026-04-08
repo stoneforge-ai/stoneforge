@@ -224,6 +224,7 @@ export function QuickFileOpen({ open, onOpenChange }: QuickFileOpenProps) {
                 {workspaceName}
               </span>
             )}
+            {/* viewport-based: renders in fixed overlay outside @container */}
             <kbd className="hidden sm:flex items-center gap-1 px-2 py-1 text-xs text-[var(--color-text-muted)] bg-[var(--color-surface)] border border-[var(--color-border)] rounded">
               ESC
             </kbd>

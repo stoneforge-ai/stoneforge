@@ -13,7 +13,7 @@ import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useSearch, useNavigate } from '@tanstack/react-router';
 import { ClipboardList, Plus, AlertCircle, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { useIsMobile } from '../../hooks';
+import { useContainerIsMobile } from '../../hooks';
 import { useCurrentUser } from '../../contexts/CurrentUserContext';
 import { PageHeader } from '../../components/shared/PageHeader';
 import { getCurrentBinding } from '../../lib/keyboard';
@@ -46,7 +46,7 @@ export function PlansPage() {
     action?: string;
   };
   const navigate = useNavigate();
-  const isMobile = useIsMobile();
+  const isMobile = useContainerIsMobile();
   const { currentUser } = useCurrentUser();
 
   // State
@@ -189,7 +189,7 @@ export function PlansPage() {
   }
 
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden">
+    <div className="flex-1 flex flex-col h-full overflow-hidden" data-testid="plans-page">
       {/* Header */}
       <PageHeader
         title="Plans"
@@ -240,7 +240,7 @@ export function PlansPage() {
       {/* Content area */}
       <div className="flex-1 flex min-h-0">
         {/* Main list/roadmap area */}
-        <div className={`flex-1 overflow-hidden ${showDetailPanel ? 'hidden lg:block' : ''}`}>
+        <div className={`flex-1 overflow-hidden ${showDetailPanel ? 'hidden @lg:block' : ''}`}>
           {isLoading ? (
             <div className="flex items-center justify-center h-full">
               <Loader2 className="w-8 h-8 animate-spin text-blue-500" />

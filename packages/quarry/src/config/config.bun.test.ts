@@ -122,6 +122,18 @@ function createTestConfig(): Configuration {
       autoLinkProvider: undefined,
     },
     demoMode: false,
+    merge: {
+      autoMerge: true,
+      targetBranch: null,
+      requireApproval: false,
+    },
+    workflow: {
+      preset: null,
+    },
+    agents: {
+      permissionModel: 'unrestricted',
+      allowedBashCommands: ['git status', 'git log', 'ls'],
+    },
   };
 }
 

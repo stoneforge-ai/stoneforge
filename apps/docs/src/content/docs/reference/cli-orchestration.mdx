@@ -364,3 +364,15 @@ sf task merge-status <task-id> <status>
 ```
 
 Valid statuses: `pending`, `testing`, `merging`, `merged`, `conflict`, `test_failed`, `failed`, `not_applicable`. Terminal statuses (`merged`, `not_applicable`) automatically close the task.
+
+#### `sf task set-owner`
+
+Set the owning director for a task. This sets the `owningDirector` field in the task's orchestrator metadata, used for message routing in multi-director workspaces.
+
+```bash
+sf task set-owner <task-id> <director-id>
+```
+
+```bash
+sf task set-owner el-abc123 el-dir01
+```

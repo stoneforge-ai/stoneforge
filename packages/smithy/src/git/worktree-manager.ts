@@ -311,6 +311,18 @@ export interface WorktreeManager {
    */
   worktreeExists(worktreePath: string): Promise<boolean>;
 
+  /**
+   * Ensures a worktree can resolve the shared git remote configuration.
+   *
+   * Repairs missing remote metadata by copying the workspace root's remote
+   * URL and fetch refspec into the target repo when needed.
+   *
+   * @param worktreePath - Path to repair
+   * @param remoteName - Remote name to ensure (default: origin)
+   * @returns true when the remote exists after repair, false otherwise
+   */
+  ensureWorktreeRemote(worktreePath: string, remoteName?: string): Promise<boolean>;
+
   // ----------------------------------------
   // Branch Operations
   // ----------------------------------------
@@ -512,6 +524,20 @@ export class WorktreeManagerImpl implements WorktreeManager {
         }
       }
 
+      const remoteAvailable = await this.ensureWorktreeRemote(fullPath);
+      if (branchCreated && remoteAvailable && options.trackRemote !== false) {
+        try {
+          await this.execGitInRepo(fullPath, [
+            'branch',
+            '--set-upstream-to',
+            `origin/${baseBranch}`,
+            branch,
+          ]);
+        } catch {
+          // Remote may be local-only or the base branch may not exist remotely.
+        }
+      }
+
       // Install dependencies if requested
       if (options.installDependencies) {
         await this.installDependencies(fullPath);
@@ -603,6 +629,8 @@ export class WorktreeManagerImpl implements WorktreeManager {
       await this.execGit(['worktree', 'prune']);
 
       await this.execGit(['worktree', 'add', '--detach', fullPath, startPoint]);
+
+      await this.ensureWorktreeRemote(fullPath);
 
       this.worktreeStates.set(relativePath, 'active');
 
@@ -856,6 +884,33 @@ export class WorktreeManagerImpl implements WorktreeManager {
     return worktree !== undefined;
   }
 
+  async ensureWorktreeRemote(worktreePath: string, remoteName = 'origin'): Promise<boolean> {
+    this.ensureInitialized();
+
+    const workspaceRemote = await this.getRemoteConfiguration(this.config.workspaceRoot, remoteName);
+    if (!workspaceRemote) {
+      return false;
+    }
+
+    const fullPath = this.resolvePath(worktreePath);
+    const worktreeRemote = await this.getRemoteConfiguration(fullPath, remoteName);
+
+    if (!worktreeRemote) {
+      await this.configureRemote(fullPath, remoteName, workspaceRemote.url, workspaceRemote.fetchSpecs);
+      return true;
+    }
+
+    const missingFetchSpecs = workspaceRemote.fetchSpecs.filter(
+      (fetchSpec) => !worktreeRemote.fetchSpecs.includes(fetchSpec)
+    );
+
+    if (worktreeRemote.url !== workspaceRemote.url || missingFetchSpecs.length > 0) {
+      await this.configureRemote(fullPath, remoteName, workspaceRemote.url, missingFetchSpecs);
+    }
+
+    return true;
+  }
+
   // ----------------------------------------
   // Branch Operations
   // ----------------------------------------
@@ -914,6 +969,75 @@ export class WorktreeManagerImpl implements WorktreeManager {
     });
   }
 
+  private async execGitInRepo(
+    repoPath: string,
+    args: string[]
+  ): Promise<{ stdout: string; stderr: string }> {
+    return execFileAsync('git', args, {
+      cwd: repoPath,
+      encoding: 'utf8',
+      timeout: GIT_OPERATION_TIMEOUT_MS,
+    });
+  }
+
+  private async getRemoteConfiguration(
+    repoPath: string,
+    remoteName: string
+  ): Promise<{ url: string; fetchSpecs: string[] } | undefined> {
+    try {
+      const { stdout: url } = await this.execGitInRepo(repoPath, ['remote', 'get-url', remoteName]);
+      let fetchSpecs: string[] = [];
+      try {
+        const { stdout } = await this.execGitInRepo(repoPath, [
+          'config',
+          '--get-all',
+          `remote.${remoteName}.fetch`,
+        ]);
+        fetchSpecs = stdout
+          .split('\n')
+          .map((line) => line.trim())
+          .filter(Boolean);
+      } catch {
+        // Missing fetch refspecs are repaired below.
+      }
+
+      return {
+        url: url.trim(),
+        fetchSpecs,
+      };
+    } catch {
+      return undefined;
+    }
+  }
+
+  private async configureRemote(
+    repoPath: string,
+    remoteName: string,
+    remoteUrl: string,
+    fetchSpecs: string[]
+  ): Promise<void> {
+    const remoteExists = await this.getRemoteConfiguration(repoPath, remoteName);
+
+    if (remoteExists) {
+      await this.execGitInRepo(repoPath, ['remote', 'set-url', remoteName, remoteUrl]);
+    } else {
+      await this.execGitInRepo(repoPath, ['remote', 'add', remoteName, remoteUrl]);
+    }
+
+    for (const fetchSpec of fetchSpecs) {
+      try {
+        await this.execGitInRepo(repoPath, [
+          'config',
+          '--add',
+          `remote.${remoteName}.fetch`,
+          fetchSpec,
+        ]);
+      } catch {
+        // Duplicate or unsupported config writes are non-fatal.
+      }
+    }
+  }
+
   /**
    * Installs dependencies in a worktree directory.
    * Detects the package manager (pnpm, npm, yarn, bun) and runs install.
@@ -965,6 +1089,7 @@ export class WorktreeManagerImpl implements WorktreeManager {
       cwd: worktreePath,
       encoding: 'utf8' as const,
       timeout: INSTALL_TIMEOUT_MS,
+      shell: true,
     };
 
     // When using corepack, the command becomes 'corepack' and the manager
@@ -1046,6 +1171,7 @@ export class WorktreeManagerImpl implements WorktreeManager {
       await execFileAsync('corepack', ['--version'], {
         encoding: 'utf8',
         timeout: 10_000,
+        shell: true,
       });
       return true;
     } catch {

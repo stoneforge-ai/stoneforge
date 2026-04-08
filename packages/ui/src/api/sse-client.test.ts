@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, test, expect, beforeEach, afterEach } from 'vitest';
 import { SSEClient, createSSEClient, type SSEConnectionState } from './sse-client';
 
 // Mock EventSource

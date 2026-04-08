@@ -2,7 +2,7 @@
  * Tests for layout components
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import type { ReactNode } from 'react';
 import {
   MobileDrawer,

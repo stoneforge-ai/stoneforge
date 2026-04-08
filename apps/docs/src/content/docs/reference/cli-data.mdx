@@ -436,82 +436,114 @@ sf playbook create -n deploy -t "Deployment Process" \
 
 ## External sync commands
 
-Sync tasks and documents with external tools (GitHub, Linear, Notion, local folders). All commands live under `sf external-sync`.
+Manage bidirectional synchronization between Stoneforge and external services (GitHub Issues, Linear, etc.).
 
-### Configuration
+### `sf external-sync config`
+
+Show or set provider configuration.
 
 ```bash
-# Show current sync configuration
 sf external-sync config
-
-# Set provider API token
-sf external-sync config set-token github ghp_xxxxxxxxxxxx
-sf external-sync config set-token linear lin_api_xxxxxxxxxxxx
-sf external-sync config set-token notion ntn_xxxxxxxxxxxx
-
-# Set default project for a provider
-sf external-sync config set-project github org/repo
-sf external-sync config set-project linear TEAM-KEY
-sf external-sync config set-project notion <database-id>
-sf external-sync config set-project folder ./docs
-
-# Enable auto-linking for new elements
-sf external-sync config set-auto-link github              # Tasks
-sf external-sync config set-auto-link notion --type document  # Documents
-
-# Disable auto-linking
+sf external-sync config set-token <provider> <token>
+sf external-sync config set-project <provider> <project>
+sf external-sync config set-auto-link <provider> [--type task|document]
 sf external-sync config disable-auto-link [--type task|document|all]
 ```
 
-### Linking elements
+```bash
+sf external-sync config set-token github ghp_xxxxxxxxxxxx
+sf external-sync config set-token linear lin_api_xxxxxxxxxxxx
+sf external-sync config set-project github org/repo
+sf external-sync config set-auto-link github
+sf external-sync config disable-auto-link --type document
+```
 
-Before syncing, elements must be linked to their external counterparts.
+### `sf external-sync link`
+
+Link a task or document to an external issue or page.
 
 ```bash
-# Link a single element by URL or external ID
-sf external-sync link <elementId> <url-or-id> [-p <provider>] [-t task|document]
+sf external-sync link <elementId> <url-or-external-id> [--provider <name>] [--type task|document]
+```
 
-# Bulk-link all unlinked elements
-sf external-sync link-all -p <provider> [--project <project>] [--status <status>] [--dry-run] [--force] [--batch-size <n>]
+```bash
+sf external-sync link el-abc123 https://github.com/org/repo/issues/42
+sf external-sync link el-doc456 https://linear.app/team/DOC-1 --provider linear --type document
+```
 
-# Remove a link
+### `sf external-sync link-all`
+
+Bulk-link all unlinked tasks or documents to external issues/pages.
+
+```bash
+sf external-sync link-all --provider <name> [--type task|document] [--status <s>...] [--dry-run]
+```
+
+```bash
+sf external-sync link-all --provider github --dry-run
+sf external-sync link-all --provider github --status open --status in_progress
+sf external-sync link-all --provider folder --type document
+```
+
+### `sf external-sync unlink`
+
+Remove an external link from a task or document.
+
+```bash
 sf external-sync unlink <elementId>
-
-# Bulk-remove all links
-sf external-sync unlink-all [-p <provider>] [-t task|document|all] [--dry-run]
 ```
 
-### Push, pull, sync
+### `sf external-sync unlink-all`
+
+Bulk-remove external links from all linked elements.
 
 ```bash
-# Push local changes to external systems
-sf external-sync push [elementId...]           # Specific elements
-sf external-sync push --all [-t task|document]  # All linked elements
-sf external-sync push --all --force             # Skip hash comparison
-
-# Pull changes from external systems
-sf external-sync pull [-p <provider>] [-t task|document|all]
-sf external-sync pull --discover               # Also import unlinked external items
-
-# Bidirectional sync (push then pull)
-sf external-sync sync [--dry-run] [-t task|document|all]
+sf external-sync unlink-all [--provider <name>] [--type task|document] [--dry-run]
 ```
 
-| Flag | Description |
-| --- | --- |
-| `-t, --type` | Filter by element type: `task`, `document`, or `all` |
-| `-p, --provider` | Target a specific provider |
-| `--discover` | Import unlinked external items as new elements |
-| `--force` | Push regardless of hash comparison |
-| `--dry-run` | Preview changes without applying them |
+### `sf external-sync push`
 
-### Status and conflicts
+Push linked elements to external service.
 
 ```bash
-# Show sync overview (linked counts, conflicts, cursors)
+sf external-sync push [elementId...] [--all] [--force] [--type task|document]
+```
+
+```bash
+sf external-sync push el-abc123
+sf external-sync push --all
+sf external-sync push --all --force --type task
+```
+
+### `sf external-sync pull`
+
+Pull changes from external for linked elements.
+
+```bash
+sf external-sync pull [--provider <name>] [--discover] [--type task|document]
+```
+
+### `sf external-sync sync`
+
+Bidirectional sync (push + pull).
+
+```bash
+sf external-sync sync [--dry-run] [--type task|document]
+```
+
+### `sf external-sync status`
+
+Show external sync state overview.
+
+```bash
 sf external-sync status
-
-# Resolve a conflict
-sf external-sync resolve <elementId> --keep local
-sf external-sync resolve <elementId> --keep remote
 ```
+
+### `sf external-sync resolve`
+
+Resolve a sync conflict.
+
+```bash
+sf external-sync resolve <elementId> --keep local|remote
+```
+

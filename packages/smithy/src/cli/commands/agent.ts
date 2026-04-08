@@ -361,6 +361,9 @@ async function agentShowHandler(
       `Created:  ${agent.createdAt}`,
     ];
 
+    if (meta.agentRole === 'director') {
+      lines.push(`Target Branch: ${meta.targetBranch ?? '(auto-detect)'}`);
+    }
     if (meta.workerMode) {
       lines.push(`Mode:     ${meta.workerMode}`);
     }
@@ -405,6 +408,7 @@ interface AgentRegisterOptions {
   trigger?: string;
   provider?: string;
   model?: string;
+  targetBranch?: string;
 }
 
 const agentRegisterOptions: CommandOption[] = [
@@ -463,6 +467,11 @@ const agentRegisterOptions: CommandOption[] = [
     description: 'LLM model to use (e.g., claude-sonnet-4-5-20250929)',
     hasValue: true,
   },
+  {
+    name: 'targetBranch',
+    description: 'Target branch for merge (director only, default: auto-detect)',
+    hasValue: true,
+  },
 ];
 
 async function agentRegisterHandler(
@@ -512,6 +521,7 @@ async function agentRegisterHandler(
           roleDefinitionRef,
           provider: options.provider,
           model: options.model,
+          targetBranch: options.targetBranch,
         });
         break;
 
@@ -608,10 +618,12 @@ Options:
   --trigger <cron>        Steward cron trigger (e.g., "0 2 * * *")
   --provider <name>       Agent provider (e.g., claude-code, opencode)
   --model <model>         LLM model to use (e.g., claude-sonnet-4-5-20250929)
+  --target-branch <branch> Target branch for merge (director only, default: auto-detect)
 
 Examples:
   sf agent register MyWorker --role worker --mode ephemeral
   sf agent register MainDirector --role director
+  sf agent register MainDirector --role director --target-branch staging
   sf agent register MergeSteward --role steward --focus merge
   sf agent register MyWorker --role worker --tags "frontend,urgent"
   sf agent register TeamWorker --role worker --reportsTo el-director123

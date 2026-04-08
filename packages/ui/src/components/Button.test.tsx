@@ -2,7 +2,7 @@
  * @stoneforge/ui Button Component Tests
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 
 describe('Button Component', () => {
   it('exports Button component', async () => {

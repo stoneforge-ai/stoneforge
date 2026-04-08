@@ -17,3 +17,6 @@ export * from './id/index.js';
 
 // Utils - shared utility functions
 export * from './utils/index.js';
+
+// Config - model pricing and cost calculation
+export * from './config/index.js';

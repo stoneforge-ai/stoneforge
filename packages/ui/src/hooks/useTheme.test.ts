@@ -2,7 +2,7 @@
  * @stoneforge/ui useTheme Hook Tests
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 
 describe('useTheme Hook', () => {
   it('exports useTheme hook', async () => {

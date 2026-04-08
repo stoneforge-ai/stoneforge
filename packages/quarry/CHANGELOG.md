@@ -1,5 +1,109 @@
 # @stoneforge/quarry
 
+## 1.23.1
+
+### Patch Changes
+
+- @stoneforge/core@1.23.1
+- @stoneforge/storage@1.23.1
+- @stoneforge/shared-routes@1.23.1
+
+## 1.23.0
+
+### Patch Changes
+
+- d9137d7: Add ts-ignore for optional smithy dependency callsites where StorageBackend types may differ across compilation units
+- 99e75d8: Add missing short flag `-V` for `--visibility` option in channel create command to match documented help text
+- f365a2d: Fix sf reset daemon stop targeting wrong port (3456 instead of 3457)
+- Updated dependencies [d9137d7]
+  - @stoneforge/core@1.23.0
+  - @stoneforge/shared-routes@1.23.0
+  - @stoneforge/storage@1.23.0
+
+## 1.22.0
+
+### Minor Changes
+
+- 9c9f3ec: Replace text input with interactive arrow-key selector for workflow preset in `sf init`
+
+### Patch Changes
+
+- 9c9f3ec: Fix preset menu duplication when terminal lines wrap in narrow terminals during `sf init`
+  - @stoneforge/core@1.22.0
+  - @stoneforge/storage@1.22.0
+  - @stoneforge/shared-routes@1.22.0
+
+## 1.21.0
+
+### Minor Changes
+
+- a2ef9af: Replace text input with interactive arrow-key selector for workflow preset in `sf init`
+- e36265c: Polish `sf init` output with branded, visually structured display including color, aligned key-value pairs, and next steps guidance
+- d93c864: Polish `sf serve` startup output with clean branded display: concise summary showing dashboard URL, agent count, and daemon status instead of noisy internal logs
+- 00a58d3: Add auto-open browser when `sf serve` starts, with `--no-open` flag to disable
+
+### Patch Changes
+
+- @stoneforge/core@1.21.0
+- @stoneforge/storage@1.21.0
+- @stoneforge/shared-routes@1.21.0
+
+## 1.20.1
+
+### Patch Changes
+
+- @stoneforge/core@1.20.1
+- @stoneforge/storage@1.20.1
+- @stoneforge/shared-routes@1.20.1
+
+## 1.20.0
+
+### Patch Changes
+
+- 50aa516: Fix findSkillsSourceDir to resolve skills via module resolution using createRequire, replacing the broken process.execPath-based lookup that failed for pnpm, yarn, and bun global installs.
+  - @stoneforge/core@1.20.0
+  - @stoneforge/storage@1.20.0
+  - @stoneforge/shared-routes@1.20.0
+
+## 1.19.0
+
+### Patch Changes
+
+- @stoneforge/core@1.19.0
+- @stoneforge/storage@1.19.0
+- @stoneforge/shared-routes@1.19.0
+
+## 1.18.0
+
+### Minor Changes
+
+- 07f3449: Update CLI resolveActor to check SF_ENTITY_ID env var for automatic agent identity resolution
+
+### Patch Changes
+
+- @stoneforge/core@1.18.0
+- @stoneforge/storage@1.18.0
+- @stoneforge/shared-routes@1.18.0
+
+## 1.17.0
+
+### Minor Changes
+
+- 7c63531: Replace hardcoded cost estimates in CLI metrics command with per-model pricing from @stoneforge/core
+- d3744f6: Add `agents.allowedBashCommands` configuration for defining which bash commands agents can run without approval in restricted permission mode.
+- 9015835: Add workflow preset selection to `sf init` with three presets (Auto, Review, Approve) that configure merge, workflow, and agent permission settings. Supports interactive prompt and `--preset` CLI flag.
+- 3bc3e76: Update CLI metrics command to show per-model 4-category token breakdown (input/output/cache_read/cache_creation) with detailed cost breakdown and improved formatCost helper
+
+### Patch Changes
+
+- b2ce7ce: Fix `sf init --name` flag being a no-op: the `--name` option now correctly sets the workspace name in `config.yaml`
+- a77ec61: Fix `sf update --help` to list all 8 valid task statuses instead of only 4
+- Updated dependencies [600e4fd]
+- Updated dependencies [7c63531]
+  - @stoneforge/storage@1.17.0
+  - @stoneforge/core@1.17.0
+  - @stoneforge/shared-routes@1.17.0
+
 ## 1.16.1
 
 ### Patch Changes

@@ -77,8 +77,7 @@ export interface ChannelPermissions {
 /**
  * Branded type for Channel IDs
  */
-declare const ChannelIdBrand: unique symbol;
-export type ChannelId = ElementId & { readonly [ChannelIdBrand]: typeof ChannelIdBrand };
+export type ChannelId = ElementId & { readonly __channelIdBrand: 'ChannelId' };
 
 // ============================================================================
 // Validation Constants

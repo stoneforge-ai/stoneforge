@@ -217,7 +217,7 @@ export async function setupTestContext(
 
     // 7. Create all services
     const agentRegistry = createAgentRegistry(api);
-    const taskAssignment = createTaskAssignmentService(api);
+    const taskAssignment = createTaskAssignmentService(api, undefined, tempWorkspace);
     const inboxService = createInboxService(storage);
     const dispatchService = createDispatchService(api, taskAssignment, agentRegistry);
 

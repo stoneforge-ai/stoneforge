@@ -77,7 +77,7 @@ describe('Agent Command Structure', () => {
 
     it('should have all registration options', () => {
       expect(agentRegisterCommand.options).toBeDefined();
-      expect(agentRegisterCommand.options!.length).toBe(10);
+      expect(agentRegisterCommand.options!.length).toBe(11);
 
       // Required role option
       const roleOption = agentRegisterCommand.options![0];
@@ -128,6 +128,11 @@ describe('Agent Command Structure', () => {
       const modelOption = agentRegisterCommand.options![9];
       expect(modelOption.name).toBe('model');
       expect(modelOption.hasValue).toBe(true);
+
+      // Target branch option
+      const targetBranchOption = agentRegisterCommand.options![10];
+      expect(targetBranchOption.name).toBe('targetBranch');
+      expect(targetBranchOption.hasValue).toBe(true);
     });
 
     it('should have --model option with correct properties', () => {
@@ -135,6 +140,23 @@ describe('Agent Command Structure', () => {
       expect(modelOption).toBeDefined();
       expect(modelOption!.hasValue).toBe(true);
       expect(modelOption!.description).toContain('LLM model');
+    });
+
+    it('should have --target-branch option with correct properties', () => {
+      const targetBranchOption = agentRegisterCommand.options!.find(opt => opt.name === 'targetBranch');
+      expect(targetBranchOption).toBeDefined();
+      expect(targetBranchOption!.hasValue).toBe(true);
+      expect(targetBranchOption!.description).toContain('Target branch');
+    });
+
+    it('should accept --target-branch flag via parser', async () => {
+      const { parseArgs } = await import('@stoneforge/quarry/cli');
+      const result = parseArgs(
+        ['agent', 'register', 'TestDir', '--role', 'director', '--target-branch', 'staging'],
+        agentRegisterCommand.options!,
+        { strict: false }
+      );
+      expect(result.commandOptions.targetBranch).toBe('staging');
     });
   });
 

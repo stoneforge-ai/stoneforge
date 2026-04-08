@@ -89,8 +89,7 @@ export const MIN_VERSION = 1;
 /**
  * Branded type for Document IDs (for use in references)
  */
-declare const DocumentIdBrand: unique symbol;
-export type DocumentId = ElementId & { readonly [DocumentIdBrand]: typeof DocumentIdBrand };
+export type DocumentId = ElementId & { readonly __documentIdBrand: 'DocumentId' };
 
 // ============================================================================
 // Document Interface

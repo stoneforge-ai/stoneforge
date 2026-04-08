@@ -345,6 +345,18 @@ function createTrackedDefaults(): TrackedConfiguration {
         : undefined,
     },
     demoMode: { value: DEFAULT_CONFIG.demoMode, source: ConfigSourceEnum.DEFAULT },
+    merge: {
+      autoMerge: { value: DEFAULT_CONFIG.merge.autoMerge, source: ConfigSourceEnum.DEFAULT },
+      targetBranch: { value: DEFAULT_CONFIG.merge.targetBranch, source: ConfigSourceEnum.DEFAULT },
+      requireApproval: { value: DEFAULT_CONFIG.merge.requireApproval, source: ConfigSourceEnum.DEFAULT },
+    },
+    workflow: {
+      preset: { value: DEFAULT_CONFIG.workflow.preset, source: ConfigSourceEnum.DEFAULT },
+    },
+    agents: {
+      permissionModel: { value: DEFAULT_CONFIG.agents.permissionModel, source: ConfigSourceEnum.DEFAULT },
+      allowedBashCommands: { value: DEFAULT_CONFIG.agents.allowedBashCommands, source: ConfigSourceEnum.DEFAULT },
+    },
   };
 }
 
@@ -423,6 +435,24 @@ function mergeTrackedConfig(
   }
   if (partial.demoMode !== undefined) {
     result.demoMode = { value: partial.demoMode, source };
+  }
+  if (partial.merge?.autoMerge !== undefined) {
+    result.merge = { ...result.merge, autoMerge: { value: partial.merge.autoMerge, source } };
+  }
+  if (partial.merge?.targetBranch !== undefined) {
+    result.merge = { ...result.merge, targetBranch: { value: partial.merge.targetBranch, source } };
+  }
+  if (partial.merge?.requireApproval !== undefined) {
+    result.merge = { ...result.merge, requireApproval: { value: partial.merge.requireApproval, source } };
+  }
+  if (partial.workflow?.preset !== undefined) {
+    result.workflow = { ...result.workflow, preset: { value: partial.workflow.preset, source } };
+  }
+  if (partial.agents?.permissionModel !== undefined) {
+    result.agents = { ...result.agents, permissionModel: { value: partial.agents.permissionModel, source } };
+  }
+  if (partial.agents?.allowedBashCommands !== undefined) {
+    result.agents = { ...result.agents, allowedBashCommands: { value: partial.agents.allowedBashCommands, source } };
   }
 
   return result;

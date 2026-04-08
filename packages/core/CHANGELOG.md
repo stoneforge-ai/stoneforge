@@ -1,5 +1,31 @@
 # @stoneforge/core
 
+## 1.23.1
+
+## 1.23.0
+
+### Patch Changes
+
+- d9137d7: Replace unique symbol branded types with string literal brands for all ID types (ElementId, EntityId, ChannelId, etc.) to fix cross-compilation-unit type incompatibility
+
+## 1.22.0
+
+## 1.21.0
+
+## 1.20.1
+
+## 1.20.0
+
+## 1.19.0
+
+## 1.18.0
+
+## 1.17.0
+
+### Minor Changes
+
+- 7c63531: Add model pricing configuration and shared cost calculation utilities for per-model, per-token-category cost estimation
+
 ## 1.16.1
 
 ## 1.16.0

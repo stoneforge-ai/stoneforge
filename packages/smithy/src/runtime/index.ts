@@ -14,6 +14,7 @@ export {
   type SpawnMode,
   type SpawnConfig,
   type SpawnOptions,
+  type SDKHookFactory,
   type StreamJsonEventType,
   type StreamJsonEvent,
   type SpawnedSessionEvent,

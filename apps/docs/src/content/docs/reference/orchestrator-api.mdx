@@ -111,15 +111,15 @@ const allWorkers = await api.getAgentsByRole('worker');
 Each agent gets a dedicated channel on registration. Used for dispatch notifications and inter-agent messaging.
 
 ```typescript
-// Get channel ID (via OrchestratorAPI)
-const channelId = await api.getAgentChannel(agentId);
+// OrchestratorAPI returns just the ChannelId
+const channelId: ChannelId | undefined = await api.getAgentChannel(entityId);
 
-// Get full channel object (via AgentRegistry)
+// AgentRegistry returns full Channel object
 import { createAgentRegistry } from '@stoneforge/smithy';
 
 const registry = createAgentRegistry(api);
-const channel = await registry.getAgentChannel(agentId);
-const channelId = await registry.getAgentChannelId(agentId);
+const channel: Channel | undefined = await registry.getAgentChannel(agentId);
+const channelId2: ChannelId | undefined = await registry.getAgentChannelId(agentId);
 
 // Channel name utilities
 import { generateAgentChannelName, parseAgentChannelName } from '@stoneforge/smithy';
@@ -169,7 +169,9 @@ interface OrchestratorTaskMeta {
   assignedAgent?: EntityId;
   branch?: string;
   worktree?: string;
+  targetBranch?: string;       // Target branch for merging (inherited from director at dispatch)
   sessionId?: string;
+  owningDirector?: EntityId;   // Director that created/owns this task
   startedAt?: Timestamp;
   completedAt?: Timestamp;
   mergedAt?: Timestamp;
@@ -214,6 +216,7 @@ interface OrchestratorTaskMeta {
 | `test_failed` | Tests failed |
 | `failed` | Merge failed (other reason) |
 | `not_applicable` | No merge needed |
+| `awaiting_approval` | PR created, waiting for human approval/merge |
 
 ---
 
@@ -233,6 +236,25 @@ type SessionState = 'idle' | 'running' | 'suspended' | 'terminated';
 ---
 
 ## Agent types
+
+### AgentEntity
+
+A typed wrapper for entities that have agent metadata:
+
+```typescript
+import { getAgentMetadata } from '@stoneforge/smithy';
+
+// AgentEntity extends Entity with typed agent metadata
+interface AgentEntity extends Entity {
+  metadata: { agent: AgentMetadata } & Record<string, unknown>;
+}
+
+// Extract agent metadata from an entity (returns undefined if not an agent)
+const agentMeta = getAgentMetadata(entity);
+if (agentMeta) {
+  console.log(agentMeta.agentRole);  // 'director' | 'worker' | 'steward'
+}
+```
 
 ### AgentRole
 
@@ -261,6 +283,7 @@ interface BaseAgentMetadata {
 
 interface DirectorMetadata extends BaseAgentMetadata {
   agentRole: 'director';
+  targetBranch?: string;  // Git branch for task merges (falls back to config or auto-detect)
 }
 
 interface WorkerMetadata extends BaseAgentMetadata {

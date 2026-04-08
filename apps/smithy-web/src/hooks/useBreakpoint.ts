@@ -3,13 +3,13 @@
  *
  * Provides hooks to detect the current viewport breakpoint and responsive helpers.
  *
- * Breakpoints:
- * - xs: 0 - 479px (small phones)
- * - sm: 480 - 639px (large phones)
- * - md: 640 - 767px (small tablets)
- * - lg: 768 - 1023px (tablets)
- * - xl: 1024 - 1279px (small laptops)
- * - 2xl: 1280px+ (desktops)
+ * Breakpoints (aligned with Tailwind CSS v4 defaults):
+ * - xs: 0 - 639px (small phones)
+ * - sm: 640 - 767px (large phones / small tablets)
+ * - md: 768 - 1023px (tablets)
+ * - lg: 1024 - 1279px (small laptops)
+ * - xl: 1280 - 1535px (desktops)
+ * - 2xl: 1536px+ (large desktops)
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -24,11 +24,11 @@ export type Breakpoint = 'xs' | 'sm' | 'md' | 'lg' | 'xl' | '2xl';
  */
 export const BREAKPOINTS: Record<Breakpoint, number> = {
   xs: 0,
-  sm: 480,
-  md: 640,
-  lg: 768,
-  xl: 1024,
-  '2xl': 1280,
+  sm: 640,
+  md: 768,
+  lg: 1024,
+  xl: 1280,
+  '2xl': 1536,
 } as const;
 
 /**

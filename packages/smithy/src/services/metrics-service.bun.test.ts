@@ -581,6 +581,148 @@ describe('MetricsService', () => {
   });
 
   // ========================================================================
+  // Cache token tracking
+  // ========================================================================
+
+  describe('cache tokens', () => {
+    test('records cache tokens via record()', () => {
+      service.record({
+        provider: 'claude-code',
+        model: 'claude-sonnet-4',
+        sessionId: 'session-cache-1',
+        inputTokens: 1000,
+        outputTokens: 500,
+        cacheReadTokens: 800,
+        cacheCreationTokens: 200,
+        durationMs: 5000,
+        outcome: 'completed',
+      });
+
+      const result = service.aggregateByProvider({ days: 7 });
+      expect(result).toHaveLength(1);
+      expect(result[0].totalCacheReadTokens).toBe(800);
+      expect(result[0].totalCacheCreationTokens).toBe(200);
+    });
+
+    test('defaults cache tokens to 0 when omitted', () => {
+      service.record({
+        provider: 'claude-code',
+        sessionId: 'session-cache-2',
+        inputTokens: 1000,
+        outputTokens: 500,
+        durationMs: 5000,
+        outcome: 'completed',
+      });
+
+      const result = service.aggregateByProvider({ days: 7 });
+      expect(result[0].totalCacheReadTokens).toBe(0);
+      expect(result[0].totalCacheCreationTokens).toBe(0);
+    });
+
+    test('upsert takes max of cache token counts', () => {
+      service.upsert({
+        provider: 'claude-code',
+        sessionId: 'session-cache-3',
+        inputTokens: 1000,
+        outputTokens: 500,
+        cacheReadTokens: 400,
+        cacheCreationTokens: 100,
+        durationMs: 5000,
+        outcome: 'completed',
+      });
+
+      service.upsert({
+        provider: 'claude-code',
+        sessionId: 'session-cache-3',
+        inputTokens: 2000,
+        outputTokens: 1000,
+        cacheReadTokens: 900,
+        cacheCreationTokens: 300,
+        durationMs: 10000,
+        outcome: 'completed',
+      });
+
+      const result = service.getBySession('session-cache-3');
+      expect(result).not.toBeNull();
+      expect(result!.totalCacheReadTokens).toBe(900);
+      expect(result!.totalCacheCreationTokens).toBe(300);
+    });
+
+    test('upsert does not decrease cache token counts', () => {
+      service.upsert({
+        provider: 'claude-code',
+        sessionId: 'session-cache-4',
+        inputTokens: 5000,
+        outputTokens: 2000,
+        cacheReadTokens: 3000,
+        cacheCreationTokens: 500,
+        durationMs: 10000,
+        outcome: 'completed',
+      });
+
+      service.upsert({
+        provider: 'claude-code',
+        sessionId: 'session-cache-4',
+        inputTokens: 1000,
+        outputTokens: 500,
+        cacheReadTokens: 100,
+        cacheCreationTokens: 50,
+        durationMs: 12000,
+        outcome: 'completed',
+      });
+
+      const result = service.getBySession('session-cache-4');
+      expect(result!.totalCacheReadTokens).toBe(3000);
+      expect(result!.totalCacheCreationTokens).toBe(500);
+    });
+
+    test('aggregates cache tokens across sessions', () => {
+      service.record({
+        provider: 'claude-code',
+        sessionId: 'session-a',
+        inputTokens: 1000,
+        outputTokens: 500,
+        cacheReadTokens: 400,
+        cacheCreationTokens: 100,
+        durationMs: 5000,
+        outcome: 'completed',
+      });
+      service.record({
+        provider: 'claude-code',
+        sessionId: 'session-b',
+        inputTokens: 2000,
+        outputTokens: 1000,
+        cacheReadTokens: 800,
+        cacheCreationTokens: 200,
+        durationMs: 8000,
+        outcome: 'completed',
+      });
+
+      const result = service.aggregateByProvider({ days: 7 });
+      expect(result[0].totalCacheReadTokens).toBe(1200);
+      expect(result[0].totalCacheCreationTokens).toBe(300);
+    });
+
+    test('cache tokens in aggregateByModel', () => {
+      service.record({
+        provider: 'claude-code',
+        model: 'claude-sonnet-4',
+        sessionId: 'session-m1',
+        inputTokens: 1000,
+        outputTokens: 500,
+        cacheReadTokens: 600,
+        cacheCreationTokens: 150,
+        durationMs: 5000,
+        outcome: 'completed',
+      });
+
+      const result = service.aggregateByModel({ days: 7 });
+      expect(result[0].totalCacheReadTokens).toBe(600);
+      expect(result[0].totalCacheCreationTokens).toBe(150);
+    });
+  });
+
+  // ========================================================================
   // Edge cases
   // ========================================================================
 

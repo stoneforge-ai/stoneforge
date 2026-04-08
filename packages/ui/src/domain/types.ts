@@ -55,7 +55,8 @@ export type MergeStatus =
   | 'conflict'
   | 'test_failed'
   | 'failed'
-  | 'not_applicable';
+  | 'not_applicable'
+  | 'awaiting_approval';
 
 /**
  * Task element for UI display
@@ -335,6 +336,8 @@ export function getMergeStatusDisplayName(status: MergeStatus): string {
       return 'Merge Failed';
     case 'not_applicable':
       return 'No Merge Needed';
+    case 'awaiting_approval':
+      return 'Awaiting Approval';
     default:
       return status;
   }
@@ -361,6 +364,8 @@ export function getMergeStatusColor(status: MergeStatus): string {
       return 'text-red-600 bg-red-100 dark:text-red-400 dark:bg-red-900/30';
     case 'not_applicable':
       return 'text-gray-500 bg-gray-100 dark:text-gray-400 dark:bg-gray-800/50';
+    case 'awaiting_approval':
+      return 'text-indigo-600 bg-indigo-100 dark:text-indigo-400 dark:bg-indigo-900/30';
     default:
       return 'text-gray-600 bg-gray-100 dark:text-gray-400 dark:bg-gray-800/50';
   }

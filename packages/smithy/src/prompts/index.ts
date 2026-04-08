@@ -11,6 +11,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { AgentRole, StewardFocus, WorkerMode } from '../types/index.js';
+import type { WorkflowPreset, AgentPermissionModel } from '@stoneforge/quarry';
 
 // ============================================================================
 // Constants
@@ -367,6 +368,109 @@ export function hasBuiltInPrompt(
 }
 
 // ============================================================================
+// Workflow Preset Context
+// ============================================================================
+
+/**
+ * Context about the active workflow preset, used to generate
+ * preset-specific instructions for agent prompts.
+ */
+export interface WorkflowPresetContext {
+  /** The active workflow preset (auto, review, approve) */
+  preset: WorkflowPreset;
+
+  /** The agent permission model (unrestricted or restricted) */
+  permissionModel: AgentPermissionModel;
+
+  /** List of auto-allowed tool names (for restricted mode) */
+  autoAllowedTools?: readonly string[];
+
+  /** List of auto-allowed sf subcommands (for restricted mode) */
+  autoAllowedSfCommands?: readonly string[];
+
+  /** List of allowed bash commands (for restricted mode) */
+  allowedBashCommands?: string[];
+}
+
+/**
+ * Builds a workflow preset context section to inject into agent prompts.
+ *
+ * Returns a markdown section explaining the agent's workflow context:
+ * - What merge behavior to expect
+ * - What tool access level they have
+ * - How to handle denied actions (restricted mode)
+ *
+ * @param context - The workflow preset context
+ * @returns A markdown string to include in the prompt, or empty string if no preset
+ */
+export function buildWorkflowPresetSection(context: WorkflowPresetContext): string {
+  const { preset, permissionModel } = context;
+
+  const lines: string[] = [
+    '## Workflow Context',
+    '',
+  ];
+
+  switch (preset) {
+    case 'auto':
+      lines.push(
+        'Your work is auto-merged to the main branch after tests pass.',
+        'You have unrestricted tool access.',
+      );
+      break;
+
+    case 'review':
+      lines.push(
+        'Your work merges to the review branch (`stoneforge/review`), not directly to main.',
+        'A human will review the review branch and merge to main.',
+        'You have unrestricted tool access.',
+      );
+      break;
+
+    case 'approve': {
+      // Build list of auto-allowed tools for display
+      const toolList = context.autoAllowedTools?.length
+        ? context.autoAllowedTools.join(', ')
+        : 'Read, Write, Edit, Glob, Grep, WebSearch, WebFetch, TodoRead, TodoWrite';
+
+      const sfCmdList = context.autoAllowedSfCommands?.length
+        ? context.autoAllowedSfCommands.map(c => `sf ${c}`).join(', ')
+        : 'sf task, sf document, sf message, sf inbox, sf show, sf plan, sf dependency, sf docs, sf channel, sf update';
+
+      const bashCmdList = context.allowedBashCommands?.length
+        ? context.allowedBashCommands.join(', ')
+        : 'git status, git log, git diff, git branch, ls, pwd, cat, head, tail';
+
+      lines.push(
+        'You are in restricted mode. The following tools are auto-allowed: ' + toolList + '.',
+        '',
+        'Auto-allowed Bash commands: ' + bashCmdList + '.',
+        'Auto-allowed `sf` subcommands: ' + sfCmdList + '.',
+        '',
+        'For any other tool or Bash command, you must request approval. If an action is denied, adapt your approach — do not retry the same action.',
+        'Your completed work will be submitted as a GitHub PR for human review before merging.',
+        'Prefer using auto-allowed tools when possible to avoid blocking on approvals.',
+      );
+      break;
+    }
+
+    default:
+      // Unknown preset — no workflow section
+      return '';
+  }
+
+  // Add permission model context if it doesn't match expected preset default
+  if (preset !== 'approve' && permissionModel === 'restricted') {
+    lines.push(
+      '',
+      '**Note:** Your tool access is restricted even though the workflow preset is not "approve". Some actions may require approval.',
+    );
+  }
+
+  return lines.join('\n');
+}
+
+// ============================================================================
 // Prompt Composition
 // ============================================================================
 
@@ -391,6 +495,9 @@ export interface BuildAgentPromptOptions {
 
   /** Skip project overrides */
   builtInOnly?: boolean;
+
+  /** Workflow preset context for preset-specific instructions */
+  workflowPresetContext?: WorkflowPresetContext;
 }
 
 /**
@@ -405,7 +512,7 @@ export interface BuildAgentPromptOptions {
  * @returns The complete prompt string, or undefined if role prompt not found
  */
 export function buildAgentPrompt(options: BuildAgentPromptOptions): string | undefined {
-  const { role, stewardFocus, workerMode, taskContext, additionalInstructions, projectRoot, builtInOnly } =
+  const { role, stewardFocus, workerMode, taskContext, additionalInstructions, projectRoot, builtInOnly, workflowPresetContext } =
     options;
 
   // Load the role prompt
@@ -415,6 +522,14 @@ export function buildAgentPrompt(options: BuildAgentPromptOptions): string | und
   }
 
   const parts: string[] = [roleResult.prompt];
+
+  // Add workflow preset context if provided
+  if (workflowPresetContext) {
+    const presetSection = buildWorkflowPresetSection(workflowPresetContext);
+    if (presetSection) {
+      parts.push(presetSection);
+    }
+  }
 
   // Add task context if provided
   if (taskContext) {

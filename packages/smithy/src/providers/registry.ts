@@ -68,7 +68,9 @@ export class AgentProviderRegistry {
    * For non-default providers, includes installation instructions.
    */
   async getOrThrow(name: string): Promise<AgentProvider> {
-    const provider = this.providers.get(name);
+    // Backward compatibility: treat 'claude' as alias for 'claude-code'
+    const resolved = name === 'claude' ? 'claude-code' : name;
+    const provider = this.providers.get(resolved);
     if (!provider) {
       const available = this.list().join(', ');
       throw new Error(

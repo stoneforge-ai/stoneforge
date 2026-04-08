@@ -42,6 +42,8 @@ export {
   // Types
   type MergeRequestResult,
   type CreateMergeRequestOptions,
+  type MergeRequestState,
+  type MergeRequestStatusResult,
   type MergeRequestProvider,
   // Implementations
   LocalMergeProvider,
@@ -110,6 +112,7 @@ export {
   type MergeAttemptResult,
   type CreateFixTaskOptions,
   type BatchProcessResult,
+  type ApprovalCheckResult,
   type MergeStewardService,
   // Errors
   MergeStatusConflictError,
@@ -254,6 +257,9 @@ export {
   // Types
   type Setting,
   type ServerAgentDefaults,
+  type SyncDirection,
+  type ProviderConfig,
+  type ExternalSyncSettings,
   type SettingsService,
   // Constants
   SETTING_KEYS,
@@ -302,3 +308,12 @@ export {
   // Factory
   createMetricsService,
 } from './metrics-service.js';
+
+// Cost service
+export {
+  // Types
+  type AggregatedMetricsWithCost,
+  type CostService,
+  // Factory
+  createCostService,
+} from './cost-service.js';

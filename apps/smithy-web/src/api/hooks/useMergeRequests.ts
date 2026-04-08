@@ -98,8 +98,8 @@ function matchesFilterStatus(task: Task, filterStatus: MergeRequestFilterStatus,
     case 'all':
       return true;
     case 'needs_review':
-      // pending or test_failed need human review
-      return mergeStatus === 'pending' || mergeStatus === 'test_failed';
+      // pending, test_failed, or awaiting_approval need human review
+      return mergeStatus === 'pending' || mergeStatus === 'test_failed' || mergeStatus === 'awaiting_approval';
     case 'testing':
       // testing or merging are transient states
       return mergeStatus === 'testing' || mergeStatus === 'merging';
@@ -192,7 +192,7 @@ export function useMergeRequestCounts() {
     all: tasks.filter(t => t.metadata?.orchestrator?.mergeStatus !== 'merged').length,
     needsReview: tasks.filter(t => {
       const status = t.metadata?.orchestrator?.mergeStatus;
-      return status === 'pending' || status === 'test_failed';
+      return status === 'pending' || status === 'test_failed' || status === 'awaiting_approval';
     }).length,
     testing: tasks.filter(t => {
       const status = t.metadata?.orchestrator?.mergeStatus;
@@ -297,6 +297,8 @@ export function getMergeStatusDisplayName(status: MergeStatus): string {
       return 'Failed';
     case 'not_applicable':
       return 'No Merge Needed';
+    case 'awaiting_approval':
+      return 'Awaiting Approval';
     default:
       return status;
   }
@@ -358,6 +360,12 @@ export function getMergeStatusColor(status: MergeStatus): {
         bg: 'bg-gray-100 dark:bg-gray-800/50',
         text: 'text-gray-500 dark:text-gray-400',
         border: 'border-gray-400',
+      };
+    case 'awaiting_approval':
+      return {
+        bg: 'bg-purple-100 dark:bg-purple-900/30',
+        text: 'text-purple-700 dark:text-purple-400',
+        border: 'border-purple-500',
       };
     default:
       return {
@@ -453,5 +461,6 @@ export function getAvailableMergeStatuses(): { value: MergeStatus; label: string
     { value: 'test_failed', label: 'Tests Failed' },
     { value: 'failed', label: 'Merge Failed' },
     { value: 'not_applicable', label: 'No Merge Needed' },
+    { value: 'awaiting_approval', label: 'Awaiting Approval' },
   ];
 }

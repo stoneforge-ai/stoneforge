@@ -1,5 +1,163 @@
 # @stoneforge/smithy
 
+## 1.23.1
+
+### Patch Changes
+
+- afbee04: Include ephemeral workflow tasks in dispatch daemon ready() call
+  - @stoneforge/core@1.23.1
+  - @stoneforge/storage@1.23.1
+  - @stoneforge/quarry@1.23.1
+  - @stoneforge/shared-routes@1.23.1
+
+## 1.23.0
+
+### Patch Changes
+
+- Updated dependencies [d9137d7]
+- Updated dependencies [d9137d7]
+- Updated dependencies [99e75d8]
+- Updated dependencies [f365a2d]
+  - @stoneforge/core@1.23.0
+  - @stoneforge/quarry@1.23.0
+  - @stoneforge/shared-routes@1.23.0
+  - @stoneforge/storage@1.23.0
+
+## 1.22.0
+
+### Patch Changes
+
+- Updated dependencies [9c9f3ec]
+- Updated dependencies [9c9f3ec]
+  - @stoneforge/quarry@1.22.0
+  - @stoneforge/core@1.22.0
+  - @stoneforge/storage@1.22.0
+  - @stoneforge/shared-routes@1.22.0
+
+## 1.21.0
+
+### Minor Changes
+
+- d93c864: Return agent count and daemon status from `startSmithyServer()` for use in polished startup summary
+
+### Patch Changes
+
+- Updated dependencies [a2ef9af]
+- Updated dependencies [e36265c]
+- Updated dependencies [d93c864]
+- Updated dependencies [00a58d3]
+  - @stoneforge/quarry@1.21.0
+  - @stoneforge/core@1.21.0
+  - @stoneforge/storage@1.21.0
+  - @stoneforge/shared-routes@1.21.0
+
+## 1.20.1
+
+### Patch Changes
+
+- @stoneforge/core@1.20.1
+- @stoneforge/storage@1.20.1
+- @stoneforge/quarry@1.20.1
+- @stoneforge/shared-routes@1.20.1
+
+## 1.20.0
+
+### Patch Changes
+
+- c3244fe: Fix --target-branch flag for sf agent register command: option was defined with kebab-case name causing the value to be silently ignored at runtime. Renamed to camelCase convention so the parser correctly maps --target-branch to options.targetBranch.
+- Updated dependencies [50aa516]
+  - @stoneforge/quarry@1.20.0
+  - @stoneforge/core@1.20.0
+  - @stoneforge/storage@1.20.0
+  - @stoneforge/shared-routes@1.20.0
+
+## 1.19.0
+
+### Minor Changes
+
+- 8d83b52: Propagate director targetBranch to task orchestrator metadata at dispatch time
+- 2100736: Add push enforcement to task completion flow. `completeTask()` now auto-pushes the task branch to origin before transitioning to REVIEW status, preventing silent commit loss when workers skip or fail to push.
+- c29843a: Accept optional targetBranch in agent API routes for director creation and update
+
+### Patch Changes
+
+- bc7a574: Add safety verification to `sf task merge-status merged` to ensure source branch commits are on origin/targetBranch before allowing the status update
+- 0d778dd: Add post-merge verification to `sf task merge` CLI command. After mergeBranch() succeeds, the command now independently verifies that commits landed on the remote target branch before marking the task as merged. Returns actionable error messages if verification fails.
+- fec32d8: Ensure target branch exists before worktree creation at dispatch time. Prevents worktree creation failures when a director's targetBranch doesn't exist locally or on the remote.
+- 3d47d68: Explicitly set CLAUDECODE=1 in interactive and headless session spawn environment to ensure spawned Claude Code sessions detect managed context on all platforms
+- a79190d: Fix ensureTargetBranchExists call ordering in mergeBranch to fetch from origin before attempting to create branches from remote refs
+- 4cc779f: Fix `sf task merge-status merged` to fail when source branch is deleted and merge is unverifiable, instead of silently allowing through. Adds `--force` flag to bypass verification in legitimate edge cases.
+- b30aebc: Fix mergeBranch() alreadyMerged check to use local source ref instead of remote, preventing unpushed commits from being skipped
+- 09effc1: Fix mock.module leak: replace global mock.module for ensureTargetBranchExists with dependency injection via DispatchDaemonConfig to prevent test interference across files
+- 7f9deb4: Fix PR creation to use task's targetBranch from orchestrator metadata instead of hardcoded 'main'. PRs now correctly target the configured target branch when set.
+- bcc47d7: Fix silent push failure in mergeBranch: return failure result when git push fails instead of reporting success, and add post-push verification to confirm the commit landed on the remote.
+- b31f8ce: Fix steward-scheduler to inform scheduled stewards that tasks may target different branches. Adds a per-task target branch override note to both merge/docs and custom steward prompts, instructing stewards to check each task's targetBranch before reviewing.
+- cbd16dd: Fix sf task merge CLI command to read targetBranch from orchestrator metadata and pass it to mergeBranch(), instead of always merging to the auto-detected default branch
+- f17aee3: Fix sf task sync to use per-task targetBranch instead of always syncing against the workspace default branch
+- 26c273c: Add shell:true to installDependencies and corepack exec options to fix ENOENT errors on Windows where npm and corepack are .cmd wrappers
+- a119fb8: Pass task targetBranch as baseBranch when creating worktrees at dispatch, so workers branch from the correct base.
+- dcf3da5: Use per-task targetBranch when rendering steward prompts instead of always using the global cached target branch
+- e87abc1: Preserve targetBranch in assignToAgent orchestrator metadata rebuild to prevent loss during task re-assignment
+- e6656b1: Record merge commit hash in task orchestrator metadata after `sf task merge` succeeds, enabling downstream verification of merged tasks
+- 3772deb: Thread targetBranch through AgentRegistry.registerDirector() metadata
+  - @stoneforge/core@1.19.0
+  - @stoneforge/storage@1.19.0
+  - @stoneforge/quarry@1.19.0
+  - @stoneforge/shared-routes@1.19.0
+
+## 1.18.0
+
+### Minor Changes
+
+- 48b0069: Add owningDirector field to OrchestratorTaskMeta, getDirectors()/getAvailableDirector() to AgentRegistry, and sf task set-owner CLI command for multi-director workspace support.
+- 6247446: Add POST /api/providers/:name/verify endpoint for fresh single-provider availability checks.
+- 2608cf1: Add --target-branch option to `sf agent register` CLI command for director agents. The option allows specifying a target merge branch when registering a director. Also displays target branch in `sf agent show` output.
+- 711343b: Add `targetBranch` field to `OrchestratorTaskMeta` interface for specifying the merge target branch at dispatch time
+- ccb002b: Add optional targetBranch field to DirectorMetadata and RegisterDirectorInput, allowing directors to specify the merge target branch for their tasks.
+- 1ed1113: Auto-resume all running directors on server restart instead of only the first one.
+- 57152b0: Dispatch daemon uses per-task owning director ID in worker/steward prompts and resolves owningDirector during task dispatch via plan creator or task creator.
+- efc955b: Add message fallback routing for offline directors. When a director is offline and has unread inbox messages, route those messages to another running director as a fallback. Each message is consumed exactly once.
+- 8cac30b: Refactor merge steward to resolve target branch per-task from orchestrator metadata, enabling tasks to merge to different branches (e.g. staging) while preserving the global default fallback
+- 07f3449: Inject SF_ENTITY_ID environment variable into agent sessions for correct CLI entity attribution
+
+### Patch Changes
+
+- c4495f5: Fix backward compatibility for legacy 'claude' provider alias in getOrThrow() and resolveProvider()
+- 8ded2a8: Remove CLAUDE_CODE_DISABLE_1M_CONTEXT env var workaround from spawn commands
+- Updated dependencies [07f3449]
+  - @stoneforge/quarry@1.18.0
+  - @stoneforge/core@1.18.0
+  - @stoneforge/storage@1.18.0
+  - @stoneforge/shared-routes@1.18.0
+
+## 1.17.0
+
+### Minor Changes
+
+- 713cea8: Add workflow preset-aware context to agent system prompts. Agents now receive preset-specific instructions about merge behavior, tool access, and approval requirements based on the active workflow preset (auto, review, approve).
+- 600e4fd: Capture cache read and cache creation tokens from Claude Code SDK events and update MetricsService aggregations
+- 7c63531: Add CostService for per-model cost calculation and enrich provider-metrics API with estimatedCost breakdowns
+- d3744f6: Add agent tool permission model with auto-allowed tools, configurable bash command allowlist, approval request service with SQLite storage, API endpoints for managing approval requests, and session-level permission monitoring.
+- dafa312: Add GET/PUT /api/settings/workflow-preset endpoints for reading and updating the workspace workflow preset from the frontend.
+- 705df96: Add GitHub PR merge approval flow for Approve preset. When `merge.requireApproval` is true, the merge steward creates GitHub PRs instead of auto-merging, adds `awaiting_approval` merge status, and polls for PR merge completion.
+- 6287e4d: Auto-create review branch when `merge.targetBranch` is set to a non-main branch (e.g. `stoneforge/review`). The merge steward now ensures the target branch exists before merging, creating it from main HEAD if needed.
+
+### Patch Changes
+
+- fe96d6a: Re-export SyncDirection, ProviderConfig, and ExternalSyncSettings types from smithy services barrel export
+- Updated dependencies [600e4fd]
+- Updated dependencies [7c63531]
+- Updated dependencies [7c63531]
+- Updated dependencies [d3744f6]
+- Updated dependencies [9015835]
+- Updated dependencies [b2ce7ce]
+- Updated dependencies [a77ec61]
+- Updated dependencies [3bc3e76]
+  - @stoneforge/storage@1.17.0
+  - @stoneforge/core@1.17.0
+  - @stoneforge/quarry@1.17.0
+  - @stoneforge/shared-routes@1.17.0
+
 ## 1.16.1
 
 ### Patch Changes

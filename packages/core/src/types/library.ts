@@ -37,8 +37,7 @@ export const MAX_LIBRARY_NAME_LENGTH = 100;
 /**
  * Branded type for Library IDs (for use in references)
  */
-declare const LibraryIdBrand: unique symbol;
-export type LibraryId = ElementId & { readonly [LibraryIdBrand]: typeof LibraryIdBrand };
+export type LibraryId = ElementId & { readonly __libraryIdBrand: 'LibraryId' };
 
 // ============================================================================
 // Library Interface
@@ -607,7 +606,7 @@ export function getAncestorIds(
   maxDepth = 100
 ): string[] {
   const ancestors: string[] = [];
-  let currentId: string | undefined = libraryId;
+  let currentId: string = libraryId;
   let depth = 0;
 
   while (depth < maxDepth) {

@@ -115,6 +115,7 @@ function createMockMergeStewardService(): MergeStewardService {
     runTests: vi.fn(),
     mergeTask: vi.fn(),
     processTask: vi.fn(),
+    checkPendingApprovals: vi.fn(async () => []),
   } as unknown as MergeStewardService;
 }
 

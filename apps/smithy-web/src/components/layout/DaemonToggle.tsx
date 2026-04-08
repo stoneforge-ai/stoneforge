@@ -41,7 +41,8 @@ export function DaemonToggle() {
       <Tooltip content={status?.reason || 'Daemon unavailable'} side="bottom">
         <div className="flex items-center gap-2 px-2 py-1.5 text-[var(--color-text-tertiary)] cursor-not-allowed">
           <AlertCircle className="w-4 h-4" />
-          <span className="hidden lg:inline text-sm">Autopilot</span>
+          {/* container-based: responds to main content column @container width */}
+          <span className="hidden @lg:inline text-sm">Autopilot</span>
         </div>
       </Tooltip>
     );
@@ -77,7 +78,7 @@ export function DaemonToggle() {
         ) : (
           <Play className="w-4 h-4" />
         )}
-        <span className="hidden lg:inline">
+        <span className="hidden @lg:inline">
           {isMutating
             ? (isRunning ? 'Stopping...' : 'Starting...')
             : (isRunning ? 'Autopilot' : 'Autopilot')

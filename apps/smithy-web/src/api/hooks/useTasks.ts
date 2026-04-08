@@ -210,7 +210,7 @@ export interface UpdateTaskInput {
 
 export interface UpdateMergeStatusInput {
   taskId: string;
-  mergeStatus: 'pending' | 'testing' | 'merging' | 'merged' | 'conflict' | 'test_failed' | 'failed' | 'not_applicable';
+  mergeStatus: 'pending' | 'testing' | 'merging' | 'merged' | 'conflict' | 'test_failed' | 'failed' | 'not_applicable' | 'awaiting_approval';
 }
 
 /**

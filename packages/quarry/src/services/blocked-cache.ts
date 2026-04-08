@@ -338,6 +338,17 @@ export class BlockedCacheService {
   }
 
   /**
+   * Check if element is a workflow
+   */
+  isWorkflow(elementId: ElementId): boolean {
+    const row = this.db.queryOne<ElementRow>(
+      'SELECT type FROM elements WHERE id = ?',
+      [elementId]
+    );
+    return row?.type === 'workflow';
+  }
+
+  /**
    * Check if an awaits gate is satisfied
    *
    * @param metadata - The awaits dependency metadata
@@ -422,8 +433,9 @@ export class BlockedCacheService {
           }
           // For task-task hierarchy: child is blocked until parent completes
           // For task-plan hierarchy: tasks in a plan are NOT blocked by the plan's status
-          // Plans are collections, not blocking parents
-          if (!this.isPlan(blockerId) && !this.isBlockerCompleted(blockerId)) {
+          // For task-workflow hierarchy: tasks in a workflow are NOT blocked by the workflow's status
+          // Plans and workflows are collections, not blocking parents
+          if (!this.isPlan(blockerId) && !this.isWorkflow(blockerId) && !this.isBlockerCompleted(blockerId)) {
             return {
               elementId,
               blockedBy: blockerId,

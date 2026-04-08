@@ -1,5 +1,106 @@
 # @stoneforge/quarry-server
 
+## 1.23.1
+
+### Patch Changes
+
+- @stoneforge/core@1.23.1
+- @stoneforge/storage@1.23.1
+- @stoneforge/quarry@1.23.1
+- @stoneforge/shared-routes@1.23.1
+
+## 1.23.0
+
+### Patch Changes
+
+- Updated dependencies [d9137d7]
+- Updated dependencies [d9137d7]
+- Updated dependencies [99e75d8]
+- Updated dependencies [f365a2d]
+  - @stoneforge/core@1.23.0
+  - @stoneforge/quarry@1.23.0
+  - @stoneforge/shared-routes@1.23.0
+  - @stoneforge/storage@1.23.0
+
+## 1.22.0
+
+### Patch Changes
+
+- Updated dependencies [9c9f3ec]
+- Updated dependencies [9c9f3ec]
+  - @stoneforge/quarry@1.22.0
+  - @stoneforge/core@1.22.0
+  - @stoneforge/storage@1.22.0
+  - @stoneforge/shared-routes@1.22.0
+
+## 1.21.0
+
+### Patch Changes
+
+- Updated dependencies [a2ef9af]
+- Updated dependencies [e36265c]
+- Updated dependencies [d93c864]
+- Updated dependencies [00a58d3]
+  - @stoneforge/quarry@1.21.0
+  - @stoneforge/core@1.21.0
+  - @stoneforge/storage@1.21.0
+  - @stoneforge/shared-routes@1.21.0
+
+## 1.20.1
+
+### Patch Changes
+
+- @stoneforge/core@1.20.1
+- @stoneforge/storage@1.20.1
+- @stoneforge/quarry@1.20.1
+- @stoneforge/shared-routes@1.20.1
+
+## 1.20.0
+
+### Patch Changes
+
+- Updated dependencies [50aa516]
+  - @stoneforge/quarry@1.20.0
+  - @stoneforge/core@1.20.0
+  - @stoneforge/storage@1.20.0
+  - @stoneforge/shared-routes@1.20.0
+
+## 1.19.0
+
+### Patch Changes
+
+- @stoneforge/core@1.19.0
+- @stoneforge/storage@1.19.0
+- @stoneforge/quarry@1.19.0
+- @stoneforge/shared-routes@1.19.0
+
+## 1.18.0
+
+### Patch Changes
+
+- Updated dependencies [07f3449]
+  - @stoneforge/quarry@1.18.0
+  - @stoneforge/core@1.18.0
+  - @stoneforge/storage@1.18.0
+  - @stoneforge/shared-routes@1.18.0
+
+## 1.17.0
+
+### Patch Changes
+
+- Updated dependencies [600e4fd]
+- Updated dependencies [7c63531]
+- Updated dependencies [7c63531]
+- Updated dependencies [d3744f6]
+- Updated dependencies [9015835]
+- Updated dependencies [b2ce7ce]
+- Updated dependencies [a77ec61]
+- Updated dependencies [3bc3e76]
+  - @stoneforge/storage@1.17.0
+  - @stoneforge/core@1.17.0
+  - @stoneforge/quarry@1.17.0
+  - @stoneforge/shared-routes@1.17.0
+
 ## 1.16.1
 
 ### Patch Changes

@@ -1,7 +1,7 @@
 /**
  * Unit tests for @stoneforge/ui domain components
  */
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 
 // Import types and utilities
 import {

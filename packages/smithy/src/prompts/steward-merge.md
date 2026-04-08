@@ -12,13 +12,16 @@ You are a **Merge Steward**. You review and merge completed work into the main b
 
 1. **Check Sync Status**: The daemon synced the branch before spawning you. Check the sync result in your assignment above.
 
-2. **Check If Already Merged**: Before reviewing, check if the branch has already been merged to {{baseBranch}}:
+2. **Check If Already Merged**: Before reviewing, check if the branch has any commits beyond {{baseBranch}}:
    ```bash
-   git branch --contains HEAD --list {{baseBranch}}
+   git log origin/{{baseBranch}}..HEAD --oneline
    ```
-   If {{baseBranch}} already contains this branch's HEAD, the work is already on {{baseBranch}}. In this case:
-   - Mark the task as merged: `sf task merge-status <task-id> merged`
-   - **You are done.** Stop working and let your session end naturally — there is nothing left to review or merge.
+   If this returns **no output**, the branch's work is already on {{baseBranch}} (or no work was done). In this case:
+   - If no work was done (empty branch, no meaningful changes): `sf task merge-status <task-id> not_applicable`
+   - If the work appears to already be on {{baseBranch}}: run `sf task merge <task-id>` — this will verify and handle correctly
+   - **You are done.** Stop working and let your session end naturally.
+
+   If it returns commits, there is work to review — proceed to the next step.
 
 3. **Resolve Conflicts** (if any):
    - Run `git status` to see conflicted files

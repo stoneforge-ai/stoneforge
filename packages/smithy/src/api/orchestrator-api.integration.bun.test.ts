@@ -13,7 +13,7 @@ import {
   isAgentEntity,
   getAgentMetadata,
 } from './orchestrator-api.js';
-import type { WorkerMetadata, StewardMetadata } from '../types/agent.js';
+import type { WorkerMetadata, StewardMetadata, DirectorMetadata } from '../types/agent.js';
 
 describe('OrchestratorAPI', () => {
   let api: OrchestratorAPI;
@@ -230,6 +230,35 @@ describe('OrchestratorAPI', () => {
       const fetchedMeta = getAgentMetadata(fetched!) as StewardMetadata;
       expect(fetchedMeta.playbook).toBe('## Custom Playbook\nReview all PRs for security issues.');
       expect(fetchedMeta.playbookId).toBe('tmpl-abc123');
+    });
+
+    test('registerDirector with targetBranch stores it in metadata', async () => {
+      const director = await api.registerDirector({
+        name: 'StagingDirector',
+        createdBy: systemEntity,
+        targetBranch: 'staging',
+      });
+
+      const meta = getAgentMetadata(director) as DirectorMetadata;
+      expect(meta).toBeDefined();
+      expect(meta.targetBranch).toBe('staging');
+
+      // Verify the field survives a round-trip through the database
+      const fetched = await api.getAgent(director.id as unknown as EntityId);
+      expect(fetched).toBeDefined();
+      const fetchedMeta = getAgentMetadata(fetched!) as DirectorMetadata;
+      expect(fetchedMeta.targetBranch).toBe('staging');
+    });
+
+    test('registerDirector without targetBranch leaves it undefined', async () => {
+      const director = await api.registerDirector({
+        name: 'DefaultDirector',
+        createdBy: systemEntity,
+      });
+
+      const meta = getAgentMetadata(director) as DirectorMetadata;
+      expect(meta).toBeDefined();
+      expect(meta.targetBranch).toBeUndefined();
     });
 
     test('registerSteward without playbook fields leaves them undefined', async () => {

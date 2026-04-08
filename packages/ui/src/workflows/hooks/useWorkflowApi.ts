@@ -487,9 +487,9 @@ export function useCreateFromPlaybook() {
 
   return useMutation<WorkflowResponse, Error, CreateFromPlaybookInput>({
     mutationFn: async ({ playbookId, ...input }) => {
-      return fetchApi<WorkflowResponse>('/workflows', {
+      return fetchApi<WorkflowResponse>(`/playbooks/${playbookId}/instantiate`, {
         method: 'POST',
-        body: JSON.stringify({ playbookId, ...input }),
+        body: JSON.stringify(input),
       });
     },
     onSuccess: () => {

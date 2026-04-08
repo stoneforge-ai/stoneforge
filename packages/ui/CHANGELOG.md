@@ -1,5 +1,35 @@
 # @stoneforge/ui
 
+## 1.23.1
+
+### Patch Changes
+
+- 65fe969: Fix useCreateFromPlaybook hook to call the playbook instantiate endpoint instead of the bare workflow creation endpoint, so that workflows created from playbooks include tasks, dependencies, and full setup.
+
+## 1.23.0
+
+### Patch Changes
+
+- b074b03: Fix document tags unreadable in dark mode by replacing Tailwind dark: prefix classes with CSS variable-based styling
+
+## 1.22.0
+
+## 1.21.0
+
+## 1.20.1
+
+## 1.20.0
+
+## 1.19.0
+
+## 1.18.0
+
+## 1.17.0
+
+### Minor Changes
+
+- 705df96: Add `awaiting_approval` merge status display support with color styling and display name.
+
 ## 1.16.1
 
 ## 1.16.0

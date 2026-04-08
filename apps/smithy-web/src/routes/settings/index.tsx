@@ -6,7 +6,7 @@
  * - Workspace: Worktree directory, ephemeral retention, steward schedules
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useSearch, useNavigate } from '@tanstack/react-router';
 import {
   Settings,
@@ -31,8 +31,11 @@ import {
   MessageSquare,
   Terminal,
   AlertCircle,
+  Workflow,
+  Sparkles,
 } from 'lucide-react';
-import { useIsMobile, ShortcutsSection } from '@stoneforge/ui';
+import { ShortcutsSection } from '@stoneforge/ui';
+import { useContainerIsMobile } from '../../hooks';
 import {
   useSettings,
   useExecutablePathSettings,
@@ -43,6 +46,8 @@ import { useProviders, useProviderModels } from '../../api/hooks/useAgents';
 import { PROVIDER_LABELS } from '../../lib/providers';
 import { DEFAULT_SHORTCUTS } from '../../lib/keyboard';
 import { useDaemonStatus, useUpdateDaemonConfig } from '../../api/hooks/useDaemon';
+import { useWorkflowPreset } from '../../api/hooks/useWorkflowPreset';
+import { InlinePresetSelector } from '../../components/settings/index.js';
 
 type TabValue = 'preferences' | 'workspace';
 
@@ -120,7 +125,7 @@ export function SettingsPage() {
 
 function PreferencesTab() {
   const { theme, notifications, agentDefaults } = useSettings();
-  const isMobile = useIsMobile();
+  const isMobile = useContainerIsMobile();
 
   return (
     <div className="space-y-6 max-w-2xl" data-testid="settings-preferences">
@@ -243,6 +248,9 @@ function PreferencesTab() {
       >
         <ShortcutsSection defaults={DEFAULT_SHORTCUTS} isMobile={isMobile} />
       </SettingsSection>
+
+      {/* Onboarding Tour */}
+      <OnboardingTourSection />
     </div>
   );
 }
@@ -405,6 +413,44 @@ function AgentDefaultsSection({ settings, setSettings, setDefaultModel, resetToD
   );
 }
 
+// ============================================================================
+// Onboarding Tour Section
+// ============================================================================
+
+function OnboardingTourSection() {
+  const navigate = useNavigate();
+
+  const handleRestartTour = useCallback(() => {
+    // Dispatch event that the tour hook listens for
+    window.dispatchEvent(new CustomEvent('restart-onboarding-tour'));
+    // Navigate to activity page where the tour starts
+    navigate({ to: '/activity' });
+  }, [navigate]);
+
+  return (
+    <SettingsSection
+      icon={Sparkles}
+      title="Onboarding Tour"
+      description="Guided walkthrough of the dashboard"
+    >
+      <div className="space-y-3">
+        <p className="text-sm text-[var(--color-text-secondary)]">
+          Take a guided tour of the key areas of the dashboard. The tour highlights
+          the activity dashboard, agent cards, system status, navigation, and more.
+        </p>
+        <button
+          onClick={handleRestartTour}
+          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-[var(--color-primary)] bg-[var(--color-primary-muted)] border border-[var(--color-primary)] rounded-md hover:bg-[var(--color-primary)] hover:text-white transition-colors"
+          data-testid="settings-restart-onboarding"
+        >
+          <RotateCcw className="w-4 h-4" />
+          Restart Onboarding Tour
+        </button>
+      </div>
+    </SettingsSection>
+  );
+}
+
 /**
  * Model selector for a specific provider
  */
@@ -515,6 +561,9 @@ function WorkspaceTab() {
 
   return (
     <div className="space-y-6 max-w-2xl" data-testid="settings-workspace">
+      {/* Workflow Preset */}
+      <WorkflowPresetSection />
+
       {/* Git Worktrees */}
       <SettingsSection
         icon={GitBranch}
@@ -700,6 +749,36 @@ function DirectorSection() {
         onChange={(checked) => updateConfig.mutate({ directorInboxForwardingEnabled: checked })}
         testId="settings-director-forwarding"
       />
+    </SettingsSection>
+  );
+}
+
+// ============================================================================
+// Workflow Preset Section
+// ============================================================================
+
+function WorkflowPresetSection() {
+  const { preset, isLoading, error, setPreset } = useWorkflowPreset();
+
+  return (
+    <SettingsSection
+      icon={Workflow}
+      title="Workflow Preset"
+      description="Controls how agents merge code and what permissions they have"
+    >
+      {isLoading ? (
+        <div className="flex items-center gap-2 py-2 text-xs text-[var(--color-text-tertiary)]">
+          <Loader2 className="w-3 h-3 animate-spin" />
+          Loading workflow preset...
+        </div>
+      ) : error ? (
+        <div className="flex items-center gap-2 px-3 py-2 text-xs text-[var(--color-danger-text)] bg-[var(--color-danger-muted)] border border-[var(--color-danger)] rounded-md">
+          <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+          <span>Failed to load workflow preset: {error}</span>
+        </div>
+      ) : (
+        <InlinePresetSelector currentPreset={preset} onSelect={setPreset} />
+      )}
     </SettingsSection>
   );
 }

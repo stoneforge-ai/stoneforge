@@ -450,6 +450,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
             className="flex-1 h-14 bg-transparent text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none text-base"
             data-testid="command-palette-input"
           />
+          {/* viewport-based: renders in fixed overlay outside @container */}
           <kbd className="hidden sm:flex items-center gap-1 px-2 py-1 text-xs text-[var(--color-text-muted)] bg-[var(--color-surface)] border border-[var(--color-border)] rounded">
             ESC
           </kbd>

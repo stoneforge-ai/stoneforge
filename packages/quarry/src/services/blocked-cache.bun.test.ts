@@ -489,6 +489,33 @@ describe('BlockedCacheService', () => {
         const result = service.computeBlockingState(task1);
         expect(result).toBeNull();
       });
+
+      test('returns null when parent is a workflow (workflows are collections, not blockers)', () => {
+        // Parent-child between task and workflow: task NOT blocked by workflow status
+        // Workflows are collections of tasks, not blocking parents
+        const workflow1 = 'el-workflow001' as ElementId;
+        createTestElement(task1, 'task', 'open');
+        createTestElement(workflow1, 'workflow', 'pending');
+        createTestDependency(task1, workflow1, DependencyType.PARENT_CHILD);
+
+        const result = service.computeBlockingState(task1);
+        expect(result).toBeNull();
+      });
+
+      test('returns blocked when workflow parent is blocked (transitive blocking)', () => {
+        // If the workflow itself is blocked, child tasks should also be blocked
+        const workflow1 = 'el-workflow001' as ElementId;
+        createTestElement(task1, 'task', 'open');
+        createTestElement(workflow1, 'workflow', 'pending');
+        createTestDependency(task1, workflow1, DependencyType.PARENT_CHILD);
+
+        // Block the workflow
+        service.addBlocked(workflow1, task2, 'Workflow blocked');
+
+        const result = service.computeBlockingState(task1);
+        expect(result).not.toBeNull();
+        expect(result?.reason).toContain('parent is blocked');
+      });
     });
 
     describe('awaits dependency', () => {

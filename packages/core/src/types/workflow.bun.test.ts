@@ -118,10 +118,11 @@ describe('TERMINAL_STATUSES', () => {
 });
 
 describe('WORKFLOW_STATUS_TRANSITIONS', () => {
-  test('pending can transition to running, cancelled', () => {
+  test('pending can transition to running, failed, cancelled', () => {
     expect(WORKFLOW_STATUS_TRANSITIONS[WorkflowStatus.PENDING]).toContain(WorkflowStatus.RUNNING);
+    expect(WORKFLOW_STATUS_TRANSITIONS[WorkflowStatus.PENDING]).toContain(WorkflowStatus.FAILED);
     expect(WORKFLOW_STATUS_TRANSITIONS[WorkflowStatus.PENDING]).toContain(WorkflowStatus.CANCELLED);
-    expect(WORKFLOW_STATUS_TRANSITIONS[WorkflowStatus.PENDING]).toHaveLength(2);
+    expect(WORKFLOW_STATUS_TRANSITIONS[WorkflowStatus.PENDING]).toHaveLength(3);
   });
 
   test('running can transition to completed, failed, cancelled', () => {
@@ -398,12 +399,12 @@ describe('isValidWorkflowStatusTransition', () => {
 
   test('allows valid transitions from pending', () => {
     expect(isValidWorkflowStatusTransition(WorkflowStatus.PENDING, WorkflowStatus.RUNNING)).toBe(true);
+    expect(isValidWorkflowStatusTransition(WorkflowStatus.PENDING, WorkflowStatus.FAILED)).toBe(true);
     expect(isValidWorkflowStatusTransition(WorkflowStatus.PENDING, WorkflowStatus.CANCELLED)).toBe(true);
   });
 
   test('rejects invalid transitions from pending', () => {
     expect(isValidWorkflowStatusTransition(WorkflowStatus.PENDING, WorkflowStatus.COMPLETED)).toBe(false);
-    expect(isValidWorkflowStatusTransition(WorkflowStatus.PENDING, WorkflowStatus.FAILED)).toBe(false);
   });
 
   test('allows valid transitions from running', () => {

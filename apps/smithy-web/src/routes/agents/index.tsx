@@ -9,7 +9,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useSearch, useNavigate } from '@tanstack/react-router';
 import { Users, Plus, Search, Crown, Wrench, Shield, Loader2, AlertCircle, RefreshCw, Network, Layers } from 'lucide-react';
 import { getCurrentBinding, formatKeyBinding } from '../../lib/keyboard';
-import { useAgentsByRole, useStartAgentSession, useStopAgentSession, useDeleteAgent, useDirector, useSessions } from '../../api/hooks/useAgents';
+import { useAgentsByRole, useStartAgentSession, useStopAgentSession, useDeleteAgent, useDirectors, useSessions } from '../../api/hooks/useAgents';
 import { useTasks } from '../../api/hooks/useTasks';
 import { usePools, useUpdatePool, useDeletePool } from '../../api/hooks/usePools';
 import type { AgentPool } from '../../api/hooks/usePools';
@@ -68,7 +68,7 @@ export function AgentsPage() {
   const [pendingStop, setPendingStop] = useState<Set<string>>(new Set());
 
   const {
-    director,
+    directors: directorAgents,
     ephemeralWorkers,
     persistentWorkers,
     stewards,
@@ -92,8 +92,16 @@ export function AgentsPage() {
   const stopSession = useStopAgentSession();
   const deleteAgent = useDeleteAgent();
 
-  // Get Director session status from dedicated hook (polls for updates)
-  const { hasActiveSession: directorHasActiveSession } = useDirector();
+  // Get Director session statuses from dedicated hook (polls for updates)
+  const { directors: directorInfos } = useDirectors();
+  // Build a map of director ID -> hasActiveSession for the AgentsTab
+  const directorSessionMap = useMemo(() => {
+    const m = new Map<string, boolean>();
+    for (const info of directorInfos) {
+      m.set(info.director.id, info.hasActiveSession);
+    }
+    return m;
+  }, [directorInfos]);
 
   // Fetch active sessions to determine which agents are actually running
   const { data: sessionsData } = useSessions({ status: 'running' });
@@ -107,7 +115,7 @@ export function AgentsPage() {
     const statusMap = new Map<string, GraphSessionStatus>();
 
     // Mark all known agents as idle by default
-    if (director) statusMap.set(director.id, 'idle');
+    for (const d of directorAgents) statusMap.set(d.id, 'idle');
     for (const worker of workers) statusMap.set(worker.id, 'idle');
     for (const steward of stewards) statusMap.set(steward.id, 'idle');
 
@@ -120,7 +128,7 @@ export function AgentsPage() {
     }
 
     return statusMap;
-  }, [director, workers, stewards, activeSessions]);
+  }, [directorAgents, workers, stewards, activeSessions]);
 
   // Helper to check if an agent has an active session
   const getActiveSessionStatus = (agentId: string): SessionStatus | undefined => {
@@ -134,18 +142,18 @@ export function AgentsPage() {
   // Filter agents based on search query
   const filteredAgents = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
-    if (!query) return { director, ephemeralWorkers, persistentWorkers, stewards };
+    if (!query) return { directors: directorAgents, ephemeralWorkers, persistentWorkers, stewards };
 
     const filter = (agents: Agent[]) =>
       agents.filter((a) => a.name.toLowerCase().includes(query));
 
     return {
-      director: director?.name.toLowerCase().includes(query) ? director : undefined,
+      directors: filter(directorAgents),
       ephemeralWorkers: filter(ephemeralWorkers),
       persistentWorkers: filter(persistentWorkers),
       stewards: filter(stewards),
     };
-  }, [searchQuery, director, ephemeralWorkers, persistentWorkers, stewards]);
+  }, [searchQuery, directorAgents, ephemeralWorkers, persistentWorkers, stewards]);
 
   const setTab = (tab: TabValue) => {
     navigate({
@@ -210,7 +218,7 @@ export function AgentsPage() {
 
   // Start handler that routes ephemeral workers to the dialog
   const handleStartAgentOrDialog = (agentId: string) => {
-    const agent = [...ephemeralWorkers, ...persistentWorkers, director].find((a) => a?.id === agentId);
+    const agent = [...ephemeralWorkers, ...persistentWorkers, ...directorAgents].find((a) => a?.id === agentId);
     if (!agent) return;
 
     if (isEphemeralWorker(agentId)) {
@@ -238,9 +246,9 @@ export function AgentsPage() {
     navigate({ to: '/workspaces', search: { layout: 'single', agent: agentId, resumeSessionId: undefined, resumePrompt: undefined } });
   };
 
-  const handleOpenDirectorPanel = () => {
-    // Dispatch event to open the Director panel in AppShell
-    window.dispatchEvent(new CustomEvent('open-director-panel'));
+  const handleOpenDirectorPanel = (directorId?: string) => {
+    // Dispatch event to open the Director panel in AppShell, optionally selecting a specific director tab
+    window.dispatchEvent(new CustomEvent('open-director-panel', { detail: { directorId } }));
   };
 
   // Create Agent Dialog handlers
@@ -289,7 +297,7 @@ export function AgentsPage() {
   };
 
   // Count agents by tab
-  const agentCount = (director ? 1 : 0) + ephemeralWorkers.length + persistentWorkers.length;
+  const agentCount = directorAgents.length + ephemeralWorkers.length + persistentWorkers.length;
   const stewardCount = stewards.length;
 
   return (
@@ -326,7 +334,7 @@ export function AgentsPage() {
               data-testid="pools-create"
             >
               <Plus className="w-4 h-4" />
-              <span className="hidden sm:inline">Create Pool</span>
+              <span className="hidden @sm:inline">Create Pool</span>
             </button>
           ) : (
             <button
@@ -335,8 +343,8 @@ export function AgentsPage() {
               data-testid="agents-create"
             >
               <Plus className="w-4 h-4" />
-              <span className="hidden sm:inline">{currentTab === 'stewards' ? 'Create Steward' : 'Create Agent'}</span>
-              <kbd className="hidden sm:inline ml-1 text-xs bg-[var(--color-primary-700)]/50 text-white px-1 py-0.5 rounded">
+              <span className="hidden @sm:inline">{currentTab === 'stewards' ? 'Create Steward' : 'Create Agent'}</span>
+              <kbd className="hidden @sm:inline ml-1 text-xs bg-[var(--color-primary-700)]/50 text-white px-1 py-0.5 rounded">
                 {formatKeyBinding(getCurrentBinding('action.createAgent'))}
               </kbd>
             </button>
@@ -426,7 +434,7 @@ export function AgentsPage() {
         // Graph tab handles its own loading/error states
         <div className="h-[600px] border border-[var(--color-border)] rounded-lg overflow-hidden">
           <AgentWorkspaceGraph
-            director={director}
+            director={directorAgents[0]}
             workers={workers}
             stewards={stewards}
             tasks={tasks}
@@ -458,8 +466,8 @@ export function AgentsPage() {
         </div>
       ) : currentTab === 'agents' ? (
         <AgentsTab
-          director={filteredAgents.director}
-          directorHasActiveSession={directorHasActiveSession}
+          directors={filteredAgents.directors}
+          directorSessionMap={directorSessionMap}
           onOpenDirectorPanel={handleOpenDirectorPanel}
           ephemeralWorkers={filteredAgents.ephemeralWorkers}
           persistentWorkers={filteredAgents.persistentWorkers}
@@ -504,7 +512,7 @@ export function AgentsPage() {
         onClose={closeCreateDialog}
         initialRole={createDialogRole}
         initialStewardFocus={createDialogStewardFocus}
-        hasDirector={!!director}
+        hasDirector={directorAgents.length > 0}
         onSuccess={() => refetch()}
       />
 
@@ -567,9 +575,9 @@ export function AgentsPage() {
 // ============================================================================
 
 interface AgentsTabProps {
-  director?: Agent;
-  directorHasActiveSession: boolean;
-  onOpenDirectorPanel: () => void;
+  directors: Agent[];
+  directorSessionMap: Map<string, boolean>;
+  onOpenDirectorPanel: (directorId?: string) => void;
   ephemeralWorkers: Agent[];
   persistentWorkers: Agent[];
   onStart: (agentId: string) => void;
@@ -584,8 +592,8 @@ interface AgentsTabProps {
 }
 
 function AgentsTab({
-  director,
-  directorHasActiveSession,
+  directors,
+  directorSessionMap,
   onOpenDirectorPanel,
   ephemeralWorkers,
   persistentWorkers,
@@ -599,7 +607,7 @@ function AgentsTab({
   onCreateAgent,
   getActiveSessionStatus,
 }: AgentsTabProps) {
-  const hasAgents = director || ephemeralWorkers.length > 0 || persistentWorkers.length > 0;
+  const hasAgents = directors.length > 0 || ephemeralWorkers.length > 0 || persistentWorkers.length > 0;
 
   if (!hasAgents) {
     return (
@@ -616,24 +624,30 @@ function AgentsTab({
 
   return (
     <div className="space-y-8">
-      {/* Director */}
-      {director && (
+      {/* Directors */}
+      {directors.length > 0 && (
         <AgentSection
-          title="Director"
+          title="Directors"
           icon={Crown}
-          description="Strategic agent that creates and assigns tasks"
+          description="Strategic agents that create and assign tasks"
+          count={directors.length}
         >
-          <AgentCard
-            agent={director}
-            activeSessionStatus={directorHasActiveSession ? 'running' : undefined}
-            onStart={() => onStart(director.id)}
-            onStop={() => onStop(director.id)}
-            onOpenTerminal={onOpenDirectorPanel}
-            onRename={() => onRename({ id: director.id, name: director.name })}
-            onDelete={() => onDelete({ id: director.id, name: director.name })}
-            isStarting={pendingStart.has(director.id)}
-            isStopping={pendingStop.has(director.id)}
-          />
+          <div className="grid grid-cols-1 @md:grid-cols-2 @xl:grid-cols-3 gap-4">
+            {directors.map((director) => (
+              <AgentCard
+                key={director.id}
+                agent={director}
+                activeSessionStatus={directorSessionMap.get(director.id) ? 'running' : undefined}
+                onStart={() => onStart(director.id)}
+                onStop={() => onStop(director.id)}
+                onOpenTerminal={() => onOpenDirectorPanel(director.id)}
+                onRename={() => onRename({ id: director.id, name: director.name })}
+                onDelete={() => onDelete({ id: director.id, name: director.name })}
+                isStarting={pendingStart.has(director.id)}
+                isStopping={pendingStop.has(director.id)}
+              />
+            ))}
+          </div>
         </AgentSection>
       )}
 

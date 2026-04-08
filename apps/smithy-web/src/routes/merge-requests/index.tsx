@@ -305,7 +305,7 @@ export function MergeRequestsPage() {
       )}
 
       {/* Keyboard Shortcuts Help */}
-      <div className="fixed bottom-4 right-4 text-xs text-[var(--color-text-tertiary)] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg px-3 py-2 shadow-sm hidden md:block">
+      <div className="fixed bottom-4 right-4 text-xs text-[var(--color-text-tertiary)] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg px-3 py-2 shadow-sm hidden @md:block">
         <span className="font-medium">Shortcuts:</span>{' '}
         <kbd className="px-1.5 py-0.5 bg-[var(--color-surface-elevated)] rounded">j</kbd>/<kbd className="px-1.5 py-0.5 bg-[var(--color-surface-elevated)] rounded">k</kbd> navigate{' '}
         <kbd className="px-1.5 py-0.5 bg-[var(--color-surface-elevated)] rounded">Enter</kbd> open{' '}

@@ -54,6 +54,18 @@ function createTempGitRepo(): string {
   return tempDir;
 }
 
+function createTempGitRepoWithOrigin(): { repoDir: string; remoteDir: string } {
+  const repoDir = createTempGitRepo();
+  const remoteDir = `/tmp/worktree-remote-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  fs.mkdirSync(remoteDir, { recursive: true });
+
+  execSync('git init --bare', { cwd: remoteDir, stdio: 'pipe' });
+  execSync(`git remote add origin "${remoteDir}"`, { cwd: repoDir, stdio: 'pipe' });
+  execSync('git push -u origin HEAD', { cwd: repoDir, stdio: 'pipe' });
+
+  return { repoDir, remoteDir };
+}
+
 /**
  * Cleans up a temporary directory
  */
@@ -576,6 +588,58 @@ describe('WorktreeManager Operations', () => {
     test('returns empty array for agent with no worktrees', async () => {
       const worktrees = await manager.getWorktreesForAgent('nonexistent');
       expect(worktrees.length).toBe(0);
+    });
+  });
+
+  describe('ensureWorktreeRemote', () => {
+    let remoteDir: string | undefined;
+
+    beforeEach(async () => {
+      cleanupTempDir(tempDir);
+      const repo = createTempGitRepoWithOrigin();
+      tempDir = repo.repoDir;
+      remoteDir = repo.remoteDir;
+      manager = createWorktreeManager({ workspaceRoot: tempDir });
+      await manager.initWorkspace();
+    });
+
+    afterEach(() => {
+      if (remoteDir) {
+        cleanupTempDir(remoteDir);
+      }
+      remoteDir = undefined;
+    });
+
+    test('repairs a repo in the worktree directory when origin is missing', async () => {
+      const brokenRepoPath = path.join(tempDir, '.stoneforge/.worktrees/manual-repair');
+      fs.mkdirSync(brokenRepoPath, { recursive: true });
+
+      execSync('git init', { cwd: brokenRepoPath, stdio: 'pipe' });
+      execSync('git config user.email "test@example.com"', { cwd: brokenRepoPath, stdio: 'pipe' });
+      execSync('git config user.name "Test User"', { cwd: brokenRepoPath, stdio: 'pipe' });
+
+      expect(() => execSync('git remote get-url origin', { cwd: brokenRepoPath, stdio: 'pipe' })).toThrow();
+
+      const repaired = await manager.ensureWorktreeRemote(brokenRepoPath);
+      expect(repaired).toBe(true);
+      expect(remoteDir).toBeDefined();
+
+      const remoteUrl = execSync('git remote get-url origin', {
+        cwd: brokenRepoPath,
+        encoding: 'utf8',
+        stdio: 'pipe',
+      }).trim();
+      expect(remoteUrl).toBe(remoteDir!);
+
+      const fetchSpecs = execSync('git config --get-all remote.origin.fetch', {
+        cwd: brokenRepoPath,
+        encoding: 'utf8',
+        stdio: 'pipe',
+      })
+        .trim()
+        .split('\n')
+        .filter(Boolean);
+      expect(fetchSpecs).toContain('+refs/heads/*:refs/remotes/origin/*');
     });
   });
 });

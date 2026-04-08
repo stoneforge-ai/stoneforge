@@ -122,10 +122,12 @@ const TaskTypeValue = {
 ### Utilities
 
 ```typescript
-import { createTask, updateTaskStatus, isTask } from '@stoneforge/core';
+import { createTask, updateTaskStatus, softDeleteTask, isTask } from '@stoneforge/core';
 
-createTask(input);                        // Factory
+await createTask(input);                  // Async factory (returns Promise<Task>)
+await createTask(input, config);          // With optional IdGeneratorConfig
 updateTaskStatus(task, { status, closeReason? }); // Validated transition
+softDeleteTask(task, { deletedBy, deleteReason? }); // Soft-delete (sets tombstone)
 isTask(element);                          // Type guard
 ```
 

@@ -58,6 +58,7 @@ export async function tryCreateProviderForAutoLink(
     // Dynamic import to handle optional peer dependency
     // @ts-ignore — smithy is an optional runtime dependency, may not be installed
     const { createSettingsService } = await import('@stoneforge/smithy/services');
+    // @ts-ignore — StorageBackend type may differ across compilation units (local source vs global dist)
     const settingsService = createSettingsService(backend) as {
       getProviderConfig(provider: string): { provider: string; token?: string; apiBaseUrl?: string; defaultProject?: string } | undefined;
     };

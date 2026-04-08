@@ -2,7 +2,7 @@
  * Tests for useBreakpoint hooks
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import {
   BREAKPOINTS,
   type Breakpoint,

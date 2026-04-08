@@ -44,6 +44,7 @@ import { mergeBranch, syncLocalBranch, hasRemote, detectTargetBranch } from '../
 import type { AgentRegistry } from './agent-registry.js';
 import { createLogger } from '../utils/logger.js';
 import type { OperationLogService } from './operation-log-service.js';
+import type { MergeRequestProvider } from './merge-request-provider.js';
 
 const logger = createLogger('merge-steward');
 
@@ -103,6 +104,10 @@ export interface MergeStewardConfig {
   readonly mergeStrategy?: MergeStrategy;
   /** Whether to auto-push to remote after successful merge (defaults to true) */
   readonly autoPushAfterMerge?: boolean;
+  /** Whether merges require human approval via PR (defaults to false) */
+  readonly requireApproval?: boolean;
+  /** Merge request provider for creating PRs when requireApproval is true */
+  readonly mergeRequestProvider?: MergeRequestProvider;
 }
 
 /**
@@ -127,6 +132,8 @@ export interface MergeProcessResult {
   taskId: ElementId;
   /** The final merge status. 'skipped' indicates another steward already claimed the task. */
   status: MergeStatus | 'skipped';
+  /** URL of the PR created when requireApproval is true */
+  mergeRequestUrl?: string;
   /** Whether the task was successfully merged */
   merged: boolean;
   /** Test result if tests were run */
@@ -185,6 +192,22 @@ export interface CreateFixTaskOptions {
   errorDetails: string;
   /** File paths involved (for conflicts) */
   affectedFiles?: string[];
+}
+
+/**
+ * Result of checking a single task's PR approval status
+ */
+export interface ApprovalCheckResult {
+  /** The task ID */
+  taskId: ElementId;
+  /** Whether the PR has been merged by a human */
+  merged: boolean;
+  /** Whether the PR was closed without merging */
+  closed: boolean;
+  /** PR URL */
+  mergeRequestUrl?: string;
+  /** Error message if check failed */
+  error?: string;
 }
 
 /**
@@ -308,6 +331,16 @@ export interface MergeStewardService {
    */
   cleanupAfterMerge(taskId: ElementId, deleteBranch?: boolean): Promise<boolean>;
 
+  /**
+   * Checks all tasks with 'awaiting_approval' merge status.
+   * For each, polls the PR provider to see if the PR has been merged.
+   * When a PR is merged, performs post-merge cleanup (worktree removal,
+   * branch cleanup, task status transition to CLOSED).
+   *
+   * @returns Array of approval check results
+   */
+  checkPendingApprovals(): Promise<ApprovalCheckResult[]>;
+
   // ----------------------------------------
   // Status Updates
   // ----------------------------------------
@@ -351,6 +384,7 @@ const DEFAULT_CONFIG = {
   deleteBranchAfterMerge: true,
   mergeStrategy: 'squash' as MergeStrategy,
   autoPushAfterMerge: true,
+  requireApproval: false,
 } as const;
 
 /**
@@ -358,8 +392,8 @@ const DEFAULT_CONFIG = {
  */
 export class MergeStewardServiceImpl implements MergeStewardService {
   private readonly api: QuarryAPI;
-  private readonly config: Required<Omit<MergeStewardConfig, 'targetBranch' | 'stewardEntityId'>> &
-    Pick<MergeStewardConfig, 'targetBranch' | 'stewardEntityId'>;
+  private readonly config: Required<Omit<MergeStewardConfig, 'targetBranch' | 'stewardEntityId' | 'mergeRequestProvider'>> &
+    Pick<MergeStewardConfig, 'targetBranch' | 'stewardEntityId' | 'mergeRequestProvider'>;
   private readonly taskAssignment: TaskAssignmentService;
   private readonly dispatchService: DispatchService;
   private readonly worktreeManager: WorktreeManager | undefined;
@@ -449,7 +483,7 @@ export class MergeStewardServiceImpl implements MergeStewardService {
       // 2a. Check if the branch has any commits ahead of the target.
       // If the branch is already fully merged (zero commits ahead), there's
       // nothing to test or merge — mark as not_applicable and close the task.
-      const branchHasCommits = await this.branchHasCommitsAhead(orchestratorMeta.branch);
+      const branchHasCommits = await this.branchHasCommitsAhead(orchestratorMeta.branch, task);
       if (!branchHasCommits) {
         logger.info(
           `Task ${taskId} branch "${orchestratorMeta.branch}" has zero commits ahead of target — already merged`
@@ -506,6 +540,11 @@ export class MergeStewardServiceImpl implements MergeStewardService {
             processedAt,
           };
         }
+      }
+
+      // 3a. If requireApproval is set, create a PR instead of auto-merging
+      if (this.config.requireApproval && !options.forceMerge) {
+        return this.createApprovalPR(task, taskId, testResult, processedAt);
       }
 
       // 3. Attempt merge (unless auto-merge disabled)
@@ -610,7 +649,7 @@ export class MergeStewardServiceImpl implements MergeStewardService {
       }
 
       // 6. Sync local target branch (best-effort, after all bookkeeping)
-      const targetBranch = await this.getTargetBranch();
+      const targetBranch = await this.getTargetBranchForTask(task);
       const remoteExists = await hasRemote(this.config.workspaceRoot);
       if (remoteExists) {
         try {
@@ -798,7 +837,7 @@ export class MergeStewardServiceImpl implements MergeStewardService {
       };
     }
 
-    const targetBranch = await this.getTargetBranch();
+    const targetBranch = await this.getTargetBranchForTask(task);
     const sourceBranch = orchestratorMeta.branch;
 
     const defaultMessage = this.config.mergeStrategy === 'squash'
@@ -977,6 +1016,113 @@ export class MergeStewardServiceImpl implements MergeStewardService {
   }
 
   // ----------------------------------------
+  // Approval Checking
+  // ----------------------------------------
+
+  async checkPendingApprovals(): Promise<ApprovalCheckResult[]> {
+    const provider = this.config.mergeRequestProvider;
+    if (!provider?.getMergeRequestStatus) {
+      return [];
+    }
+
+    // Find tasks awaiting approval
+    const assignments = await this.taskAssignment.listAssignments({
+      taskStatus: TaskStatus.REVIEW,
+      mergeStatus: ['awaiting_approval'],
+    });
+
+    const results: ApprovalCheckResult[] = [];
+
+    for (const { taskId, task } of assignments) {
+      const orchestratorMeta = getOrchestratorTaskMeta(
+        task.metadata as Record<string, unknown>
+      );
+      const prNumber = orchestratorMeta?.mergeRequestId;
+      const prUrl = orchestratorMeta?.mergeRequestUrl;
+
+      if (!prNumber) {
+        results.push({
+          taskId,
+          merged: false,
+          closed: false,
+          mergeRequestUrl: prUrl,
+          error: 'No PR number in task metadata',
+        });
+        continue;
+      }
+
+      try {
+        const status = await provider.getMergeRequestStatus(prNumber);
+
+        if (status.merged) {
+          // PR was merged by human — perform post-merge cleanup
+          logger.info(`PR #${prNumber} for task ${taskId} has been merged — running post-merge cleanup`);
+          this.operationLog?.write('info', 'merge', `PR #${prNumber} merged for task ${taskId}`, { taskId, prNumber });
+
+          await this.updateMergeStatus(taskId, 'merged');
+
+          // Cleanup worktree if auto-cleanup enabled
+          if (this.config.autoCleanup) {
+            await this.cleanupAfterMerge(taskId, this.config.deleteBranchAfterMerge);
+          }
+
+          // Sync local target branch (best-effort)
+          const targetBranch = await this.getTargetBranchForTask(task);
+          const remoteExists = await hasRemote(this.config.workspaceRoot);
+          if (remoteExists) {
+            try {
+              await execAsync('git fetch origin', { cwd: this.config.workspaceRoot, encoding: 'utf8' });
+            } catch { /* best-effort */ }
+            await syncLocalBranch(this.config.workspaceRoot, targetBranch);
+          }
+
+          results.push({
+            taskId,
+            merged: true,
+            closed: false,
+            mergeRequestUrl: prUrl,
+          });
+        } else if (status.state === 'closed') {
+          // PR was closed without merging
+          logger.info(`PR #${prNumber} for task ${taskId} was closed without merge`);
+          this.operationLog?.write('warn', 'merge', `PR #${prNumber} closed without merge for task ${taskId}`, { taskId, prNumber });
+
+          await this.updateMergeStatus(taskId, 'failed', {
+            failureReason: `PR #${prNumber} was closed without merging`,
+          });
+
+          results.push({
+            taskId,
+            merged: false,
+            closed: true,
+            mergeRequestUrl: prUrl,
+          });
+        } else {
+          // Still open — no action needed
+          results.push({
+            taskId,
+            merged: false,
+            closed: false,
+            mergeRequestUrl: prUrl,
+          });
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.warn(`Failed to check PR status for task ${taskId}: ${errorMessage}`);
+        results.push({
+          taskId,
+          merged: false,
+          closed: false,
+          mergeRequestUrl: prUrl,
+          error: errorMessage,
+        });
+      }
+    }
+
+    return results;
+  }
+
+  // ----------------------------------------
   // Status Updates
   // ----------------------------------------
 
@@ -1045,6 +1191,176 @@ export class MergeStewardServiceImpl implements MergeStewardService {
   // ----------------------------------------
 
   /**
+   * Creates a GitHub PR for approval instead of auto-merging.
+   * Called when requireApproval is true and tests pass.
+   */
+  private async createApprovalPR(
+    task: Task,
+    taskId: ElementId,
+    testResult: TestResult | undefined,
+    processedAt: Timestamp
+  ): Promise<MergeProcessResult> {
+    const provider = this.config.mergeRequestProvider;
+    if (!provider) {
+      // No provider configured — fall back to pending status
+      logger.warn(`requireApproval is true but no mergeRequestProvider configured for task ${taskId}`);
+      await this.updateMergeStatus(taskId, 'pending', { testResult });
+      return {
+        taskId,
+        status: 'pending',
+        merged: false,
+        testResult,
+        error: 'requireApproval is true but no merge request provider configured',
+        processedAt,
+      };
+    }
+
+    const orchestratorMeta = getOrchestratorTaskMeta(
+      task.metadata as Record<string, unknown>
+    );
+
+    // Check if a PR already exists for this task
+    if (orchestratorMeta?.mergeRequestUrl && orchestratorMeta?.mergeRequestId) {
+      logger.info(`PR already exists for task ${taskId}: ${orchestratorMeta.mergeRequestUrl}`);
+      await this.updateMergeStatus(taskId, 'awaiting_approval', { testResult });
+      return {
+        taskId,
+        status: 'awaiting_approval',
+        merged: false,
+        testResult,
+        mergeRequestUrl: orchestratorMeta.mergeRequestUrl,
+        processedAt,
+      };
+    }
+
+    const sourceBranch = orchestratorMeta?.branch;
+    if (!sourceBranch) {
+      await this.updateMergeStatus(taskId, 'failed', {
+        failureReason: 'No branch associated with task',
+      });
+      return {
+        taskId,
+        status: 'failed',
+        merged: false,
+        error: 'Task has no branch associated',
+        processedAt,
+      };
+    }
+
+    // Ensure branch is pushed to remote
+    try {
+      const remoteExists = await hasRemote(this.config.workspaceRoot);
+      if (remoteExists) {
+        await execAsync(`git push origin ${sourceBranch}`, {
+          cwd: this.config.workspaceRoot,
+          encoding: 'utf8',
+        });
+      }
+    } catch (pushError) {
+      // Push may fail if already up to date — that's fine
+      logger.debug(`Push attempt for ${sourceBranch}: ${pushError instanceof Error ? pushError.message : String(pushError)}`);
+    }
+
+    const targetBranch = await this.getTargetBranchForTask(task);
+
+    // Build PR title with task ID prefix
+    const prTitle = `[${taskId}] ${task.title}`;
+
+    // Build PR body with task description and change summary
+    const bodyParts = [
+      `## Task`,
+      '',
+      `**ID:** ${taskId}`,
+      `**Title:** ${task.title}`,
+      '',
+    ];
+
+    // Add completion summary if available
+    if (orchestratorMeta?.completionSummary) {
+      bodyParts.push('## Summary', '', orchestratorMeta.completionSummary, '');
+    }
+
+    // Add change summary via git diff stat
+    try {
+      const { stdout: diffStat } = await execAsync(
+        `git diff --stat origin/${targetBranch}...origin/${sourceBranch}`,
+        { cwd: this.config.workspaceRoot, encoding: 'utf8' }
+      );
+      if (diffStat.trim()) {
+        bodyParts.push('## Changes', '', '```', diffStat.trim(), '```', '');
+      }
+    } catch {
+      // Best-effort — diff stat is not critical
+    }
+
+    // Add test result info
+    if (testResult) {
+      bodyParts.push(
+        '## Tests',
+        '',
+        testResult.passed ? '✅ All tests passed' : '❌ Tests failed',
+        '',
+      );
+    }
+
+    bodyParts.push('---', '_Created by Stoneforge Smithy_');
+
+    try {
+      const mrResult = await provider.createMergeRequest(task, {
+        title: prTitle,
+        body: bodyParts.join('\n'),
+        sourceBranch,
+        targetBranch,
+      });
+
+      // Store PR info in task metadata
+      const metaUpdates: Partial<OrchestratorTaskMeta> = {
+        mergeStatus: 'awaiting_approval',
+        mergeRequestUrl: mrResult.url,
+        mergeRequestId: mrResult.id,
+        mergeRequestProvider: provider.name,
+      };
+
+      if (testResult) {
+        (metaUpdates as { lastTestResult: TestResult }).lastTestResult = testResult;
+      }
+
+      const newMetadata = updateOrchestratorTaskMeta(
+        task.metadata as Record<string, unknown>,
+        metaUpdates
+      );
+      await this.api.update<Task>(taskId, { metadata: newMetadata });
+
+      this.operationLog?.write('info', 'merge', `Created PR for task ${taskId}: ${mrResult.url}`, { taskId, prUrl: mrResult.url, prNumber: mrResult.id });
+      logger.info(`Created PR for task ${taskId}: ${mrResult.url}`);
+
+      return {
+        taskId,
+        status: 'awaiting_approval',
+        merged: false,
+        testResult,
+        mergeRequestUrl: mrResult.url,
+        processedAt,
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.operationLog?.write('error', 'merge', `Failed to create PR for task ${taskId}: ${errorMessage}`, { taskId });
+      await this.updateMergeStatus(taskId, 'failed', {
+        failureReason: `PR creation failed: ${errorMessage}`,
+      });
+
+      return {
+        taskId,
+        status: 'failed',
+        merged: false,
+        testResult,
+        error: `PR creation failed: ${errorMessage}`,
+        processedAt,
+      };
+    }
+  }
+
+  /**
    * Finds existing fix tasks for a given original task and fix type.
    * This prevents creating duplicate fix tasks when tests fail repeatedly.
    */
@@ -1078,8 +1394,8 @@ export class MergeStewardServiceImpl implements MergeStewardService {
    * Returns true if there are commits to merge, false if the branch is
    * already fully merged (zero commits ahead).
    */
-  private async branchHasCommitsAhead(sourceBranch: string): Promise<boolean> {
-    const targetBranch = await this.getTargetBranch();
+  private async branchHasCommitsAhead(sourceBranch: string, task: Task): Promise<boolean> {
+    const targetBranch = await this.getTargetBranchForTask(task);
     const remoteExists = await hasRemote(this.config.workspaceRoot);
 
     try {
@@ -1109,6 +1425,19 @@ export class MergeStewardServiceImpl implements MergeStewardService {
       // and let the normal merge flow handle errors
       return true;
     }
+  }
+
+  /**
+   * Resolves the target branch for a specific task.
+   * Uses the task's orchestrator metadata targetBranch if set,
+   * otherwise falls back to the global getTargetBranch().
+   */
+  private async getTargetBranchForTask(task: Task): Promise<string> {
+    const orcMeta = getOrchestratorTaskMeta(task.metadata as Record<string, unknown> | undefined);
+    if (orcMeta?.targetBranch) {
+      return orcMeta.targetBranch;
+    }
+    return this.getTargetBranch();
   }
 
   private async getTargetBranch(): Promise<string> {

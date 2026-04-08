@@ -48,6 +48,7 @@ export function createAgentRoutes(services: Services) {
         provider?: string;
         model?: string;
         executablePath?: string;
+        targetBranch?: string;
       };
 
       if (!body.role || !body.name) {
@@ -67,6 +68,7 @@ export function createAgentRoutes(services: Services) {
             provider: body.provider,
             model: body.model,
             executablePath: body.executablePath,
+            targetBranch: body.targetBranch,
           });
           break;
 
@@ -137,6 +139,7 @@ export function createAgentRoutes(services: Services) {
         maxConcurrentTasks?: number;
         tags?: string[];
         createdBy?: string;
+        targetBranch?: string;
       };
 
       if (!body.name) {
@@ -148,6 +151,7 @@ export function createAgentRoutes(services: Services) {
         createdBy: (body.createdBy ?? 'el-0000') as EntityId,
         tags: body.tags,
         maxConcurrentTasks: body.maxConcurrentTasks,
+        targetBranch: body.targetBranch,
       });
 
       return c.json({ agent }, 201);
@@ -307,6 +311,7 @@ export function createAgentRoutes(services: Services) {
         provider?: string;
         model?: string | null;
         executablePath?: string | null;
+        targetBranch?: string | null;
         triggers?: Array<{ type: 'cron'; schedule: string } | { type: 'event'; event: string; condition?: string }>;
       };
 
@@ -331,6 +336,10 @@ export function createAgentRoutes(services: Services) {
         return c.json({ error: { code: 'VALIDATION_ERROR', message: 'executablePath must be a non-empty string or null' } }, 400);
       }
 
+      if (body.targetBranch !== undefined && body.targetBranch !== null && (typeof body.targetBranch !== 'string' || body.targetBranch.trim().length === 0)) {
+        return c.json({ error: { code: 'VALIDATION_ERROR', message: 'targetBranch must be a non-empty string or null' } }, 400);
+      }
+
       // Update name if provided
       let updatedAgent = agent;
       if (body.name !== undefined) {
@@ -353,6 +362,17 @@ export function createAgentRoutes(services: Services) {
       if (body.executablePath !== undefined) {
         updatedAgent = await agentRegistry.updateAgentMetadata(agentId, {
           executablePath: body.executablePath === null ? undefined : body.executablePath.trim(),
+        });
+      }
+
+      // Update targetBranch in agent metadata if provided (director agents only, null clears the override)
+      if (body.targetBranch !== undefined) {
+        const agentMeta = updatedAgent.metadata?.agent;
+        if (!agentMeta || agentMeta.agentRole !== 'director') {
+          return c.json({ error: { code: 'VALIDATION_ERROR', message: 'targetBranch can only be set on director agents' } }, 400);
+        }
+        updatedAgent = await agentRegistry.updateAgentMetadata(agentId, {
+          targetBranch: body.targetBranch === null ? undefined : body.targetBranch.trim(),
         });
       }
 
@@ -483,6 +503,29 @@ export function createAgentRoutes(services: Services) {
       return c.json({ providers });
     } catch (error) {
       logger.error('Failed to list providers:', error);
+      return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
+    }
+  });
+
+  // POST /api/providers/:name/verify
+  app.post('/api/providers/:name/verify', async (c) => {
+    try {
+      const providerName = c.req.param('name');
+      const registry = getProviderRegistry();
+      const provider = registry.get(providerName);
+
+      if (!provider) {
+        return c.json({ error: { code: 'NOT_FOUND', message: `Provider not found: ${providerName}` } }, 404);
+      }
+
+      const available = await provider.isAvailable();
+      return c.json({
+        name: providerName,
+        available,
+        installInstructions: provider.getInstallInstructions(),
+      });
+    } catch (error) {
+      logger.error('Failed to verify provider:', error);
       return c.json({ error: { code: 'INTERNAL_ERROR', message: String(error) } }, 500);
     }
   });
