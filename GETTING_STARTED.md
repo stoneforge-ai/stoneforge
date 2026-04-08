@@ -6,22 +6,29 @@ Set up your multi-agent development command center.
 
 ## What You Need
 
-Before starting, make sure you have these installed:
-
-| Requirement | How to check | How to install |
-|-------------|-------------|----------------|
-| **Node.js 18+** | `node -v` | [nodejs.org](https://nodejs.org/) — download the LTS version |
-| **Git** | `git --version` | [git-scm.com](https://git-scm.com/) |
-| **Claude Code** | `claude --version` | `npm install -g @anthropic-ai/claude-code` |
-| **Claude account** | Sign in to claude.ai | [claude.ai/settings/billing](https://claude.ai/settings/billing) — you need MAX or a Pro plan |
-
-**Claude Code** is the AI coding assistant that powers Stoneforge's agents. Without it, agents can't run.
+| Requirement | How to install |
+|-------------|----------------|
+| **Node.js 18+** | [nodejs.org](https://nodejs.org/) — download the LTS version, run the installer |
+| **Claude Code** | Open a terminal and run: `npm install -g @anthropic-ai/claude-code` |
+| **Claude account** | Sign up at [claude.ai](https://claude.ai/) — you need a MAX or Pro plan |
 
 ---
 
-## Install (2 Steps)
+## Option A: Download Pre-Built (Easiest — Windows)
 
-### Step 1: Download Stoneforge
+1. Go to the [Releases page](https://github.com/stoneforge-ai/stoneforge/releases)
+2. Download **stoneforge-windows.zip**
+3. Extract the ZIP to a folder (right-click > Extract All)
+4. Double-click **launch.bat**
+5. The dashboard opens automatically in your browser
+
+**That's it.** No terminal, no build, no git.
+
+---
+
+## Option B: Install from Source (Mac / Linux / Windows)
+
+### Step 1: Download
 
 ```bash
 git clone https://github.com/stoneforge-ai/stoneforge.git
@@ -40,38 +47,26 @@ cd stoneforge
 setup.bat
 ```
 
-This single script handles everything:
-- Installs pnpm (the package manager Stoneforge needs)
-- Downloads all dependencies
-- Builds the project
-- Creates the `sf` command
-- Initializes your workspace with default agents
+The script installs dependencies, builds the project, and creates the `sf` command. Takes 2-3 minutes.
 
-**It takes 2-3 minutes.** When it finishes, you'll see "Setup complete!"
+> **Windows users:** After setup.bat finishes, close your terminal and open a new one.
 
-> **Windows users:** After `setup.bat` finishes, **close your terminal and open a new one**. This is needed so Windows can find the `sf` command.
+### Step 3: Launch
 
----
-
-## Start the Dashboard
-
+**Mac / Linux:**
 ```bash
 sf serve
 ```
 
-Open your browser to **http://localhost:3457**
+**Windows:** Double-click **launch.bat** in the stoneforge folder.
 
-You should see the Stoneforge dashboard with these sections:
-- **Tasks** — Create work for your agents
-- **Agents** — See who's running (Director, Workers, Steward)
-- **Activity** — Watch agents work in real-time
-- **Workflows** — Combine tasks into automated processes
+Open **http://localhost:3457** in your browser.
 
 ---
 
 ## Create Your First Task
 
-1. Go to **Work** > **Tasks**
+1. Go to **Work** > **Tasks** in the dashboard
 2. Click **+ New Task**
 3. Fill in:
    - **Title**: Something like "Add dark mode toggle"
@@ -85,29 +80,24 @@ Your agents will automatically pick it up. Watch the **Activity** page to see pr
 
 ## Troubleshooting
 
-### "sf: command not found"
-The setup script creates the `sf` command. If it couldn't write to `/usr/local/bin`, use `./sf` instead (from the stoneforge directory).
+### Dashboard doesn't open
+Make sure Node.js is installed. Go to [nodejs.org](https://nodejs.org/), download and install the LTS version.
 
 ### Agents aren't picking up tasks
-Make sure Claude Code is installed and you're signed in:
-```bash
-claude --version      # Should show a version number
-claude                # If not signed in, this will prompt you
+Claude Code must be installed and signed in. Open a terminal and run:
 ```
-
-### Dashboard won't load
-Check that the server is running. Run `sf serve` and look for errors. The dashboard runs at http://localhost:3457.
-
-### Build fails
-Make sure you have Node.js 18+:
-```bash
-node -v   # Must be v18.x.x or higher
+claude --version
+claude
 ```
+The second command will prompt you to sign in if needed.
+
+### "sf: command not found" (Mac/Linux)
+Run `./sf serve` instead (with `./` in front), from the stoneforge folder.
 
 ---
 
 ## Next Steps
 
-- **[Your First Task](FIRST_TASK.md)** — Step-by-step tutorial creating and watching a task
+- **[Your First Task](FIRST_TASK.md)** — Step-by-step tutorial
 - **[Dashboard Guide](DASHBOARD_GUIDE.md)** — Learn every feature in the web UI
 - **[Setup Guide](SETUP_GUIDE.md)** — Advanced configuration (custom agents, prompts, playbooks)
