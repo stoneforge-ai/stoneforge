@@ -17,11 +17,36 @@ if %errorlevel% neq 0 (
     echo   Node.js is not installed!
     echo.
     echo   Download it from: https://nodejs.org/
-    echo   Install the LTS version, then try again.
+    echo   Install the LTS version, then double-click this file again.
     echo.
     pause
     exit /b 1
 )
+
+REM Check if setup is needed (no built CLI or no dependencies)
+set "SF_BIN=%~dp0packages\smithy\dist\bin\sf.js"
+if not exist "%SF_BIN%" goto :run_setup
+if not exist "%~dp0node_modules" goto :run_setup
+goto :skip_setup
+
+:run_setup
+echo   First-time setup detected. This takes 2-3 minutes...
+echo   (Installing dependencies and building packages)
+echo.
+set "SF_LAUNCHED=1"
+call "%~dp0setup.bat"
+if %errorlevel% neq 0 (
+    echo.
+    echo   Setup failed! See the errors above.
+    echo.
+    pause
+    exit /b 1
+)
+echo.
+echo   Setup complete! Starting server...
+echo.
+
+:skip_setup
 
 REM Check if server is already running on port 3457
 netstat -ano | findstr ":3457 " | findstr "LISTENING" >nul 2>nul
@@ -31,16 +56,6 @@ if %errorlevel% equ 0 (
     start http://localhost:3457
     timeout /t 2 /nobreak >nul
     exit /b 0
-)
-
-REM Find the sf.js file (works whether launched from repo root or extracted ZIP)
-set "SF_BIN=%~dp0packages\smithy\dist\bin\sf.js"
-if not exist "%SF_BIN%" (
-    echo   Error: Cannot find Stoneforge at %SF_BIN%
-    echo   Make sure you extracted the ZIP or ran setup.bat first.
-    echo.
-    pause
-    exit /b 1
 )
 
 REM Initialize workspace if needed

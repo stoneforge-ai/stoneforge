@@ -43,18 +43,16 @@ if %NODE_MAJOR% lss 18 (
 for /f %%v in ('node -v') do echo [ok]    Node.js %%v
 
 REM --------------------------------------------------------------------------
-REM Step 2: Check git
+REM Step 2: Check git (optional for ZIP downloads)
 REM --------------------------------------------------------------------------
 echo [info]  Checking git...
 
 where git >nul 2>nul
 if %errorlevel% neq 0 (
-    echo [error] Git is not installed.
-    echo         Download from: https://git-scm.com/
-    exit /b 1
+    echo [warn]  Git is not installed (OK if you downloaded the ZIP^).
+) else (
+    for /f "tokens=3" %%v in ('git --version') do echo [ok]    git %%v
 )
-
-for /f "tokens=3" %%v in ('git --version') do echo [ok]    git %%v
 
 REM --------------------------------------------------------------------------
 REM Step 3: Install pnpm (if needed)
@@ -172,6 +170,10 @@ echo.
 echo ======================================
 echo   Setup complete!
 echo ======================================
+
+REM If called from launch.bat, skip the manual instructions and return
+if defined SF_LAUNCHED goto :eof
+
 echo.
 echo   IMPORTANT: Close this terminal and open a new one!
 echo   (This is needed so your computer can find the "sf" command.)
