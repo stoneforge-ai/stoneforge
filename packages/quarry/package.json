@@ -1,6 +1,7 @@
 {
   "name": "@stoneforge/quarry",
   "version": "1.16.1",
+  "private": false,
   "type": "module",
   "description": "Core SDK for Stoneforge - API, services, sync, and CLI",
   "main": "dist/index.js",
@@ -83,6 +84,7 @@
     "web",
     "README.md"
   ],
+  "homepage": "https://github.com/stoneforge-ai/stoneforge/tree/main/packages/quarry",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/stoneforge-ai/stoneforge.git",

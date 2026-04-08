@@ -1,6 +1,7 @@
 {
   "name": "@stoneforge/smithy",
   "version": "1.16.1",
+  "private": false,
   "type": "module",
   "description": "Orchestrator SDK for Stoneforge - AI agent orchestration library extending the core SDK",
   "main": "dist/index.js",
@@ -81,6 +82,7 @@
     "scripts",
     "README.md"
   ],
+  "homepage": "https://github.com/stoneforge-ai/stoneforge/tree/main/packages/smithy",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/stoneforge-ai/stoneforge.git",
