@@ -1,14 +1,28 @@
 # Your First AI-Powered Workflow
 
-Learn how to create and execute your first multi-agent task—entirely through the web dashboard.
+Learn how to create and execute your first multi-agent task — entirely through the web dashboard.
+
+## Before You Start
+
+Make sure these are all true before continuing:
+
+- [ ] You ran `./setup.sh` (see [Getting Started](GETTING_STARTED.md))
+- [ ] Claude Code is installed: run `claude --version` in your terminal
+- [ ] You're signed in to Claude: run `claude` and follow the prompts if needed
+- [ ] The server is running: run `sf serve` in a terminal (leave it open)
+- [ ] Dashboard is open: go to **http://localhost:3457** in your browser
+
+If any of these fail, see [Getting Started — Troubleshooting](GETTING_STARTED.md#troubleshooting).
+
+---
 
 ## Scenario: Add Dark Mode to Your App
 
 We'll walk through creating a feature task and watching your agent team execute it.
 
-### Step 1: Have Dashboard Open
+### Step 1: Open the Dashboard
 
-Make sure you ran `sf serve` and have the dashboard open at **http://localhost:3457**.
+Go to **http://localhost:3457** in your browser. You should see the Stoneforge dashboard.
 
 ### Step 2: Create the Task
 
@@ -103,6 +117,27 @@ The dashboard is your **control center**. You:
 - Don't touch the CLI
 
 Your agents handle everything else.
+
+---
+
+---
+
+## Troubleshooting
+
+### Task stays "open" and no agent picks it up
+
+1. **Is Claude Code installed?** Run `claude --version` in your terminal. If not found, install it: `npm install -g @anthropic-ai/claude-code`
+2. **Are you signed in?** Run `claude` — it will prompt you to sign in if needed.
+3. **Are agents registered?** Run `sf agent list` in a new terminal. You should see a director, workers, and a steward.
+4. **Is the Director running?** The Director needs to be started first. In the dashboard, go to the **Director Panel** (right sidebar) and start it, or run `sf agent start director` in your terminal.
+
+### Dashboard is blank or won't load
+
+Make sure `sf serve` is still running in your terminal. If it crashed, restart it.
+
+### Worker seems stuck
+
+Click on the worker's name in **Orchestration** > **Agents** to see its live output. If it's genuinely stuck, you can stop it with `sf agent stop <id>` and the task will be re-dispatched to another worker.
 
 ---
 

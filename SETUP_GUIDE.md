@@ -6,34 +6,42 @@ Complete guide for running Stoneforge as your daily multi-agent development comm
 
 ## Prerequisites
 
-- Node.js >= 18.0.0
-- pnpm (package manager)
-- Claude API key or Claude MAX subscription
-- Git configured with SSH or HTTPS auth
+- **Node.js** >= 18.0.0 ([download](https://nodejs.org/))
+- **Git** ([download](https://git-scm.com/))
+- **Claude Code CLI** — the AI engine that powers agents (`npm install -g @anthropic-ai/claude-code`)
+- **Claude MAX or Pro subscription** — sign up at [claude.ai/settings/billing](https://claude.ai/settings/billing)
+
+> pnpm is also required but is installed automatically by `setup.sh`.
 
 ---
 
 ## Step 1: Install & Build
 
+### Recommended: Use the setup script
+
 ```bash
-# Clone the repository
 git clone https://github.com/stoneforge-ai/stoneforge.git
 cd stoneforge
+./setup.sh
+```
+
+The script checks prerequisites, installs pnpm, downloads dependencies, builds the project, creates the `sf` command, and initializes the workspace. It takes 2-3 minutes.
+
+### Manual install (alternative)
+
+If you prefer to run each step yourself:
+
+```bash
+# Install pnpm if you don't have it
+npm install -g pnpm@8
 
 # Install dependencies
 pnpm install
 
 # Build all packages (core → storage → quarry → smithy → apps)
 pnpm build
-```
 
-The build produces the `sf` CLI at `packages/smithy/dist/bin/sf.js`. For convenience:
-
-```bash
-# Option A: Install globally from built package
-npm install -g ./packages/smithy
-
-# Option B: Create an alias
+# Create an alias for the sf command
 alias sf="node $(pwd)/packages/smithy/dist/bin/sf.js"
 ```
 

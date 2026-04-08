@@ -1,52 +1,105 @@
 # Getting Started with Stoneforge
 
-Get your multi-agent development command center running in 5 minutes.
-
-## Prerequisites
-
-- **Node.js** 18.0.0 or higher (download from [nodejs.org](https://nodejs.org/))
-- **Claude API key** or **Claude MAX subscription** (for agent capabilities)
-
-## Install & Run (3 Commands)
-
-```bash
-# 1. Install globally
-npm install -g @stoneforge/cli
-
-# 2. Initialize your workspace
-sf init --name "my-project"
-
-# 3. Start the dashboard
-sf serve
-```
-
-Open your browser to **http://localhost:3457** — you should see the Stoneforge dashboard.
-
-## What You See
-
-The dashboard has everything you need:
-- **Tasks** — Create work for your agents
-- **Agents** — Monitor what's running
-- **Workflows** — Combine tasks into automated processes
-- **Activity** — Watch agents execute in real-time
-- **Documents** — Shared knowledge base for your team
-
-## Create Your First Task
-
-1. Go to **Work** → **Tasks**
-2. Click **+ New Task**
-3. Enter a title (e.g., "Add dark mode toggle")
-4. Set priority and type
-5. Click **Save**
-
-Your agents will automatically pick it up and start working. Watch the **Activity** tab to see progress.
-
-## Next Steps
-
-- **[First Task Tutorial](FIRST_TASK.md)** — Walk through a complete workflow
-- **[Dashboard Guide](DASHBOARD_GUIDE.md)** — Explore all features
-- **[Setup Guide](SETUP_GUIDE.md)** — Advanced configuration and reference
+Set up your multi-agent development command center.
 
 ---
 
-**That's it!** You now have a team of AI agents at your command.
+## What You Need
+
+Before starting, make sure you have these installed:
+
+| Requirement | How to check | How to install |
+|-------------|-------------|----------------|
+| **Node.js 18+** | `node -v` | [nodejs.org](https://nodejs.org/) — download the LTS version |
+| **Git** | `git --version` | [git-scm.com](https://git-scm.com/) |
+| **Claude Code** | `claude --version` | `npm install -g @anthropic-ai/claude-code` |
+| **Claude account** | Sign in to claude.ai | [claude.ai/settings/billing](https://claude.ai/settings/billing) — you need MAX or a Pro plan |
+
+**Claude Code** is the AI coding assistant that powers Stoneforge's agents. Without it, agents can't run.
+
+---
+
+## Install (2 Steps)
+
+### Step 1: Download Stoneforge
+
+```bash
+git clone https://github.com/stoneforge-ai/stoneforge.git
+cd stoneforge
+```
+
+### Step 2: Run the setup script
+
+```bash
+./setup.sh
+```
+
+This single script handles everything:
+- Installs pnpm (the package manager Stoneforge needs)
+- Downloads all dependencies
+- Builds the project
+- Creates the `sf` command
+- Initializes your workspace with default agents
+
+**It takes 2-3 minutes.** When it finishes, you'll see "Setup complete!"
+
+---
+
+## Start the Dashboard
+
+```bash
+sf serve
+```
+
+Open your browser to **http://localhost:3457**
+
+You should see the Stoneforge dashboard with these sections:
+- **Tasks** — Create work for your agents
+- **Agents** — See who's running (Director, Workers, Steward)
+- **Activity** — Watch agents work in real-time
+- **Workflows** — Combine tasks into automated processes
+
+---
+
+## Create Your First Task
+
+1. Go to **Work** > **Tasks**
+2. Click **+ New Task**
+3. Fill in:
+   - **Title**: Something like "Add dark mode toggle"
+   - **Type**: Feature
+   - **Priority**: 3 (Medium)
+4. Click **Save**
+
+Your agents will automatically pick it up. Watch the **Activity** page to see progress.
+
+---
+
+## Troubleshooting
+
+### "sf: command not found"
+The setup script creates the `sf` command. If it couldn't write to `/usr/local/bin`, use `./sf` instead (from the stoneforge directory).
+
+### Agents aren't picking up tasks
+Make sure Claude Code is installed and you're signed in:
+```bash
+claude --version      # Should show a version number
+claude                # If not signed in, this will prompt you
+```
+
+### Dashboard won't load
+Check that the server is running. Run `sf serve` and look for errors. The dashboard runs at http://localhost:3457.
+
+### Build fails
+Make sure you have Node.js 18+:
+```bash
+node -v   # Must be v18.x.x or higher
+```
+
+---
+
+## Next Steps
+
+- **[Your First Task](FIRST_TASK.md)** — Step-by-step tutorial creating and watching a task
+- **[Dashboard Guide](DASHBOARD_GUIDE.md)** — Learn every feature in the web UI
+- **[Setup Guide](SETUP_GUIDE.md)** — Advanced configuration (custom agents, prompts, playbooks)
