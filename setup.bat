@@ -63,9 +63,26 @@ where pnpm >nul 2>nul
 if %errorlevel% neq 0 (
     echo [warn]  pnpm not found. Installing...
     call npm install -g pnpm@8
-    where pnpm >nul 2>nul
-    if %errorlevel% neq 0 (
+    if !errorlevel! neq 0 (
         echo [error] Failed to install pnpm. Try: npm install -g pnpm
+        exit /b 1
+    )
+    REM Refresh PATH so the current shell can find the newly installed pnpm
+    for /f "tokens=2*" %%A in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v Path 2^>nul') do set "SYS_PATH=%%B"
+    for /f "tokens=2*" %%A in ('reg query "HKCU\Environment" /v Path 2^>nul') do set "USR_PATH=%%B"
+    set "PATH=!SYS_PATH!;!USR_PATH!"
+)
+
+where pnpm >nul 2>nul
+if %errorlevel% neq 0 (
+    REM npm global bin might not be in PATH yet — find it directly
+    for /f "delims=" %%p in ('npm prefix -g 2^>nul') do set "NPM_GLOBAL=%%p"
+    if exist "!NPM_GLOBAL!\pnpm.cmd" (
+        set "PATH=!PATH!;!NPM_GLOBAL!"
+        echo [info]  Found pnpm at !NPM_GLOBAL!
+    ) else (
+        echo [error] pnpm installed but not found in PATH.
+        echo         Close this terminal, open a new one, and run setup.bat again.
         exit /b 1
     )
 )
