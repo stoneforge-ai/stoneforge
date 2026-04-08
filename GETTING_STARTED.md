@@ -30,8 +30,14 @@ cd stoneforge
 
 ### Step 2: Run the setup script
 
+**Mac / Linux:**
 ```bash
 ./setup.sh
+```
+
+**Windows (Command Prompt):**
+```
+setup.bat
 ```
 
 This single script handles everything:
