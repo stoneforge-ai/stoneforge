@@ -9,13 +9,12 @@
 </p>
 
 <p align="center">
+  <a href="GETTING_STARTED.md">Getting Started</a> &nbsp;&middot;&nbsp;
   <a href="#before-you-start">Before You Start</a> &nbsp;&middot;&nbsp;
   <a href="#why-stoneforge">Why Stoneforge?</a> &nbsp;&middot;&nbsp;
   <a href="#quick-start">Quick Start</a> &nbsp;&middot;&nbsp;
   <a href="#how-it-works">How It Works</a> &nbsp;&middot;&nbsp;
-  <a href="#the-web-dashboard">Web Dashboard</a> &nbsp;&middot;&nbsp;
-  <a href="#customization">Customization</a> &nbsp;&middot;&nbsp;
-  <a href="#development">Development</a>
+  <a href="FIRST_TASK.md">Tutorial</a>
 </p>
 
 <p align="center">

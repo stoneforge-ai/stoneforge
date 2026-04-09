@@ -1,0 +1,41 @@
+name: bug-fix
+title: Bug Fix Workflow
+version: 1
+
+variables:
+  - name: bug_summary
+    type: string
+    required: true
+    description: "One-line summary of the bug"
+  - name: severity
+    type: number
+    required: false
+    default: 3
+    description: "Severity 1-5 (1=critical, 5=cosmetic)"
+
+steps:
+  - id: reproduce
+    title: "Reproduce: {{bug_summary}}"
+    description: "Reproduce the bug reliably. Identify the root cause. Document the failing scenario and expected behavior."
+    step_type: task
+    task_type: bug
+    priority: 2
+    complexity: 2
+
+  - id: fix
+    title: "Fix: {{bug_summary}}"
+    description: "Implement the fix. Add a regression test that fails without the fix and passes with it. Keep the change minimal and focused."
+    step_type: task
+    task_type: bug
+    priority: 2
+    complexity: 3
+    depends_on: [reproduce]
+
+  - id: verify
+    title: "Verify fix for: {{bug_summary}}"
+    description: "Run the full test suite with pnpm test. Confirm the regression test passes and no other tests broke."
+    step_type: task
+    task_type: task
+    priority: 2
+    complexity: 1
+    depends_on: [fix]

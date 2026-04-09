@@ -83,6 +83,7 @@
     "web",
     "README.md"
   ],
+  "homepage": "https://github.com/stoneforge-ai/stoneforge/tree/main/packages/quarry",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/stoneforge-ai/stoneforge.git",

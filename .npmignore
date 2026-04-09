@@ -1,0 +1,51 @@
+# Development files
+src/
+**/*.test.ts
+**/*.test.bun.ts
+.test_*
+
+# Build artifacts
+tsconfig.json
+tsconfig.base.json
+turbo.json
+
+# Git
+.git
+.gitignore
+
+# Development
+node_modules/
+.env
+.env.local
+
+# Documentation build
+docs/
+*.md
+!README.md
+
+# Tools
+scripts/
+tools/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# System
+.DS_Store
+Thumbs.db
+
+# Testing
+vitest.config.ts
+bun.lockb
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.circleci/
+
+# Package manager
+pnpm-lock.yaml
+pnpm-workspace.yaml

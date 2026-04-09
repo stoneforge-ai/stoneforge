@@ -1,6 +1,7 @@
 # Stoneforge Configuration
 
 actor: el-1k0b
+base_branch: master
 database: stoneforge.db
 sync:
   auto_export: true
