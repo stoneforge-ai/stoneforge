@@ -119,12 +119,11 @@ export function isValidBaseBranch(value: unknown): value is string {
   if (typeof value !== 'string') {
     return false;
   }
-  // Must be non-empty, no whitespace-only, no slashes that break git commands,
-  // no control characters, no spaces
+  // Must be non-empty, no whitespace-only, no backslashes,
+  // no control characters, no spaces. Forward slashes are allowed (e.g. feature/my-branch).
   return (
     value.length > 0 &&
     value.trim().length > 0 &&
-    !value.includes('/') &&
     !value.includes('\\') &&
     !/\s/.test(value) &&
     // eslint-disable-next-line no-control-regex
@@ -150,9 +149,9 @@ export function validateBaseBranch(value: unknown): string {
       { field: 'baseBranch', value }
     );
   }
-  if (value.includes('/') || value.includes('\\')) {
+  if (value.includes('\\')) {
     throw new ValidationError(
-      'baseBranch must not contain slashes',
+      'baseBranch must not contain backslashes',
       ErrorCode.INVALID_INPUT,
       { field: 'baseBranch', value }
     );

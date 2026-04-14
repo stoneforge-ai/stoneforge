@@ -1416,6 +1416,7 @@ function getWorkflowPresetSection(): string {
 
     const permissionModel = getValue('agents.permissionModel') as AgentPermissionModel;
     const allowedBashCommands = getValue('agents.allowedBashCommands') as string[] | undefined;
+    const targetBranch = getValue('merge.targetBranch') as string | null | undefined;
 
     const context: WorkflowPresetContext = {
       preset,
@@ -1423,6 +1424,7 @@ function getWorkflowPresetSection(): string {
       autoAllowedTools: AUTO_ALLOWED_TOOLS,
       autoAllowedSfCommands: AUTO_ALLOWED_SF_COMMANDS,
       allowedBashCommands: allowedBashCommands,
+      targetBranch: targetBranch ?? undefined,
     };
 
     return buildWorkflowPresetSection(context);
