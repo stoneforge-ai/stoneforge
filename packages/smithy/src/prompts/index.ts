@@ -390,6 +390,9 @@ export interface WorkflowPresetContext {
 
   /** List of allowed bash commands (for restricted mode) */
   allowedBashCommands?: string[];
+
+  /** The configured merge target branch (e.g. 'stoneforge/review', 'feature/my-branch') */
+  targetBranch?: string | null;
 }
 
 /**
@@ -419,13 +422,15 @@ export function buildWorkflowPresetSection(context: WorkflowPresetContext): stri
       );
       break;
 
-    case 'review':
+    case 'review': {
+      const reviewBranch = context.targetBranch ?? 'stoneforge/review';
       lines.push(
-        'Your work merges to the review branch (`stoneforge/review`), not directly to main.',
+        `Your work merges to the target branch (\`${reviewBranch}\`), not directly to main.`,
         'A human will review the review branch and merge to main.',
         'You have unrestricted tool access.',
       );
       break;
+    }
 
     case 'approve': {
       // Build list of auto-allowed tools for display
