@@ -1,5 +1,19 @@
 # @stoneforge/quarry
 
+## 1.24.0
+
+### Patch Changes
+
+- cd0997b: Exempt workflows from parent-child blocking in blocked cache so that tasks inside a workflow are not blocked by the workflow's pending/running status. Workflows, like plans, are collections and should not act as blocking parents.
+- 2850dea: Fix sf serve to skip browser open on restart using marker file instead of WebSocket polling. Adds --open flag to force opening a new tab.
+- e87fafb: Fix sf serve opening a new browser tab on every restart. Uses a marker file combined with WebSocket client polling (5s window) to reliably detect existing dashboard tabs before deciding to open a new one.
+- fe994c8: Skip opening a new browser tab on `sf serve` when the dashboard is already connected via WebSocket
+- Updated dependencies [28696f6]
+- Updated dependencies [823ccb9]
+  - @stoneforge/core@1.24.0
+  - @stoneforge/shared-routes@1.24.0
+  - @stoneforge/storage@1.24.0
+
 ## 1.23.1
 
 ### Patch Changes
