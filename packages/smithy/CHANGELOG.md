@@ -1,5 +1,27 @@
 # @stoneforge/smithy
 
+## 1.24.0
+
+### Minor Changes
+
+- 823ccb9: Add pollWorkflowAutoTransition() to dispatch daemon polling loop. Workflows now automatically transition from pending→running when a task starts, running→completed when all tasks close, and pending|running→failed when a task is tombstoned.
+
+### Patch Changes
+
+- 9f9e1b9: Add 'workflow-auto-transition' to PollResult.pollType union type for type safety
+- 28696f6: Increase timeout for recovery steward session history test to prevent flaky CI failures
+- fe994c8: Export `getEventsClientCount()` and add `hasConnectedClients` to `SmithyServerResult` to detect active dashboard WebSocket connections
+- Updated dependencies [cd0997b]
+- Updated dependencies [28696f6]
+- Updated dependencies [2850dea]
+- Updated dependencies [e87fafb]
+- Updated dependencies [fe994c8]
+- Updated dependencies [823ccb9]
+  - @stoneforge/quarry@1.24.0
+  - @stoneforge/core@1.24.0
+  - @stoneforge/shared-routes@1.24.0
+  - @stoneforge/storage@1.24.0
+
 ## 1.23.1
 
 ### Patch Changes
