@@ -16,7 +16,7 @@ interface CIOverlayProps {
   onCreateAction?: (action: CIAction) => void
 }
 
-export function CIOverlay({ runs, actions, onBack, onNavigateToTask, onNavigateToMR, onNavigateToAutomation, initialRunId, initialJobId, onRunChange, onCreateAction }: CIOverlayProps) {
+export function CIOverlay({ runs, actions, onNavigateToTask, onNavigateToMR, onNavigateToAutomation, initialRunId, initialJobId, onRunChange, onCreateAction }: CIOverlayProps) {
   const [selectedRun, setSelectedRun] = useState<CIRun | null>(() => {
     if (initialRunId) return runs.find(r => r.id === initialRunId) || null
     return null
@@ -54,7 +54,6 @@ export function CIOverlay({ runs, actions, onBack, onNavigateToTask, onNavigateT
     <CIRunListView
       runs={runs}
       actions={actions}
-      onBack={onBack}
       onSelectRun={handleSelectRun}
       onCreateAction={onCreateAction}
     />

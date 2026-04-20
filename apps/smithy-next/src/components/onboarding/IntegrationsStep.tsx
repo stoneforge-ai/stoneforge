@@ -374,7 +374,7 @@ function InstallFlowBlock({ flowType }: { flowType: InstallFlowType }) {
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <MiniDropdown
                 placeholder="Organization"
-                value={selectedOrg ? MOCK_ORGS.find(o => o.id === selectedOrg)?.name : null}
+                value={selectedOrg ? (MOCK_ORGS.find(o => o.id === selectedOrg)?.name ?? null) : null}
                 items={MOCK_ORGS.map(o => ({ id: o.id, label: o.name, detail: o.type }))}
                 onChange={handleOrgSelect}
                 disabled={step === 'done'}

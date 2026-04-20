@@ -48,9 +48,9 @@ export function MRDetailView({ mr, onBack, onNavigateToTask, onNavigateToSession
       case 'conversation':
         return <MRConversationTab mr={mr} timeline={timeline} checks={checks} onNavigateToSession={onNavigateToSession} onNavigateToChecks={() => setActiveTab('checks')} onNavigateToPreview={onNavigateToPreview} />
       case 'files':
-        return <MRFilesChangedTab files={diffFiles} timeline={timeline} viewedFiles={viewedFiles} onToggleViewed={toggleViewed} onOpenInEditor={onOpenInEditor ? (f) => onOpenInEditor(f, mr.sourceBranch) : undefined} />
+        return <MRFilesChangedTab files={diffFiles} timeline={timeline} viewedFiles={viewedFiles} onToggleViewed={toggleViewed} onOpenInEditor={onOpenInEditor ? (f) => onOpenInEditor(f, mr.branch) : undefined} />
       case 'commits':
-        return <MRCommitsTab commits={commits} diffFiles={diffFiles} onOpenInEditor={onOpenInEditor ? (f) => onOpenInEditor(f, mr.sourceBranch) : undefined} />
+        return <MRCommitsTab commits={commits} diffFiles={diffFiles} onOpenInEditor={onOpenInEditor ? (f) => onOpenInEditor(f, mr.branch) : undefined} />
       case 'checks':
         return <MRChecksTab checks={checks} />
     }

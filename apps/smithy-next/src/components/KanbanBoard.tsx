@@ -1049,7 +1049,7 @@ function MetaRow({ label, value, mono }: { label: string; value: string; mono?: 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
       <span style={{ width: 60, fontSize: 11, color: 'var(--color-text-tertiary)', flexShrink: 0 }}>{label}</span>
-      <span style={{ fontSize: 12, color: 'var(--color-text-secondary)', textTransform: mono ? undefined : 'capitalize', fontFamily: mono ? 'var(--font-mono)' : undefined, fontSize: mono ? 11 : 12 } as React.CSSProperties}>{value}</span>
+      <span style={{ fontSize: mono ? 11 : 12, color: 'var(--color-text-secondary)', textTransform: mono ? undefined : 'capitalize', fontFamily: mono ? 'var(--font-mono)' : undefined } as React.CSSProperties}>{value}</span>
     </div>
   )
 }
