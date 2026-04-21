@@ -459,6 +459,253 @@ test.describe('TB-O17a: Terminal Multiplexer (Workspaces Page)', () => {
     });
   });
 
+  test.describe('Stream viewer scroll regression (issue #46)', () => {
+    // Regression guard for GitHub issue #46 and Stoneforge decision-log el-1meu39.
+    // Before the fix, once a session accumulated more than 200 events, every new
+    // SSE event ran `prev.slice(-200)` which unmounted the oldest DOM nodes from
+    // the top of the scroll container. Chrome's scroll anchoring couldn't keep
+    // up, scrollTop collapsed to 0, and the resulting browser-fired scroll event
+    // flipped `shouldAutoScrollRef` to false — parking the pane at the top for
+    // the rest of the session. The fix removes the tail cap and tracks user
+    // scroll intent (wheel/touchmove/keydown) so layout-induced scroll events
+    // can't bypass the sticky-bottom guard.
+
+    /**
+     * Install a mock EventSource before the page scripts run so tests can
+     * dispatch synthetic SSE events into the StreamViewer on demand.
+     */
+    async function installMockEventSource(page: import('@playwright/test').Page) {
+      await page.addInitScript(() => {
+        class MockEventSource extends EventTarget {
+          url: string;
+          readyState = 0;
+          onopen: ((e: Event) => unknown) | null = null;
+          onerror: ((e: Event) => unknown) | null = null;
+          onmessage: ((e: MessageEvent) => unknown) | null = null;
+          CONNECTING = 0;
+          OPEN = 1;
+          CLOSED = 2;
+
+          constructor(url: string) {
+            super();
+            this.url = url;
+            const w = window as unknown as { __mockEventSources?: MockEventSource[] };
+            w.__mockEventSources = w.__mockEventSources || [];
+            w.__mockEventSources.push(this);
+            setTimeout(() => {
+              this.readyState = 1;
+              const openEvt = new Event('open');
+              this.dispatchEvent(openEvt);
+              if (this.onopen) this.onopen(openEvt);
+            }, 10);
+          }
+
+          close() {
+            this.readyState = 2;
+          }
+        }
+        (window as unknown as { EventSource: unknown }).EventSource = MockEventSource;
+      });
+    }
+
+    async function mockAgentStatus(
+      page: import('@playwright/test').Page,
+      agentId: string,
+      sessionId: string,
+    ) {
+      await page.route(`**/api/agents/${agentId}/status`, async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            agentId,
+            hasActiveSession: true,
+            activeSession: {
+              id: sessionId,
+              providerSessionId: 'provider-session-abc',
+              agentId,
+              agentRole: 'worker',
+              workerMode: 'ephemeral',
+              status: 'running',
+              createdAt: Date.now(),
+              startedAt: Date.now(),
+            },
+            recentHistory: [],
+          }),
+        });
+      });
+    }
+
+    async function mockSessionMessages(
+      page: import('@playwright/test').Page,
+      sessionId: string,
+      agentId: string,
+      count: number,
+    ) {
+      await page.route(`**/api/sessions/${sessionId}/messages`, async (route) => {
+        const messages = Array.from({ length: count }, (_, i) => ({
+          id: `hist-msg-${i}`,
+          sessionId,
+          agentId,
+          // Alternate between user and assistant to get a realistic mix of card
+          // heights — a pure run of one type could end up shorter than the
+          // viewport, which would trivially satisfy "scrolled up" checks.
+          type: i % 2 === 0 ? 'user' : 'assistant',
+          content: `Historical message #${i} — lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.`,
+          isError: false,
+          createdAt: Date.now() - (count - i) * 1000,
+        }));
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ messages }),
+        });
+      });
+    }
+
+    async function installLayout(page: import('@playwright/test').Page, paneId: string, agentId: string) {
+      await page.goto('/workspaces');
+      await page.evaluate(({ paneId: pid, agentId: aid }) => {
+        const mockLayout = {
+          id: 'test-layout-scroll',
+          name: 'Scroll Test',
+          preset: 'single',
+          panes: [
+            {
+              id: pid,
+              agentId: aid,
+              agentName: 'Scroll Test Agent',
+              agentRole: 'worker',
+              workerMode: 'ephemeral',
+              paneType: 'stream',
+              status: 'connected',
+              position: 0,
+              weight: 1,
+            },
+          ],
+          createdAt: Date.now(),
+          modifiedAt: Date.now(),
+        };
+        localStorage.setItem('stoneforge-active-workspace-layout', JSON.stringify(mockLayout));
+      }, { paneId, agentId });
+      await page.reload();
+    }
+
+    async function dispatchSseEvent(
+      page: import('@playwright/test').Page,
+      payload: { msgId: string; type: string; content: string },
+    ) {
+      await page.evaluate((p) => {
+        const w = window as unknown as { __mockEventSources?: EventTarget[] };
+        const sources = w.__mockEventSources;
+        if (!sources || sources.length === 0) {
+          throw new Error('No mock EventSource was created — SSE connection not attempted');
+        }
+        const source = sources[sources.length - 1];
+        const msgEvent = new MessageEvent(`agent_${p.type}`, {
+          data: JSON.stringify({ msgId: p.msgId, type: p.type, content: p.content }),
+          lastEventId: p.msgId,
+        });
+        source.dispatchEvent(msgEvent);
+      }, payload);
+    }
+
+    test('new SSE event does NOT jump scroll to top when user is scrolled up (>200 historical messages)', async ({ page }) => {
+      const AGENT_ID = 'test-agent-scroll-46-a';
+      const SESSION_ID = 'test-session-scroll-46-a';
+      const HISTORICAL_COUNT = 210;
+
+      await installMockEventSource(page);
+      await mockAgentStatus(page, AGENT_ID, SESSION_ID);
+      await mockSessionMessages(page, SESSION_ID, AGENT_ID, HISTORICAL_COUNT);
+      await installLayout(page, 'pane-scroll-a', AGENT_ID);
+
+      const scrollContainer = page.getByTestId('stream-events');
+      await expect(scrollContainer).toBeVisible();
+
+      // Wait for all historical events to render. Allow some slack for
+      // adjacent tool_use/tool_result grouping (not relevant with our plain
+      // user/assistant mock, but future-proof).
+      await expect(async () => {
+        const count = await scrollContainer.evaluate((el) => el.children.length);
+        expect(count).toBeGreaterThanOrEqual(HISTORICAL_COUNT - 10);
+      }).toPass({ timeout: 5000 });
+
+      // Scroll up (away from bottom) via a user gesture so the viewer latches
+      // `shouldAutoScrollRef` to false. We dispatch a wheel event then set
+      // scrollTop — just setting scrollTop alone does not count as a user
+      // scroll under the new intent-tracking logic.
+      await scrollContainer.evaluate((el) => {
+        el.dispatchEvent(new WheelEvent('wheel', { deltaY: -500, bubbles: true }));
+        el.scrollTop = Math.floor(el.scrollHeight / 3);
+      });
+      await page.waitForTimeout(100);
+
+      const scrollTopBefore = await scrollContainer.evaluate((el) => el.scrollTop);
+      expect(scrollTopBefore).toBeGreaterThan(100);
+
+      // Dispatch a synthetic SSE event. With the old tail-cap truncation, this
+      // would cause scrollTop to collapse to 0. With the fix, the user's
+      // position must be preserved.
+      await dispatchSseEvent(page, {
+        msgId: 'new-sse-msg-1',
+        type: 'assistant',
+        content: 'A brand new message arrived via SSE after the user scrolled up',
+      });
+
+      // Let React flush the state update and any scroll effects run
+      await page.waitForTimeout(250);
+
+      const scrollTopAfter = await scrollContainer.evaluate((el) => el.scrollTop);
+
+      // The regression: scrollTop collapsed to 0 on every new SSE event.
+      // The fix must keep the user's scroll position; at minimum it must
+      // never be at 0 when the user had scrolled down into the transcript.
+      expect(scrollTopAfter).toBeGreaterThan(0);
+      // And it must not have silently overridden the user's position by
+      // jumping to the bottom either — sticky-bottom respects the user.
+      expect(Math.abs(scrollTopAfter - scrollTopBefore)).toBeLessThan(100);
+    });
+
+    test('new SSE event auto-follows to bottom when user is already at bottom', async ({ page }) => {
+      const AGENT_ID = 'test-agent-scroll-46-b';
+      const SESSION_ID = 'test-session-scroll-46-b';
+      const HISTORICAL_COUNT = 210;
+
+      await installMockEventSource(page);
+      await mockAgentStatus(page, AGENT_ID, SESSION_ID);
+      await mockSessionMessages(page, SESSION_ID, AGENT_ID, HISTORICAL_COUNT);
+      await installLayout(page, 'pane-scroll-b', AGENT_ID);
+
+      const scrollContainer = page.getByTestId('stream-events');
+      await expect(scrollContainer).toBeVisible();
+
+      // Wait for historical events to load AND the initial auto-scroll effect
+      // to pin the view to the bottom.
+      await expect(async () => {
+        const info = await scrollContainer.evaluate((el) => ({
+          count: el.children.length,
+          atBottom: el.scrollHeight - el.scrollTop - el.clientHeight < 80,
+        }));
+        expect(info.count).toBeGreaterThanOrEqual(HISTORICAL_COUNT - 10);
+        expect(info.atBottom).toBe(true);
+      }).toPass({ timeout: 5000 });
+
+      await dispatchSseEvent(page, {
+        msgId: 'follow-msg-1',
+        type: 'assistant',
+        content: 'Follow-on message while at bottom',
+      });
+
+      await page.waitForTimeout(250);
+
+      const atBottomAfter = await scrollContainer.evaluate(
+        (el) => el.scrollHeight - el.scrollTop - el.clientHeight < 80,
+      );
+      expect(atBottomAfter).toBe(true);
+    });
+  });
+
   test.describe('Terminal pane', () => {
     test.beforeEach(async ({ page }) => {
       await page.goto('/workspaces');

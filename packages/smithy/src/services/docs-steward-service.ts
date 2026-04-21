@@ -288,13 +288,20 @@ export class DocsStewardServiceImpl implements DocsStewardService {
         const lineNum = i + 1;
 
         // Match inline code containing file paths
-        const codeMatches = line.matchAll(/`([^`]+\.(ts|js|tsx|jsx|json|md))`/g);
+        const codeMatches = line.matchAll(/`([^`]+\.(ts|js|tsx|jsx|json|md|mdx))`/g);
         for (const match of codeMatches) {
           const filePath = match[1];
           // Skip if it looks like a pattern (contains *)
           if (filePath.includes('*')) continue;
           // Skip if it's a relative doc link
-          if (filePath.startsWith('#') || filePath.startsWith('./') && filePath.endsWith('.md')) continue;
+          if (filePath.startsWith('#') || (filePath.startsWith('./') && filePath.endsWith('.md'))) continue;
+          // Skip if it contains a placeholder (e.g. `{role}.md`)
+          if (filePath.includes('{') || filePath.includes('}')) continue;
+          // Skip bare basenames (no `/`) — these are almost always prose
+          // references to filename conventions, not actual paths to verify.
+          // Example: "ephemeral workers get `worker.md`" doesn't assert that
+          // `worker.md` exists at the repo root.
+          if (!filePath.includes('/')) continue;
 
           const fullPath = path.join(this.config.workspaceRoot, filePath);
           if (!fs.existsSync(fullPath)) {
@@ -317,7 +324,9 @@ export class DocsStewardServiceImpl implements DocsStewardService {
         const tableMatch = line.match(/\|\s*`?([^|`]+\.(ts|js))`?\s*\|/);
         if (tableMatch) {
           const filePath = tableMatch[1].trim();
-          if (!filePath.includes('*')) {
+          // Require a path separator so product names like "Node.js" aren't
+          // matched as file paths.
+          if (!filePath.includes('*') && filePath.includes('/')) {
             const fullPath = path.join(this.config.workspaceRoot, filePath);
             if (!fs.existsSync(fullPath)) {
               const suggestedFix = await this.findSimilarFile(filePath);
@@ -383,6 +392,47 @@ export class DocsStewardServiceImpl implements DocsStewardService {
 
           // Parse path and optional anchor
           const [targetPath, anchor] = linkTarget.split('#');
+
+          // Absolute paths (starting with `/`) are treated as docs-site routes
+          // (e.g. Astro Starlight) and resolved against the configured docs
+          // directory, trying common page-file layouts. `mailto:` / `tel:`
+          // protocol links are skipped earlier via the http/https filter; skip
+          // them here too for safety.
+          if (targetPath.startsWith('/')) {
+            const resolvedPath = this.resolveDocsRoute(targetPath);
+            if (!resolvedPath) {
+              issues.push({
+                type: 'internal_link',
+                file: path.relative(this.config.workspaceRoot, file),
+                line: lineNum,
+                description: `Link target does not exist: ${targetPath}`,
+                currentValue: linkTarget,
+                confidence: 'high',
+                context: this.getContext(lines, i),
+                complexity: 'low',
+              });
+            } else if (anchor) {
+              try {
+                const targetContent = await readFile(resolvedPath, 'utf-8');
+                if (!this.anchorExistsInContent(targetContent, anchor)) {
+                  issues.push({
+                    type: 'internal_link',
+                    file: path.relative(this.config.workspaceRoot, file),
+                    line: lineNum,
+                    description: `Anchor not found in target file: #${anchor}`,
+                    currentValue: linkTarget,
+                    confidence: 'high',
+                    context: this.getContext(lines, i),
+                    complexity: 'low',
+                  });
+                }
+              } catch {
+                // Skip if can't read target file
+              }
+            }
+            continue;
+          }
+
           const resolvedPath = path.resolve(fileDir, targetPath);
 
           // Check if target file exists
@@ -696,6 +746,35 @@ export class DocsStewardServiceImpl implements DocsStewardService {
   // Private Helpers
   // ----------------------------------------
 
+  /**
+   * Resolves a docs-site absolute route (e.g. `/guides/demo-mode/`) to the
+   * underlying markdown/mdx file on disk, trying common layouts used by
+   * static docs generators like Astro Starlight.
+   *
+   * Returns the resolved absolute path if found, or undefined otherwise.
+   */
+  private resolveDocsRoute(route: string): string | undefined {
+    // Strip leading slash and any trailing slash
+    const stripped = route.replace(/^\/+/, '').replace(/\/+$/, '');
+    if (!stripped) return undefined;
+
+    const docsRoot = path.join(this.config.workspaceRoot, this.config.docsDir);
+    const candidates = [
+      path.join(docsRoot, `${stripped}.mdx`),
+      path.join(docsRoot, `${stripped}.md`),
+      path.join(docsRoot, stripped, 'index.mdx'),
+      path.join(docsRoot, stripped, 'index.md'),
+    ];
+
+    for (const candidate of candidates) {
+      if (fs.existsSync(candidate)) {
+        return candidate;
+      }
+    }
+
+    return undefined;
+  }
+
   private async findMarkdownFiles(dir: string): Promise<string[]> {
     const files: string[] = [];
 
@@ -712,7 +791,10 @@ export class DocsStewardServiceImpl implements DocsStewardService {
           }
           const subFiles = await this.findMarkdownFiles(fullPath);
           files.push(...subFiles);
-        } else if (entry.isFile() && entry.name.endsWith('.md')) {
+        } else if (
+          entry.isFile() &&
+          (entry.name.endsWith('.md') || entry.name.endsWith('.mdx'))
+        ) {
           files.push(fullPath);
         }
       }
@@ -811,10 +893,12 @@ export class DocsStewardServiceImpl implements DocsStewardService {
   }
 
   private anchorExistsInContent(content: string, anchor: string): boolean {
-    // Convert anchor to expected heading format
-    // Anchors are typically lowercase with hyphens: #my-heading
+    // Convert anchor to expected heading format. Slug generators (e.g. the
+    // one used by Astro Starlight / github-slugger) strip backticks and other
+    // punctuation from heading text, so `### \`sf create\`` produces anchor
+    // `sf-create`. Normalize the heading text before matching.
     const headingPattern = new RegExp(
-      `^#+\\s+${anchor.replace(/-/g, '[- ]').replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')}`,
+      `^#+\\s+[\`\\s]*${anchor.replace(/-/g, '[- ]').replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')}`,
       'im'
     );
 

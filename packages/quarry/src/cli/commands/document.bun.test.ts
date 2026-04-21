@@ -355,13 +355,64 @@ describe('doc update command', () => {
     expect(result.exitCode).toBe(ExitCode.INVALID_ARGUMENTS);
   });
 
-  test('fails without content, file, or metadata', async () => {
+  test('fails without content, file, metadata, or category', async () => {
     const doc = await createTestDocument('Original');
 
     const options = createTestOptions();
     const result = await documentCommand.subcommands!.update.handler!([doc.id], options);
 
     expect(result.exitCode).toBe(ExitCode.INVALID_ARGUMENTS);
+  });
+
+  test('updates document category with --category flag', async () => {
+    const doc = await createTestDocument('Miscategorized content', { category: 'other' });
+    expect(doc.category).toBe('other');
+
+    const options = createTestOptions({ category: 'spec', json: true });
+    const result = await documentCommand.subcommands!.update.handler!([doc.id], options);
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    const updated = result.data as Document;
+    expect(updated.category).toBe('spec');
+  });
+
+  test('updates document category alongside content', async () => {
+    const doc = await createTestDocument('Original content', { category: 'other' });
+
+    const options = createTestOptions({
+      content: 'Refined content',
+      category: 'reference',
+      json: true,
+    });
+    const result = await documentCommand.subcommands!.update.handler!([doc.id], options);
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    const updated = result.data as Document;
+    expect(updated.content).toBe('Refined content');
+    expect(updated.category).toBe('reference');
+  });
+
+  test('fails with invalid category on update', async () => {
+    const doc = await createTestDocument('Original content');
+
+    const options = createTestOptions({ category: 'invalid-category' });
+    const result = await documentCommand.subcommands!.update.handler!([doc.id], options);
+
+    expect(result.exitCode).toBe(ExitCode.VALIDATION);
+    expect(result.error).toContain('Invalid category');
+  });
+
+  test('category-only update does not require content or metadata', async () => {
+    const doc = await createTestDocument('Unchanged content', { category: 'other' });
+
+    const options = createTestOptions({ category: 'decision-log', json: true });
+    const result = await documentCommand.subcommands!.update.handler!([doc.id], options);
+
+    expect(result.exitCode).toBe(ExitCode.SUCCESS);
+    const updated = result.data as Document;
+    expect(updated.category).toBe('decision-log');
+    // Content preserved
+    expect(updated.content).toBe('Unchanged content');
   });
 
   test('fails with both content and file', async () => {

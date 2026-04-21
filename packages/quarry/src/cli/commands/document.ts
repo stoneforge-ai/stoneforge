@@ -592,6 +592,7 @@ interface DocUpdateOptions {
   content?: string;
   file?: string;
   metadata?: string;
+  category?: string;
 }
 
 const docUpdateOptions: CommandOption[] = [
@@ -613,6 +614,11 @@ const docUpdateOptions: CommandOption[] = [
     description: "JSON metadata to merge (e.g. '{\"key\": \"value\"}')",
     hasValue: true,
   },
+  {
+    name: 'category',
+    description: 'New document category (e.g., spec, prd, reference)',
+    hasValue: true,
+  },
 ];
 
 async function docUpdateHandler(
@@ -622,16 +628,25 @@ async function docUpdateHandler(
   const [docId] = args;
 
   if (!docId) {
-    return failure('Usage: sf document update <document-id> --content <text> | --file <path> | --metadata <json>', ExitCode.INVALID_ARGUMENTS);
+    return failure('Usage: sf document update <document-id> --content <text> | --file <path> | --metadata <json> | --category <category>', ExitCode.INVALID_ARGUMENTS);
   }
 
-  // Must specify at least one of --content, --file, or --metadata
-  if (!options.content && !options.file && !options.metadata) {
-    return failure('At least one of --content, --file, or --metadata is required', ExitCode.INVALID_ARGUMENTS);
+  // Must specify at least one of --content, --file, --metadata, or --category
+  if (!options.content && !options.file && !options.metadata && !options.category) {
+    return failure('At least one of --content, --file, --metadata, or --category is required', ExitCode.INVALID_ARGUMENTS);
   }
 
   if (options.content && options.file) {
     return failure('Cannot specify both --content and --file', ExitCode.INVALID_ARGUMENTS);
+  }
+
+  // Validate category
+  if (options.category && !isValidDocumentCategory(options.category)) {
+    const validCategories = Object.values(DocumentCategory);
+    return failure(
+      `Invalid category: ${options.category}. Must be one of: ${validCategories.join(', ')}`,
+      ExitCode.VALIDATION
+    );
   }
 
   const { api, error } = createAPI(options);
@@ -683,6 +698,7 @@ async function docUpdateHandler(
     const updatePayload: Record<string, unknown> = {};
     if (content !== undefined) updatePayload.content = content;
     if (metadata) updatePayload.metadata = metadata;
+    if (options.category) updatePayload.category = options.category;
 
     // Update the document (creates a new version)
     const updated = await api.update<Document>(
@@ -709,8 +725,8 @@ async function docUpdateHandler(
 const docUpdateCommand: Command = {
   name: 'update',
   description: 'Update document content',
-  usage: 'sf document update <document-id> --content <text> | --file <path> | --metadata <json>',
-  help: `Update a document's content and/or metadata, creating a new version.
+  usage: 'sf document update <document-id> --content <text> | --file <path> | --metadata <json> | --category <category>',
+  help: `Update a document's content, metadata, and/or category, creating a new version.
 
 Documents are versioned - each update creates a new version while preserving
 the history. Use 'sf document history' to view versions and 'sf document rollback' to
@@ -720,16 +736,18 @@ Arguments:
   document-id   Document identifier
 
 Options:
-  -c, --content <text>   New content (inline)
-  -f, --file <path>      Read new content from file
-  -m, --metadata <json>  JSON metadata to merge
+  -c, --content <text>       New content (inline)
+  -f, --file <path>          Read new content from file
+  -m, --metadata <json>      JSON metadata to merge
+      --category <category>  New document category (e.g., spec, prd, reference)
 
 Examples:
   sf document update el-doc123 --content "Updated content"
   sf document update el-doc123 --file updated-spec.md
   sf document update el-doc123 -c "Quick fix"
   sf document update el-doc123 --metadata '{"purpose": "api-reference"}'
-  sf document update el-doc123 --content "New content" --metadata '{"version": 2}'`,
+  sf document update el-doc123 --content "New content" --metadata '{"version": 2}'
+  sf document update el-doc123 --category spec`,
   options: docUpdateOptions,
   handler: docUpdateHandler as Command['handler'],
 };

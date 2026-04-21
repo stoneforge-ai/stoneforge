@@ -12,6 +12,9 @@
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 
 import {
   DocsStewardServiceImpl,
@@ -282,6 +285,122 @@ describe('DocsStewardService', () => {
       await expect(
         service.commitFix('test message', ['file.md'])
       ).rejects.toThrow('No active session worktree');
+    });
+  });
+
+  // ----------------------------------------
+  // Verifier behavior (filesystem integration)
+  // ----------------------------------------
+
+  describe('verifier behavior on a real docs tree', () => {
+    let tmpRoot: string;
+    let scopedService: DocsStewardService;
+
+    beforeEach(() => {
+      tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'docs-steward-'));
+      scopedService = createDocsStewardService({
+        workspaceRoot: tmpRoot,
+        docsDir: 'docs',
+      });
+    });
+
+    afterEach(() => {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    });
+
+    function writeDoc(relPath: string, content: string): void {
+      const full = path.join(tmpRoot, relPath);
+      fs.mkdirSync(path.dirname(full), { recursive: true });
+      fs.writeFileSync(full, content, 'utf-8');
+    }
+
+    it('scans .mdx files in addition to .md', async () => {
+      writeDoc('docs/page.mdx', '# Page\n');
+      writeDoc('docs/other.md', '# Other\n');
+
+      const result = await scopedService.scanAll();
+      expect(result.filesScanned).toBe(2);
+    });
+
+    it('does not flag bare-basename mentions in prose as missing file paths', async () => {
+      writeDoc(
+        'docs/page.mdx',
+        "The worker prompt is in `worker.md`, and the default is `persistent-worker.md`.\n",
+      );
+
+      const issues = await scopedService.verifyFilePaths();
+      expect(issues).toEqual([]);
+    });
+
+    it('still flags paths with slashes that do not exist', async () => {
+      writeDoc(
+        'docs/page.mdx',
+        "Check out `packages/missing/src/does-not-exist.ts` for details.\n",
+      );
+
+      const issues = await scopedService.verifyFilePaths();
+      expect(issues.length).toBe(1);
+      expect(issues[0].currentValue).toBe(
+        'packages/missing/src/does-not-exist.ts',
+      );
+    });
+
+    it('does not flag product names like "Node.js" in tables as file paths', async () => {
+      writeDoc(
+        'docs/page.mdx',
+        '| Feature | Bun | Node.js | Browser |\n| --- | --- | --- | --- |\n',
+      );
+
+      const issues = await scopedService.verifyFilePaths();
+      expect(issues).toEqual([]);
+    });
+
+    it('resolves Starlight-style absolute routes to .mdx pages', async () => {
+      writeDoc('docs/guides/demo-mode.mdx', '# Demo Mode\n');
+      writeDoc(
+        'docs/index.mdx',
+        'See [demo mode](/guides/demo-mode/) for details.\n',
+      );
+
+      const issues = await scopedService.verifyInternalLinks();
+      expect(issues).toEqual([]);
+    });
+
+    it('flags Starlight-style routes that do not map to any page', async () => {
+      writeDoc(
+        'docs/index.mdx',
+        'See [missing](/guides/does-not-exist/).\n',
+      );
+
+      const issues = await scopedService.verifyInternalLinks();
+      expect(issues.length).toBe(1);
+      expect(issues[0].currentValue).toBe('/guides/does-not-exist/');
+    });
+
+    it('matches anchors against headings with backticks', async () => {
+      writeDoc(
+        'docs/ref.mdx',
+        '# Ref\n\n## `sf create`\n\nBody.\n',
+      );
+      writeDoc(
+        'docs/index.mdx',
+        'See [create](/ref/#sf-create) for details.\n',
+      );
+
+      const issues = await scopedService.verifyInternalLinks();
+      expect(issues).toEqual([]);
+    });
+
+    it('flags anchors that truly do not exist on the target page', async () => {
+      writeDoc('docs/ref.mdx', '# Ref\n\n## `sf create`\n');
+      writeDoc(
+        'docs/index.mdx',
+        'See [missing](/ref/#does-not-exist).\n',
+      );
+
+      const issues = await scopedService.verifyInternalLinks();
+      expect(issues.length).toBe(1);
+      expect(issues[0].description).toContain('Anchor not found');
     });
   });
 

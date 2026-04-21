@@ -351,6 +351,12 @@ export function StreamViewer({
   const [isWorking, setIsWorking] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
+  // Tracks whether a user-initiated gesture (wheel, touch, keyboard) is currently
+  // driving scroll. We only flip `shouldAutoScrollRef` to false when the user is
+  // the one scrolling — this prevents browser-fired scroll events from DOM
+  // layout changes (see #46) from incorrectly breaking sticky-bottom follow.
+  const userScrollingRef = useRef(false);
+  const userScrollingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectAttempts = useRef(0);
@@ -489,20 +495,86 @@ export function StreamViewer({
     }
   }, [isWorking]);
 
-  // Handle scroll events to detect if user has scrolled away from bottom
+  // Mark that a user-initiated gesture is driving scroll. We latch the flag for
+  // a short window so that any `scroll` events fired on the same tick are
+  // attributed to the user. Without this, the browser can fire spurious
+  // `scroll` events when DOM layout changes (e.g. from list re-renders) and
+  // we'd incorrectly flip `shouldAutoScrollRef` to false. See issue #46 and
+  // decision-log el-1meu39 for the root-cause analysis.
+  const markUserScrolling = useCallback(() => {
+    userScrollingRef.current = true;
+    if (userScrollingTimeoutRef.current) {
+      clearTimeout(userScrollingTimeoutRef.current);
+    }
+    userScrollingTimeoutRef.current = setTimeout(() => {
+      userScrollingRef.current = false;
+      userScrollingTimeoutRef.current = null;
+    }, 150);
+  }, []);
+
+  // Keyboard keys that cause the scroll container to scroll when focused
+  // inside it. Only these flip the user-scrolling latch.
+  const isScrollingKey = (key: string) =>
+    key === 'PageUp' ||
+    key === 'PageDown' ||
+    key === 'ArrowUp' ||
+    key === 'ArrowDown' ||
+    key === 'Home' ||
+    key === 'End' ||
+    key === ' ' || // Space / Shift-Space are a common scroll gesture
+    key === 'Spacebar';
+
+  const handleWheel = useCallback(() => {
+    markUserScrolling();
+  }, [markUserScrolling]);
+
+  const handleTouchMove = useCallback(() => {
+    markUserScrolling();
+  }, [markUserScrolling]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (isScrollingKey(e.key)) {
+      markUserScrolling();
+    }
+  }, [markUserScrolling]);
+
+  // Handle scroll events to detect if user has scrolled away from bottom.
+  //
+  // The `scroll` event fires for both user-initiated scrolls AND programmatic
+  // or layout-induced scrolls (the browser resets `scrollTop` when DOM nodes
+  // above the viewport are unmounted). We only trust a "flip to false" (user
+  // left the bottom) when a user gesture (wheel/touch/keydown) is currently
+  // active. Returning to the bottom is always safe to trust — if scrollTop is
+  // near the bottom of the container, the user is effectively opting back
+  // into sticky-bottom follow regardless of how they got there.
   const handleScroll = useCallback(() => {
     if (!scrollRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
     // Consider "near bottom" if within 80px of the bottom
     const isNearBottom = scrollHeight - scrollTop - clientHeight < 80;
-    shouldAutoScrollRef.current = isNearBottom;
+
+    if (isNearBottom) {
+      // User returned to the bottom (or never left it). Always resume follow.
+      shouldAutoScrollRef.current = true;
+      return;
+    }
+
+    // Only mark "don't follow" when the user is actively scrolling. This
+    // avoids the regression in issue #46 where layout-induced scroll events
+    // (from DOM node removals) incorrectly flipped the ref to false.
+    if (userScrollingRef.current) {
+      shouldAutoScrollRef.current = false;
+    }
   }, []);
 
-  // Cleanup working timeout on unmount
+  // Cleanup working timeout & user-scroll latch on unmount
   useEffect(() => {
     return () => {
       if (workingTimeoutRef.current) {
         clearTimeout(workingTimeoutRef.current);
+      }
+      if (userScrollingTimeoutRef.current) {
+        clearTimeout(userScrollingTimeoutRef.current);
       }
     };
   }, []);
@@ -693,12 +765,26 @@ export function StreamViewer({
           };
 
           // Add event with deduplication (prevents duplicates when transcript is loaded from localStorage)
+          //
+          // We keep the full events array rather than slicing a tail cap: the
+          // previous `prev.slice(-200)` was the root cause of issue #46. Once
+          // a session crossed 200 events, that truncation unmounted the oldest
+          // DOM nodes on every SSE event, Chrome's scroll-anchoring failed,
+          // scrollTop collapsed to 0, and the scroll-event handler flipped
+          // `shouldAutoScrollRef` to false — parking the view at the top.
+          // Diagnosis: Stoneforge document el-1meu39. Resolution: this task.
+          //
+          // Rendering unbounded events is acceptable in practice: stream cards
+          // are lightweight, React reconciles the tail stably when appending,
+          // and sessions don't routinely exceed a few hundred events. If
+          // DOM cost ever becomes a concern we should move to virtualization
+          // rather than reintroducing tail-cap truncation (see decision-log).
           setEvents(prev => {
             // Skip if event with same ID already exists
             if (prev.some(existing => existing.id === newEvent.id)) {
               return prev;
             }
-            return [...prev.slice(-200), newEvent]; // Keep last 200 events
+            return [...prev, newEvent];
           });
 
           // Track activity for working indicator
@@ -1115,6 +1201,12 @@ export function StreamViewer({
         ref={scrollRef}
         className="flex-1 overflow-y-auto p-3 space-y-1"
         onScroll={handleScroll}
+        onWheel={handleWheel}
+        onTouchMove={handleTouchMove}
+        onKeyDown={handleKeyDown}
+        // tabIndex so keyboard scroll gestures (PageUp, arrows, etc.) are
+        // detected by onKeyDown when the container itself has focus.
+        tabIndex={-1}
         data-testid="stream-events"
       >
         {events.length === 0 ? (
