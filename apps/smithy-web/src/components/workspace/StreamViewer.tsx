@@ -698,6 +698,14 @@ export function StreamViewer({
             if (prev.some(existing => existing.id === newEvent.id)) {
               return prev;
             }
+            // NOTE: The `prev.slice(-200)` tail-cap here is the root cause of
+            // GitHub issue #46 (Workspaces pane scrolls to top on new message).
+            // Once a session crosses 200 events, this truncation unmounts the
+            // oldest DOM nodes on every SSE event, Chrome's scroll-anchoring
+            // fails, scrollTop collapses to 0, and the subsequent scroll event
+            // flips `shouldAutoScrollRef` to false. Diagnosis: Stoneforge
+            // document el-1meu39. Fix task pending — replace with
+            // virtualization or tail-only rendered slice.
             return [...prev.slice(-200), newEvent]; // Keep last 200 events
           });
 
