@@ -399,6 +399,17 @@ describe("buildWorkflowPresetSection", () => {
     expect(section).toContain("unrestricted tool access");
   });
 
+  it("uses targetBranch in review preset instructions when provided", () => {
+    const context: WorkflowPresetContext = {
+      preset: "review",
+      permissionModel: "unrestricted",
+      targetBranch: "feature/my-branch",
+    };
+    const section = buildWorkflowPresetSection(context);
+    expect(section).toContain("feature/my-branch");
+    expect(section).not.toContain("stoneforge/review");
+  });
+
   it("returns restricted mode instructions for approve preset", () => {
     const context: WorkflowPresetContext = {
       preset: "approve",

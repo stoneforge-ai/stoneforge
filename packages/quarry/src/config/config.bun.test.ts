@@ -36,6 +36,8 @@ import {
   // Validation
   isValidActor,
   validateActor,
+  isValidBaseBranch,
+  validateBaseBranch,
   isValidDatabase,
   validateDatabase,
   isValidJsonlFilename,
@@ -326,6 +328,32 @@ describe('Validation', () => {
 
     test('throws on invalid characters', () => {
       expect(() => validateActor('agent name')).toThrow(ValidationError);
+    });
+  });
+
+  describe('isValidBaseBranch', () => {
+    test('accepts standard git branch names', () => {
+      expect(isValidBaseBranch('feature/my-branch')).toBe(true);
+      expect(isValidBaseBranch('main')).toBe(true);
+    });
+
+    test('rejects invalid base branch names', () => {
+      expect(isValidBaseBranch('foo\\bar')).toBe(false);
+      expect(isValidBaseBranch('')).toBe(false);
+      expect(isValidBaseBranch(' ')).toBe(false);
+    });
+  });
+
+  describe('validateBaseBranch', () => {
+    test('returns valid base branch names', () => {
+      expect(validateBaseBranch('feature/my-branch')).toBe('feature/my-branch');
+      expect(validateBaseBranch('main')).toBe('main');
+    });
+
+    test('throws on invalid base branch names', () => {
+      expect(() => validateBaseBranch('foo\\bar')).toThrow(ValidationError);
+      expect(() => validateBaseBranch('')).toThrow(ValidationError);
+      expect(() => validateBaseBranch(' ')).toThrow(ValidationError);
     });
   });
 
