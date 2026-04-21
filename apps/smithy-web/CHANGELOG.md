@@ -1,5 +1,23 @@
 # @stoneforge/smithy-web
 
+## 1.24.0
+
+### Minor Changes
+
+- ce71ed5: Add container-aware responsive hooks (useContainerWidth, useContainerBreakpoint, useContainerIsMobile, useContainerIsTablet, useContainerIsDesktop) that track the main content container's width via ResizeObserver instead of the viewport width
+- 3ff3f75: Migrate PageHeader and Pagination components from viewport-based breakpoints to container query breakpoints so they respond to the actual content area width when the director panel is open
+
+### Patch Changes
+
+- d253329: Align JS sidebar breakpoints with Tailwind 4 container query defaults (sm:640, md:768, lg:1024, xl:1280, 2xl:1536). Update sidebar tablet/desktop boundary from 1024px to 1280px to match @xl: container query. Update CSS token breakpoint custom properties and @container layout queries.
+- 3bf16c6: Fix sidebar responsive layout to use content area width instead of viewport width. The sidebar now computes `contentAreaWidth = viewportWidth - directorPanelWidth` and uses that for all responsive decisions, ensuring identical behavior whether the director panel is open or closed.
+- 351d7ee: Fix Workspaces pane scroll-to-top regression: new SSE messages no longer jump the StreamViewer to the top when the user has scrolled up. Root cause was DOM churn from a 200-event tail-cap that's now removed; adds user-scroll-intent tracking as defense-in-depth. Sticky-bottom semantics (el-2pyf) are preserved.
+- 3229e78: Migrate header and banner components from viewport breakpoints to container query breakpoints so they respond to actual available width when the director panel is open
+- 83cbf85: Migrate documents, inbox, messages, and settings routes from viewport-based useIsMobile to container-aware useContainerIsMobile
+- 0987a9d: Migrate route pages from viewport to container query breakpoints. All responsive classes in route files now use @sm/@md/@lg/@xl container queries instead of viewport-based sm/md/lg/xl, so layouts adapt to the main content area width rather than the viewport.
+- c313e5b: Migrate responsive CSS custom property tokens (spacing, typography, layout) from viewport @media queries to @container queries so token values adapt based on container width instead of viewport width
+  - @stoneforge/ui@1.24.0
+
 ## 1.23.1
 
 ### Patch Changes

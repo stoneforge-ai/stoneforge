@@ -1,5 +1,27 @@
 # @stoneforge/smithy-server
 
+## 1.24.0
+
+### Patch Changes
+
+- Updated dependencies [9f9e1b9]
+- Updated dependencies [c486f60]
+- Updated dependencies [2db1700]
+- Updated dependencies [cd0997b]
+- Updated dependencies [28696f6]
+- Updated dependencies [2850dea]
+- Updated dependencies [e87fafb]
+- Updated dependencies [28696f6]
+- Updated dependencies [fe994c8]
+- Updated dependencies [fe994c8]
+- Updated dependencies [823ccb9]
+- Updated dependencies [823ccb9]
+  - @stoneforge/smithy@1.24.0
+  - @stoneforge/quarry@1.24.0
+  - @stoneforge/core@1.24.0
+  - @stoneforge/shared-routes@1.24.0
+  - @stoneforge/storage@1.24.0
+
 ## 1.23.1
 
 ### Patch Changes

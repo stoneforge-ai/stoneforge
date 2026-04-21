@@ -1,5 +1,29 @@
 # @stoneforge/smithy
 
+## 1.24.0
+
+### Minor Changes
+
+- 823ccb9: Add pollWorkflowAutoTransition() to dispatch daemon polling loop. Workflows now automatically transition from pending→running when a task starts, running→completed when all tasks close, and pending|running→failed when a task is tombstoned.
+
+### Patch Changes
+
+- 9f9e1b9: Add 'workflow-auto-transition' to PollResult.pollType union type for type safety
+- 2db1700: Docs Steward verifiers now handle Astro Starlight docs sites correctly: `.mdx` files are scanned alongside `.md`, absolute route links like `[x](/guides/foo/)` resolve to the underlying page file under the configured docs directory, and heading anchors tolerate backticks in heading text (so `### \`sf create\``matches anchor`#sf-create`). File-path verifiers also skip bare basenames and product names like "Node.js" that were producing false positives when mentioned in prose.
+- 28696f6: Increase timeout for recovery steward session history test to prevent flaky CI failures
+- fe994c8: Export `getEventsClientCount()` and add `hasConnectedClients` to `SmithyServerResult` to detect active dashboard WebSocket connections
+- Updated dependencies [c486f60]
+- Updated dependencies [cd0997b]
+- Updated dependencies [28696f6]
+- Updated dependencies [2850dea]
+- Updated dependencies [e87fafb]
+- Updated dependencies [fe994c8]
+- Updated dependencies [823ccb9]
+  - @stoneforge/quarry@1.24.0
+  - @stoneforge/core@1.24.0
+  - @stoneforge/shared-routes@1.24.0
+  - @stoneforge/storage@1.24.0
+
 ## 1.23.1
 
 ### Patch Changes
