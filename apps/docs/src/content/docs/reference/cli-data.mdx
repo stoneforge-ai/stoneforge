@@ -263,12 +263,16 @@ sf document search "query" [--category <cat>] [--status <s>] [--limit <n>]
 
 ### `sf document update`
 
-Update content, creating a new version. Each update preserves history.
+Update content, metadata, and/or category, creating a new version. Each update preserves history.
 
 ```bash
 sf document update <id> --content "New content"
 sf document update <id> --file updated-spec.md
+sf document update <id> --metadata '{"key": "value"}'
+sf document update <id> --category reference
 ```
+
+At least one of `--content`, `--file`, `--metadata`, or `--category` is required. Valid categories match those accepted by `sf document create`.
 
 ### `sf document history / rollback`
 
