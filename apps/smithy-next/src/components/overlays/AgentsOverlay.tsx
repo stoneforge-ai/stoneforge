@@ -32,15 +32,17 @@ interface AgentsOverlayProps {
   initialCreate?: boolean
   initialSessionId?: string | null
   initialSessionEventId?: string | null
+  initialSessionsView?: 'list' | 'canvas' | null
   onAgentChange?: (agentId: string | null, tab: string | null) => void
   onPoolChange?: (poolId: string | null) => void
   onCreateChange?: (creating: boolean) => void
   onSessionChange?: (sessionId: string | null, eventId: string | null) => void
+  onSessionsViewChange?: (view: 'list' | 'canvas') => void
   onCreateSession?: (config: { agentId: string; agentName: string; taskId?: string; initialMessage?: string }) => void
   tasks?: Array<{ id: string; title: string }>
 }
 
-export function AgentsOverlay({ onBack: _onBack, onNavigateToWhiteboard, onNavigateToTask, onNavigateToSession, onNavigateToRuntimes, onNavigateToMR, initialAgentId, initialTab, initialCreate, initialSessionId, initialSessionEventId, onAgentChange, onCreateChange, onSessionChange, onCreateSession, tasks }: AgentsOverlayProps) {
+export function AgentsOverlay({ onBack: _onBack, onNavigateToWhiteboard, onNavigateToTask, onNavigateToSession, onNavigateToRuntimes, onNavigateToMR, initialAgentId, initialTab, initialCreate, initialSessionId, initialSessionEventId, initialSessionsView, onAgentChange, onCreateChange, onSessionChange, onSessionsViewChange, onCreateSession, tasks }: AgentsOverlayProps) {
   const [agents, setAgents] = useState<AgentExtended[]>(mockAgentsExtended)
   const [roleDefinitions, setRoleDefinitions] = useState<RoleDefinition[]>(mockRoleDefinitions)
   const [runtimes, setRuntimes] = useState<Runtime[]>(mockRuntimes)
@@ -351,6 +353,8 @@ export function AgentsOverlay({ onBack: _onBack, onNavigateToWhiteboard, onNavig
           agents={agents.map(a => ({ id: a.id, name: a.name, model: a.model, status: a.status }))}
           tasks={tasks}
           onCreateSession={onCreateSession}
+          initialView={initialSessionsView ?? undefined}
+          onViewChange={onSessionsViewChange}
         />
       )
     }

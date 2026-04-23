@@ -453,6 +453,45 @@ input[placeholder*="Search"]:focus {
   50% { opacity: 0.5; }
 }
 
+/* Canvas: needs-input amber pulse (stronger, slow) */
+.session-needs-input-pulse {
+  animation: needsInputPulse 2s ease-in-out infinite;
+}
+@keyframes needsInputPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.55); }
+  50% { box-shadow: 0 0 0 5px rgba(245, 158, 11, 0); }
+}
+
+/* Canvas: active-session progress pulse (thin bar fill sweep) */
+.session-canvas-progress {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--color-primary) 50%,
+    transparent 100%
+  );
+  opacity: 0.7;
+  animation: canvasProgressSweep 2.2s linear infinite;
+}
+@keyframes canvasProgressSweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* Honor reduced-motion preference across the canvas */
+@media (prefers-reduced-motion: reduce) {
+  .session-needs-input-pulse {
+    animation: none;
+    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.8);
+  }
+  .session-canvas-progress {
+    animation: none;
+  }
+  .session-status-pulse {
+    animation: none;
+  }
+}
+
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }

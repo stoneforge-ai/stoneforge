@@ -10,6 +10,8 @@ interface SessionListViewProps {
   selectedSessionId?: string | null
   compact?: boolean
   onCreateSession?: () => void
+  /** Slot rendered after the active count and before the filter pills. */
+  afterTitleSlot?: React.ReactNode
 }
 
 type SessionGroupField = 'status' | 'agent' | 'environment' | 'none'
@@ -57,7 +59,8 @@ function getPreviewLines(session: Session, count: number): string[] {
   return lines
 }
 
-export function SessionListView({ sessions, onSelectSession, selectedSessionId, compact, onCreateSession }: SessionListViewProps) {
+export function SessionListView({ sessions, onSelectSession, selectedSessionId, compact, onCreateSession, afterTitleSlot }: SessionListViewProps) {
+  const activeCount = sessions.filter(s => s.status === 'active').length
   const [searchQuery, setSearchQuery] = useState('')
   const [filters, setFilters] = useState<SessionActiveFilter[]>([])
   const [filterOpen, setFilterOpen] = useState(false)
@@ -165,6 +168,13 @@ export function SessionListView({ sessions, onSelectSession, selectedSessionId, 
         <h1 style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)', margin: 0 }}>
           Sessions
         </h1>
+        <span
+          className="hidden md:inline"
+          style={{ fontSize: 12, color: 'var(--color-text-tertiary)', fontFamily: 'var(--font-mono)' }}
+        >
+          {activeCount} active
+        </span>
+        {afterTitleSlot}
 
         {/* Active filter pills */}
         {filters.map(f => (

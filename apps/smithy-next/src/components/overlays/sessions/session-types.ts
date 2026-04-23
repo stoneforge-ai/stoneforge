@@ -60,6 +60,8 @@ export interface Session {
   title: string
   agent: SessionAgent
   status: SessionStatus
+  /** True when an active session is waiting on the user for guidance. */
+  needsInput?: boolean
   startedAt: string
   /** Total duration, e.g. "5m 34s" */
   duration: string

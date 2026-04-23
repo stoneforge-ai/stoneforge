@@ -81,6 +81,7 @@ interface RouteParams {
   whiteboardDirectorId?: string | null
   sessionId?: string | null
   sessionEventId?: string | null
+  sessionsView?: 'list' | 'canvas' | null
   automationId?: string | null
   automationTab?: string | null
   automationEdit?: boolean | null
@@ -156,13 +157,15 @@ function parseUrl(pathname: string, search: string): { view: View; params: Route
     return { view: 'whiteboard', params }
   }
 
-  // /sessions/{sessionId}?event={eventId}
+  // /sessions/{sessionId}?event={eventId}&view=canvas
   if (p.startsWith('/sessions')) {
     const rest = p.slice('/sessions'.length)
     if (rest.length > 1) {
       params.sessionId = rest.slice(1).split('/')[0]
     }
     params.sessionEventId = q.get('event') || null
+    const viewParam = q.get('view')
+    params.sessionsView = viewParam === 'canvas' ? 'canvas' : viewParam === 'list' ? 'list' : null
     return { view: 'sessions', params }
   }
 
@@ -292,7 +295,10 @@ function buildUrl(view: View, params: RouteParams = {}): string {
     case 'sessions': {
       let url = '/sessions'
       if (params.sessionId) url += `/${params.sessionId}`
-      if (params.sessionEventId) url += `?event=${params.sessionEventId}`
+      const qs: string[] = []
+      if (params.sessionEventId) qs.push(`event=${params.sessionEventId}`)
+      if (params.sessionsView === 'canvas') qs.push('view=canvas')
+      if (qs.length) url += `?${qs.join('&')}`
       return url
     }
     case 'automations': {
@@ -396,6 +402,7 @@ export default function App() {
       setActiveWhiteboardDirectorId(params.whiteboardDirectorId || null)
       setSelectedSessionId(params.sessionId || null)
       setSelectedSessionEventId(params.sessionEventId || null)
+      setSessionsView(params.sessionsView || null)
       setSelectedAutomationId(params.automationId || null)
       setSelectedAutomationTab(params.automationTab || null)
       setSelectedAutomationEdit(!!params.automationEdit)
@@ -426,7 +433,7 @@ export default function App() {
     if (view === 'preview') setActivePreviewTabId(params.previewTabId || null)
     if (view === 'whiteboard') setActiveWhiteboardDirectorId(params.whiteboardDirectorId || null)
     if (view === 'editor') { setEditorFile(params.editorFile || null); setEditorBranch(params.editorBranch || null); setEditorLine(params.editorLine || null); setEditorFrom(params.editorFrom || null); setEditorFromId(params.editorFromId || null); setEditorFromLabel(params.editorFromLabel || null) }
-    if (view === 'sessions') { setSelectedSessionId(params.sessionId || null); setSelectedSessionEventId(params.sessionEventId || null) }
+    if (view === 'sessions') { setSelectedSessionId(params.sessionId || null); setSelectedSessionEventId(params.sessionEventId || null); setSessionsView(params.sessionsView || null) }
     if (view === 'automations') { setSelectedAutomationId(params.automationId || null); setSelectedAutomationTab(params.automationTab || null); setSelectedAutomationEdit(!!params.automationEdit); setSelectedAutomationRunNumber(params.automationRunNumber || null) }
     if (view === 'agents') { setSelectedAgentTab(params.agentTab || null) }
     if (view === 'channels') setSelectedChannelId(params.channelId || null)
@@ -507,6 +514,7 @@ export default function App() {
   const [activeWhiteboardDirectorId, setActiveWhiteboardDirectorId] = useState<string | null>(() => getInitialRoute().params.whiteboardDirectorId || null)
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(() => getInitialRoute().params.sessionId || null)
   const [selectedSessionEventId, setSelectedSessionEventId] = useState<string | null>(() => getInitialRoute().params.sessionEventId || null)
+  const [sessionsView, setSessionsView] = useState<'list' | 'canvas' | null>(() => getInitialRoute().params.sessionsView || null)
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(() => getInitialRoute().params.channelId || null)
 
   // ── Workspace state (lifted) ──
@@ -1045,6 +1053,15 @@ export default function App() {
           initialCreate={agentCreateMode}
           initialSessionId={selectedSessionId}
           initialSessionEventId={selectedSessionEventId}
+          initialSessionsView={sessionsView}
+          onSessionsViewChange={(v) => {
+            setSessionsView(v)
+            pushUrl('sessions', {
+              sessionId: selectedSessionId,
+              sessionEventId: selectedSessionEventId,
+              sessionsView: v,
+            })
+          }}
           onAgentChange={(agentId, tab) => {
             setSelectedAgentId(agentId)
             setSelectedAgentTab(tab)
