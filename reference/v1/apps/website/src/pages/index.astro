@@ -1,0 +1,27 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Hero from '../components/sections/Hero.astro';
+import ProblemTimeline from '../components/sections/ProblemTimeline.astro';
+import Solutions from '../components/sections/Solutions.astro';
+import DemoSection from '../components/sections/DemoSection.astro';
+import Features from '../components/sections/Features.astro';
+import Comparison from '../components/sections/Comparison.astro';
+import QuickStart from '../components/sections/QuickStart.astro';
+import LatestBlog from '../components/sections/LatestBlog.astro';
+import SocialProof from '../components/sections/SocialProof.astro';
+---
+
+<BaseLayout
+  title="Stoneforge — Multi-Agent Orchestration for AI Coding Agents"
+  description="Run teams of AI coding agents in parallel with automatic merge, dependency-aware task dispatch, and a real-time web dashboard. Orchestrate Claude Code, Codex, and OpenCode with multi-agent workflows."
+>
+  <Hero />
+  <ProblemTimeline />
+  <Solutions />
+  <DemoSection />
+  <Features />
+  <Comparison />
+  <QuickStart />
+  <LatestBlog />
+  <SocialProof />
+</BaseLayout>

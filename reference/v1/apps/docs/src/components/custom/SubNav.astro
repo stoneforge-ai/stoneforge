@@ -1,0 +1,94 @@
+---
+/**
+ * SubNav — horizontal tab bar for multi-sidebar sections.
+ * Reads multiSidebar data populated by starlight-utils middleware.
+ */
+
+type SidebarEntry = { type: 'link'; href: string; isCurrent: boolean; label: string; entries: never[] }
+  | { type: 'group'; label: string; entries: SidebarEntry[] };
+
+interface MultiSidebarEntry {
+  isCurrentSidebar: boolean;
+  sidebar: SidebarEntry[];
+  label: { label: string; type: string; entries: SidebarEntry[] };
+}
+
+const multiSidebar: MultiSidebarEntry[] | undefined =
+  (Astro.locals as any).starlightUtils?.multiSidebar;
+
+function findFirstHref(entries: SidebarEntry[]): string | undefined {
+  for (const entry of entries) {
+    if (entry.type === 'link') return entry.href;
+    if (entry.entries) {
+      const found = findFirstHref(entry.entries);
+      if (found) return found;
+    }
+  }
+}
+
+const tabs = (multiSidebar ?? []).map((item) => ({
+  label: item.label.label,
+  href: findFirstHref(item.sidebar) ?? '#',
+  isActive: item.isCurrentSidebar,
+}));
+---
+
+{tabs.length > 0 && (
+  <nav class="sf-subnav" aria-label="Section">
+    {tabs.map((tab) => (
+      <a
+        href={tab.href}
+        class:list={['sf-subnav-tab', { active: tab.isActive }]}
+        aria-current={tab.isActive ? 'true' : undefined}
+      >
+        {tab.label}
+      </a>
+    ))}
+  </nav>
+)}
+
+<style>
+  .sf-subnav {
+    position: fixed;
+    top: var(--sl-nav-height);
+    left: 0;
+    right: 0;
+    z-index: var(--sl-z-index-navbar);
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    height: var(--sf-subnav-height);
+    padding-inline: var(--sl-nav-pad-x, 1rem);
+    background: var(--sl-color-bg-nav);
+    backdrop-filter: blur(20px) saturate(1.5);
+    -webkit-backdrop-filter: blur(20px) saturate(1.5);
+    border-bottom: 1px solid var(--sl-color-hairline);
+  }
+
+  .sf-subnav-tab {
+    font-family: var(--sf-font-body);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    line-height: 1;
+    white-space: nowrap;
+    text-decoration: none;
+    color: var(--sl-color-gray-3);
+    padding-block: 0.5rem;
+    border-bottom: 2px solid transparent;
+    transition: color 0.15s ease, border-color 0.15s ease;
+  }
+
+  .sf-subnav-tab:hover {
+    color: var(--sl-color-gray-1);
+  }
+
+  .sf-subnav-tab.active {
+    color: var(--sl-color-white);
+    font-weight: 600;
+    border-bottom-color: var(--sl-color-accent);
+  }
+
+  :global([data-theme='light']) .sf-subnav-tab.active {
+    color: var(--sl-color-black);
+  }
+</style>

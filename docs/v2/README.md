@@ -23,6 +23,16 @@ This brief is organized in a simple order:
 - the hard decisions frozen early
 - the proving slice the team should build first
 
+## Subordinate Build-Shaping Docs
+
+These docs are subordinate to this README. They translate the charter into first-slice implementation guidance and should not be treated as replacement planning docs.
+
+- [system-model.md](system-model.md)
+- [state-machines.md](state-machines.md)
+- [runtime-architecture.md](runtime-architecture.md)
+- [policy-auth-audit.md](policy-auth-audit.md)
+- [integrations-and-first-slice.md](integrations-and-first-slice.md)
+
 ## What Stoneforge V2 Is
 
 Stoneforge V2 is a clean-room rebuild of Stoneforge around one core job: turning engineering intent into supervised, agent-driven software-engineering execution.
@@ -206,7 +216,9 @@ We are intentionally preferring `scheduler` over `daemon` as the core internal c
 
 ### 7. Worker sessions execute with checkpointed continuity
 
-When a task is dispatched, one or more agent sessions may work on it.
+When a task is dispatched, Stoneforge creates an assignment for that work.
+
+One or more agent sessions may work under that assignment.
 
 Sessions must be resumable.
 
@@ -362,6 +374,8 @@ Examples:
 
 Some automations may be platform-provided or platform-suggested, but many will be user-defined and workflow-specific.
 
+For the first slice, automations may be triggered by product events, time-based schedules, or inbound webhooks. Their actions should create controlled Stoneforge workflow intent or call user-hosted code-first handlers through signed outbound webhooks; they should not bypass scheduler, policy, or audit.
+
 ### Human Intervention Is Core, Not An Edge Case
 
 At any point in the workflow, a human may:
@@ -435,8 +449,8 @@ Execution history is first-class and separate from planning intent.
 
 Core execution records include:
 
+- assignment
 - session
-- run
 - PR
 - CI run
 
@@ -564,7 +578,7 @@ Why:
 Decision:
 
 - tasks remain the planning unit
-- sessions, runs, PRs, and CI runs are first-class execution records
+- assignments, sessions, PRs, and CI runs are first-class execution records
 
 Why:
 
@@ -685,10 +699,10 @@ The first slice should prove:
 1. one team can onboard one real repository into Stoneforge
 2. workspace agents, role definitions, and runtimes can be configured clearly
 3. customer-managed hosts and at least one managed sandbox path can execute real work
-4. a task can become a real execution chain: task -> session/run -> PR -> CI
+4. a task can become a real execution chain: task -> assignment -> session -> PR -> CI
 5. the same control-plane model can drive at least Claude Code and OpenAI Codex
 6. policy and audit work on real actions, not only mocked flows
-7. task-native continuity and documents together improve resumability across sessions and runs
+7. task-native continuity and documents together improve resumability across sessions and assignments
 8. plans and automations add value without creating competing systems
 9. review, change-request, and retry loops remain coherent
 10. failure escalation works

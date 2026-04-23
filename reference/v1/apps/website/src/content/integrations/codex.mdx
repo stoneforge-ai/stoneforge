@@ -1,0 +1,97 @@
+---
+title: "Codex CLI Orchestration with Stoneforge"
+description: "Orchestrate OpenAI Codex CLI as an AI coding agent with Stoneforge. Parallel dispatch, worktree isolation, and automated merging."
+agentName: "Codex CLI"
+agentUrl: "https://github.com/openai/codex"
+configSnippet: |
+  # .stoneforge/config.yaml
+  orchestrator:
+    agent: codex
+    maxConcurrent: 4
+    worktreeIsolation: true
+
+  agents:
+    worker:
+      provider: codex
+      model: o4-mini
+      approval: auto-edit
+    steward:
+      provider: codex
+      model: o4-mini
+      autoMerge: true
+features:
+  - feature: "Single sandboxed session per task"
+    stoneforgeAdds: "Multiple Codex agents dispatched to parallel tasks"
+  - feature: "Manual task assignment and tracking"
+    stoneforgeAdds: "Automatic dispatch with priority and dependency awareness"
+  - feature: "Sandbox isolation per session"
+    stoneforgeAdds: "Git worktree isolation with automatic merge coordination"
+  - feature: "No built-in multi-agent coordination"
+    stoneforgeAdds: "Director-worker-steward role hierarchy"
+  - feature: "Manual review of each change"
+    stoneforgeAdds: "Steward agent runs tests and merges automatically"
+docsLinks:
+  - title: "Quick Start Guide"
+    url: "https://docs.stoneforge.ai/getting-started/quick-start/"
+  - title: "Agent Configuration"
+    url: "https://docs.stoneforge.ai/core-concepts/agents/"
+  - title: "Multi-Agent Providers"
+    url: "https://docs.stoneforge.ai/guides/multi-provider/"
+order: 2
+---
+
+OpenAI's [Codex CLI](https://github.com/openai/codex) is an AI coding agent that runs in a sandboxed terminal environment with built-in safety controls. As a Codex AI coding agent, each session handles one task in isolation.
+
+Stoneforge adds multi-agent orchestration on top of OpenAI Codex, dispatching multiple tasks to parallel Codex CLI agents and handling coordination, merging, and failure recovery.
+
+### How Stoneforge dispatches to Codex CLI
+
+When you create tasks, the Daemon watches the queue and dispatches work to available Codex agents:
+
+```bash
+sf plan create --title "Backend Improvements"
+
+sf task create --title "Add rate limiting to API" --plan "Backend Improvements"
+sf task create --title "Optimize database queries" --plan "Backend Improvements"
+sf task create --title "Add request logging middleware" --plan "Backend Improvements"
+
+# Codex agents pick up tasks automatically
+sf serve
+```
+
+Each Codex agent gets its own worktree, task context, and acceptance criteria.
+
+### Sandboxed execution at scale
+
+Codex CLI's sandboxing keeps each agent contained. Stoneforge adds git-level isolation through worktrees, so multiple Codex agents run in parallel on separate branches without interfering with each other.
+
+### Merge and review pipeline
+
+When a Codex agent completes its task, the Steward:
+
+1. Validates the branch builds and tests pass
+2. Checks for merge conflicts with other completed work
+3. Creates a merge request with a summary of changes
+4. Merges automatically if checks pass, or flags for human review
+
+### Getting started with Codex
+
+```bash
+# Install Stoneforge
+npm install -g @stoneforge/cli
+
+# Initialize and configure for Codex
+sf init
+
+# Update .stoneforge/config.yaml to use codex provider
+# Start orchestrating
+sf serve
+```
+
+Codex CLI has three approval modes: `suggest` (approve everything), `auto-edit` (auto-apply file changes, approve shell commands), and `full-auto` (no confirmation). Set the `approval` field in your Stoneforge config to match your preferred level of oversight.
+
+### Learn more
+
+- [Best AI Coding Agents in 2026](/blog/best-ai-coding-agents-2026/) — see how Codex CLI compares to other AI coding agents
+- [Run Multiple AI Coding Agents in Parallel](/blog/run-multiple-ai-coding-agents-parallel/) — a practical guide to parallel agent workflows
+- [Claude Code Orchestration](/integrations/claude-code/) — compare with another supported AI coding agent provider

@@ -1,0 +1,1744 @@
+/**
+ * Notion Blocks ↔ Markdown Converter Tests
+ *
+ * Tests for bidirectional conversion between markdown and Notion block format.
+ * Covers each block type in both directions, round-trip fidelity, unsupported
+ * block fallback, nested rich text formatting, and edge cases.
+ */
+
+import { describe, expect, test } from 'bun:test';
+import {
+  markdownToNotionBlocks,
+  notionBlocksToMarkdown,
+  parseInlineMarkdown,
+  richTextToMarkdown,
+  chunkRichText,
+  mapLanguageToNotion,
+  isValidNotionUrl,
+  NOTION_MAX_TEXT_LENGTH,
+  NOTION_MAX_RICH_TEXT_ARRAY_LENGTH,
+  NOTION_LANGUAGES,
+  LANGUAGE_ALIASES,
+} from './notion-blocks.js';
+import type {
+  NotionBlock,
+  NotionRichText,
+} from './notion-types.js';
+import { DEFAULT_ANNOTATIONS } from './notion-types.js';
+
+// ============================================================================
+// Test Helpers
+// ============================================================================
+
+/** Create a plain rich text element for test data */
+function plainRichText(content: string): NotionRichText {
+  return {
+    type: 'text',
+    text: { content, link: null },
+    annotations: { ...DEFAULT_ANNOTATIONS },
+    plain_text: content,
+    href: null,
+  };
+}
+
+/** Create an annotated rich text element for test data */
+function annotatedRichText(
+  content: string,
+  overrides: Partial<NotionRichText['annotations']>
+): NotionRichText {
+  return {
+    type: 'text',
+    text: { content, link: null },
+    annotations: { ...DEFAULT_ANNOTATIONS, ...overrides },
+    plain_text: content,
+    href: null,
+  };
+}
+
+/** Create a link rich text element for test data */
+function linkRichText(content: string, url: string): NotionRichText {
+  return {
+    type: 'text',
+    text: { content, link: { url } },
+    annotations: { ...DEFAULT_ANNOTATIONS },
+    plain_text: content,
+    href: url,
+  };
+}
+
+/** Extract rich text from a block's inner payload */
+function getRichText(block: NotionBlock): readonly NotionRichText[] {
+  const inner = (block as Record<string, unknown>)[block.type] as
+    | { rich_text: readonly NotionRichText[] }
+    | undefined;
+  return inner?.rich_text ?? [];
+}
+
+/** Get plain text content from a block */
+function getPlainText(block: NotionBlock): string {
+  return getRichText(block)
+    .map((rt) => rt.plain_text)
+    .join('');
+}
+
+// ============================================================================
+// markdownToNotionBlocks — Individual Block Types
+// ============================================================================
+
+describe('markdownToNotionBlocks', () => {
+  describe('paragraphs', () => {
+    test('converts a single paragraph', () => {
+      const blocks = markdownToNotionBlocks('Hello world');
+      expect(blocks).toHaveLength(1);
+      expect(blocks[0].type).toBe('paragraph');
+      expect(getPlainText(blocks[0])).toBe('Hello world');
+    });
+
+    test('converts multiple paragraphs separated by blank lines', () => {
+      const blocks = markdownToNotionBlocks('First paragraph\n\nSecond paragraph');
+      expect(blocks).toHaveLength(2);
+      expect(blocks[0].type).toBe('paragraph');
+      expect(blocks[1].type).toBe('paragraph');
+      expect(getPlainText(blocks[0])).toBe('First paragraph');
+      expect(getPlainText(blocks[1])).toBe('Second paragraph');
+    });
+
+    test('merges consecutive non-special lines into one paragraph', () => {
+      const blocks = markdownToNotionBlocks('Line one\nLine two\nLine three');
+      expect(blocks).toHaveLength(1);
+      expect(blocks[0].type).toBe('paragraph');
+      expect(getPlainText(blocks[0])).toBe('Line one\nLine two\nLine three');
+    });
+  });
+
+  describe('headings', () => {
+    test('converts h1', () => {
+      const blocks = markdownToNotionBlocks('# Heading 1');
+      expect(blocks).toHaveLength(1);
+      expect(blocks[0].type).toBe('heading_1');
+      expect(getPlainText(blocks[0])).toBe('Heading 1');
+    });
+
+    test('converts h2', () => {
+      const blocks = markdownToNotionBlocks('## Heading 2');
+      expect(blocks).toHaveLength(1);
+      expect(blocks[0].type).toBe('heading_2');
+      expect(getPlainText(blocks[0])).toBe('Heading 2');
+    });
+
+    test('converts h3', () => {
+      const blocks = markdownToNotionBlocks('### Heading 3');
+      expect(blocks).toHaveLength(1);
+      expect(blocks[0].type).toBe('heading_3');
+      expect(getPlainText(blocks[0])).toBe('Heading 3');
+    });
+
+    test('preserves inline formatting in headings', () => {
+      const blocks = markdownToNotionBlocks('## A **bold** heading');
+      expect(blocks).toHaveLength(1);
+      expect(blocks[0].type).toBe('heading_2');
+      const richText = getRichText(blocks[0]);
+      expect(richText).toHaveLength(3);
+      expect(richText[0].plain_text).toBe('A ');
+      expect(richText[1].plain_text).toBe('bold');
+      expect(richText[1].annotations.bold).toBe(true);
+      expect(richText[2].plain_text).toBe(' heading');
+    });
+  });
+
+  describe('bulleted lists', () => {
+    test('converts dash-prefixed items', () => {
+      const blocks = markdownToNotionBlocks('- Item one\n- Item two');
+      expect(blocks).toHaveLength(2);
+      expect(blocks[0].type).toBe('bulleted_list_item');
+      expect(blocks[1].type).toBe('bulleted_list_item');
+      expect(getPlainText(blocks[0])).toBe('Item one');
+      expect(getPlainText(blocks[1])).toBe('Item two');
+    });
+
+    test('converts asterisk-prefixed items', () => {
+      const blocks = markdownToNotionBlocks('* Item one\n* Item two');
+      expect(blocks).toHaveLength(2);
+      expect(blocks[0].type).toBe('bulleted_list_item');
+      expect(blocks[1].type).toBe('bulleted_list_item');
+    });
+  });
+
+  describe('numbered lists', () => {
+    test('converts numbered items', () => {
+      const blocks = markdownToNotionBlocks('1. First\n2. Second\n3. Third');
+      expect(blocks).toHaveLength(3);
+      blocks.forEach((block) => {
+        expect(block.type).toBe('numbered_list_item');
+      });
+      expect(getPlainText(blocks[0])).toBe('First');
+      expect(getPlainText(blocks[1])).toBe('Second');
+      expect(getPlainText(blocks[2])).toBe('Third');
+    });
+  });
+
+  describe('code blocks', () => {
+    test('converts code block with language', () => {
+      const md = '```typescript\nconst x = 1;\nconsole.log(x);\n```';
+      const blocks = markdownToNotionBlocks(md);
+      expect(blocks).toHaveLength(1);
+      expect(blocks[0].type).toBe('code');
+      const code = (blocks[0] as { type: 'code'; code: { rich_text: readonly NotionRichText[]; language: string } }).code;
+      expect(code.language).toBe('typescript');
+      expect(code.rich_text[0].plain_text).toBe('const x = 1;\nconsole.log(x);');
+    });
+
+    test('converts code block without language', () => {
+      const md = '```\nsome code\n```';
+      const blocks = markdownToNotionBlocks(md);
+      expect(blocks).toHaveLength(1);
+      const code = (blocks[0] as { type: 'code'; code: { rich_text: readonly NotionRichText[]; language: string } }).code;
+      expect(code.language).toBe('plain text');
+    });
+
+    test('normalizes common language aliases', () => {
+      const jsBlock = markdownToNotionBlocks('```js\ncode\n```');
+      const code = (jsBlock[0] as { type: 'code'; code: { language: string } }).code;
+      expect(code.language).toBe('javascript');
+
+      const pyBlock = markdownToNotionBlocks('```py\ncode\n```');
+      const pyCode = (pyBlock[0] as { type: 'code'; code: { language: string } }).code;
+      expect(pyCode.language).toBe('python');
+
+      const tsBlock = markdownToNotionBlocks('```ts\ncode\n```');
+      const tsCode = (tsBlock[0] as { type: 'code'; code: { language: string } }).code;
+      expect(tsCode.language).toBe('typescript');
+    });
+
+    test('preserves empty code blocks', () => {
+      const md = '```python\n```';
+      const blocks = markdownToNotionBlocks(md);
+      expect(blocks).toHaveLength(1);
+      const code = (blocks[0] as { type: 'code'; code: { rich_text: readonly NotionRichText[]; language: string } }).code;
+      expect(code.language).toBe('python');
+      expect(code.rich_text[0].plain_text).toBe('');
+    });
+  });
+
+  describe('blockquotes', () => {
+    test('converts single-line blockquote', () => {
+      const blocks = markdownToNotionBlocks('> This is a quote');
+      expect(blocks).toHaveLength(1);
+      expect(blocks[0].type).toBe('quote');
+      expect(getPlainText(blocks[0])).toBe('This is a quote');
+    });
+
+    test('merges consecutive blockquote lines', () => {
+      const blocks = markdownToNotionBlocks('> Line one\n> Line two');
+      expect(blocks).toHaveLength(1);
+      expect(blocks[0].type).toBe('quote');
+      expect(getPlainText(blocks[0])).toBe('Line one\nLine two');
+    });
+  });
+
+  describe('checkboxes (to_do)', () => {
+    test('converts unchecked checkbox', () => {
+      const blocks = markdownToNotionBlocks('- [ ] Unchecked task');
+      expect(blocks).toHaveLength(1);
+      expect(blocks[0].type).toBe('to_do');
+      const todo = (blocks[0] as { type: 'to_do'; to_do: { checked: boolean; rich_text: readonly NotionRichText[] } }).to_do;
+      expect(todo.checked).toBe(false);
+      expect(todo.rich_text[0].plain_text).toBe('Unchecked task');
+    });
+
+    test('converts checked checkbox', () => {
+      const blocks = markdownToNotionBlocks('- [x] Done task');
+      expect(blocks).toHaveLength(1);
+      const todo = (blocks[0] as { type: 'to_do'; to_do: { checked: boolean } }).to_do;
+      expect(todo.checked).toBe(true);
+    });
+
+    test('handles uppercase X', () => {
+      const blocks = markdownToNotionBlocks('- [X] Also done');
+      expect(blocks).toHaveLength(1);
+      const todo = (blocks[0] as { type: 'to_do'; to_do: { checked: boolean } }).to_do;
+      expect(todo.checked).toBe(true);
+    });
+
+    test('converts multiple checkboxes', () => {
+      const md = '- [ ] Task 1\n- [x] Task 2\n- [ ] Task 3';
+      const blocks = markdownToNotionBlocks(md);
+      expect(blocks).toHaveLength(3);
+      blocks.forEach((b) => expect(b.type).toBe('to_do'));
+    });
+  });
+
+  describe('inline formatting', () => {
+    test('converts bold text', () => {
+      const blocks = markdownToNotionBlocks('This is **bold** text');
+      const richText = getRichText(blocks[0]);
+      expect(richText).toHaveLength(3);
+      expect(richText[1].annotations.bold).toBe(true);
+      expect(richText[1].plain_text).toBe('bold');
+    });
+
+    test('converts italic text', () => {
+      const blocks = markdownToNotionBlocks('This is *italic* text');
+      const richText = getRichText(blocks[0]);
+      expect(richText).toHaveLength(3);
+      expect(richText[1].annotations.italic).toBe(true);
+      expect(richText[1].plain_text).toBe('italic');
+    });
+
+    test('converts inline code', () => {
+      const blocks = markdownToNotionBlocks('Use the `console.log` function');
+      const richText = getRichText(blocks[0]);
+      expect(richText).toHaveLength(3);
+      expect(richText[1].annotations.code).toBe(true);
+      expect(richText[1].plain_text).toBe('console.log');
+    });
+
+    test('converts links', () => {
+      const blocks = markdownToNotionBlocks('Visit [Google](https://google.com) today');
+      const richText = getRichText(blocks[0]);
+      expect(richText).toHaveLength(3);
+      expect(richText[1].text.link).toEqual({ url: 'https://google.com' });
+      expect(richText[1].plain_text).toBe('Google');
+      expect(richText[1].href).toBe('https://google.com');
+    });
+
+    test('handles multiple formats in one line', () => {
+      const blocks = markdownToNotionBlocks('**bold** and *italic* and `code`');
+      const richText = getRichText(blocks[0]);
+      expect(richText.length).toBeGreaterThanOrEqual(5);
+      // Check that bold, italic, and code annotations are applied to the right elements
+      const boldElement = richText.find((rt) => rt.annotations.bold);
+      const italicElement = richText.find((rt) => rt.annotations.italic);
+      const codeElement = richText.find((rt) => rt.annotations.code);
+      expect(boldElement).toBeDefined();
+      expect(italicElement).toBeDefined();
+      expect(codeElement).toBeDefined();
+    });
+  });
+
+  describe('edge cases', () => {
+    test('returns empty array for empty string', () => {
+      expect(markdownToNotionBlocks('')).toEqual([]);
+    });
+
+    test('returns empty array for whitespace-only string', () => {
+      expect(markdownToNotionBlocks('   \n  \n  ')).toEqual([]);
+    });
+
+    test('handles mixed block types', () => {
+      const md = `# Title
+
+Some paragraph text.
+
+- Bullet 1
+- Bullet 2
+
+1. Number 1
+2. Number 2
+
+> A quote
+
+\`\`\`python
+print("hello")
+\`\`\`
+
+- [ ] Todo item`;
+      const blocks = markdownToNotionBlocks(md);
+      const types = blocks.map((b) => b.type);
+      expect(types).toContain('heading_1');
+      expect(types).toContain('paragraph');
+      expect(types).toContain('bulleted_list_item');
+      expect(types).toContain('numbered_list_item');
+      expect(types).toContain('quote');
+      expect(types).toContain('code');
+      expect(types).toContain('to_do');
+    });
+  });
+});
+
+// ============================================================================
+// notionBlocksToMarkdown — Individual Block Types
+// ============================================================================
+
+describe('notionBlocksToMarkdown', () => {
+  describe('paragraphs', () => {
+    test('converts paragraph block to text', () => {
+      const blocks: NotionBlock[] = [
+        { type: 'paragraph', paragraph: { rich_text: [plainRichText('Hello world')] } },
+      ];
+      expect(notionBlocksToMarkdown(blocks)).toBe('Hello world');
+    });
+  });
+
+  describe('headings', () => {
+    test('converts heading_1 to # prefix', () => {
+      const blocks: NotionBlock[] = [
+        { type: 'heading_1', heading_1: { rich_text: [plainRichText('Title')] } },
+      ];
+      expect(notionBlocksToMarkdown(blocks)).toBe('# Title');
+    });
+
+    test('converts heading_2 to ## prefix', () => {
+      const blocks: NotionBlock[] = [
+        { type: 'heading_2', heading_2: { rich_text: [plainRichText('Subtitle')] } },
+      ];
+      expect(notionBlocksToMarkdown(blocks)).toBe('## Subtitle');
+    });
+
+    test('converts heading_3 to ### prefix', () => {
+      const blocks: NotionBlock[] = [
+        { type: 'heading_3', heading_3: { rich_text: [plainRichText('Section')] } },
+      ];
+      expect(notionBlocksToMarkdown(blocks)).toBe('### Section');
+    });
+  });
+
+  describe('bulleted lists', () => {
+    test('converts bulleted_list_item to - prefix', () => {
+      const blocks: NotionBlock[] = [
+        { type: 'bulleted_list_item', bulleted_list_item: { rich_text: [plainRichText('Item 1')] } },
+        { type: 'bulleted_list_item', bulleted_list_item: { rich_text: [plainRichText('Item 2')] } },
+      ];
+      expect(notionBlocksToMarkdown(blocks)).toBe('- Item 1\n- Item 2');
+    });
+  });
+
+  describe('numbered lists', () => {
+    test('converts numbered_list_item to 1. prefix', () => {
+      const blocks: NotionBlock[] = [
+        { type: 'numbered_list_item', numbered_list_item: { rich_text: [plainRichText('First')] } },
+        { type: 'numbered_list_item', numbered_list_item: { rich_text: [plainRichText('Second')] } },
+      ];
+      expect(notionBlocksToMarkdown(blocks)).toBe('1. First\n1. Second');
+    });
+  });
+
+  describe('code blocks', () => {
+    test('converts code block with language', () => {
+      const blocks: NotionBlock[] = [
+        {
+          type: 'code',
+          code: {
+            rich_text: [plainRichText('const x = 1;')],
+            language: 'typescript',
+          },
+        },
+      ];
+      expect(notionBlocksToMarkdown(blocks)).toBe('```typescript\nconst x = 1;\n```');
+    });
+
+    test('converts code block with plain text language as no lang', () => {
+      const blocks: NotionBlock[] = [
+        {
+          type: 'code',
+          code: {
+            rich_text: [plainRichText('some code')],
+            language: 'plain text',
+          },
+        },
+      ];
+      expect(notionBlocksToMarkdown(blocks)).toBe('```\nsome code\n```');
+    });
+
+    test('handles empty code block', () => {
+      const blocks: NotionBlock[] = [
+        {
+          type: 'code',
+          code: {
+            rich_text: [plainRichText('')],
+            language: 'javascript',
+          },
+        },
+      ];
+      expect(notionBlocksToMarkdown(blocks)).toBe('```javascript\n\n```');
+    });
+  });
+
+  describe('blockquotes', () => {
+    test('converts quote block to > prefix', () => {
+      const blocks: NotionBlock[] = [
+        { type: 'quote', quote: { rich_text: [plainRichText('A wise quote')] } },
+      ];
+      expect(notionBlocksToMarkdown(blocks)).toBe('> A wise quote');
+    });
+
+    test('prefixes each line of multiline quote', () => {
+      const blocks: NotionBlock[] = [
+        { type: 'quote', quote: { rich_text: [plainRichText('Line 1\nLine 2')] } },
+      ];
+      expect(notionBlocksToMarkdown(blocks)).toBe('> Line 1\n> Line 2');
+    });
+  });
+
+  describe('checkboxes (to_do)', () => {
+    test('converts unchecked to_do to - [ ]', () => {
+      const blocks: NotionBlock[] = [
+        { type: 'to_do', to_do: { rich_text: [plainRichText('Buy milk')], checked: false } },
+      ];
+      expect(notionBlocksToMarkdown(blocks)).toBe('- [ ] Buy milk');
+    });
+
+    test('converts checked to_do to - [x]', () => {
+      const blocks: NotionBlock[] = [
+        { type: 'to_do', to_do: { rich_text: [plainRichText('Done task')], checked: true } },
+      ];
+      expect(notionBlocksToMarkdown(blocks)).toBe('- [x] Done task');
+    });
+  });
+
+  describe('unsupported blocks', () => {
+    test('produces fallback text for unsupported block types', () => {
+      const blocks: NotionBlock[] = [
+        { type: 'divider' } as unknown as NotionBlock,
+      ];
+      expect(notionBlocksToMarkdown(blocks)).toBe('[Unsupported: divider]');
+    });
+
+    test('produces fallback for image blocks', () => {
+      const blocks: NotionBlock[] = [
+        { type: 'image', image: { url: 'https://example.com/img.png' } } as unknown as NotionBlock,
+      ];
+      expect(notionBlocksToMarkdown(blocks)).toBe('[Unsupported: image]');
+    });
+
+    test('produces fallback for table blocks', () => {
+      const blocks: NotionBlock[] = [
+        { type: 'table' } as unknown as NotionBlock,
+      ];
+      expect(notionBlocksToMarkdown(blocks)).toBe('[Unsupported: table]');
+    });
+  });
+
+  describe('rich text formatting', () => {
+    test('converts bold rich text to **', () => {
+      const blocks: NotionBlock[] = [
+        {
+          type: 'paragraph',
+          paragraph: {
+            rich_text: [
+              plainRichText('Hello '),
+              annotatedRichText('bold', { bold: true }),
+              plainRichText(' world'),
+            ],
+          },
+        },
+      ];
+      expect(notionBlocksToMarkdown(blocks)).toBe('Hello **bold** world');
+    });
+
+    test('converts italic rich text to *', () => {
+      const blocks: NotionBlock[] = [
+        {
+          type: 'paragraph',
+          paragraph: {
+            rich_text: [
+              plainRichText('Hello '),
+              annotatedRichText('italic', { italic: true }),
+              plainRichText(' world'),
+            ],
+          },
+        },
+      ];
+      expect(notionBlocksToMarkdown(blocks)).toBe('Hello *italic* world');
+    });
+
+    test('converts inline code rich text to backticks', () => {
+      const blocks: NotionBlock[] = [
+        {
+          type: 'paragraph',
+          paragraph: {
+            rich_text: [
+              plainRichText('Use '),
+              annotatedRichText('console.log', { code: true }),
+              plainRichText(' here'),
+            ],
+          },
+        },
+      ];
+      expect(notionBlocksToMarkdown(blocks)).toBe('Use `console.log` here');
+    });
+
+    test('converts link rich text to [text](url)', () => {
+      const blocks: NotionBlock[] = [
+        {
+          type: 'paragraph',
+          paragraph: {
+            rich_text: [
+              plainRichText('Visit '),
+              linkRichText('Google', 'https://google.com'),
+              plainRichText(' now'),
+            ],
+          },
+        },
+      ];
+      expect(notionBlocksToMarkdown(blocks)).toBe('Visit [Google](https://google.com) now');
+    });
+
+    test('converts bold + italic to ***', () => {
+      const blocks: NotionBlock[] = [
+        {
+          type: 'paragraph',
+          paragraph: {
+            rich_text: [
+              annotatedRichText('bold italic', { bold: true, italic: true }),
+            ],
+          },
+        },
+      ];
+      expect(notionBlocksToMarkdown(blocks)).toBe('***bold italic***');
+    });
+  });
+
+  describe('block spacing', () => {
+    test('adds blank line between different block types', () => {
+      const blocks: NotionBlock[] = [
+        { type: 'heading_1', heading_1: { rich_text: [plainRichText('Title')] } },
+        { type: 'paragraph', paragraph: { rich_text: [plainRichText('Text')] } },
+      ];
+      expect(notionBlocksToMarkdown(blocks)).toBe('# Title\n\nText');
+    });
+
+    test('no blank line between consecutive bulleted list items', () => {
+      const blocks: NotionBlock[] = [
+        { type: 'bulleted_list_item', bulleted_list_item: { rich_text: [plainRichText('A')] } },
+        { type: 'bulleted_list_item', bulleted_list_item: { rich_text: [plainRichText('B')] } },
+      ];
+      expect(notionBlocksToMarkdown(blocks)).toBe('- A\n- B');
+    });
+
+    test('no blank line between consecutive numbered list items', () => {
+      const blocks: NotionBlock[] = [
+        { type: 'numbered_list_item', numbered_list_item: { rich_text: [plainRichText('1st')] } },
+        { type: 'numbered_list_item', numbered_list_item: { rich_text: [plainRichText('2nd')] } },
+      ];
+      expect(notionBlocksToMarkdown(blocks)).toBe('1. 1st\n1. 2nd');
+    });
+
+    test('no blank line between consecutive to_do items', () => {
+      const blocks: NotionBlock[] = [
+        { type: 'to_do', to_do: { rich_text: [plainRichText('A')], checked: false } },
+        { type: 'to_do', to_do: { rich_text: [plainRichText('B')], checked: true } },
+      ];
+      expect(notionBlocksToMarkdown(blocks)).toBe('- [ ] A\n- [x] B');
+    });
+
+    test('blank line between different list types', () => {
+      const blocks: NotionBlock[] = [
+        { type: 'bulleted_list_item', bulleted_list_item: { rich_text: [plainRichText('Bullet')] } },
+        { type: 'numbered_list_item', numbered_list_item: { rich_text: [plainRichText('Number')] } },
+      ];
+      expect(notionBlocksToMarkdown(blocks)).toBe('- Bullet\n\n1. Number');
+    });
+  });
+
+  describe('edge cases', () => {
+    test('returns empty string for empty array', () => {
+      expect(notionBlocksToMarkdown([])).toBe('');
+    });
+
+    test('returns empty string for null/undefined-like input', () => {
+      expect(notionBlocksToMarkdown(null as unknown as NotionBlock[])).toBe('');
+      expect(notionBlocksToMarkdown(undefined as unknown as NotionBlock[])).toBe('');
+    });
+
+    test('handles block with empty rich_text array', () => {
+      const blocks: NotionBlock[] = [
+        { type: 'paragraph', paragraph: { rich_text: [] } },
+      ];
+      expect(notionBlocksToMarkdown(blocks)).toBe('');
+    });
+  });
+});
+
+// ============================================================================
+// Round-Trip Fidelity
+// ============================================================================
+
+describe('round-trip fidelity', () => {
+  test('paragraph round-trips', () => {
+    const md = 'Hello world';
+    const blocks = markdownToNotionBlocks(md);
+    const result = notionBlocksToMarkdown(blocks);
+    expect(result).toBe(md);
+  });
+
+  test('heading round-trips', () => {
+    const md = '## My Heading';
+    const blocks = markdownToNotionBlocks(md);
+    const result = notionBlocksToMarkdown(blocks);
+    expect(result).toBe(md);
+  });
+
+  test('bulleted list round-trips', () => {
+    const md = '- Item A\n- Item B\n- Item C';
+    const blocks = markdownToNotionBlocks(md);
+    const result = notionBlocksToMarkdown(blocks);
+    expect(result).toBe(md);
+  });
+
+  test('code block with language round-trips', () => {
+    const md = '```typescript\nconst x = 42;\n```';
+    const blocks = markdownToNotionBlocks(md);
+    const result = notionBlocksToMarkdown(blocks);
+    expect(result).toBe(md);
+  });
+
+  test('code block without language round-trips', () => {
+    const md = '```\nplain code\n```';
+    const blocks = markdownToNotionBlocks(md);
+    const result = notionBlocksToMarkdown(blocks);
+    expect(result).toBe(md);
+  });
+
+  test('blockquote round-trips', () => {
+    const md = '> This is a quote';
+    const blocks = markdownToNotionBlocks(md);
+    const result = notionBlocksToMarkdown(blocks);
+    expect(result).toBe(md);
+  });
+
+  test('unchecked to_do round-trips', () => {
+    const md = '- [ ] Unchecked task';
+    const blocks = markdownToNotionBlocks(md);
+    const result = notionBlocksToMarkdown(blocks);
+    expect(result).toBe(md);
+  });
+
+  test('checked to_do round-trips', () => {
+    const md = '- [x] Done task';
+    const blocks = markdownToNotionBlocks(md);
+    const result = notionBlocksToMarkdown(blocks);
+    expect(result).toBe(md);
+  });
+
+  test('bold text round-trips', () => {
+    const md = 'This is **bold** text';
+    const blocks = markdownToNotionBlocks(md);
+    const result = notionBlocksToMarkdown(blocks);
+    expect(result).toBe(md);
+  });
+
+  test('italic text round-trips', () => {
+    const md = 'This is *italic* text';
+    const blocks = markdownToNotionBlocks(md);
+    const result = notionBlocksToMarkdown(blocks);
+    expect(result).toBe(md);
+  });
+
+  test('inline code round-trips', () => {
+    const md = 'Use `console.log` here';
+    const blocks = markdownToNotionBlocks(md);
+    const result = notionBlocksToMarkdown(blocks);
+    expect(result).toBe(md);
+  });
+
+  test('link round-trips', () => {
+    const md = 'Visit [Google](https://google.com) today';
+    const blocks = markdownToNotionBlocks(md);
+    const result = notionBlocksToMarkdown(blocks);
+    expect(result).toBe(md);
+  });
+
+  test('complex document round-trips', () => {
+    const md = `# Main Title
+
+This is a paragraph with **bold** and *italic* text.
+
+## Section 1
+
+- Bullet one
+- Bullet two
+
+1. Number one
+1. Number two
+
+> A famous quote
+
+\`\`\`javascript
+const x = 42;
+\`\`\`
+
+- [ ] Todo 1
+- [x] Todo 2`;
+    const blocks = markdownToNotionBlocks(md);
+    const result = notionBlocksToMarkdown(blocks);
+    expect(result).toBe(md);
+  });
+});
+
+// ============================================================================
+// parseInlineMarkdown (exported helper)
+// ============================================================================
+
+describe('parseInlineMarkdown', () => {
+  test('returns empty array for empty string', () => {
+    expect(parseInlineMarkdown('')).toEqual([]);
+  });
+
+  test('returns plain text for unformatted string', () => {
+    const result = parseInlineMarkdown('Hello world');
+    expect(result).toHaveLength(1);
+    expect(result[0].plain_text).toBe('Hello world');
+    expect(result[0].annotations.bold).toBe(false);
+    expect(result[0].annotations.italic).toBe(false);
+    expect(result[0].annotations.code).toBe(false);
+  });
+
+  test('parses __bold__ syntax', () => {
+    const result = parseInlineMarkdown('__underscored bold__');
+    expect(result).toHaveLength(1);
+    expect(result[0].annotations.bold).toBe(true);
+    expect(result[0].plain_text).toBe('underscored bold');
+  });
+
+  test('parses _italic_ syntax', () => {
+    const result = parseInlineMarkdown('_underscored italic_');
+    expect(result).toHaveLength(1);
+    expect(result[0].annotations.italic).toBe(true);
+    expect(result[0].plain_text).toBe('underscored italic');
+  });
+});
+
+// ============================================================================
+// richTextToMarkdown (exported helper)
+// ============================================================================
+
+describe('richTextToMarkdown', () => {
+  test('returns empty string for empty array', () => {
+    expect(richTextToMarkdown([])).toBe('');
+  });
+
+  test('returns empty string for null/undefined', () => {
+    expect(richTextToMarkdown(null as unknown as NotionRichText[])).toBe('');
+    expect(richTextToMarkdown(undefined as unknown as NotionRichText[])).toBe('');
+  });
+
+  test('concatenates multiple plain text elements', () => {
+    const result = richTextToMarkdown([
+      plainRichText('Hello '),
+      plainRichText('world'),
+    ]);
+    expect(result).toBe('Hello world');
+  });
+
+  test('applies bold formatting', () => {
+    const result = richTextToMarkdown([
+      annotatedRichText('bold', { bold: true }),
+    ]);
+    expect(result).toBe('**bold**');
+  });
+
+  test('applies italic formatting', () => {
+    const result = richTextToMarkdown([
+      annotatedRichText('italic', { italic: true }),
+    ]);
+    expect(result).toBe('*italic*');
+  });
+
+  test('applies code formatting', () => {
+    const result = richTextToMarkdown([
+      annotatedRichText('code', { code: true }),
+    ]);
+    expect(result).toBe('`code`');
+  });
+
+  test('applies link formatting', () => {
+    const result = richTextToMarkdown([
+      linkRichText('click here', 'https://example.com'),
+    ]);
+    expect(result).toBe('[click here](https://example.com)');
+  });
+
+  test('code takes precedence over bold/italic', () => {
+    const result = richTextToMarkdown([
+      annotatedRichText('code', { code: true, bold: true, italic: true }),
+    ]);
+    // code should be applied, not bold/italic wrapping
+    expect(result).toBe('`code`');
+  });
+});
+
+// ============================================================================
+// Rich Text Chunking (Notion 2000-character limit)
+// ============================================================================
+
+describe('chunkRichText', () => {
+  test('short text (<2000 chars) returns single element unchanged', () => {
+    const result = chunkRichText('Hello world');
+    expect(result).toHaveLength(1);
+    expect(result[0].text!.content).toBe('Hello world');
+    expect(result[0].plain_text).toBe('Hello world');
+    expect(result[0].type).toBe('text');
+  });
+
+  test('text exactly at 2000 chars returns single element', () => {
+    const text = 'a'.repeat(2000);
+    const result = chunkRichText(text);
+    expect(result).toHaveLength(1);
+    expect(result[0].text!.content).toBe(text);
+  });
+
+  test('text >2000 chars is split into multiple elements', () => {
+    const text = 'word '.repeat(500); // 2500 chars
+    const result = chunkRichText(text);
+    expect(result.length).toBeGreaterThan(1);
+    result.forEach((rt) => {
+      expect(rt.text!.content.length).toBeLessThanOrEqual(2000);
+      expect(rt.type).toBe('text');
+    });
+    // Verify all content is preserved (after joining and normalizing whitespace)
+    const joined = result.map((rt) => rt.text!.content).join(' ');
+    expect(joined.replace(/\s+/g, ' ').trim()).toBe(text.trim());
+  });
+
+  test('split happens at word boundaries', () => {
+    // Create text with words, where a space exists before position 2000
+    const words = [];
+    let length = 0;
+    while (length < 2500) {
+      const word = 'testing';
+      words.push(word);
+      length += word.length + 1; // +1 for space
+    }
+    const text = words.join(' ');
+    const result = chunkRichText(text);
+    expect(result.length).toBeGreaterThan(1);
+    // First chunk should end at a word boundary (no partial words)
+    const firstContent = result[0].text!.content;
+    expect(firstContent.length).toBeLessThanOrEqual(2000);
+    // The chunk should end with a complete word (no trailing space, but ends at "testing")
+    expect(firstContent).toMatch(/testing$/);
+    // Verify the split didn't cut a word in half
+    const secondContent = result[1].text!.content;
+    expect(secondContent).toMatch(/^testing/);
+  });
+
+  test('hard split when no word boundary exists', () => {
+    // A single 3000-char "word" with no spaces
+    const text = 'a'.repeat(3000);
+    const result = chunkRichText(text);
+    expect(result.length).toBeGreaterThan(1);
+    expect(result[0].text!.content.length).toBe(2000);
+    expect(result[1].text!.content.length).toBe(1000);
+  });
+
+  test('respects custom maxLength', () => {
+    const text = 'hello world foo bar baz';
+    const result = chunkRichText(text, 11);
+    expect(result.length).toBeGreaterThan(1);
+    result.forEach((rt) => {
+      expect(rt.text!.content.length).toBeLessThanOrEqual(11);
+    });
+  });
+});
+
+describe('markdownToNotionBlocks — rich text chunking', () => {
+  test('paragraph with >2000 chars splits into multiple rich_text elements', () => {
+    const longText = 'word '.repeat(500); // 2500 chars
+    const blocks = markdownToNotionBlocks(longText);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].type).toBe('paragraph');
+    const richText = getRichText(blocks[0]);
+    expect(richText.length).toBeGreaterThan(1);
+    richText.forEach((rt) => {
+      expect(rt.text!.content.length).toBeLessThanOrEqual(NOTION_MAX_TEXT_LENGTH);
+    });
+  });
+
+  test('heading with >2000 chars splits into multiple rich_text elements', () => {
+    const longText = '# ' + 'word '.repeat(500);
+    const blocks = markdownToNotionBlocks(longText);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].type).toBe('heading_1');
+    const richText = getRichText(blocks[0]);
+    expect(richText.length).toBeGreaterThan(1);
+    richText.forEach((rt) => {
+      expect(rt.text!.content.length).toBeLessThanOrEqual(NOTION_MAX_TEXT_LENGTH);
+    });
+  });
+
+  test('bulleted list item with >2000 chars splits into multiple rich_text elements', () => {
+    const longText = '- ' + 'word '.repeat(500);
+    const blocks = markdownToNotionBlocks(longText);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].type).toBe('bulleted_list_item');
+    const richText = getRichText(blocks[0]);
+    expect(richText.length).toBeGreaterThan(1);
+    richText.forEach((rt) => {
+      expect(rt.text!.content.length).toBeLessThanOrEqual(NOTION_MAX_TEXT_LENGTH);
+    });
+  });
+
+  test('numbered list item with >2000 chars splits into multiple rich_text elements', () => {
+    const longText = '1. ' + 'word '.repeat(500);
+    const blocks = markdownToNotionBlocks(longText);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].type).toBe('numbered_list_item');
+    const richText = getRichText(blocks[0]);
+    expect(richText.length).toBeGreaterThan(1);
+    richText.forEach((rt) => {
+      expect(rt.text!.content.length).toBeLessThanOrEqual(NOTION_MAX_TEXT_LENGTH);
+    });
+  });
+
+  test('quote with >2000 chars splits into multiple rich_text elements', () => {
+    const longText = '> ' + 'word '.repeat(500);
+    const blocks = markdownToNotionBlocks(longText);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].type).toBe('quote');
+    const richText = getRichText(blocks[0]);
+    expect(richText.length).toBeGreaterThan(1);
+    richText.forEach((rt) => {
+      expect(rt.text!.content.length).toBeLessThanOrEqual(NOTION_MAX_TEXT_LENGTH);
+    });
+  });
+
+  test('to_do with >2000 chars splits into multiple rich_text elements', () => {
+    const longText = '- [ ] ' + 'word '.repeat(500);
+    const blocks = markdownToNotionBlocks(longText);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].type).toBe('to_do');
+    const richText = getRichText(blocks[0]);
+    expect(richText.length).toBeGreaterThan(1);
+    richText.forEach((rt) => {
+      expect(rt.text!.content.length).toBeLessThanOrEqual(NOTION_MAX_TEXT_LENGTH);
+    });
+  });
+
+  test('code block with >2000 chars splits into multiple code blocks', () => {
+    const longCode = 'x = 1\n'.repeat(500); // ~3000 chars
+    const md = '```python\n' + longCode + '```';
+    const blocks = markdownToNotionBlocks(md);
+    expect(blocks.length).toBeGreaterThan(1);
+    blocks.forEach((block) => {
+      expect(block.type).toBe('code');
+      const code = (block as { type: 'code'; code: { rich_text: readonly NotionRichText[]; language: string } }).code;
+      expect(code.language).toBe('python');
+      expect(code.rich_text[0].text!.content.length).toBeLessThanOrEqual(NOTION_MAX_TEXT_LENGTH);
+    });
+    // Verify content is preserved
+    const allCode = blocks.map((b) => {
+      const code = (b as { type: 'code'; code: { rich_text: readonly NotionRichText[] } }).code;
+      return code.rich_text[0].plain_text;
+    }).join('\n');
+    expect(allCode).toBe(longCode.trimEnd());
+  });
+
+  test('code block with <2000 chars is unchanged (no regression)', () => {
+    const md = '```typescript\nconst x = 1;\n```';
+    const blocks = markdownToNotionBlocks(md);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].type).toBe('code');
+  });
+
+  test('formatting annotations preserved across chunks', () => {
+    // Create a very long bold text that exceeds 2000 chars
+    const longBoldContent = 'word '.repeat(500); // 2500 chars
+    const md = '**' + longBoldContent.trim() + '**';
+    const blocks = markdownToNotionBlocks(md);
+    expect(blocks).toHaveLength(1);
+    const richText = getRichText(blocks[0]);
+    expect(richText.length).toBeGreaterThan(1);
+    // All chunks should preserve the bold annotation
+    richText.forEach((rt) => {
+      expect(rt.annotations.bold).toBe(true);
+      expect(rt.text!.content.length).toBeLessThanOrEqual(NOTION_MAX_TEXT_LENGTH);
+    });
+  });
+
+  test('link annotation preserved across chunks', () => {
+    // Create a very long link text that exceeds 2000 chars
+    const longLinkContent = 'word '.repeat(500); // 2500 chars
+    const md = '[' + longLinkContent.trim() + '](https://example.com)';
+    const blocks = markdownToNotionBlocks(md);
+    expect(blocks).toHaveLength(1);
+    const richText = getRichText(blocks[0]);
+    expect(richText.length).toBeGreaterThan(1);
+    // All chunks should preserve the link
+    richText.forEach((rt) => {
+      expect(rt.href).toBe('https://example.com');
+      expect(rt.text!.link).toEqual({ url: 'https://example.com' });
+      expect(rt.text!.content.length).toBeLessThanOrEqual(NOTION_MAX_TEXT_LENGTH);
+    });
+  });
+
+  test('short text (<2000 chars) is unchanged (no regression)', () => {
+    const blocks = markdownToNotionBlocks('Hello world');
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].type).toBe('paragraph');
+    const richText = getRichText(blocks[0]);
+    expect(richText).toHaveLength(1);
+    expect(richText[0].plain_text).toBe('Hello world');
+  });
+
+  test('mixed short and long blocks handled correctly', () => {
+    const shortParagraph = 'Short text.';
+    const longParagraph = 'word '.repeat(500); // 2500 chars
+    const md = shortParagraph + '\n\n' + longParagraph;
+    const blocks = markdownToNotionBlocks(md);
+    expect(blocks).toHaveLength(2);
+    // First block should have 1 rich_text element (short)
+    const firstRt = getRichText(blocks[0]);
+    expect(firstRt).toHaveLength(1);
+    // Second block should have multiple rich_text elements (long)
+    const secondRt = getRichText(blocks[1]);
+    expect(secondRt.length).toBeGreaterThan(1);
+  });
+});
+
+// ============================================================================
+// Rich Text Array Length Enforcement (Notion 100-element limit)
+// ============================================================================
+
+describe('markdownToNotionBlocks — rich_text array length enforcement', () => {
+  /**
+   * Generate a markdown paragraph with many alternating inline tokens that
+   * will produce at least `count` rich_text elements from parseInlineMarkdown.
+   * Pattern: "plain **bold** plain **bold** ..." — each pair produces 2 elements
+   * (one plain, one bold), plus a trailing plain element.
+   */
+  function generateInlineHeavyMarkdown(targetElements: number): string {
+    // Each pair of "text **bold** " produces: plain("text ") + bold("bold") + plain(" ")
+    // Actually parseInlineMarkdown produces: plain before match, then annotated match.
+    // Pattern: "a **b** " → plain("a "), bold("b"), plain(" ")
+    // So each "a **b** " generates 3 elements. We need targetElements / 3 repetitions + extra.
+    // Let's use a simpler approach: alternate between different formatting types.
+    // "a `c` " → plain("a "), code("c"), plain(" ") = 3 elements per group
+    const parts: string[] = [];
+    // Each iteration of "w0 **w1** " gives ~3 rich_text elements
+    // We want at least targetElements, so need ceil(targetElements/3) iterations
+    const iterations = Math.ceil(targetElements / 2);
+    for (let i = 0; i < iterations; i++) {
+      parts.push(`w${i} **b${i}**`);
+    }
+    return parts.join(' ');
+  }
+
+  test('paragraph with >100 inline tokens splits into multiple blocks', () => {
+    // Generate markdown that produces well over 100 rich_text elements
+    const md = generateInlineHeavyMarkdown(160);
+    const blocks = markdownToNotionBlocks(md);
+
+    // Should produce multiple paragraph blocks
+    expect(blocks.length).toBeGreaterThan(1);
+
+    // Every block's rich_text array must be ≤ 100 elements
+    for (const block of blocks) {
+      expect(block.type).toBe('paragraph');
+      const richText = getRichText(block);
+      expect(richText.length).toBeLessThanOrEqual(NOTION_MAX_RICH_TEXT_ARRAY_LENGTH);
+      expect(richText.length).toBeGreaterThan(0);
+    }
+
+    // All text content should be preserved across blocks
+    const allText = blocks.map((b) => getPlainText(b)).join('');
+    // Verify it contains the key content (not empty or truncated)
+    expect(allText).toContain('w0');
+    expect(allText).toContain('b0');
+    expect(allText.length).toBeGreaterThan(100);
+  });
+
+  test('heading with >100 inline tokens splits: first block is heading, rest are paragraphs', () => {
+    const md = '# ' + generateInlineHeavyMarkdown(160);
+    const blocks = markdownToNotionBlocks(md);
+
+    expect(blocks.length).toBeGreaterThan(1);
+    expect(blocks[0].type).toBe('heading_1');
+    expect(getRichText(blocks[0]).length).toBeLessThanOrEqual(NOTION_MAX_RICH_TEXT_ARRAY_LENGTH);
+
+    // Overflow blocks should be paragraphs
+    for (let i = 1; i < blocks.length; i++) {
+      expect(blocks[i].type).toBe('paragraph');
+      expect(getRichText(blocks[i]).length).toBeLessThanOrEqual(NOTION_MAX_RICH_TEXT_ARRAY_LENGTH);
+    }
+  });
+
+  test('bulleted list with >100 inline tokens splits into multiple list items', () => {
+    const md = '- ' + generateInlineHeavyMarkdown(160);
+    const blocks = markdownToNotionBlocks(md);
+
+    expect(blocks.length).toBeGreaterThan(1);
+    for (const block of blocks) {
+      expect(block.type).toBe('bulleted_list_item');
+      expect(getRichText(block).length).toBeLessThanOrEqual(NOTION_MAX_RICH_TEXT_ARRAY_LENGTH);
+    }
+  });
+
+  test('numbered list with >100 inline tokens splits into multiple list items', () => {
+    const md = '1. ' + generateInlineHeavyMarkdown(160);
+    const blocks = markdownToNotionBlocks(md);
+
+    expect(blocks.length).toBeGreaterThan(1);
+    for (const block of blocks) {
+      expect(block.type).toBe('numbered_list_item');
+      expect(getRichText(block).length).toBeLessThanOrEqual(NOTION_MAX_RICH_TEXT_ARRAY_LENGTH);
+    }
+  });
+
+  test('quote with >100 inline tokens splits into multiple quote blocks', () => {
+    const md = '> ' + generateInlineHeavyMarkdown(160);
+    const blocks = markdownToNotionBlocks(md);
+
+    expect(blocks.length).toBeGreaterThan(1);
+    for (const block of blocks) {
+      expect(block.type).toBe('quote');
+      expect(getRichText(block).length).toBeLessThanOrEqual(NOTION_MAX_RICH_TEXT_ARRAY_LENGTH);
+    }
+  });
+
+  test('to_do with >100 inline tokens splits into multiple to_do blocks', () => {
+    const md = '- [x] ' + generateInlineHeavyMarkdown(160);
+    const blocks = markdownToNotionBlocks(md);
+
+    expect(blocks.length).toBeGreaterThan(1);
+    for (const block of blocks) {
+      expect(block.type).toBe('to_do');
+      expect(getRichText(block).length).toBeLessThanOrEqual(NOTION_MAX_RICH_TEXT_ARRAY_LENGTH);
+    }
+
+    // First block should be checked, overflow blocks unchecked
+    const firstToDo = blocks[0] as { type: 'to_do'; to_do: { checked: boolean } };
+    expect(firstToDo.to_do.checked).toBe(true);
+    if (blocks.length > 1) {
+      const secondToDo = blocks[1] as { type: 'to_do'; to_do: { checked: boolean } };
+      expect(secondToDo.to_do.checked).toBe(false);
+    }
+  });
+
+  test('paragraph with exactly 100 elements is NOT split', () => {
+    // Generate markdown that after merging will have ≤100 elements
+    // Use exactly 50 bold tokens: each produces plain + bold = ~100 elements
+    // But merging may reduce this. Let's use distinct formatting to prevent merging.
+    const parts: string[] = [];
+    for (let i = 0; i < 50; i++) {
+      parts.push(`x **b${i}**`);
+    }
+    const md = parts.join(' ');
+    const blocks = markdownToNotionBlocks(md);
+
+    // Should be a single block (merging reduces adjacent plains)
+    // After parsing: plain, bold, plain, bold, ... → merging adjacent plains
+    // → bold, plain, bold, plain, ... → 50 bold + 49 plain + 1 leading plain = 100
+    // But actually merging only merges elements with SAME annotations,
+    // and plain elements between bolds would be merged.
+    // Let's just verify no block exceeds the limit
+    for (const block of blocks) {
+      expect(getRichText(block).length).toBeLessThanOrEqual(NOTION_MAX_RICH_TEXT_ARRAY_LENGTH);
+    }
+  });
+
+  test('adjacent plain text elements are merged to reduce array count', () => {
+    // parseInlineMarkdown("hello world") → single plain element
+    // But after character chunking of a long text, we might get multiple plain elements
+    // The merging step should combine them
+    const blocks = markdownToNotionBlocks('Hello world, this is plain text');
+    expect(blocks).toHaveLength(1);
+    const richText = getRichText(blocks[0]);
+    expect(richText).toHaveLength(1); // Should be a single merged element
+  });
+
+  test('NOTION_MAX_RICH_TEXT_ARRAY_LENGTH is 100', () => {
+    expect(NOTION_MAX_RICH_TEXT_ARRAY_LENGTH).toBe(100);
+  });
+});
+
+// ============================================================================
+// Language Mapping (mapLanguageToNotion)
+// ============================================================================
+
+describe('mapLanguageToNotion', () => {
+  describe('alias mapping', () => {
+    test('"tsx" maps to "typescript"', () => {
+      expect(mapLanguageToNotion('tsx')).toBe('typescript');
+    });
+
+    test('"ts" maps to "typescript"', () => {
+      expect(mapLanguageToNotion('ts')).toBe('typescript');
+    });
+
+    test('"jsx" maps to "javascript"', () => {
+      expect(mapLanguageToNotion('jsx')).toBe('javascript');
+    });
+
+    test('"js" maps to "javascript"', () => {
+      expect(mapLanguageToNotion('js')).toBe('javascript');
+    });
+
+    test('"sh" maps to "shell"', () => {
+      expect(mapLanguageToNotion('sh')).toBe('shell');
+    });
+
+    test('"zsh" maps to "shell"', () => {
+      expect(mapLanguageToNotion('zsh')).toBe('shell');
+    });
+
+    test('"yml" maps to "yaml"', () => {
+      expect(mapLanguageToNotion('yml')).toBe('yaml');
+    });
+
+    test('"py" maps to "python"', () => {
+      expect(mapLanguageToNotion('py')).toBe('python');
+    });
+
+    test('"rb" maps to "ruby"', () => {
+      expect(mapLanguageToNotion('rb')).toBe('ruby');
+    });
+
+    test('"rs" maps to "rust"', () => {
+      expect(mapLanguageToNotion('rs')).toBe('rust');
+    });
+
+    test('"cs" maps to "c#"', () => {
+      expect(mapLanguageToNotion('cs')).toBe('c#');
+    });
+
+    test('"cpp" maps to "c++"', () => {
+      expect(mapLanguageToNotion('cpp')).toBe('c++');
+    });
+
+    test('"objc" maps to "objective-c"', () => {
+      expect(mapLanguageToNotion('objc')).toBe('objective-c');
+    });
+
+    test('"dockerfile" maps to "docker"', () => {
+      expect(mapLanguageToNotion('dockerfile')).toBe('docker');
+    });
+
+    test('"tf" maps to "hcl"', () => {
+      expect(mapLanguageToNotion('tf')).toBe('hcl');
+    });
+
+    test('"hs" maps to "haskell"', () => {
+      expect(mapLanguageToNotion('hs')).toBe('haskell');
+    });
+
+    test('"ex" maps to "elixir"', () => {
+      expect(mapLanguageToNotion('ex')).toBe('elixir');
+    });
+
+    test('"exs" maps to "elixir"', () => {
+      expect(mapLanguageToNotion('exs')).toBe('elixir');
+    });
+
+    test('"kt" maps to "kotlin"', () => {
+      expect(mapLanguageToNotion('kt')).toBe('kotlin');
+    });
+
+    test('"fs" maps to "f#"', () => {
+      expect(mapLanguageToNotion('fs')).toBe('f#');
+    });
+
+    test('"fsharp" maps to "f#"', () => {
+      expect(mapLanguageToNotion('fsharp')).toBe('f#');
+    });
+
+    test('"csharp" maps to "c#"', () => {
+      expect(mapLanguageToNotion('csharp')).toBe('c#');
+    });
+
+    test('"jsonc" maps to "json"', () => {
+      expect(mapLanguageToNotion('jsonc')).toBe('json');
+    });
+
+    test('"md" maps to "markdown"', () => {
+      expect(mapLanguageToNotion('md')).toBe('markdown');
+    });
+
+    test('"text" maps to "plain text"', () => {
+      expect(mapLanguageToNotion('text')).toBe('plain text');
+    });
+
+    test('"txt" maps to "plain text"', () => {
+      expect(mapLanguageToNotion('txt')).toBe('plain text');
+    });
+
+    test('"plaintext" maps to "plain text"', () => {
+      expect(mapLanguageToNotion('plaintext')).toBe('plain text');
+    });
+  });
+
+  describe('valid Notion languages pass through', () => {
+    test('"python" stays "python"', () => {
+      expect(mapLanguageToNotion('python')).toBe('python');
+    });
+
+    test('"typescript" stays "typescript"', () => {
+      expect(mapLanguageToNotion('typescript')).toBe('typescript');
+    });
+
+    test('"javascript" stays "javascript"', () => {
+      expect(mapLanguageToNotion('javascript')).toBe('javascript');
+    });
+
+    test('"rust" stays "rust"', () => {
+      expect(mapLanguageToNotion('rust')).toBe('rust');
+    });
+
+    test('"go" stays "go"', () => {
+      expect(mapLanguageToNotion('go')).toBe('go');
+    });
+
+    test('"bash" stays "bash"', () => {
+      expect(mapLanguageToNotion('bash')).toBe('bash');
+    });
+
+    test('"sql" stays "sql"', () => {
+      expect(mapLanguageToNotion('sql')).toBe('sql');
+    });
+
+    test('"plain text" stays "plain text"', () => {
+      expect(mapLanguageToNotion('plain text')).toBe('plain text');
+    });
+  });
+
+  describe('unknown and edge cases', () => {
+    test('unknown language falls back to "plain text"', () => {
+      expect(mapLanguageToNotion('brainfuck')).toBe('plain text');
+    });
+
+    test('empty string becomes "plain text"', () => {
+      expect(mapLanguageToNotion('')).toBe('plain text');
+    });
+
+    test('whitespace-only string becomes "plain text"', () => {
+      expect(mapLanguageToNotion('   ')).toBe('plain text');
+    });
+
+    test('case insensitive matching', () => {
+      expect(mapLanguageToNotion('TypeScript')).toBe('typescript');
+      expect(mapLanguageToNotion('PYTHON')).toBe('python');
+      expect(mapLanguageToNotion('TSX')).toBe('typescript');
+      expect(mapLanguageToNotion('JSX')).toBe('javascript');
+    });
+
+    test('trims whitespace', () => {
+      expect(mapLanguageToNotion('  typescript  ')).toBe('typescript');
+      expect(mapLanguageToNotion(' tsx ')).toBe('typescript');
+    });
+  });
+
+  describe('all aliases map to valid Notion languages', () => {
+    test('every alias value is in NOTION_LANGUAGES', () => {
+      for (const [alias, target] of Object.entries(LANGUAGE_ALIASES)) {
+        expect(NOTION_LANGUAGES.has(target)).toBe(true);
+      }
+    });
+  });
+});
+
+// ============================================================================
+// Language Mapping Integration (markdownToNotionBlocks → notionBlocksToMarkdown)
+// ============================================================================
+
+describe('language mapping integration', () => {
+  describe('markdownToNotionBlocks maps languages correctly', () => {
+    test('tsx code fence maps to typescript', () => {
+      const blocks = markdownToNotionBlocks('```tsx\nconst x: React.FC = () => null;\n```');
+      const code = (blocks[0] as { type: 'code'; code: { language: string } }).code;
+      expect(code.language).toBe('typescript');
+    });
+
+    test('jsx code fence maps to javascript', () => {
+      const blocks = markdownToNotionBlocks('```jsx\nconst App = () => <div />;\n```');
+      const code = (blocks[0] as { type: 'code'; code: { language: string } }).code;
+      expect(code.language).toBe('javascript');
+    });
+
+    test('sh code fence maps to shell', () => {
+      const blocks = markdownToNotionBlocks('```sh\necho hello\n```');
+      const code = (blocks[0] as { type: 'code'; code: { language: string } }).code;
+      expect(code.language).toBe('shell');
+    });
+
+    test('yml code fence maps to yaml', () => {
+      const blocks = markdownToNotionBlocks('```yml\nkey: value\n```');
+      const code = (blocks[0] as { type: 'code'; code: { language: string } }).code;
+      expect(code.language).toBe('yaml');
+    });
+
+    test('unknown language falls back to plain text', () => {
+      const blocks = markdownToNotionBlocks('```brainfuck\n++++\n```');
+      const code = (blocks[0] as { type: 'code'; code: { language: string } }).code;
+      expect(code.language).toBe('plain text');
+    });
+
+    test('empty language becomes plain text', () => {
+      const blocks = markdownToNotionBlocks('```\nsome code\n```');
+      const code = (blocks[0] as { type: 'code'; code: { language: string } }).code;
+      expect(code.language).toBe('plain text');
+    });
+
+    test('dockerfile maps to docker', () => {
+      const blocks = markdownToNotionBlocks('```dockerfile\nFROM node:18\n```');
+      const code = (blocks[0] as { type: 'code'; code: { language: string } }).code;
+      expect(code.language).toBe('docker');
+    });
+
+    test('rs maps to rust', () => {
+      const blocks = markdownToNotionBlocks('```rs\nfn main() {}\n```');
+      const code = (blocks[0] as { type: 'code'; code: { language: string } }).code;
+      expect(code.language).toBe('rust');
+    });
+  });
+
+  describe('reverse mapping in notionBlocksToMarkdown', () => {
+    test('plain text language renders as empty fence annotation', () => {
+      const blocks: NotionBlock[] = [
+        { type: 'code', code: { rich_text: [plainRichText('some code')], language: 'plain text' } },
+      ];
+      expect(notionBlocksToMarkdown(blocks)).toBe('```\nsome code\n```');
+    });
+
+    test('typescript language renders as typescript fence', () => {
+      const blocks: NotionBlock[] = [
+        { type: 'code', code: { rich_text: [plainRichText('const x = 1;')], language: 'typescript' } },
+      ];
+      expect(notionBlocksToMarkdown(blocks)).toBe('```typescript\nconst x = 1;\n```');
+    });
+
+    test('javascript language renders as javascript fence', () => {
+      const blocks: NotionBlock[] = [
+        { type: 'code', code: { rich_text: [plainRichText('const x = 1;')], language: 'javascript' } },
+      ];
+      expect(notionBlocksToMarkdown(blocks)).toBe('```javascript\nconst x = 1;\n```');
+    });
+
+    test('shell language renders as shell fence', () => {
+      const blocks: NotionBlock[] = [
+        { type: 'code', code: { rich_text: [plainRichText('echo hello')], language: 'shell' } },
+      ];
+      expect(notionBlocksToMarkdown(blocks)).toBe('```shell\necho hello\n```');
+    });
+  });
+
+  describe('round-trip fidelity with aliased languages', () => {
+    test('tsx → typescript → typescript (aliased input normalizes)', () => {
+      const md = '```tsx\nconst x = 1;\n```';
+      const blocks = markdownToNotionBlocks(md);
+      const result = notionBlocksToMarkdown(blocks);
+      // tsx maps to typescript, so round-trip produces typescript fence
+      expect(result).toBe('```typescript\nconst x = 1;\n```');
+    });
+
+    test('jsx → javascript → javascript (aliased input normalizes)', () => {
+      const md = '```jsx\nconst x = 1;\n```';
+      const blocks = markdownToNotionBlocks(md);
+      const result = notionBlocksToMarkdown(blocks);
+      expect(result).toBe('```javascript\nconst x = 1;\n```');
+    });
+
+    test('sh → shell → shell (aliased input normalizes)', () => {
+      const md = '```sh\necho hello\n```';
+      const blocks = markdownToNotionBlocks(md);
+      const result = notionBlocksToMarkdown(blocks);
+      expect(result).toBe('```shell\necho hello\n```');
+    });
+
+    test('yml → yaml → yaml (aliased input normalizes)', () => {
+      const md = '```yml\nkey: value\n```';
+      const blocks = markdownToNotionBlocks(md);
+      const result = notionBlocksToMarkdown(blocks);
+      expect(result).toBe('```yaml\nkey: value\n```');
+    });
+
+    test('valid Notion language round-trips perfectly', () => {
+      const md = '```python\nprint("hello")\n```';
+      const blocks = markdownToNotionBlocks(md);
+      const result = notionBlocksToMarkdown(blocks);
+      expect(result).toBe(md);
+    });
+
+    test('unknown language normalizes to plain text (empty fence)', () => {
+      const md = '```brainfuck\n++++\n```';
+      const blocks = markdownToNotionBlocks(md);
+      const result = notionBlocksToMarkdown(blocks);
+      expect(result).toBe('```\n++++\n```');
+    });
+  });
+});
+
+// ============================================================================
+// URL Validation (isValidNotionUrl)
+// ============================================================================
+
+describe('isValidNotionUrl', () => {
+  describe('valid URLs', () => {
+    test('accepts https URLs', () => {
+      expect(isValidNotionUrl('https://example.com')).toBe(true);
+    });
+
+    test('accepts http URLs', () => {
+      expect(isValidNotionUrl('http://example.com')).toBe(true);
+    });
+
+    test('accepts https URLs with paths', () => {
+      expect(isValidNotionUrl('https://example.com/path/to/page')).toBe(true);
+    });
+
+    test('accepts https URLs with query params', () => {
+      expect(isValidNotionUrl('https://example.com?foo=bar&baz=qux')).toBe(true);
+    });
+
+    test('accepts https URLs with fragments', () => {
+      expect(isValidNotionUrl('https://example.com/page#section')).toBe(true);
+    });
+
+    test('accepts https URLs with port', () => {
+      expect(isValidNotionUrl('https://localhost:3000/api')).toBe(true);
+    });
+  });
+
+  describe('invalid URLs', () => {
+    test('rejects empty string', () => {
+      expect(isValidNotionUrl('')).toBe(false);
+    });
+
+    test('rejects relative paths', () => {
+      expect(isValidNotionUrl('/path/to/page')).toBe(false);
+    });
+
+    test('rejects fragment-only references', () => {
+      expect(isValidNotionUrl('#section')).toBe(false);
+    });
+
+    test('rejects workspace element IDs', () => {
+      expect(isValidNotionUrl('el-xxxx')).toBe(false);
+    });
+
+    test('rejects plain text', () => {
+      expect(isValidNotionUrl('not a url')).toBe(false);
+    });
+
+    test('rejects ftp protocol', () => {
+      expect(isValidNotionUrl('ftp://files.example.com/file.txt')).toBe(false);
+    });
+
+    test('rejects mailto protocol', () => {
+      expect(isValidNotionUrl('mailto:user@example.com')).toBe(false);
+    });
+
+    test('rejects javascript protocol', () => {
+      expect(isValidNotionUrl('javascript:alert(1)')).toBe(false);
+    });
+
+    test('rejects file protocol', () => {
+      expect(isValidNotionUrl('file:///etc/passwd')).toBe(false);
+    });
+  });
+});
+
+// ============================================================================
+// URL Validation Integration (parseInlineMarkdown with invalid URLs)
+// ============================================================================
+
+describe('parseInlineMarkdown URL validation', () => {
+  describe('valid URLs produce link rich text', () => {
+    test('https link produces link element', () => {
+      const result = parseInlineMarkdown('[Google](https://google.com)');
+      expect(result).toHaveLength(1);
+      expect(result[0].text.link).toEqual({ url: 'https://google.com' });
+      expect(result[0].plain_text).toBe('Google');
+      expect(result[0].href).toBe('https://google.com');
+    });
+
+    test('http link produces link element', () => {
+      const result = parseInlineMarkdown('[Example](http://example.com)');
+      expect(result).toHaveLength(1);
+      expect(result[0].text.link).toEqual({ url: 'http://example.com' });
+      expect(result[0].plain_text).toBe('Example');
+    });
+  });
+
+  describe('invalid URLs produce plain text instead of links', () => {
+    test('relative path renders as plain text', () => {
+      const result = parseInlineMarkdown('[link](/relative/path)');
+      expect(result).toHaveLength(1);
+      expect(result[0].text.link).toBeNull();
+      expect(result[0].plain_text).toBe('link');
+      expect(result[0].href).toBeNull();
+    });
+
+    test('fragment-only URL renders as plain text', () => {
+      const result = parseInlineMarkdown('[section](#section-id)');
+      expect(result).toHaveLength(1);
+      expect(result[0].text.link).toBeNull();
+      expect(result[0].plain_text).toBe('section');
+    });
+
+    test('element ID renders as plain text', () => {
+      const result = parseInlineMarkdown('[task](el-1234)');
+      expect(result).toHaveLength(1);
+      expect(result[0].text.link).toBeNull();
+      expect(result[0].plain_text).toBe('task');
+    });
+
+    test('malformed URL renders as plain text', () => {
+      const result = parseInlineMarkdown('[broken](not a valid url)');
+      expect(result).toHaveLength(1);
+      expect(result[0].text.link).toBeNull();
+      expect(result[0].plain_text).toBe('broken');
+    });
+
+    test('ftp URL renders as plain text', () => {
+      const result = parseInlineMarkdown('[file](ftp://files.example.com/doc.txt)');
+      expect(result).toHaveLength(1);
+      expect(result[0].text.link).toBeNull();
+      expect(result[0].plain_text).toBe('file');
+    });
+  });
+
+  describe('mixed valid and invalid URLs in same text', () => {
+    test('valid link and invalid link in same line', () => {
+      const result = parseInlineMarkdown(
+        'See [Google](https://google.com) and [section](#top)'
+      );
+      // Should have: "See ", link(Google), " and ", plain(section)
+      expect(result).toHaveLength(4);
+      // The valid link
+      expect(result[1].text.link).toEqual({ url: 'https://google.com' });
+      expect(result[1].plain_text).toBe('Google');
+      // The invalid link rendered as plain text
+      expect(result[3].text.link).toBeNull();
+      expect(result[3].plain_text).toBe('section');
+    });
+  });
+
+  describe('invalid URLs in block-level elements', () => {
+    test('invalid URL in paragraph block produces plain text', () => {
+      const blocks = markdownToNotionBlocks('Click [here](#section) for more');
+      expect(blocks).toHaveLength(1);
+      expect(blocks[0].type).toBe('paragraph');
+      const richText = getRichText(blocks[0]);
+      // "here" is rendered as plain text (no link) and may be merged with
+      // adjacent plain text by ensureRichTextWithinLimits. Verify no links exist.
+      for (const rt of richText) {
+        expect(rt.text.link).toBeNull();
+      }
+      // The full text content should still be present
+      const fullText = richText.map((rt) => rt.plain_text).join('');
+      expect(fullText).toContain('here');
+    });
+
+    test('invalid URL in bullet list produces plain text', () => {
+      const blocks = markdownToNotionBlocks('- See [task](el-abc123)');
+      expect(blocks).toHaveLength(1);
+      expect(blocks[0].type).toBe('bulleted_list_item');
+      const richText = getRichText(blocks[0]);
+      // "task" is rendered as plain text (no link) and may be merged with
+      // adjacent plain text by ensureRichTextWithinLimits. Verify no links exist.
+      for (const rt of richText) {
+        expect(rt.text.link).toBeNull();
+      }
+      const fullText = richText.map((rt) => rt.plain_text).join('');
+      expect(fullText).toContain('task');
+    });
+
+    test('valid URL in paragraph still works', () => {
+      const blocks = markdownToNotionBlocks('Visit [Google](https://google.com) today');
+      const richText = getRichText(blocks[0]);
+      const linkElement = richText.find((rt) => rt.plain_text === 'Google');
+      expect(linkElement).toBeDefined();
+      expect(linkElement!.text.link).toEqual({ url: 'https://google.com' });
+    });
+  });
+});

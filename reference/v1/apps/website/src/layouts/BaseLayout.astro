@@ -1,0 +1,131 @@
+---
+import Nav from '../components/Nav.astro';
+import Footer from '../components/Footer.astro';
+import '../styles/global.css';
+
+interface Props {
+  title: string;
+  description: string;
+  image?: string;
+  canonicalUrl?: string;
+}
+
+const { title, description, image = '/og.png', canonicalUrl } = Astro.props;
+const resolvedCanonical = canonicalUrl ? new URL(canonicalUrl, Astro.site) : new URL(Astro.url.pathname, Astro.site);
+const imageUrl = new URL(image, Astro.site);
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="canonical" href={resolvedCanonical} />
+
+    <title>{title}</title>
+    <meta name="description" content={description} />
+
+    <!-- RSS autodiscovery -->
+    <link rel="alternate" type="application/rss+xml" title="Stoneforge Blog" href={new URL('/rss.xml', Astro.site)} />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content={resolvedCanonical} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content={imageUrl} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@stoneforge_ai" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={imageUrl} />
+
+    <!-- Fonts — preload critical display font, load body font normally, defer code font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="preload"
+      as="style"
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400&display=swap"
+      rel="stylesheet"
+      media="print"
+      onload="this.media='all'"
+    />
+    <noscript>
+      <link
+        href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400&display=swap"
+        rel="stylesheet"
+      />
+    </noscript>
+
+    <!-- JSON-LD Structured Data -->
+    <script type="application/ld+json" set:html={JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "Stoneforge",
+      "applicationCategory": "DeveloperApplication",
+      "applicationSubCategory": "AI Development Tool",
+      "operatingSystem": "macOS, Linux, Windows",
+      "description": description,
+      "url": "https://stoneforge.ai",
+      "screenshot": "https://stoneforge.ai/og.png",
+      "featureList": "Multi-agent orchestration, Git worktree isolation, Automatic merge review, Dependency-aware task dispatch, Real-time web dashboard, Multi-provider support (Claude Code, OpenCode, Codex)",
+      "downloadUrl": "https://www.npmjs.com/package/@stoneforge/smithy",
+      "softwareVersion": "0.1.0",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "license": "https://opensource.org/licenses/Apache-2.0",
+      "author": {
+        "@type": "Organization",
+        "name": "Stoneforge",
+        "url": "https://github.com/stoneforge-ai"
+      }
+    })} />
+    <!-- Plausible Analytics -->
+    <!-- TODO: Human action required — create a Plausible account and verify the domain stoneforge.ai -->
+    <!-- Uses tagged-events (CSS class-based custom events) + outbound-links (automatic external link tracking) -->
+    <script defer data-domain="stoneforge.ai" src="https://plausible.io/js/script.tagged-events.outbound-links.js"></script>
+
+    <slot name="head" />
+  </head>
+  <body>
+    <Nav />
+    <main>
+      <slot />
+    </main>
+    <Footer />
+    <script src="../scripts/reveal.ts"></script>
+    <script src="../scripts/analytics.ts"></script>
+    <script>
+      // Copy to clipboard
+      document.querySelectorAll('.copy-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const code = (btn as HTMLElement).dataset.code;
+          if (!code) return;
+          await navigator.clipboard.writeText(code);
+          btn.classList.add('copied');
+          setTimeout(() => btn.classList.remove('copied'), 2000);
+        });
+      });
+    </script>
+  </body>
+</html>

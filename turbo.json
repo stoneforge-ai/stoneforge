@@ -3,15 +3,14 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".next/**", "!.next/cache/**", "../../packages/smithy/web/**", "../../packages/quarry/web/**"]
+      "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
     },
     "dev": {
       "cache": false,
       "persistent": true
     },
     "test": {
-      "dependsOn": ["build"],
-      "inputs": ["src/**/*.ts", "src/**/*.tsx", "tests/**/*.ts", "tests/**/*.tsx"]
+      "dependsOn": ["build"]
     },
     "lint": {
       "dependsOn": ["^build"]
@@ -19,9 +18,8 @@
     "typecheck": {
       "dependsOn": ["^build"]
     },
-    "build:web": {
-      "dependsOn": ["^build"],
-      "outputs": ["../../packages/smithy/web/**", "../../packages/quarry/web/**"]
+    "clean": {
+      "cache": false
     }
   }
 }

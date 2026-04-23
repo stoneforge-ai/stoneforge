@@ -3,13 +3,7 @@
   "compilerOptions": {
     "noEmit": true
   },
-  "references": [
-    { "path": "./packages/core" },
-    { "path": "./packages/storage" },
-    { "path": "./packages/quarry" },
-    { "path": "./apps/quarry-server" },
-    { "path": "./apps/quarry-web" }
-  ],
+  "references": [],
   "include": [],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "reference", "dist"]
 }

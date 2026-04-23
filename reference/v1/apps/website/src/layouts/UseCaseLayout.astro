@@ -1,0 +1,230 @@
+---
+import BaseLayout from './BaseLayout.astro';
+import Button from '../components/ui/Button.astro';
+import SectionLabel from '../components/ui/SectionLabel.astro';
+import CodeBlock from '../components/ui/CodeBlock.astro';
+
+interface Props {
+  title: string;
+  description: string;
+  problem: string;
+  icon?: string;
+  docsLinks: { title: string; url: string }[];
+  faqItems: { question: string; answer: string }[];
+  slug: string;
+}
+
+const { title, description, problem, icon, docsLinks, faqItems, slug } = Astro.props;
+const canonicalUrl = new URL(`/use-cases/${slug}/`, Astro.site).href;
+
+const faqJsonLd = faqItems.length > 0 ? {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": faqItems.map(item => ({
+    "@type": "Question",
+    "name": item.question,
+    "acceptedAnswer": {
+      "@type": "Answer",
+      "text": item.answer,
+    },
+  })),
+} : null;
+
+const softwareJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Stoneforge",
+  "applicationCategory": "DeveloperApplication",
+  "applicationSubCategory": "AI Development Tool",
+  "operatingSystem": "macOS, Linux, Windows",
+  "description": description,
+  "url": "https://stoneforge.ai",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD",
+  },
+  "license": "https://opensource.org/licenses/Apache-2.0",
+  "author": {
+    "@type": "Organization",
+    "name": "Stoneforge",
+    "url": "https://github.com/stoneforge-ai",
+  },
+};
+
+const breadcrumbJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Home",
+      "item": "https://stoneforge.ai",
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "Use Cases",
+      "item": "https://stoneforge.ai/use-cases/",
+    },
+    {
+      "@type": "ListItem",
+      "position": 3,
+      "name": title,
+      "item": canonicalUrl,
+    },
+  ],
+};
+---
+
+<BaseLayout title={`${title} — Stoneforge`} description={description} canonicalUrl={canonicalUrl}>
+  <Fragment slot="head">
+    {faqJsonLd && <script type="application/ld+json" set:html={JSON.stringify(faqJsonLd)} />}
+    <script type="application/ld+json" set:html={JSON.stringify(softwareJsonLd)} />
+    <script type="application/ld+json" set:html={JSON.stringify(breadcrumbJsonLd)} />
+  </Fragment>
+
+  <article class="site-section pt-28 md:pt-36 pb-16">
+    <div class="site-container">
+      <!-- Breadcrumbs -->
+      <nav class="flex items-center gap-1.5 text-[13px] text-[var(--site-text-tertiary)] mb-10" aria-label="Breadcrumb">
+        <a href="/" class="hover:text-[var(--site-accent)] transition-colors">Home</a>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+        <a href="/use-cases/" class="hover:text-[var(--site-accent)] transition-colors">Use Cases</a>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+        <span class="text-[var(--site-text-primary)]">{title}</span>
+      </nav>
+
+      <div class="max-w-[72ch] mx-auto">
+        <!-- Hero section -->
+        <header class="mb-16">
+          <SectionLabel class="mb-4">Use Case</SectionLabel>
+          <h1
+            class="text-[clamp(1.75rem,4vw+0.5rem,2.75rem)] font-bold tracking-tight leading-[1.15] mb-6"
+            style="font-family: var(--font-headline);"
+            data-reveal
+          >
+            {title}
+          </h1>
+
+          <!-- Problem statement -->
+          <div class="rounded-xl border border-[var(--site-border)] bg-[var(--site-bg-elevated)] p-6 md:p-8" data-reveal>
+            <div class="flex items-start gap-3">
+              <div class="w-8 h-8 rounded-lg bg-[var(--site-error)]/10 border border-[var(--site-error)]/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--site-error)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+              </div>
+              <div>
+                <p class="text-[11px] uppercase tracking-[0.12em] text-[var(--site-error)] font-semibold mb-1.5">The Problem</p>
+                <p class="text-[var(--site-text-secondary)] leading-relaxed">{problem}</p>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <!-- How Stoneforge solves it -->
+        <section class="mb-16">
+          <h2
+            class="text-[clamp(1.25rem,2.5vw+0.25rem,1.75rem)] font-semibold tracking-tight mb-6 text-[var(--site-text-primary)]"
+            style="font-family: var(--font-headline);"
+            data-reveal
+          >
+            How Stoneforge solves it
+          </h2>
+          <div class="prose" data-reveal>
+            <slot />
+          </div>
+        </section>
+
+        <!-- Docs links -->
+        {docsLinks.length > 0 && (
+          <section class="mb-16">
+            <h2
+              class="text-[clamp(1.25rem,2.5vw+0.25rem,1.75rem)] font-semibold tracking-tight mb-6 text-[var(--site-text-primary)]"
+              style="font-family: var(--font-headline);"
+              data-reveal
+            >
+              Related documentation
+            </h2>
+            <div class="grid gap-3" data-reveal-stagger>
+              {docsLinks.map(link => (
+                <a
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="group flex items-center gap-3 p-4 rounded-xl border border-[var(--site-border)] bg-[var(--site-bg-elevated)] hover:border-[var(--site-border-accent)] hover:bg-[var(--site-bg-surface)] transition-all duration-200"
+                >
+                  <div class="w-8 h-8 rounded-lg bg-[var(--site-accent-subtle)] border border-[var(--site-border-accent)] flex items-center justify-center flex-shrink-0">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--site-accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+                    </svg>
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <span class="text-sm font-medium text-[var(--site-text-primary)] group-hover:text-[var(--site-accent)] transition-colors">{link.title}</span>
+                    <span class="block text-[11px] text-[var(--site-text-ghost)]">docs.stoneforge.ai</span>
+                  </div>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-[var(--site-text-ghost)] group-hover:text-[var(--site-accent)] transition-colors flex-shrink-0">
+                    <line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/>
+                  </svg>
+                </a>
+              ))}
+            </div>
+          </section>
+        )}
+
+        <!-- FAQ section -->
+        {faqItems.length > 0 && (
+          <section class="mb-16">
+            <h2
+              class="text-[clamp(1.25rem,2.5vw+0.25rem,1.75rem)] font-semibold tracking-tight mb-6 text-[var(--site-text-primary)]"
+              style="font-family: var(--font-headline);"
+              data-reveal
+            >
+              Frequently asked questions
+            </h2>
+            <div class="space-y-4" data-reveal-stagger>
+              {faqItems.map(item => (
+                <details class="group rounded-xl border border-[var(--site-border)] bg-[var(--site-bg-elevated)] overflow-hidden">
+                  <summary class="flex items-center justify-between gap-3 p-5 cursor-pointer list-none text-sm font-medium text-[var(--site-text-primary)] hover:text-[var(--site-accent)] transition-colors">
+                    {item.question}
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="flex-shrink-0 transition-transform duration-200 group-open:rotate-180">
+                      <polyline points="6 9 12 15 18 9"/>
+                    </svg>
+                  </summary>
+                  <div class="px-5 pb-5 text-sm text-[var(--site-text-secondary)] leading-relaxed border-t border-[var(--site-border)] pt-4">
+                    {item.answer}
+                  </div>
+                </details>
+              ))}
+            </div>
+          </section>
+        )}
+
+        <!-- CTA -->
+        <section class="text-center rounded-xl border border-[var(--site-border-accent)] bg-[var(--site-bg-elevated)] p-8 md:p-12" data-reveal>
+          <h2
+            class="text-xl font-semibold tracking-tight mb-3 text-[var(--site-text-primary)]"
+            style="font-family: var(--font-headline);"
+          >
+            Ready to get started?
+          </h2>
+          <p class="text-[var(--site-text-secondary)] mb-6 max-w-md mx-auto">
+            Set up Stoneforge in under 30 seconds and start orchestrating AI agents in parallel.
+          </p>
+          <div class="flex flex-wrap justify-center gap-4">
+            <Button href="https://docs.stoneforge.ai/getting-started/quick-start/">
+              Quick Start Guide
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+            </Button>
+            <Button variant="ghost" href="https://github.com/stoneforge-ai/stoneforge" target="_blank" rel="noopener noreferrer">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+              Star on GitHub
+            </Button>
+          </div>
+        </section>
+      </div>
+    </div>
+  </article>
+</BaseLayout>

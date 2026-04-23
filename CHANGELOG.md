@@ -1,14 +1,9 @@
 # Changelog
 
-## 0.1.0 (Unreleased)
+This root changelog now tracks Stoneforge V2 repository changes.
 
-Initial public release of Stoneforge.
+Stoneforge V1 release history lives in `reference/v1/CHANGELOG.md`.
 
-### Packages
+## Unreleased
 
-- `@stoneforge/core` - Core types, errors, ID generation, utilities
-- `@stoneforge/storage` - SQLite storage with multi-runtime support (Bun, Node, browser)
-- `@stoneforge/quarry` - SDK with API, services, sync engine, and CLI
-- `@stoneforge/smithy` - AI agent orchestration (Director, Worker, Steward roles)
-- `@stoneforge/ui` - Shared React UI components and design tokens
-- `@stoneforge/shared-routes` - Shared Hono route factories
+- Reorganized the repository so active V2 work lives at the root and non-active V1 and prototype assets live under `reference/`.

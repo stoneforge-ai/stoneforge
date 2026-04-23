@@ -1,0 +1,225 @@
+# @stoneforge/storage
+
+## 1.23.1
+
+### Patch Changes
+
+- @stoneforge/core@1.23.1
+
+## 1.23.0
+
+### Patch Changes
+
+- Updated dependencies [d9137d7]
+  - @stoneforge/core@1.23.0
+
+## 1.22.0
+
+### Patch Changes
+
+- @stoneforge/core@1.22.0
+
+## 1.21.0
+
+### Patch Changes
+
+- @stoneforge/core@1.21.0
+
+## 1.20.1
+
+### Patch Changes
+
+- @stoneforge/core@1.20.1
+
+## 1.20.0
+
+### Patch Changes
+
+- @stoneforge/core@1.20.0
+
+## 1.19.0
+
+### Patch Changes
+
+- @stoneforge/core@1.19.0
+
+## 1.18.0
+
+### Patch Changes
+
+- @stoneforge/core@1.18.0
+
+## 1.17.0
+
+### Minor Changes
+
+- 600e4fd: Add cache_read_tokens and cache_creation_tokens columns to provider_metrics (migration v12)
+
+### Patch Changes
+
+- Updated dependencies [7c63531]
+  - @stoneforge/core@1.17.0
+
+## 1.16.1
+
+### Patch Changes
+
+- @stoneforge/core@1.16.1
+
+## 1.16.0
+
+### Patch Changes
+
+- @stoneforge/core@1.16.0
+
+## 1.15.0
+
+### Patch Changes
+
+- @stoneforge/core@1.15.0
+
+## 1.14.0
+
+### Patch Changes
+
+- Updated dependencies [54e031a]
+- Updated dependencies [7b0894c]
+- Updated dependencies [89a73d8]
+- Updated dependencies [6a769ce]
+  - @stoneforge/core@1.14.0
+
+## 1.13.0
+
+### Patch Changes
+
+- 21f4b95: Add migration 11 to update inbox_items CHECK constraint to include 'thread_reply' source_type. Recreates the table since SQLite does not support ALTER CONSTRAINT.
+- 695b3b8: Fix tsconfig types array to use "bun" instead of "bun-types" for robust type resolution via @types/bun
+- Updated dependencies [f056e73]
+- Updated dependencies [695b3b8]
+- Updated dependencies [e787cb8]
+  - @stoneforge/core@1.13.0
+
+## 1.12.0
+
+### Patch Changes
+
+- @stoneforge/core@1.12.0
+
+## 1.11.0
+
+### Minor Changes
+
+- 49631b0: Add migration v10 with `operation_log` and `provider_metrics` tables for system observability and LLM usage tracking.
+
+### Patch Changes
+
+- @stoneforge/core@1.11.0
+
+## 1.10.2
+
+### Patch Changes
+
+- @stoneforge/core@1.10.2
+
+## 1.10.1
+
+### Patch Changes
+
+- @stoneforge/core@1.10.1
+
+## 1.10.0
+
+### Patch Changes
+
+- Updated dependencies [69ab9e2]
+  - @stoneforge/core@1.10.0
+
+## 1.9.0
+
+### Patch Changes
+
+- @stoneforge/core@1.9.0
+
+## 1.8.0
+
+### Patch Changes
+
+- @stoneforge/core@1.8.0
+
+## 1.7.0
+
+### Patch Changes
+
+- @stoneforge/core@1.7.0
+
+## 1.6.0
+
+### Patch Changes
+
+- @stoneforge/core@1.6.0
+
+## 1.5.0
+
+### Patch Changes
+
+- @stoneforge/core@1.5.0
+
+## 1.4.1
+
+### Patch Changes
+
+- @stoneforge/core@1.4.1
+
+## 1.4.0
+
+### Patch Changes
+
+- @stoneforge/core@1.4.0
+
+## 1.3.0
+
+### Minor Changes
+
+- 8e6aa99: Add `settings` table via migration 9 for server-side key-value configuration storage
+
+### Patch Changes
+
+- @stoneforge/core@1.3.0
+
+## 1.2.0
+
+### Patch Changes
+
+- dd47614: Rename 3 bun:test files to .bun.test.ts naming convention so vitest excludes them from collection. Add vitest.config.ts with exclude pattern.
+- Updated dependencies [dd47614]
+  - @stoneforge/core@1.2.0
+
+## 1.1.0
+
+### Patch Changes
+
+- @stoneforge/core@1.1.0
+
+## 1.0.3
+
+### Patch Changes
+
+- @stoneforge/core@1.0.3
+
+## 1.0.2
+
+### Patch Changes
+
+- @stoneforge/core@1.0.2
+
+## 1.0.1
+
+### Patch Changes
+
+- @stoneforge/core@1.0.1
+
+## 1.0.0
+
+### Patch Changes
+
+- @stoneforge/core@1.0.0

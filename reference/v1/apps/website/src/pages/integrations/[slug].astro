@@ -1,0 +1,29 @@
+---
+import { getCollection, render } from 'astro:content';
+import IntegrationLayout from '../../layouts/IntegrationLayout.astro';
+
+export async function getStaticPaths() {
+  const integrations = await getCollection('integrations');
+  return integrations.map(integration => ({
+    params: { slug: integration.id },
+    props: { integration },
+  }));
+}
+
+const { integration } = Astro.props;
+const { Content } = await render(integration);
+---
+
+<IntegrationLayout
+  title={integration.data.title}
+  description={integration.data.description}
+  agentName={integration.data.agentName}
+  agentUrl={integration.data.agentUrl}
+  logo={integration.data.logo}
+  configSnippet={integration.data.configSnippet}
+  features={integration.data.features}
+  docsLinks={integration.data.docsLinks}
+  slug={integration.id}
+>
+  <Content />
+</IntegrationLayout>

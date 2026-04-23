@@ -1,3 +1,4 @@
+# Active V2 workspace only. Reference code lives under reference/ and is excluded on purpose.
 packages:
   - "packages/*"
   - "apps/*"

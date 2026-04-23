@@ -1,0 +1,52 @@
+---
+interface Props {
+  date: Date;
+  updatedDate?: Date;
+  author: { name: string; url?: string; avatar?: string };
+  /** Pass the raw body text to compute reading time. */
+  body?: string;
+}
+
+const { date, updatedDate, author, body } = Astro.props;
+
+const readingTime = body
+  ? Math.max(1, Math.round(
+      body.replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/prompt="[^"]*"/g, '').split(/\s+/).length / 280
+    ))
+  : undefined;
+
+const formatter = new Intl.DateTimeFormat('en-US', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+  timeZone: 'UTC',
+});
+---
+
+<div class="flex flex-wrap items-center gap-x-3 text-xs text-[var(--site-text-tertiary)]">
+  <!-- Author -->
+  <span>{author.name}</span>
+
+  <span class="text-[var(--site-text-ghost)]">&middot;</span>
+
+  <!-- Date -->
+  <time datetime={date.toISOString()}>
+    {formatter.format(date)}
+  </time>
+
+  {updatedDate && (
+    <>
+      <span class="text-[var(--site-text-ghost)]">&middot;</span>
+      <span>
+        Updated <time datetime={updatedDate.toISOString()}>{formatter.format(updatedDate)}</time>
+      </span>
+    </>
+  )}
+
+  {readingTime && (
+    <>
+      <span class="text-[var(--site-text-ghost)]">&middot;</span>
+      <span>{readingTime} min read</span>
+    </>
+  )}
+</div>

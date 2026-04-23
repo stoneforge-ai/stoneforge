@@ -1,0 +1,92 @@
+---
+import Icon from './Icon.astro';
+
+interface RelatedItem {
+  title: string;
+  url: string;
+  type: 'docs' | 'blog' | 'use-case' | 'compare';
+}
+
+interface Props {
+  items: RelatedItem[];
+  class?: string;
+}
+
+const { items, class: className = '' } = Astro.props;
+
+const typeConfig: Record<RelatedItem['type'], { label: string; icon: string; color: string }> = {
+  docs: {
+    label: 'Docs',
+    icon: 'book-open',
+    color: 'text-[var(--site-accent)] bg-[var(--site-accent-subtle)] border-[var(--site-accent)]/15',
+  },
+  blog: {
+    label: 'Blog',
+    icon: 'pen-tool',
+    color: 'text-[#a78bfa] bg-[rgba(167,139,250,0.08)] border-[#a78bfa]/15',
+  },
+  'use-case': {
+    label: 'Use Case',
+    icon: 'zap',
+    color: 'text-[var(--site-warning)] bg-[rgba(251,191,36,0.08)] border-[var(--site-warning)]/15',
+  },
+  compare: {
+    label: 'Compare',
+    icon: 'scale',
+    color: 'text-[var(--site-success)] bg-[rgba(74,222,128,0.08)] border-[var(--site-success)]/15',
+  },
+};
+
+function isExternal(url: string): boolean {
+  return url.startsWith('http://') || url.startsWith('https://');
+}
+---
+
+{items.length > 0 && (
+  <aside class:list={['mt-16 pt-10 border-t border-[var(--site-border)]', className]}>
+    <h2 class="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--site-accent)] mb-6">
+      Related Content
+    </h2>
+
+    <div class:list={[
+      'grid gap-3',
+      items.length === 1 ? 'grid-cols-1' : items.length === 2 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
+    ]}>
+      {items.map((item) => {
+        const config = typeConfig[item.type];
+        const external = isExternal(item.url);
+        return (
+          <a
+            href={item.url}
+            target={external ? '_blank' : undefined}
+            rel={external ? 'noopener noreferrer' : undefined}
+            class="group flex flex-col gap-3 rounded-xl border border-[var(--site-border)] bg-[var(--site-bg-elevated)] p-4 transition-all duration-300 hover:border-[var(--site-border-accent)] hover:bg-[var(--site-bg-surface)] hover:shadow-[0_0_24px_rgba(96,165,250,0.06)] relative overflow-hidden"
+          >
+            <!-- Top accent line -->
+            <div
+              class="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[var(--site-accent)]/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+              aria-hidden="true"
+            ></div>
+
+            <!-- Type badge -->
+            <span class:list={[
+              'inline-flex items-center gap-1.5 self-start rounded-full px-2.5 py-1 text-[11px] font-medium border',
+              config.color,
+            ]}>
+              <Icon name={config.icon} size={12} />
+              {config.label}
+            </span>
+
+            <!-- Title -->
+            <p class="text-sm font-medium text-[var(--site-text-primary)] group-hover:text-[var(--site-accent)] transition-colors duration-200 leading-snug flex items-center gap-2">
+              <span class="flex-1">{item.title}</span>
+              {external && (
+                <Icon name="external-link" size={14} class="flex-shrink-0 text-[var(--site-text-ghost)] group-hover:text-[var(--site-accent)]" />
+              )}
+            </p>
+          </a>
+        );
+      })}
+    </div>
+  </aside>
+)}

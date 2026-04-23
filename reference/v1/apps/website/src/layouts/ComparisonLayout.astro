@@ -1,0 +1,329 @@
+---
+import BaseLayout from './BaseLayout.astro';
+import Button from '../components/ui/Button.astro';
+import SectionLabel from '../components/ui/SectionLabel.astro';
+import Breadcrumbs from '../components/ui/Breadcrumbs.astro';
+
+interface FeatureRow {
+  category: string;
+  feature: string;
+  stoneforge: string;
+  competitor: string;
+}
+
+interface Props {
+  title: string;
+  description: string;
+  competitor: string;
+  competitorUrl?: string;
+  differentiator: string;
+  features: FeatureRow[];
+  faqItems: { question: string; answer: string }[];
+  verdict: string;
+  slug: string;
+}
+
+const { title, description, competitor, competitorUrl, differentiator, features, faqItems, verdict, slug } = Astro.props;
+const canonicalUrl = new URL(`/compare/${slug}/`, Astro.site).href;
+const metaTitle = `Stoneforge vs ${competitor}: ${differentiator}`;
+
+// Group features by category
+const featuresByCategory = features.reduce<Record<string, FeatureRow[]>>((acc, row) => {
+  if (!acc[row.category]) acc[row.category] = [];
+  acc[row.category].push(row);
+  return acc;
+}, {});
+
+const faqJsonLd = faqItems.length > 0 ? {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": faqItems.map(item => ({
+    "@type": "Question",
+    "name": item.question,
+    "acceptedAnswer": {
+      "@type": "Answer",
+      "text": item.answer,
+    },
+  })),
+} : null;
+
+const softwareJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Stoneforge",
+  "applicationCategory": "DeveloperApplication",
+  "applicationSubCategory": "AI Agent Orchestration",
+  "operatingSystem": "macOS, Linux, Windows",
+  "description": description,
+  "url": "https://stoneforge.ai",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD",
+  },
+  "license": "https://opensource.org/licenses/Apache-2.0",
+  "author": {
+    "@type": "Organization",
+    "name": "Stoneforge",
+    "url": "https://github.com/stoneforge-ai",
+  },
+};
+
+const breadcrumbItems = [
+  { label: 'Home', href: '/' },
+  { label: 'Compare', href: '/compare/' },
+  { label: title, href: canonicalUrl },
+];
+---
+
+<BaseLayout title={`${metaTitle} — Stoneforge`} description={description} canonicalUrl={canonicalUrl}>
+  <Fragment slot="head">
+    {faqJsonLd && <script type="application/ld+json" set:html={JSON.stringify(faqJsonLd)} />}
+    <script type="application/ld+json" set:html={JSON.stringify(softwareJsonLd)} />
+  </Fragment>
+
+  <article class="site-section pt-28 md:pt-36 pb-16">
+    <div class="site-container">
+      <Breadcrumbs items={breadcrumbItems} class="mb-10" />
+
+      <div class="max-w-4xl mx-auto">
+        <!-- Hero section -->
+        <header class="text-center mb-16">
+          <SectionLabel class="mb-4">Compare</SectionLabel>
+          <h1
+            class="text-[clamp(1.75rem,4vw+0.5rem,2.75rem)] font-bold tracking-tight leading-[1.15] mb-4"
+            style="font-family: var(--font-headline);"
+            data-reveal
+          >
+            Stoneforge vs {competitor}
+          </h1>
+          <p class="text-lg text-[var(--site-text-secondary)] leading-relaxed max-w-2xl mx-auto mb-6" data-reveal>
+            {differentiator}
+          </p>
+          <p class="text-[var(--site-text-tertiary)] text-sm" data-reveal>
+            {description}
+          </p>
+        </header>
+
+        <!-- Feature comparison table -->
+        <section class="mb-16">
+          <h2
+            class="text-[clamp(1.25rem,2.5vw+0.25rem,1.75rem)] font-semibold tracking-tight mb-6 text-[var(--site-text-primary)]"
+            style="font-family: var(--font-headline);"
+            data-reveal
+          >
+            Feature comparison
+          </h2>
+
+          <div class="rounded-xl border border-[var(--site-border)] bg-[var(--site-bg-elevated)] overflow-hidden" data-reveal>
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead>
+                  <tr class="border-b border-[var(--site-border)]">
+                    <th class="text-left px-5 py-3.5 text-[11px] uppercase tracking-[0.12em] text-[var(--site-text-ghost)] font-semibold w-[40%]">Feature</th>
+                    <th class="text-left px-5 py-3.5 text-[11px] uppercase tracking-[0.12em] text-[var(--site-accent)] font-semibold w-[30%]">Stoneforge</th>
+                    <th class="text-left px-5 py-3.5 text-[11px] uppercase tracking-[0.12em] text-[var(--site-text-ghost)] font-semibold w-[30%]">{competitor}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(featuresByCategory).map(([category, rows]) => (
+                    <>
+                      <tr class="border-b border-[var(--site-border)] bg-[var(--site-bg-surface)]/50">
+                        <td colspan="3" class="px-5 py-2.5 text-[11px] uppercase tracking-[0.12em] text-[var(--site-text-tertiary)] font-semibold">
+                          {category}
+                        </td>
+                      </tr>
+                      {rows.map((row, i) => (
+                        <tr class="border-b border-[var(--site-border)] last:border-b-0">
+                          <td class="px-5 py-4 text-[var(--site-text-primary)] leading-relaxed font-medium">{row.feature}</td>
+                          <td class="px-5 py-4 text-[var(--site-text-secondary)] leading-relaxed">
+                            <span class="inline-flex items-start gap-2">
+                              {row.stoneforge.startsWith('Yes') || row.stoneforge.startsWith('Free') || row.stoneforge.startsWith('Full') || row.stoneforge.startsWith('Unlimited') ? (
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--site-success, #22c55e)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="flex-shrink-0 mt-0.5"><polyline points="20 6 9 17 4 12"/></svg>
+                              ) : row.stoneforge.startsWith('No') || row.stoneforge.startsWith('None') ? (
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--site-error, #ef4444)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="flex-shrink-0 mt-0.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                              ) : null}
+                              <span>{row.stoneforge}</span>
+                            </span>
+                          </td>
+                          <td class="px-5 py-4 text-[var(--site-text-secondary)] leading-relaxed">
+                            <span class="inline-flex items-start gap-2">
+                              {row.competitor.startsWith('Yes') || row.competitor.startsWith('Free') || row.competitor.startsWith('Full') || row.competitor.startsWith('Unlimited') ? (
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--site-success, #22c55e)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="flex-shrink-0 mt-0.5"><polyline points="20 6 9 17 4 12"/></svg>
+                              ) : row.competitor.startsWith('No') || row.competitor.startsWith('None') ? (
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--site-error, #ef4444)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="flex-shrink-0 mt-0.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                              ) : null}
+                              <span>{row.competitor}</span>
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- Pricing comparison -->
+        <section class="mb-16">
+          <h2
+            class="text-[clamp(1.25rem,2.5vw+0.25rem,1.75rem)] font-semibold tracking-tight mb-6 text-[var(--site-text-primary)]"
+            style="font-family: var(--font-headline);"
+            data-reveal
+          >
+            Pricing
+          </h2>
+          <div class="grid md:grid-cols-2 gap-4" data-reveal>
+            <!-- Stoneforge pricing -->
+            <div class="rounded-xl border border-[var(--site-border-accent)] bg-[var(--site-bg-elevated)] p-6 relative">
+              <div class="absolute top-0 left-0 right-0 h-1 bg-[var(--site-accent)] rounded-t-xl"></div>
+              <div class="flex items-center gap-3 mb-4">
+                <div class="w-8 h-8 rounded-lg bg-[var(--site-accent-subtle)] border border-[var(--site-border-accent)] flex items-center justify-center">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--site-accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                </div>
+                <h3 class="font-semibold text-[var(--site-text-primary)]" style="font-family: var(--font-headline);">Stoneforge</h3>
+              </div>
+              <div class="mb-3">
+                <span class="text-2xl font-bold text-[var(--site-text-primary)]">Free</span>
+                <span class="text-sm text-[var(--site-text-tertiary)]"> / open-source</span>
+              </div>
+              <ul class="space-y-2 text-sm text-[var(--site-text-secondary)]">
+                <li class="flex items-center gap-2">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--site-success, #22c55e)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  No per-seat pricing
+                </li>
+                <li class="flex items-center gap-2">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--site-success, #22c55e)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  Self-hosted, full control
+                </li>
+                <li class="flex items-center gap-2">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--site-success, #22c55e)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  Apache 2.0 license
+                </li>
+                <li class="flex items-center gap-2">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--site-success, #22c55e)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  BYO API keys
+                </li>
+              </ul>
+            </div>
+
+            <!-- Competitor pricing -->
+            <div class="rounded-xl border border-[var(--site-border)] bg-[var(--site-bg-elevated)] p-6">
+              <div class="flex items-center gap-3 mb-4">
+                <div class="w-8 h-8 rounded-lg bg-[var(--site-bg-surface)] border border-[var(--site-border)] flex items-center justify-center">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--site-text-tertiary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+                </div>
+                <h3 class="font-semibold text-[var(--site-text-primary)]" style="font-family: var(--font-headline);">{competitor}</h3>
+              </div>
+              <div class="mb-3">
+                <span class="text-2xl font-bold text-[var(--site-text-primary)]">Paid</span>
+                <span class="text-sm text-[var(--site-text-tertiary)]"> / per-seat or usage-based</span>
+              </div>
+              <ul class="space-y-2 text-sm text-[var(--site-text-secondary)]">
+                <li class="flex items-center gap-2">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--site-text-tertiary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg>
+                  Per-seat or subscription pricing
+                </li>
+                <li class="flex items-center gap-2">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--site-text-tertiary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg>
+                  Managed infrastructure
+                </li>
+                <li class="flex items-center gap-2">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--site-text-tertiary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg>
+                  Vendor-managed updates
+                </li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <!-- Content from MDX -->
+        <section class="mb-16">
+          <div class="prose" data-reveal>
+            <slot />
+          </div>
+        </section>
+
+        <!-- Verdict section -->
+        <section class="mb-16">
+          <div class="grid md:grid-cols-2 gap-4" data-reveal>
+            <!-- When to choose Stoneforge -->
+            <div class="rounded-xl border border-[var(--site-border-accent)] bg-[var(--site-bg-elevated)] p-6 md:p-8">
+              <div class="flex items-center gap-2 mb-4">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--site-accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                <h3 class="font-semibold text-[var(--site-accent)]" style="font-family: var(--font-headline);">When to choose Stoneforge</h3>
+              </div>
+              <div class="text-sm text-[var(--site-text-secondary)] leading-relaxed space-y-2">
+                <p>{verdict}</p>
+              </div>
+            </div>
+
+            <!-- When to choose competitor -->
+            <div class="rounded-xl border border-[var(--site-border)] bg-[var(--site-bg-elevated)] p-6 md:p-8">
+              <div class="flex items-center gap-2 mb-4">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--site-text-tertiary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                <h3 class="font-semibold text-[var(--site-text-tertiary)]" style="font-family: var(--font-headline);">When to choose {competitor}</h3>
+              </div>
+              <div class="text-sm text-[var(--site-text-secondary)] leading-relaxed space-y-2">
+                <slot name="competitor-verdict" />
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- FAQ section -->
+        {faqItems.length > 0 && (
+          <section class="mb-16">
+            <h2
+              class="text-[clamp(1.25rem,2.5vw+0.25rem,1.75rem)] font-semibold tracking-tight mb-6 text-[var(--site-text-primary)]"
+              style="font-family: var(--font-headline);"
+              data-reveal
+            >
+              Frequently asked questions
+            </h2>
+            <div class="space-y-4" data-reveal-stagger>
+              {faqItems.map(item => (
+                <details class="group rounded-xl border border-[var(--site-border)] bg-[var(--site-bg-elevated)] overflow-hidden">
+                  <summary class="flex items-center justify-between gap-3 p-5 cursor-pointer list-none text-sm font-medium text-[var(--site-text-primary)] hover:text-[var(--site-accent)] transition-colors">
+                    {item.question}
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="flex-shrink-0 transition-transform duration-200 group-open:rotate-180">
+                      <polyline points="6 9 12 15 18 9"/>
+                    </svg>
+                  </summary>
+                  <div class="px-5 pb-5 text-sm text-[var(--site-text-secondary)] leading-relaxed border-t border-[var(--site-border)] pt-4">
+                    {item.answer}
+                  </div>
+                </details>
+              ))}
+            </div>
+          </section>
+        )}
+
+        <!-- CTA -->
+        <section class="text-center rounded-xl border border-[var(--site-border-accent)] bg-[var(--site-bg-elevated)] p-8 md:p-12" data-reveal>
+          <h2
+            class="text-xl font-semibold tracking-tight mb-3 text-[var(--site-text-primary)]"
+            style="font-family: var(--font-headline);"
+          >
+            Ready to try Stoneforge?
+          </h2>
+          <p class="text-[var(--site-text-secondary)] mb-6 max-w-md mx-auto">
+            Set up in under 30 seconds. Free, open-source, and self-hosted. No credit card required.
+          </p>
+          <div class="flex flex-wrap justify-center gap-4">
+            <Button href="https://docs.stoneforge.ai/getting-started/quick-start/">
+              Quick Start Guide
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+            </Button>
+            <Button variant="ghost" href="https://github.com/stoneforge-ai/stoneforge" target="_blank" rel="noopener noreferrer">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+              Star on GitHub
+            </Button>
+          </div>
+        </section>
+      </div>
+    </div>
+  </article>
+</BaseLayout>

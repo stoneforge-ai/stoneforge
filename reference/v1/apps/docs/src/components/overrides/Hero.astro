@@ -1,0 +1,397 @@
+---
+import type { Props } from '@astrojs/starlight/props';
+import Default from '@astrojs/starlight/components/Hero.astro';
+
+const pathname = Astro.url.pathname;
+const isHomePage = pathname === '/' || pathname === '';
+---
+
+{isHomePage ? (
+  <div class="sf-hero">
+    {/* Floating orbs */}
+    <div class="sf-hero-orb sf-hero-orb-1"></div>
+    <div class="sf-hero-orb sf-hero-orb-2"></div>
+    <div class="sf-hero-orb sf-hero-orb-3"></div>
+
+    {/* Grid background */}
+    <div class="sf-hero-grid"></div>
+
+    <div class="sf-hero-content">
+      {/* Animated badge */}
+      <div class="sf-hero-badge">
+        <span class="sf-hero-badge-dot"></span>
+        <span>Open Source — Apache 2.0</span>
+      </div>
+
+      <h1 class="sf-hero-title">
+        <span class="sf-hero-title-main">Orchestrate AI agents<br/>in <strong>parallel</strong></span>
+      </h1>
+
+      <p class="sf-hero-tagline">
+        The open-source platform for coordinating multiple AI coding agents on your codebase — plan, dispatch, and merge in parallel.
+      </p>
+
+      <div class="sf-hero-actions">
+        <a href="/getting-started/introduction/" class="sf-hero-btn sf-hero-btn-primary">
+          Get Started
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </a>
+        <a href="https://github.com/stoneforge-ai/stoneforge" class="sf-hero-btn sf-hero-btn-secondary" target="_blank" rel="noopener noreferrer">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+          GitHub
+        </a>
+      </div>
+
+      {/* Provider pills */}
+      <div class="sf-hero-providers">
+        <span class="sf-hero-providers-label">Works with</span>
+        <div class="sf-hero-providers-list">
+          <span class="sf-hero-provider">Claude Code</span>
+          <span class="sf-hero-provider">Codex</span>
+          <span class="sf-hero-provider">OpenCode</span>
+        </div>
+      </div>
+    </div>
+
+    {/* Bottom gradient fade */}
+    <div class="sf-hero-fade"></div>
+  </div>
+) : (
+  <Default {...Astro.props}><slot /></Default>
+)}
+
+<style>
+  .sf-hero {
+    position: relative;
+    min-height: 560px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 5rem 1.5rem 3.5rem;
+    overflow: hidden;
+  }
+
+  /* --- Floating orbs --- */
+  .sf-hero-orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    pointer-events: none;
+  }
+
+  .sf-hero-orb-1 {
+    width: 450px;
+    height: 450px;
+    top: -15%;
+    left: 10%;
+    background: radial-gradient(circle, rgba(96, 165, 250, 0.14), transparent 70%);
+    animation: sf-orb-drift-1 20s ease-in-out infinite;
+  }
+
+  .sf-hero-orb-2 {
+    width: 380px;
+    height: 380px;
+    top: 5%;
+    right: 8%;
+    background: radial-gradient(circle, rgba(167, 139, 250, 0.11), transparent 70%);
+    animation: sf-orb-drift-2 25s ease-in-out infinite;
+  }
+
+  .sf-hero-orb-3 {
+    width: 320px;
+    height: 320px;
+    bottom: -10%;
+    left: 35%;
+    background: radial-gradient(circle, rgba(96, 165, 250, 0.07), transparent 70%);
+    animation: sf-orb-drift-1 30s ease-in-out infinite reverse;
+  }
+
+  /* --- Grid background --- */
+  .sf-hero-grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(96, 165, 250, 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(96, 165, 250, 0.04) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: radial-gradient(ellipse 70% 70% at 50% 40%, black 10%, transparent 70%);
+    -webkit-mask-image: radial-gradient(ellipse 70% 70% at 50% 40%, black 10%, transparent 70%);
+  }
+
+  /* --- Content --- */
+  .sf-hero-content {
+    position: relative;
+    text-align: center;
+    max-width: 680px;
+    margin: 0 auto;
+    z-index: 1;
+  }
+
+  /* --- Badge --- */
+  .sf-hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.375rem 1rem;
+    border-radius: 9999px;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--sl-color-gray-2);
+    background: var(--sf-surface);
+    border: 1px solid transparent;
+    background-clip: padding-box;
+    position: relative;
+    margin-bottom: 1.75rem;
+  }
+
+  .sf-hero-badge::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: 9999px;
+    background: linear-gradient(135deg, #60a5fa, #a78bfa, #60a5fa);
+    background-size: 200% 200%;
+    animation: sf-gradient-shift 4s ease infinite;
+    z-index: -1;
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask-composite: exclude;
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    padding: 1px;
+  }
+
+  .sf-hero-badge-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--sf-success);
+    animation: sf-pulse-glow 2s ease-in-out infinite;
+  }
+
+  /* --- Title --- */
+  .sf-hero-title {
+    margin: 0 0 1.5rem;
+    line-height: 1.08;
+  }
+
+  .sf-hero-title-main {
+    display: block;
+    font-family: var(--sf-font-headline);
+    font-size: clamp(2.5rem, 6vw, 3.75rem);
+    font-weight: 700;
+    letter-spacing: -0.035em;
+    color: var(--sl-color-white);
+  }
+
+  .sf-hero-title-main strong {
+    font-weight: 700;
+    background: var(--sf-gradient-brand);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* --- Tagline --- */
+  .sf-hero-tagline {
+    font-size: 1.125rem;
+    color: var(--sl-color-gray-3);
+    line-height: 1.65;
+    margin: 0 auto 2.25rem;
+    max-width: 540px;
+  }
+
+  /* --- Actions --- */
+  .sf-hero-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 2.75rem;
+  }
+
+  .sf-hero-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.75rem;
+    border-radius: 0.5rem;
+    font-family: var(--sf-font-body);
+    font-size: 0.9rem;
+    font-weight: 500;
+    text-decoration: none;
+    transition: all 0.25s var(--sf-ease-out-expo);
+  }
+
+  .sf-hero-btn-primary {
+    background: var(--sl-color-accent);
+    color: #ffffff;
+    box-shadow: 0 0 24px rgba(96, 165, 250, 0.2), 0 1px 3px rgba(0, 0, 0, 0.15);
+  }
+
+  .sf-hero-btn-primary:hover {
+    filter: brightness(1.1);
+    transform: translateY(-2px);
+    box-shadow: 0 0 36px rgba(96, 165, 250, 0.3), 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  .sf-hero-btn-secondary {
+    background: transparent;
+    color: var(--sl-color-gray-2);
+    border: 1px solid var(--sl-color-hairline);
+  }
+
+  .sf-hero-btn-secondary:hover {
+    border-color: var(--sf-border-accent);
+    color: var(--sl-color-white);
+    background: rgba(96, 165, 250, 0.05);
+    transform: translateY(-2px);
+  }
+
+  /* --- Provider pills --- */
+  .sf-hero-providers {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .sf-hero-providers-label {
+    font-size: 0.75rem;
+    color: var(--sl-color-gray-3);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 500;
+  }
+
+  .sf-hero-providers-list {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .sf-hero-provider {
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--sl-color-gray-2);
+    background: var(--sf-surface);
+    border: 1px solid var(--sl-color-hairline);
+    transition: border-color 0.3s ease;
+  }
+
+  .sf-hero-provider:hover {
+    border-color: var(--sf-border-accent);
+  }
+
+  /* --- Bottom gradient fade --- */
+  .sf-hero-fade {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 100px;
+    background: linear-gradient(to bottom, transparent, var(--sl-color-bg, var(--sl-color-black)));
+    pointer-events: none;
+  }
+
+  /* ==============================================
+     LIGHT MODE VARIANTS
+     ============================================== */
+
+  :global([data-theme='light']) .sf-hero-orb-1 {
+    background: radial-gradient(circle, rgba(37, 99, 235, 0.07), transparent 70%);
+  }
+
+  :global([data-theme='light']) .sf-hero-orb-2 {
+    background: radial-gradient(circle, rgba(124, 58, 237, 0.05), transparent 70%);
+  }
+
+  :global([data-theme='light']) .sf-hero-orb-3 {
+    background: radial-gradient(circle, rgba(37, 99, 235, 0.04), transparent 70%);
+  }
+
+  :global([data-theme='light']) .sf-hero-grid {
+    background-image:
+      linear-gradient(rgba(37, 99, 235, 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(37, 99, 235, 0.05) 1px, transparent 1px);
+  }
+
+  :global([data-theme='light']) .sf-hero-badge {
+    color: #475569;
+    background: #ffffff;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  }
+
+  :global([data-theme='light']) .sf-hero-title-main {
+    color: #0f172a;
+  }
+
+  :global([data-theme='light']) .sf-hero-title-main strong {
+    background: linear-gradient(135deg, #2563eb, #7c3aed);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  :global([data-theme='light']) .sf-hero-tagline {
+    color: #475569;
+  }
+
+  :global([data-theme='light']) .sf-hero-btn-primary {
+    background: #2563eb;
+    color: #ffffff;
+    box-shadow: 0 0 24px rgba(37, 99, 235, 0.15), 0 1px 3px rgba(15, 23, 42, 0.1);
+  }
+
+  :global([data-theme='light']) .sf-hero-btn-primary:hover {
+    box-shadow: 0 0 36px rgba(37, 99, 235, 0.25), 0 4px 12px rgba(15, 23, 42, 0.1);
+  }
+
+  :global([data-theme='light']) .sf-hero-btn-secondary {
+    color: #475569;
+    border-color: #e2e8f0;
+  }
+
+  :global([data-theme='light']) .sf-hero-btn-secondary:hover {
+    color: #0f172a;
+    background: rgba(37, 99, 235, 0.04);
+    border-color: rgba(37, 99, 235, 0.2);
+  }
+
+  :global([data-theme='light']) .sf-hero-provider {
+    color: #475569;
+    background: #ffffff;
+    border-color: #e2e8f0;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  }
+
+  :global([data-theme='light']) .sf-hero-provider:hover {
+    border-color: rgba(37, 99, 235, 0.2);
+  }
+
+  :global([data-theme='light']) .sf-hero-providers-label {
+    color: #64748b;
+  }
+
+  :global([data-theme='light']) .sf-hero-fade {
+    background: linear-gradient(to bottom, transparent, #ffffff);
+  }
+
+  /* --- Responsive --- */
+  @media (max-width: 640px) {
+    .sf-hero {
+      min-height: auto;
+      padding: 3.5rem 1rem 2.5rem;
+    }
+
+    .sf-hero-orb-1 { width: 250px; height: 250px; }
+    .sf-hero-orb-2 { width: 200px; height: 200px; }
+    .sf-hero-orb-3 { display: none; }
+
+    .sf-hero-providers {
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+  }
+</style>

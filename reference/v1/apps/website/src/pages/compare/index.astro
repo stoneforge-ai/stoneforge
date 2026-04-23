@@ -1,0 +1,64 @@
+---
+import { getCollection } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SectionLabel from '../../components/ui/SectionLabel.astro';
+
+const allComparisons = await getCollection('comparisons');
+const comparisons = allComparisons.sort((a, b) => a.data.order - b.data.order);
+---
+
+<BaseLayout
+  title="Compare Stoneforge to AI Development Tools — Multi-Agent Orchestration"
+  description="See how Stoneforge's multi-agent orchestration compares to other AI coding tools. Honest, detailed comparisons to help you choose the right AI development platform."
+>
+  <section class="site-section pt-28 md:pt-36 pb-16">
+    <div class="site-container">
+      <div class="max-w-4xl mx-auto">
+        <!-- Header -->
+        <div class="text-center mb-16">
+          <SectionLabel class="mb-4">Compare</SectionLabel>
+          <h1
+            class="text-[clamp(1.75rem,4vw+0.5rem,2.75rem)] font-bold tracking-tight mb-4"
+            style="font-family: var(--font-headline);"
+            data-reveal
+          >
+            How Stoneforge compares
+          </h1>
+          <p class="text-[var(--site-text-secondary)] text-lg max-w-2xl mx-auto" data-reveal>
+            Honest, detailed comparisons to help you choose the right AI coding agent orchestration tool for your team.
+          </p>
+        </div>
+
+        <!-- Comparison grid -->
+        <div class="grid gap-5 md:grid-cols-2" data-reveal-stagger>
+          {comparisons.map(comparison => (
+            <a
+              href={`/compare/${comparison.id}/`}
+              class="group glow-card p-6 md:p-8 flex flex-col"
+            >
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 mb-3">
+                  <span class="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.12em] font-semibold text-[var(--site-accent)]">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>
+                    vs {comparison.data.competitor}
+                  </span>
+                </div>
+                <h2 class="text-base font-semibold text-[var(--site-text-primary)] group-hover:text-[var(--site-accent)] transition-colors leading-snug mb-2" style="font-family: var(--font-headline);">
+                  {comparison.data.title}
+                </h2>
+                <p class="text-sm text-[var(--site-text-tertiary)] leading-relaxed mb-4">
+                  {comparison.data.description}
+                </p>
+              </div>
+              <div class="mt-auto pt-4 border-t border-[var(--site-border)]">
+                <span class="text-[12px] font-medium text-[var(--site-accent)] group-hover:underline">
+                  Read comparison &rarr;
+                </span>
+              </div>
+            </a>
+          ))}
+        </div>
+      </div>
+    </div>
+  </section>
+</BaseLayout>

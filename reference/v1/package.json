@@ -1,0 +1,35 @@
+{
+  "name": "stoneforge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Stoneforge Agent Orchestration Platform - Monorepo",
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "clean": "turbo run clean && rm -rf node_modules",
+    "dev:smithy": "turbo run dev --filter=@stoneforge/smithy-server --filter=@stoneforge/smithy-web",
+    "dev:platform": "turbo run dev --filter=@stoneforge/quarry-server --filter=@stoneforge/quarry-web",
+    "postinstall": "node packages/smithy/scripts/fix-node-pty-permissions.cjs",
+    "release": "bun run scripts/release.ts"
+  },
+  "packageManager": "pnpm@8.15.5",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stoneforge-ai/stoneforge.git"
+  },
+  "author": "Stoneforge",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@changesets/cli": "^2.29.8",
+    "@types/bun": "latest",
+    "turbo": "^2.8.14",
+    "typescript": "^5.0.0"
+  }
+}

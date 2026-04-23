@@ -1,0 +1,78 @@
+---
+import { getCollection } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import PostCard from '../../components/blog/PostCard.astro';
+
+const allPosts = await getCollection('blog', ({ data }) => !data.draft);
+const posts = allPosts.sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf());
+
+// Collect all unique tags
+const allTags = [...new Set(posts.flatMap(post => post.data.tags))].sort();
+---
+
+<BaseLayout
+  title="Blog — Stoneforge"
+  description="Updates, engineering deep-dives, and guides for multi-agent orchestration from the Stoneforge team."
+>
+  <section class="site-section pt-28 md:pt-36 pb-16">
+    <div class="site-container">
+      <div class="max-w-3xl mx-auto">
+        <!-- Header -->
+        <div class="mb-12">
+          <h1
+            class="text-[clamp(1.75rem,4vw+0.5rem,2.75rem)] font-bold tracking-tight mb-3"
+            style="font-family: var(--font-headline);"
+            data-reveal
+          >
+            Blog
+          </h1>
+          <p class="text-[var(--site-text-secondary)] text-lg" data-reveal>
+            Updates, engineering deep-dives, and guides from the Stoneforge team.
+          </p>
+        </div>
+
+        <!-- Tag filter row -->
+        {allTags.length > 0 && (
+          <div class="flex flex-wrap gap-2 mb-10" data-reveal>
+            <a
+              href="/blog/"
+              class="inline-block px-3 py-1.5 text-[12px] font-medium rounded-lg bg-[var(--site-accent-subtle)] text-[var(--site-accent)] border border-[var(--site-border-accent)] transition-all duration-200"
+            >
+              All
+            </a>
+            {allTags.map(tag => (
+              <a
+                href={`/blog/tags/${tag}/`}
+                class="inline-block px-3 py-1.5 text-[12px] font-medium rounded-lg bg-[var(--site-bg-elevated)] text-[var(--site-text-tertiary)] border border-[var(--site-border)] hover:border-[var(--site-border-accent)] hover:text-[var(--site-accent)] transition-all duration-200"
+              >
+                {tag}
+              </a>
+            ))}
+          </div>
+        )}
+
+        <!-- Posts -->
+        <div class="space-y-5" data-reveal-stagger>
+          {posts.map(post => (
+            <PostCard
+              title={post.data.title}
+              description={post.data.description}
+              date={post.data.date}
+              updatedDate={post.data.updatedDate}
+              author={post.data.author}
+              tags={post.data.tags}
+              slug={post.id}
+              body={post.body}
+            />
+          ))}
+        </div>
+
+        {posts.length === 0 && (
+          <p class="text-[var(--site-text-ghost)] text-center py-16">
+            No posts yet. Check back soon!
+          </p>
+        )}
+      </div>
+    </div>
+  </section>
+</BaseLayout>

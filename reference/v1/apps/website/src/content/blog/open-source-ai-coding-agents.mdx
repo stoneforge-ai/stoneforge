@@ -1,0 +1,170 @@
+---
+title: "Open Source AI Coding Agents: The Complete List"
+description: "Every notable open-source AI coding agent in 2026: features, GitHub stars, license, and what each does best. Updated for March 2026."
+date: 2026-03-09
+tags: ["open-source", "ai-agents", "tools", "comparison"]
+relatedContent:
+  - title: "Best AI Coding Agents in 2026"
+    url: "/blog/best-ai-coding-agents-2026/"
+    type: "blog"
+  - title: "Free & Open Source AI Coding"
+    url: "/use-cases/free-open-source-ai-coding/"
+    type: "use-case"
+  - title: "Multi-Agent vs Single-Agent AI Development"
+    url: "/comparisons/multi-agent-vs-single-agent/"
+    type: "compare"
+  - title: "Getting Started with Stoneforge"
+    url: "https://docs.stoneforge.ai/getting-started"
+    type: "docs"
+---
+
+{/* SEO CHECKLIST
+    [x] Title tag <=60 chars with primary keyword
+    [x] Meta description <=160 chars
+    [x] H1 = title, H2s for each section
+    [x] 2-3 internal links to docs.stoneforge.ai
+    [x] 1-2 internal links to use case or comparison pages
+    [x] 3-5 FAQ items
+    [x] Image alt text with keywords */}
+
+The open-source AI coding agent ecosystem grew rapidly through 2025 and into 2026. What was once a category with two or three options now includes more than a dozen actively maintained projects, each with a different take on how AI should help developers write code.
+
+This list covers every notable open-source AI coding agent as of March 2026. For each, we've included what it does, its GitHub star count, license, key strengths, and the type of developer it serves best. We built [Stoneforge](https://docs.stoneforge.ai/getting-started), which is included at the end as an orchestration layer, so that's disclosed upfront.
+
+## OpenCode
+
+**GitHub:** [opencode-ai/opencode](https://github.com/opencode-ai/opencode) · 95K+ stars · MIT License
+
+OpenCode is a Go-based terminal coding agent that supports 75+ models from Claude, OpenAI, Gemini, and local providers. Its terminal UI is polished, with multi-session support and two built-in agent modes: Build (full tool access for editing, running commands, and browsing) and Plan (read-only analysis for understanding codebases before making changes).
+
+OpenCode grew explosively in early 2026, gaining 18,000 stars in two weeks after developers discovered they could route Claude Max subscriptions through it. The community around it is large and active, with over 650,000 monthly developers.
+
+**Strengths:** Provider-agnostic model support, OpenCode Zen for curated model recommendations, desktop app and IDE extensions available alongside the terminal interface.
+
+**Best for:** Developers who want full control over which model they use and don't want provider lock-in. Also strong for teams that need to run local models for privacy compliance.
+
+## Aider
+
+**GitHub:** [Aider-AI/aider](https://github.com/Aider-AI/aider) · 30K+ stars · Apache 2.0 License
+
+Aider pioneered the AI pair programming workflow in the terminal. It connects to your git repository, builds an internal map of your codebase for context, makes edits, and auto-commits each change with a descriptive message. The git integration is the defining feature: every AI change is a clean commit you can review, revert, or cherry-pick.
+
+Aider supports virtually every major model provider and works well with Claude, GPT-4o, DeepSeek, and local models through Ollama. It also supports voice input and can consume images and web pages as context.
+
+**Strengths:** Best-in-class git integration with automatic, meaningful commits. Repository map gives it strong understanding of large codebases. Automatic linting and test running with self-correction loops.
+
+**Best for:** Developers who value clean git history and traceability. Strong choice for open-source maintainers who need every AI change to be individually reviewable.
+
+## Cline
+
+**GitHub:** [cline/cline](https://github.com/cline/cline) · 59K+ stars · Apache 2.0 License
+
+Cline is a VS Code extension that brings autonomous agent capabilities into the editor. It has two modes: Plan (analyzes without making changes) and Act (executes with step-by-step approval). Every file edit, terminal command, and browser action requires your explicit permission before it runs.
+
+Cline was the first major coding agent to integrate MCP (Model Context Protocol) deeply into its workflow. You can ask Cline to create new MCP servers, and it handles the server creation and installation. The MCP Marketplace functions as an app store for extending Cline's capabilities with community-built tools.
+
+**Strengths:** Human-in-the-loop by default, keeping you in control of every change. MCP integration is the most mature of any coding agent. Supports a wide range of providers through OpenRouter, Anthropic, OpenAI, Gemini, and local models.
+
+**Best for:** Developers who want an agent in their editor but need to approve each step. Teams that need enterprise compliance features (Cline Enterprise offers SSO, audit trails, and private networking) with an open-source core.
+
+## OpenHands
+
+**GitHub:** [OpenHands/OpenHands](https://github.com/OpenHands/OpenHands) · 68K+ stars · MIT License
+
+OpenHands (formerly OpenDevin) is a platform for building and running AI coding agents. Rather than a single agent, it provides a framework with a universal agent controller, multi-session management, and sandboxed execution environments. Agents built on OpenHands can edit code, run commands, browse the web, and call APIs.
+
+Backed by $18.8M in Series A funding, OpenHands is one of the most well-resourced open-source projects in this space. The sandbox execution model means the agent's actions are isolated from your host system, reducing the risk of unintended side effects.
+
+**Strengths:** Sandboxed execution for safety. Platform approach means multiple agent types can run on the same infrastructure. Multi-agent collaboration support built in. Active, well-funded development.
+
+**Best for:** Teams that want to build custom agent workflows or need sandboxed execution for security. Also useful for researchers experimenting with different agent architectures.
+
+## Continue
+
+**GitHub:** [continuedev/continue](https://github.com/continuedev/continue) · 31K+ stars · Apache 2.0 License
+
+Continue is an AI coding assistant that integrates into VS Code and JetBrains IDEs. It offers code completion, chat-based assistance, and the ability to edit code from natural language instructions. The model-agnostic architecture lets you connect any LLM, from cloud providers to local models running through Ollama.
+
+Continue's differentiator is its focus on source-controlled AI checks. You can define rules and checks that your AI assistant enforces, enforceable in CI alongside your regular linting and testing pipeline. This bridges the gap between ad-hoc AI assistance and systematic code quality.
+
+**Strengths:** Works in both VS Code and JetBrains. Model-agnostic. Source-controlled AI checks that can run in CI. Clean integration with existing IDE workflows.
+
+**Best for:** Developers who want AI assistance embedded in their IDE without committing to a specific model provider, especially those on JetBrains IDEs where agent options are more limited.
+
+## Goose
+
+**GitHub:** [block/goose](https://github.com/block/goose) · 15K+ stars · Apache 2.0 License
+
+Goose, built by Block (formerly Square), is a terminal-based coding agent that emphasizes extensibility through MCP. Rather than building every capability into the agent itself, Goose relies on MCP servers to provide tools for file operations, terminal access, browser automation, and more. You configure which MCP servers Goose can access, and it assembles capabilities from them.
+
+This approach means Goose's capabilities grow with the MCP ecosystem. As new MCP servers are published for databases, cloud services, or internal tools, Goose can use them without needing updates to the agent itself.
+
+**Strengths:** MCP-native architecture makes it highly extensible. Built and maintained by Block, which provides corporate backing and stability. Clean terminal UI.
+
+**Best for:** Developers who want an agent they can extend through the MCP ecosystem rather than waiting for built-in feature additions.
+
+## Plandex
+
+**GitHub:** [plandex-ai/plandex](https://github.com/plandex-ai/plandex) · 11K+ stars · AGPL-3.0 License
+
+Plandex focuses on large, multi-file tasks that span entire features or refactors. It accumulates changes in a sandbox and lets you review everything before applying, so you can inspect the full scope of a multi-file edit before it touches your working directory. It also supports branching within plans, so you can explore alternative approaches without losing progress.
+
+**Strengths:** Built for large changes across many files. Sandbox accumulation means you review the full change set, not individual file edits. Plan branching for exploring alternatives.
+
+**Best for:** Developers working on large refactors or multi-file features who want to review all changes as a cohesive set before applying them.
+
+## Void
+
+**GitHub:** [voideditor/void](https://github.com/voideditor/void) · 15K+ stars · MIT License
+
+Void is an open-source fork of VS Code that integrates AI at the editor level, similar to Cursor but fully open source. It routes to any model provider and keeps all configuration local. The goal is to provide a Cursor-like experience without the proprietary lock-in.
+
+**Strengths:** Full VS Code compatibility (extensions, settings, themes). Local model support. No telemetry or data collection. Open-source alternative to Cursor.
+
+**Best for:** Developers who want an AI-native editor experience but prefer open-source software and full control over their data.
+
+## Stoneforge (Orchestration Layer)
+
+**GitHub:** [stoneforge-ai/stoneforge](https://github.com/stoneforge-ai/stoneforge) · MIT License
+
+Stoneforge is a different kind of tool. Instead of being a coding agent, it [orchestrates multiple agents](/comparisons/multi-agent-vs-single-agent/) working in parallel on the same codebase. It dispatches tasks to agents (currently supporting [Claude Code](/integrations/claude-code/), [Codex CLI](/integrations/codex/), and [OpenCode](/integrations/opencode/)), isolates their work in git worktrees, tracks dependencies between tasks, and manages the merge queue when agents finish.
+
+The role-based system splits responsibilities: a Director creates and assigns tasks, Workers execute code changes, a Steward reviews and merges, and a Daemon handles automatic dispatch. This separation addresses the coordination overhead that emerges when you scale beyond a single agent.
+
+**Strengths:** Agent-agnostic orchestration. Automatic task lifecycle management (dispatch, monitor, retry, merge). Dependency-aware scheduling prevents wasted work. Git worktree isolation eliminates conflicts during execution.
+
+**Best for:** Teams running enough parallel AI work that [coordination becomes the bottleneck](/blog/run-multiple-ai-coding-agents-parallel/). If you're manually juggling multiple agent sessions and merge conflicts, Stoneforge automates that coordination layer.
+
+## How to Choose
+
+The choice depends on where you spend your time and what your constraints are.
+
+**Terminal or editor?** OpenCode, Aider, Goose, and Plandex are terminal-first. Cline and Continue live in VS Code. Void is a full editor. Pick based on where you're most productive.
+
+**Model flexibility matters?** OpenCode, Aider, Continue, Cline, and Goose all support multiple providers including local models. If your organization requires on-premise model hosting, any of these work.
+
+**How much autonomy?** Cline asks permission at every step. Aider auto-commits but stays interactive. OpenHands and OpenCode can run more autonomously. Match the autonomy level to your comfort and the risk profile of the task.
+
+**Scale beyond one agent?** If you're already using one of these tools and finding that serial execution is the bottleneck, that's where orchestration tools like [Stoneforge](https://docs.stoneforge.ai/getting-started) fit in. They don't replace agents. They coordinate them.
+
+## Frequently Asked Questions
+
+### Which open-source AI coding agent has the most GitHub stars?
+
+As of March 2026, OpenCode leads among dedicated coding agents with 95K+ stars, followed by OpenHands at 68K+ and Cline at 59K+. Star counts don't always reflect quality or suitability for your use case, but they do indicate community size and activity level.
+
+### Can I use open-source coding agents for free?
+
+Yes. All tools on this list are free to download and run. The cost comes from the underlying model API. If you use Claude, GPT-4o, or similar cloud models, you pay the provider's API rates. If you run local models through Ollama or similar tools, the total cost is zero beyond your hardware and electricity.
+
+### Do open-source coding agents support local models?
+
+Most do. OpenCode, Aider, Continue, Cline, and Goose all support local model providers. The practical limitation is hardware: running a capable code model locally requires 16GB+ VRAM for good performance. Smaller models (7B-13B parameters) run on consumer GPUs but produce lower-quality output than frontier cloud models.
+
+### Are open-source coding agents safe for proprietary code?
+
+When running with cloud model APIs, your code is sent to the provider's servers. Check each provider's data handling policies. When running with local models, your code stays entirely on your machine. For maximum security, use Aider or OpenCode with a local model and no network access. OpenHands adds sandboxed execution as an extra safety layer.
+
+### Can I use multiple open-source coding agents together?
+
+Yes. Tools like [Stoneforge](/blog/run-multiple-ai-coding-agents-parallel/) are designed specifically for this. You can run different agents as workers on separate tasks, each in an isolated git worktree. This lets you leverage each agent's strengths: one might handle Python tasks better while another excels at TypeScript. Without an orchestrator, you can still run multiple agents manually, but you manage the branching and merging yourself.

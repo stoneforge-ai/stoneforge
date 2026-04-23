@@ -1,0 +1,65 @@
+---
+title: "AI Code Refactoring at Scale"
+description: "Break down large AI code refactoring tasks into parallel subtasks. Stoneforge agents execute automated refactoring across your codebase simultaneously."
+problem: "Large refactors are dreaded because they're all-or-nothing. A single developer touching hundreds of files creates a monster PR that's impossible to review, and the branch goes stale before it's merged. Splitting the work manually is tedious and error-prone."
+icon: "refactor"
+order: 2
+docsLinks:
+  - title: "Task Planning"
+    url: "https://docs.stoneforge.ai/guides/task-planning/"
+  - title: "Dependency System"
+    url: "https://docs.stoneforge.ai/core-concepts/dependency-system/"
+  - title: "Auto-Merge"
+    url: "https://docs.stoneforge.ai/guides/auto-merge/"
+faqItems:
+  - question: "How does AI code refactoring break down large changes?"
+    answer: "You describe the refactoring goal to the Director agent, which analyzes your codebase and creates a plan — a dependency-ordered list of tasks. Each task targets a specific module, file group, or pattern. You review the plan before execution starts, and can adjust scope or ordering."
+  - question: "Can automated refactoring handle shared code safely?"
+    answer: "Yes. The dependency system ensures tasks that modify shared code are sequenced correctly. If Task B depends on changes from Task A, the orchestrator won't start Task B until Task A is complete and merged. For truly independent modules, tasks run in parallel."
+  - question: "How do I ensure consistency across a parallelized refactor?"
+    answer: "Define the refactoring pattern once in the plan description, and every agent follows the same approach. Stoneforge also supports workspace-level prompts so you can enforce naming conventions, import patterns, and coding standards across all agents."
+  - question: "Can AI refactoring work across multiple packages in a monorepo?"
+    answer: "The plan system supports cross-package refactors. Create tasks scoped to each package, set up dependencies for shared types or interfaces, and let the agents work through the graph. Each task produces a small, reviewable PR."
+  - question: "How long does automated refactoring take compared to manual work?"
+    answer: "It depends on the scope. The main time savings come from parallelism: multiple agents work on independent modules simultaneously, and each produces a small PR that's faster to review than one monolithic changeset. A refactor across several packages might take a day or two of agent time plus human review, compared to a week or more of sequential manual work."
+---
+
+AI code refactoring with Stoneforge makes large refactors tractable by decomposing them into a dependency graph of small, focused tasks — then executing automated refactoring in parallel across multiple agents.
+
+### Plan the refactor, don't just start
+
+The worst refactors start with `git checkout -b big-refactor` and end three weeks later with a 200-file PR. Stoneforge's approach is different: the [Director agent](https://docs.stoneforge.ai/guides/agent-roles/) analyzes the refactoring goal and produces a structured plan.
+
+```bash
+# Describe what you want to refactor
+sf plan create --title "Migrate from Express to Hono"
+
+# The Director breaks it into ordered tasks:
+# 1. Add Hono dependency and shared middleware adapter
+# 2. Migrate /api/auth routes (no deps on other routes)
+# 3. Migrate /api/users routes (parallel with auth)
+# 4. Migrate /api/billing routes (parallel)
+# 5. Update error handling middleware (depends on 1)
+# 6. Update integration tests (depends on 2, 3, 4)
+# 7. Remove Express dependency and cleanup
+```
+
+### Small PRs, fast reviews
+
+Each AI code refactoring task produces a focused merge request — typically touching 5-20 files instead of 200. Reviewers can understand the change in minutes, not hours. The Steward agent adds context about what changed and why, linking back to the overall plan.
+
+### Maximum parallelism with correct ordering
+
+Stoneforge's [dependency system](https://docs.stoneforge.ai/core-concepts/dependency-system/) determines which tasks can run concurrently and which need to wait. Independent modules are refactored in parallel, while tasks that depend on shared code are queued until their prerequisites merge.
+
+```bash
+# Start the refactor — agents execute the plan
+sf serve
+
+# Monitor progress in real time
+# Dashboard shows: 3 agents working, 2 tasks complete, 1 in review
+```
+
+### Rollback-friendly automated refactoring
+
+Because each task is a separate merge request, you can roll back individual changes without reverting the entire refactor. If the billing route migration introduces a bug, revert that one PR while the rest of the refactor stays in place. Combine this with [AI test generation](/use-cases/test-generation/) to verify each step of the refactoring process.

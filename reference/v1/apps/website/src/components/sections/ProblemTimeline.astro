@@ -1,0 +1,90 @@
+---
+import SectionLabel from '../ui/SectionLabel.astro';
+
+const problems = [
+  {
+    icon: '<path d="M18 21a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"/><path d="M6 7a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"/><path d="M6 7v14"/><path d="M6 11a7 7 0 0 0 7 7h1a2 2 0 0 0 2-2v-1"/>',
+    title: 'Merge conflicts',
+    desc: 'Agents edit the same files on the same branch, creating constant conflicts.',
+    color: '#f87171',
+    glowColor: 'rgba(248, 113, 113, 0.12)',
+  },
+  {
+    icon: '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+    title: 'Duplicated work',
+    desc: 'Two agents grab the same task, or one starts work that\'s blocked by another.',
+    color: '#fbbf24',
+    glowColor: 'rgba(251, 191, 36, 0.10)',
+  },
+  {
+    icon: '<path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><line x1="2" y1="2" x2="22" y2="22"/>',
+    title: 'Zero visibility',
+    desc: 'You can\'t see what\'s happening until you check each terminal individually.',
+    color: '#64748b',
+    glowColor: 'rgba(100, 116, 139, 0.08)',
+  },
+];
+---
+
+<section id="why" class="site-section relative overflow-hidden">
+  <div class="site-container relative z-10">
+    <SectionLabel class="mb-4">The Problem</SectionLabel>
+    <h2
+      class="text-[clamp(1.75rem,3vw+0.5rem,2.75rem)] font-semibold tracking-[-0.025em] mb-16 md:mb-20 max-w-lg"
+      data-reveal
+    >
+      Why multi-agent breaks&nbsp;down
+    </h2>
+
+    <!-- Desktop: horizontal timeline -->
+    <div class="hidden md:block relative" data-reveal-stagger>
+      <!-- Connecting line -->
+      <div class="absolute top-[44px] left-[calc(16.67%-10px)] right-[calc(16.67%-10px)] h-px overflow-hidden">
+        <div
+          class="timeline-line h-full w-full"
+          style="background: linear-gradient(to right, #f87171, #fbbf24, #64748b);"
+        ></div>
+      </div>
+
+      <div class="grid grid-cols-3 gap-6">
+        {problems.map((problem) => (
+          <div class="relative flex flex-col items-center text-center group">
+            <!-- Glow halo behind the icon -->
+            <div
+              class="absolute top-0 left-1/2 -translate-x-1/2 w-24 h-24 rounded-full blur-2xl transition-opacity duration-500 group-hover:opacity-100 opacity-50"
+              style={`background: ${problem.glowColor};`}
+              aria-hidden="true"
+            ></div>
+            <!-- Icon circle -->
+            <div
+              class="relative z-10 w-[88px] h-[88px] rounded-2xl border flex items-center justify-center mb-6 bg-[var(--site-bg-primary)] transition-all duration-300 group-hover:scale-105"
+              style={`border-color: color-mix(in srgb, ${problem.color} 30%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, ${problem.color} 8%, transparent), inset 0 1px 0 rgba(255,255,255,0.02);`}
+            >
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={problem.color} stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" set:html={problem.icon} />
+            </div>
+            <h3 class="text-lg font-semibold mb-2 tracking-tight">{problem.title}</h3>
+            <p class="text-sm text-[var(--site-text-secondary)] max-w-[240px] leading-relaxed">{problem.desc}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+
+    <!-- Mobile: vertical layout -->
+    <div class="md:hidden space-y-6" data-reveal-stagger>
+      {problems.map((problem) => (
+        <div class="relative flex gap-5 items-start p-4 rounded-xl bg-[var(--site-bg-elevated)] border border-[var(--site-border)]">
+          <div
+            class="w-12 h-12 rounded-xl border flex items-center justify-center flex-shrink-0"
+            style={`border-color: color-mix(in srgb, ${problem.color} 30%, transparent);`}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={problem.color} stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" set:html={problem.icon} />
+          </div>
+          <div>
+            <h3 class="text-base font-semibold mb-1">{problem.title}</h3>
+            <p class="text-sm text-[var(--site-text-secondary)] leading-relaxed">{problem.desc}</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>

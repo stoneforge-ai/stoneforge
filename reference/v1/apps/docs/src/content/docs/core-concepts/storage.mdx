@@ -1,0 +1,287 @@
+---
+title: Storage
+description: How Stoneforge's dual storage architecture combines SQLite for fast queries with JSONL files for durable, git-friendly persistence.
+---
+
+import { Aside, LinkCard } from '@astrojs/starlight/components';
+import FeatureCard from '../../../components/custom/FeatureCard.astro';
+
+Stoneforge uses a **dual storage architecture** — SQLite for fast, indexed queries at runtime, and JSONL files for durable, git-trackable persistence. SQLite is the cache. JSONL is the source of truth.
+
+## Why two storage layers
+
+Neither SQLite nor flat files alone solve the full problem.
+
+**SQLite alone** gives you fast queries, indexes, and full-text search — but binary database files don't merge in Git, corruption risks permanent data loss, and there's no meaningful version control.
+
+**JSONL alone** gives you portable, human-readable, diff-friendly files that merge cleanly across branches — but every query requires a full scan, there are no indexes, no transactions, and no complex joins.
+
+**Stoneforge uses both.** SQLite handles runtime performance. JSONL handles durability and collaboration. The database can always be rebuilt from the JSONL files, but not the other way around.
+
+| Aspect | SQLite | JSONL |
+| --- | --- | --- |
+| **Purpose** | Fast queries at runtime | Durable persistence |
+| **Speed** | Milliseconds (indexed) | Slower (file I/O) |
+| **Git-friendly** | No (binary) | Yes (text diffs) |
+| **Portable** | No | Yes (copy files) |
+| **Source of truth** | No | **Yes** |
+| **Rebuildable from** | JSONL | N/A |
+
+<Aside type="tip">
+  If your SQLite database ever corrupts or gets out of sync, delete it and run `sf sync import`. The JSONL files will rebuild it completely.
+</Aside>
+
+## Data flow
+
+Every read and write in Stoneforge follows a predictable path through the two storage layers.
+
+### Write path
+
+```
+API call (create / update / delete)
+         │
+         ▼
+   ┌───────────┐
+   │  SQLite   │  ← Immediate write
+   └─────┬─────┘
+         │
+         ▼
+   ┌───────────┐
+   │   Dirty   │  ← Mark element as modified
+   │  Tracking │
+   └─────┬─────┘
+         │
+         ▼ (on export)
+   ┌───────────┐
+   │   JSONL   │  ← Serialize to file
+   └───────────┘
+```
+
+Writes go to SQLite immediately for fast reads. The element is marked dirty so the next export includes it in the JSONL files.
+
+### Read path
+
+```
+API call (get / list / query)
+         │
+         ▼
+   ┌───────────┐
+   │  SQLite   │  ← Fast indexed query
+   └───────────┘
+```
+
+Reads always go to SQLite. The JSONL files are never read at runtime — they exist only for sync and recovery.
+
+### Sync path
+
+```
+   ┌───────────┐      ┌───────────┐
+   │   Local   │      │  Remote   │
+   │   JSONL   │      │   JSONL   │
+   └─────┬─────┘      └─────┬─────┘
+         │                   │
+         └────────┬──────────┘
+                  │ merge
+         ┌───────▼────────┐
+         │  Merge Logic   │  ← Content hash comparison
+         │ (newer wins)   │  ← closed/tombstone always wins
+         └───────┬────────┘
+                 │
+         ┌───────▼────────┐
+         │  Import into   │
+         │    SQLite      │
+         └────────────────┘
+```
+
+When JSONL files arrive from another branch (via `git pull` or branch merge), the import process merges them into SQLite using content hashing and last-write-wins semantics.
+
+## The `.stoneforge/` directory
+
+All project data lives in a `.stoneforge/` directory at the project root:
+
+```
+.stoneforge/
+├── stoneforge.db          # SQLite database (cache — gitignored)
+├── sync/
+│   ├── elements.jsonl     # All elements (source of truth)
+│   └── dependencies.jsonl # All dependency relationships
+└── config.yaml            # Project configuration
+```
+
+<Aside>
+  The `sync/` directory and `config.yaml` are committed to Git. The `stoneforge.db` file is gitignored — it's a cache that can always be rebuilt from the JSONL files.
+</Aside>
+
+## SQLite schema
+
+The database uses a migration-based schema (currently version 9). Here are the key tables:
+
+| Table | Purpose |
+| --- | --- |
+| `elements` | All elements with JSON data column |
+| `dependencies` | Relationship records between elements |
+| `events` | Immutable event log for audit/history |
+| `dirty_elements` | Tracks elements modified since last export |
+| `blocked_cache` | Materialized blocked status for O(1) lookups |
+| `child_counters` | Hierarchical ID generation counters |
+| `tags` | Tag index for fast filtering |
+| `inbox_items` | Agent notification/message queue |
+| `comments` | Inline document comments with text anchoring |
+| `session_messages` | Persistent agent session event storage |
+| `documents_fts` | FTS5 virtual table for full-text search |
+| `document_embeddings` | Vector embeddings for semantic search |
+| `settings` | Server-side key-value configuration store |
+
+### Elements table
+
+The `elements` table stores all element types in a single table with a JSON `data` column for type-specific fields:
+
+```sql
+CREATE TABLE elements (
+  id TEXT PRIMARY KEY,
+  type TEXT NOT NULL,
+  data TEXT NOT NULL,          -- JSON blob
+  content_hash TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  created_by TEXT NOT NULL,
+  deleted_at TEXT,
+  CHECK (type IN ('task', 'message', 'document', 'entity',
+                  'plan', 'workflow', 'playbook',
+                  'channel', 'library', 'team'))
+);
+```
+
+The `content_hash` column stores a hash of the element's semantic content, used for merge conflict detection during sync.
+
+### Dependencies table
+
+Dependencies use a composite primary key of `(blocked_id, blocker_id, type)`, allowing multiple relationship types between the same pair of elements:
+
+```sql
+CREATE TABLE dependencies (
+  blocked_id TEXT NOT NULL
+    REFERENCES elements(id) ON DELETE CASCADE,
+  blocker_id TEXT NOT NULL,
+  type TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  created_by TEXT NOT NULL,
+  metadata TEXT,               -- JSON blob
+  PRIMARY KEY (blocked_id, blocker_id, type)
+);
+```
+
+Only `blocked_id` has a CASCADE foreign key constraint. Deleting an element removes all dependencies where it is the blocked element.
+
+<Aside>
+  Schema migrations run automatically on startup. You never need to manage the database schema manually — Stoneforge handles it.
+</Aside>
+
+## JSONL format
+
+The JSONL files contain one self-contained JSON object per line. Each line has everything needed to reconstruct the element — no dependencies between lines, no ordering requirements.
+
+### Elements file
+
+`.stoneforge/sync/elements.jsonl`:
+
+```jsonl
+{"id":"el-3a8f","type":"task","title":"Fix login bug","status":"open","createdAt":"...","createdBy":"director-1","tags":[],"metadata":{}}
+{"id":"el-7b2c","type":"task","title":"Add tests","status":"closed","createdAt":"...","createdBy":"director-1","tags":["testing"],"metadata":{}}
+```
+
+### Dependencies file
+
+`.stoneforge/sync/dependencies.jsonl`:
+
+```jsonl
+{"blockedId":"el-3a8f","blockerId":"el-7b2c","type":"blocks","createdAt":"...","createdBy":"director-1","metadata":{}}
+```
+
+This format is designed for Git. Lines can be added, removed, or reordered without breaking anything. Standard text-based merge tools handle conflicts at the line level, and Stoneforge's import logic handles semantic merges.
+
+## Dirty tracking
+
+Stoneforge uses **dirty tracking** to make exports efficient. Instead of writing every element to JSONL on every export, only elements modified since the last export are written.
+
+When an element is created, updated, or deleted through the API, it's marked dirty in a dedicated `dirty_elements` table. On export:
+
+1. Query all dirty element IDs
+2. Serialize only those elements to JSONL
+3. Clear the dirty flags for exported elements
+
+For a full export (e.g., after a major migration), you can bypass dirty tracking and serialize everything:
+
+```bash
+sf sync export --full
+```
+
+Incremental exports are the default, keeping the export operation fast even in large projects.
+
+## Multi-runtime backends
+
+Stoneforge's storage layer supports three runtime environments through a common `StorageBackend` interface:
+
+| Feature | Bun | Node.js | Browser |
+| --- | --- | --- | --- |
+| **Implementation** | Native SQLite | better-sqlite3 (FFI) | sql.js (WASM + OPFS) |
+| **Async required** | No | No | Yes |
+| **Performance** | Best | Good | Good |
+| **Memory** | Low | Medium | Higher |
+
+The `createStorage()` factory auto-detects the runtime and returns the appropriate backend. You never need to specify which backend to use — it just works.
+
+<Aside type="tip">
+  For the browser backend, use `createStorageAsync()` instead of `createStorage()`. The WASM/OPFS initialization is inherently asynchronous.
+</Aside>
+
+## Document search
+
+Documents support three search modes through two index layers built on top of the `elements` table:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    elements table                        │
+│  Primary storage for all document data (SQLite)         │
+└────────────────────────────┬────────────────────────────┘
+                             │
+         ┌───────────────────┼───────────────────┐
+         │                                       │
+┌────────▼─────────┐                  ┌──────────▼────────┐
+│  documents_fts   │                  │ document_embeddings│
+│  FTS5 virtual    │                  │  Vector storage    │
+│  table (BM25)    │                  │ (cosine similarity)│
+└──────────────────┘                  └───────────────────┘
+```
+
+| Mode | Engine | Ranking | Requires embeddings |
+| --- | --- | --- | --- |
+| **Relevance** | FTS5 | BM25 (term frequency / inverse document frequency) | No |
+| **Semantic** | Vector | Cosine similarity against query embedding | Yes |
+| **Hybrid** | FTS5 + Vector | Reciprocal Rank Fusion (RRF) combining both | Yes |
+
+**Relevance search** uses SQLite's built-in FTS5 with BM25 ranking and an elbow-detection algorithm to filter low-relevance results.
+
+**Semantic search** embeds the query and computes cosine similarity against all stored document embeddings.
+
+**Hybrid search** runs both pipelines and merges results using Reciprocal Rank Fusion (RRF) for the best of both worlds.
+
+Indexes are updated automatically on document create, update, and delete. After a bulk import, call `sf document reindex` (or `sf embeddings reindex` for vector indexes) to rebuild the search indexes.
+
+## Next steps
+
+<LinkCard
+  title="Sync & Merge"
+  description="How data synchronizes across branches with content hashing and merge strategies"
+  href="/core-concepts/sync-and-merge/"
+/>
+<LinkCard
+  title="Event Sourcing"
+  description="How Stoneforge records every state change as an immutable event"
+  href="/core-concepts/event-sourcing/"
+/>
+<LinkCard
+  title="Services Reference"
+  description="API reference for SyncService, BlockedCacheService, and other services"
+  href="/reference/sdk-services/"
+/>

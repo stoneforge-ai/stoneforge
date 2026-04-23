@@ -1,0 +1,143 @@
+---
+interface Props {
+  title: string;
+  icon: string;
+  href?: string;
+  class?: string;
+}
+
+const { title, icon, href, class: className = '' } = Astro.props;
+const Tag = href ? 'a' : 'div';
+---
+
+<Tag class:list={['sf-concept-card', className]} href={href}>
+  <div class="sf-concept-card-icon" set:html={icon} />
+  <div class="sf-concept-card-content">
+    <h3 class="sf-concept-card-title">
+      {title}
+      {href && <span class="sf-concept-card-arrow">&rarr;</span>}
+    </h3>
+    <div class="sf-concept-card-body">
+      <slot />
+    </div>
+  </div>
+</Tag>
+
+<style>
+  .sf-concept-card {
+    display: flex;
+    gap: 1rem;
+    padding: 1.25rem;
+    background: var(--sf-surface);
+    border: 1px solid var(--sl-color-hairline);
+    border-radius: 0.75rem;
+    text-decoration: none;
+    transition: border-color 0.4s var(--sf-ease-out-expo),
+                box-shadow 0.4s var(--sf-ease-out-expo),
+                transform 0.3s var(--sf-ease-out-expo);
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Gradient hover overlay */
+  .sf-concept-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, transparent 30%, rgba(96, 165, 250, 0.05) 50%, rgba(167, 139, 250, 0.03) 70%, transparent 90%);
+    opacity: 0;
+    transition: opacity 0.4s var(--sf-ease-out-expo);
+    pointer-events: none;
+  }
+
+  a.sf-concept-card:hover {
+    border-color: var(--sf-border-accent);
+    box-shadow: 0 0 20px rgba(96, 165, 250, 0.06), var(--sf-shadow-md);
+    transform: translateY(-2px);
+  }
+
+  a.sf-concept-card:hover::before {
+    opacity: 1;
+  }
+
+  .sf-concept-card-icon {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 0.625rem;
+    background: var(--sl-color-accent-low);
+    color: var(--sl-color-accent);
+    transition: border-color 0.4s var(--sf-ease-out-expo),
+                box-shadow 0.4s var(--sf-ease-out-expo);
+    border: 1px solid transparent;
+  }
+
+  a.sf-concept-card:hover .sf-concept-card-icon {
+    border-color: var(--sf-border-accent);
+    box-shadow: 0 0 12px rgba(96, 165, 250, 0.15);
+  }
+
+  .sf-concept-card-title {
+    font-family: var(--sf-font-headline);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--sl-color-white);
+    margin: 0 0 0.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .sf-concept-card-arrow {
+    opacity: 0;
+    transform: translateX(-4px);
+    transition: opacity 0.3s var(--sf-ease-out-expo), transform 0.3s var(--sf-ease-out-expo);
+    color: var(--sl-color-accent);
+  }
+
+  a.sf-concept-card:hover .sf-concept-card-arrow {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  .sf-concept-card-body {
+    font-size: 0.8125rem;
+    color: var(--sl-color-gray-3);
+    line-height: 1.55;
+  }
+
+  .sf-concept-card-body :global(p) {
+    margin: 0;
+  }
+
+  /* ---- Light mode ---- */
+  :global([data-theme='light']) .sf-concept-card {
+    background: #ffffff;
+    border-color: #e2e8f0;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  }
+
+  :global([data-theme='light']) a.sf-concept-card:hover {
+    border-color: rgba(37, 99, 235, 0.2);
+    box-shadow: 0 4px 16px rgba(37, 99, 235, 0.06), var(--sf-shadow-md);
+  }
+
+  :global([data-theme='light']) .sf-concept-card::before {
+    background: linear-gradient(135deg, transparent 30%, rgba(37, 99, 235, 0.03) 50%, rgba(124, 58, 237, 0.02) 70%, transparent 90%);
+  }
+
+  :global([data-theme='light']) .sf-concept-card-title {
+    color: #0f172a;
+  }
+
+  :global([data-theme='light']) .sf-concept-card-body {
+    color: #475569;
+  }
+
+  :global([data-theme='light']) a.sf-concept-card:hover .sf-concept-card-icon {
+    box-shadow: 0 0 12px rgba(37, 99, 235, 0.1);
+  }
+</style>

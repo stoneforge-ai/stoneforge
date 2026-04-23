@@ -1,0 +1,71 @@
+---
+import { getCollection } from 'astro:content';
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import PostCard from '../../../components/blog/PostCard.astro';
+
+export async function getStaticPaths() {
+  const allPosts = await getCollection('blog', ({ data }) => !data.draft);
+  const allTags = [...new Set(allPosts.flatMap(post => post.data.tags))];
+
+  return allTags.map(tag => {
+    const filtered = allPosts
+      .filter(post => post.data.tags.includes(tag))
+      .sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf());
+    return {
+      params: { tag },
+      props: { posts: filtered, tag },
+    };
+  });
+}
+
+const { posts, tag } = Astro.props;
+---
+
+<BaseLayout
+  title={`Posts tagged "${tag}" — Stoneforge Blog`}
+  description={`All blog posts tagged with "${tag}" on the Stoneforge blog.`}
+>
+  <section class="site-section pt-28 md:pt-36 pb-16">
+    <div class="site-container">
+      <div class="max-w-3xl mx-auto">
+        <!-- Header -->
+        <div class="mb-12">
+          <a
+            href="/blog/"
+            class="inline-flex items-center gap-1.5 text-[13px] text-[var(--site-text-tertiary)] hover:text-[var(--site-accent)] transition-colors mb-6"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M19 12H5"/><polyline points="12 19 5 12 12 5"/>
+            </svg>
+            All posts
+          </a>
+          <h1
+            class="text-[clamp(1.75rem,4vw+0.5rem,2.75rem)] font-bold tracking-tight mb-3"
+            style="font-family: var(--font-headline);"
+          >
+            Tagged: <span class="text-[var(--site-accent)]">{tag}</span>
+          </h1>
+          <p class="text-[var(--site-text-secondary)]">
+            {posts.length} {posts.length === 1 ? 'post' : 'posts'}
+          </p>
+        </div>
+
+        <!-- Posts -->
+        <div class="space-y-5">
+          {posts.map(post => (
+            <PostCard
+              title={post.data.title}
+              description={post.data.description}
+              date={post.data.date}
+              updatedDate={post.data.updatedDate}
+              author={post.data.author}
+              tags={post.data.tags}
+              slug={post.id}
+              body={post.body}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  </section>
+</BaseLayout>

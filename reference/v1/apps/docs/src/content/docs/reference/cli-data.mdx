@@ -1,0 +1,549 @@
+---
+title: Data & Workflow Commands
+description: CLI commands for tasks, dependencies, plans, workflows, entities, documents, channels, messages, inbox, libraries, teams, and playbooks.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Task commands
+
+### `sf task create`
+
+Alias for `sf create task`. Same options as [`sf create`](/reference/cli-core/#sf-create).
+
+### `sf task list`
+
+```bash
+sf task list [--status <s>] [--ready] [--priority <1-5>] [--assignee <id>] [--type <type>] [--tag <tag>] [--limit <n>] [--offset <n>]
+```
+
+<Aside type="tip">
+  Use `--ready` instead of `--status open` for the most accurate view of dispatchable tasks. It accounts for blocked cache, draft plans, future scheduling, and ephemeral workflows.
+</Aside>
+
+### `sf task ready`
+
+List ready (unblocked, open) tasks — the queue that the dispatch daemon draws from.
+
+```bash
+sf task ready [--assignee <id>] [--priority <1-5>] [--type <type>] [--limit <n>]
+```
+
+### `sf task blocked`
+
+List blocked tasks with their block reasons.
+
+```bash
+sf task blocked [--assignee <id>] [--priority <1-5>] [--limit <n>]
+```
+
+### `sf task backlog`
+
+```bash
+sf task backlog [--priority <1-5>] [--limit <n>]
+```
+
+### `sf task activate`
+
+Move a task from backlog to open status.
+
+```bash
+sf task activate <id>
+```
+
+### `sf task close`
+
+```bash
+sf task close <id> [--reason <text>]
+```
+
+### `sf task reopen`
+
+```bash
+sf task reopen <id> [--message <text>]
+```
+
+The `--message` text is appended to the task description.
+
+### `sf task assign`
+
+```bash
+sf task assign <task-id> <entity>
+sf task assign <task-id> <entity> --unassign
+```
+
+### `sf task defer / undefer`
+
+```bash
+sf task defer <id> --until 2025-06-01
+sf task undefer <id>
+```
+
+### `sf task describe`
+
+Set or show a task's description. Descriptions are stored as versioned documents.
+
+```bash
+sf task describe <id> --content "Implement the login feature"
+sf task describe <id> --file specs/login.md
+sf task describe <id> --append --content "Additional notes"
+sf task describe <id> --show
+```
+
+---
+
+## Dependency commands
+
+<Aside>
+  **Semantics:** `sf dependency add --type=blocks A B` means **A is blocked BY B** — B must complete before A can start.
+</Aside>
+
+### `sf dependency add`
+
+```bash
+sf dependency add --type=<type> <blocked-id> <blocker-id> [--metadata <json>]
+```
+
+Types: `blocks`, `parent-child`, `awaits`, `relates-to`, `references`, `supersedes`, `duplicates`, `caused-by`, `validates`, `mentions`, `authored-by`, `assigned-to`, `approved-by`, `replies-to`.
+
+### `sf dependency remove`
+
+```bash
+sf dependency remove <blocked-id> <blocker-id> --type=<type>
+```
+
+### `sf dependency list`
+
+```bash
+sf dependency list <id> [--direction out|in|both] [--type <type>]
+```
+
+### `sf dependency tree`
+
+```bash
+sf dependency tree <id> [--depth <n>]
+```
+
+---
+
+## Plan commands
+
+Plans group related tasks. Plans start in `draft` status — **tasks in draft plans are NOT dispatchable**.
+
+```bash
+# Recommended workflow
+sf plan create --title "Feature X"                        # 1. Create (draft)
+sf create task --title "Task 1" --plan "Feature X"        # 2. Add tasks
+sf dependency add --type=blocks el-task2 el-task1          # 3. Set deps
+sf plan activate <plan-id>                                 # 4. Activate
+```
+
+### `sf plan create`
+
+```bash
+sf plan create --title <text> [--status draft|active] [--tag <tag>]
+```
+
+### `sf plan list / show`
+
+```bash
+sf plan list [--status draft|active|completed|cancelled] [--tag <tag>] [--limit <n>]
+sf plan show <id> [--tasks] [--json]
+```
+
+### `sf plan activate / complete / cancel`
+
+```bash
+sf plan activate <id>
+sf plan complete <id>
+sf plan cancel <id> [--reason <text>]
+```
+
+### `sf plan add-task / remove-task / tasks`
+
+```bash
+sf plan add-task <plan-id> <task-id>
+sf plan remove-task <plan-id> <task-id>
+sf plan tasks <plan-id> [--status <s>] [--limit <n>]
+```
+
+### `sf plan auto-complete`
+
+Auto-complete active plans where all tasks are closed.
+
+```bash
+sf plan auto-complete [--dry-run] [--json]
+```
+
+---
+
+## Workflow commands
+
+Workflows are instantiated from playbooks — reusable task sequences with durable state.
+
+### `sf workflow create`
+
+```bash
+sf workflow create <playbook> [--var name=value] [--ephemeral] [--title <text>]
+```
+
+### `sf workflow list / show / tasks / progress`
+
+```bash
+sf workflow list [--status <s>] [--ephemeral] [--durable] [--limit <n>]
+sf workflow show <id>
+sf workflow tasks <id> [--ready] [--status <s>] [--limit <n>]
+sf workflow progress <id>
+```
+
+### `sf workflow delete / promote / gc`
+
+```bash
+sf workflow delete <id> [--force]    # --force required for durable
+sf workflow promote <id>             # Ephemeral to durable
+sf workflow gc [--age <days>] [--dry-run]
+```
+
+---
+
+## Entity commands
+
+### `sf entity register`
+
+```bash
+sf entity register <name> [--type agent|human|system] [--public-key <key>] [--tag <tag>]
+```
+
+Entity names must start with a letter and match `/^[a-zA-Z][a-zA-Z0-9_-]*$/`. Reserved names: `system`, `anonymous`, `unknown`.
+
+### `sf entity list`
+
+```bash
+sf entity list [--type agent|human|system] [--limit <n>]
+```
+
+### Management hierarchy
+
+```bash
+sf entity set-manager <entity> <manager>
+sf entity clear-manager <entity>
+sf entity reports <manager>
+sf entity chain <entity>
+```
+
+---
+
+## Document commands
+
+### `sf document create`
+
+```bash
+sf document create --title <text> [--content <text>] [--file <path>] [--type text|markdown|json] [--category <cat>] [--tag <tag>] [--metadata <json>]
+```
+
+Categories: `spec`, `prd`, `decision-log`, `changelog`, `tutorial`, `how-to`, `explanation`, `reference`, `runbook`, `meeting-notes`, `post-mortem`, `other`.
+
+### `sf document list`
+
+```bash
+sf document list [--category <cat>] [--status active|archived] [--all] [--limit <n>]
+```
+
+<Aside>
+  Archived documents are hidden from default list and search results. Use `--all` or `--status archived` to include them.
+</Aside>
+
+### `sf document search`
+
+Full-text search with BM25 ranking and adaptive top-K filtering.
+
+```bash
+sf document search "query" [--category <cat>] [--status <s>] [--limit <n>]
+```
+
+### `sf document update`
+
+Update content, creating a new version. Each update preserves history.
+
+```bash
+sf document update <id> --content "New content"
+sf document update <id> --file updated-spec.md
+```
+
+### `sf document history / rollback`
+
+```bash
+sf document history <id> [--limit <n>]
+sf document rollback <id> <version>
+```
+
+### `sf document archive / unarchive / delete`
+
+```bash
+sf document archive <id>
+sf document unarchive <id>
+sf document delete <id> [--reason <text>] [--force]
+```
+
+### `sf document reindex`
+
+Rebuild the FTS5 search index. Required after importing documents via `sf import`.
+
+```bash
+sf document reindex
+```
+
+---
+
+## Channel commands
+
+### `sf channel create`
+
+```bash
+sf channel create --name <name> [--description <text>] [--type group|direct] [--visibility public|private] [--policy open|invite-only|request] [--member <id>] [--direct <entity>] [--tag <tag>]
+```
+
+### `sf channel list`
+
+```bash
+sf channel list [--type group|direct] [--member <id>] [--limit <n>]
+```
+
+### Membership
+
+```bash
+sf channel join <id>
+sf channel leave <id>
+sf channel members <id>
+sf channel add <channel-id> <entity-id>
+sf channel remove <channel-id> <entity-id>
+```
+
+### `sf channel merge`
+
+Merge all messages from source into target. The source is archived after the merge.
+
+```bash
+sf channel merge --source <id> --target <id> [--name <new-name>]
+```
+
+---
+
+## Message commands
+
+### `sf message send`
+
+```bash
+sf message send --channel <id> --content "Hello!"       # To channel
+sf message send --to <entity> -m "Direct message"        # DM
+sf message send --reply-to <msg-id> -m "Reply text"      # Reply
+```
+
+| Option | Description |
+| --- | --- |
+| `-c, --channel <id>` | Channel to send to |
+| `-T, --to <entity>` | Entity to DM (finds or creates DM channel) |
+| `-r, --reply-to <msg>` | Reply to message (auto-sets channel/thread) |
+| `-m, --content <text>` | Message content |
+| `--file <path>` | Read content from file |
+| `-a, --attachment <id>` | Attach document (repeatable) |
+| `-t, --thread <id>` | Thread ID to reply to |
+| `--tag <tag>` | Add tag (repeatable) |
+
+### `sf message reply`
+
+Shorthand for `sf message send --reply-to`. In DM channels, sender/recipient are auto-swapped.
+
+```bash
+sf message reply <msg-id> --content "Thanks!"
+```
+
+### `sf message list / thread`
+
+```bash
+sf message list --channel <id> [--sender <id>] [--root-only] [--limit <n>]
+sf message thread <msg-id> [--limit <n>]
+```
+
+---
+
+## Inbox commands
+
+```bash
+sf inbox <entity>                  # List unread items
+sf inbox <entity> --full           # Full message content
+sf inbox <entity> --all            # Include read/archived
+sf inbox read <id>                 # Mark as read
+sf inbox read-all <entity>         # Mark all as read
+sf inbox unread <id>               # Mark as unread
+sf inbox archive <id>              # Archive
+sf inbox count <entity>            # Count unread
+sf show <inbox-id>                 # Full inbox item
+```
+
+---
+
+## Library commands
+
+Libraries organize documents into hierarchical collections.
+
+```bash
+sf library create --name "API Docs" [--tag <tag>]
+sf library list [--limit <n>]
+sf library roots                                        # Root libraries
+sf library docs <lib-id>                                # Documents in library
+sf library stats <lib-id>                               # Statistics
+sf library add <lib-id> <doc-id>                        # Add document
+sf library remove <lib-id> <doc-id>                     # Remove document
+sf library nest <child-lib> <parent-lib>                # Create hierarchy
+sf library delete <id> [--force]
+```
+
+---
+
+## Team commands
+
+```bash
+sf team create --name "Backend" [--member <id>] [--tag <tag>]
+sf team list [--member <id>] [--limit <n>]
+sf team add <team-id> <entity-id>
+sf team remove <team-id> <entity-id>
+sf team members <team-id>
+sf team delete <id> [--reason <text>] [--force]
+```
+
+---
+
+## Playbook commands
+
+```bash
+sf playbook list [--limit <n>]
+sf playbook show <name|id> [--steps] [--variables]
+sf playbook validate <name|id> [--var name=value] [--create]
+sf playbook create -n <name> -t <title> [-s id:title[:deps]] [--variable name:type[:default][:required]]
+```
+
+```bash
+# Create a deployment playbook
+sf playbook create -n deploy -t "Deployment Process" \
+  -s "build:Build app" \
+  -s "test:Run tests:build" \
+  --variable "env:string" \
+  --variable "debug:boolean:false:false"
+```
+
+---
+
+## External sync commands
+
+Manage bidirectional synchronization between Stoneforge and external services (GitHub Issues, Linear, etc.).
+
+### `sf external-sync config`
+
+Show or set provider configuration.
+
+```bash
+sf external-sync config
+sf external-sync config set-token <provider> <token>
+sf external-sync config set-project <provider> <project>
+sf external-sync config set-auto-link <provider> [--type task|document]
+sf external-sync config disable-auto-link [--type task|document|all]
+```
+
+```bash
+sf external-sync config set-token github ghp_xxxxxxxxxxxx
+sf external-sync config set-token linear lin_api_xxxxxxxxxxxx
+sf external-sync config set-project github org/repo
+sf external-sync config set-auto-link github
+sf external-sync config disable-auto-link --type document
+```
+
+### `sf external-sync link`
+
+Link a task or document to an external issue or page.
+
+```bash
+sf external-sync link <elementId> <url-or-external-id> [--provider <name>] [--type task|document]
+```
+
+```bash
+sf external-sync link el-abc123 https://github.com/org/repo/issues/42
+sf external-sync link el-doc456 https://linear.app/team/DOC-1 --provider linear --type document
+```
+
+### `sf external-sync link-all`
+
+Bulk-link all unlinked tasks or documents to external issues/pages.
+
+```bash
+sf external-sync link-all --provider <name> [--type task|document] [--status <s>...] [--dry-run]
+```
+
+```bash
+sf external-sync link-all --provider github --dry-run
+sf external-sync link-all --provider github --status open --status in_progress
+sf external-sync link-all --provider folder --type document
+```
+
+### `sf external-sync unlink`
+
+Remove an external link from a task or document.
+
+```bash
+sf external-sync unlink <elementId>
+```
+
+### `sf external-sync unlink-all`
+
+Bulk-remove external links from all linked elements.
+
+```bash
+sf external-sync unlink-all [--provider <name>] [--type task|document] [--dry-run]
+```
+
+### `sf external-sync push`
+
+Push linked elements to external service.
+
+```bash
+sf external-sync push [elementId...] [--all] [--force] [--type task|document]
+```
+
+```bash
+sf external-sync push el-abc123
+sf external-sync push --all
+sf external-sync push --all --force --type task
+```
+
+### `sf external-sync pull`
+
+Pull changes from external for linked elements.
+
+```bash
+sf external-sync pull [--provider <name>] [--discover] [--type task|document]
+```
+
+### `sf external-sync sync`
+
+Bidirectional sync (push + pull).
+
+```bash
+sf external-sync sync [--dry-run] [--type task|document]
+```
+
+### `sf external-sync status`
+
+Show external sync state overview.
+
+```bash
+sf external-sync status
+```
+
+### `sf external-sync resolve`
+
+Resolve a sync conflict.
+
+```bash
+sf external-sync resolve <elementId> --keep local|remote
+```
+

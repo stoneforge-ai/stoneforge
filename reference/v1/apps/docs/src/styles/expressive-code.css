@@ -1,0 +1,85 @@
+/* =============================================================================
+   STONEFORGE DOCS — EXPRESSIVE CODE THEMING
+   Premium code block styling with brand aesthetic
+   ============================================================================= */
+
+/* --- Dark theme code blocks --- */
+:root {
+  --ec-brdCol: var(--sf-border-dark);
+  --ec-frm-edBg: var(--sf-bg-void);
+  --ec-frm-trmBg: var(--sf-bg-void);
+  --ec-frm-tooltipBg: var(--sf-bg-elevated);
+}
+
+/* --- Light theme code blocks --- */
+:root[data-theme='light'] {
+  --ec-brdCol: #e2e8f0;
+  --ec-frm-edBg: #f8fafc;
+  --ec-frm-trmBg: #f8fafc;
+  --ec-frm-tooltipBg: #ffffff;
+}
+
+/* --- Code block font --- */
+.expressive-code pre {
+  font-family: var(--sf-font-code);
+  font-size: 0.875rem;
+  line-height: 1.7;
+}
+
+/* --- File name tabs --- */
+.expressive-code .frame.has-title .header {
+  font-family: var(--sf-font-code);
+  font-size: 0.8rem;
+}
+
+/* --- Frame base --- */
+.expressive-code .frame {
+  position: relative;
+  box-shadow: var(--sf-shadow-md);
+}
+
+:root[data-theme='light'] .expressive-code .frame {
+  box-shadow: var(--sf-shadow-sm);
+}
+
+/* --- Refined title bar --- */
+.expressive-code .frame.has-title .header {
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid var(--ec-brdCol);
+}
+
+:root[data-theme='light'] .expressive-code .frame.has-title .header {
+  background: rgba(15, 23, 42, 0.02);
+}
+
+/* --- Copy button: accent on hover --- */
+.expressive-code .copy button {
+  transition: color 0.2s ease, background 0.2s ease;
+}
+
+.expressive-code .copy button:hover {
+  color: var(--sl-color-accent);
+  background: var(--sl-color-accent-low);
+}
+
+/* --- Line highlights: accent-tinted with left border --- */
+.expressive-code .highlight {
+  background: rgba(96, 165, 250, 0.08);
+  border-left: 3px solid var(--sf-accent);
+}
+
+:root[data-theme='light'] .expressive-code .highlight {
+  background: rgba(37, 99, 235, 0.06);
+  border-left-color: var(--sf-accent-deep);
+}
+
+/* --- Diff styling --- */
+.expressive-code .diff.ins {
+  background: rgba(74, 222, 128, 0.1);
+  border-left: 3px solid var(--sf-success);
+}
+
+.expressive-code .diff.del {
+  background: rgba(248, 113, 113, 0.1);
+  border-left: 3px solid var(--sf-error);
+}

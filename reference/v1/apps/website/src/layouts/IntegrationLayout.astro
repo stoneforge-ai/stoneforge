@@ -1,0 +1,226 @@
+---
+import BaseLayout from './BaseLayout.astro';
+import Button from '../components/ui/Button.astro';
+import SectionLabel from '../components/ui/SectionLabel.astro';
+import CodeBlock from '../components/ui/CodeBlock.astro';
+import Breadcrumbs from '../components/ui/Breadcrumbs.astro';
+
+interface Props {
+  title: string;
+  description: string;
+  agentName: string;
+  agentUrl: string;
+  logo?: string;
+  configSnippet: string;
+  features: { feature: string; stoneforgeAdds: string }[];
+  docsLinks: { title: string; url: string }[];
+  slug: string;
+}
+
+const { title, description, agentName, agentUrl, logo, configSnippet, features, docsLinks, slug } = Astro.props;
+const canonicalUrl = new URL(`/integrations/${slug}/`, Astro.site).href;
+
+const softwareJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Stoneforge",
+  "applicationCategory": "DeveloperApplication",
+  "applicationSubCategory": "AI Agent Orchestration",
+  "operatingSystem": "macOS, Linux, Windows",
+  "description": description,
+  "url": "https://stoneforge.ai",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD",
+  },
+  "license": "https://opensource.org/licenses/Apache-2.0",
+  "author": {
+    "@type": "Organization",
+    "name": "Stoneforge",
+    "url": "https://github.com/stoneforge-ai",
+  },
+};
+
+const breadcrumbItems = [
+  { label: 'Home', href: '/' },
+  { label: 'Integrations', href: '/integrations/' },
+  { label: agentName, href: canonicalUrl },
+];
+---
+
+<BaseLayout title={`${title} — Stoneforge`} description={description} canonicalUrl={canonicalUrl}>
+  <Fragment slot="head">
+    <script type="application/ld+json" set:html={JSON.stringify(softwareJsonLd)} />
+  </Fragment>
+
+  <article class="site-section pt-28 md:pt-36 pb-16">
+    <div class="site-container">
+      <Breadcrumbs items={breadcrumbItems} class="mb-10" />
+
+      <div class="max-w-[72ch] mx-auto">
+        <!-- Hero section -->
+        <header class="mb-16">
+          <SectionLabel class="mb-4">Integration</SectionLabel>
+
+          <div class="flex items-center gap-5 mb-6" data-reveal>
+            {logo && (
+              <div class="w-14 h-14 rounded-2xl bg-[var(--site-bg-elevated)] border border-[var(--site-border)] flex items-center justify-center flex-shrink-0 overflow-hidden">
+                <img src={logo} alt={`${agentName} logo`} class="w-9 h-9 object-contain" />
+              </div>
+            )}
+            <div class="flex items-center gap-3">
+              <h1
+                class="text-[clamp(1.75rem,4vw+0.5rem,2.75rem)] font-bold tracking-tight leading-[1.15]"
+                style="font-family: var(--font-headline);"
+              >
+                {title}
+              </h1>
+            </div>
+          </div>
+
+          <p class="text-lg text-[var(--site-text-secondary)] leading-relaxed mb-6" data-reveal>
+            {description}
+          </p>
+
+          <div class="flex flex-wrap gap-3" data-reveal>
+            <a
+              href={agentUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              class="inline-flex items-center gap-2 text-sm text-[var(--site-text-tertiary)] hover:text-[var(--site-accent)] transition-colors"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/>
+              </svg>
+              {agentName} website
+            </a>
+          </div>
+        </header>
+
+        <!-- How Stoneforge orchestrates this agent -->
+        <section class="mb-16">
+          <h2
+            class="text-[clamp(1.25rem,2.5vw+0.25rem,1.75rem)] font-semibold tracking-tight mb-6 text-[var(--site-text-primary)]"
+            style="font-family: var(--font-headline);"
+            data-reveal
+          >
+            How Stoneforge orchestrates {agentName}
+          </h2>
+          <div class="prose" data-reveal>
+            <slot />
+          </div>
+        </section>
+
+        <!-- Configuration snippet -->
+        <section class="mb-16">
+          <h2
+            class="text-[clamp(1.25rem,2.5vw+0.25rem,1.75rem)] font-semibold tracking-tight mb-6 text-[var(--site-text-primary)]"
+            style="font-family: var(--font-headline);"
+            data-reveal
+          >
+            Configuration
+          </h2>
+          <div data-reveal>
+            <CodeBlock code={configSnippet} title=".stoneforge/config.yaml" />
+          </div>
+        </section>
+
+        <!-- Feature comparison table -->
+        {features.length > 0 && (
+          <section class="mb-16">
+            <h2
+              class="text-[clamp(1.25rem,2.5vw+0.25rem,1.75rem)] font-semibold tracking-tight mb-6 text-[var(--site-text-primary)]"
+              style="font-family: var(--font-headline);"
+              data-reveal
+            >
+              {agentName} alone vs. with Stoneforge
+            </h2>
+            <div class="rounded-xl border border-[var(--site-border)] bg-[var(--site-bg-elevated)] overflow-hidden" data-reveal>
+              <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                  <thead>
+                    <tr class="border-b border-[var(--site-border)]">
+                      <th class="text-left px-5 py-3.5 text-[11px] uppercase tracking-[0.12em] text-[var(--site-text-ghost)] font-semibold">{agentName} alone</th>
+                      <th class="text-left px-5 py-3.5 text-[11px] uppercase tracking-[0.12em] text-[var(--site-accent)] font-semibold">With Stoneforge</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {features.map((row, i) => (
+                      <tr class:list={[
+                        'border-b border-[var(--site-border)] last:border-b-0',
+                        i % 2 === 0 ? 'bg-[var(--site-bg-elevated)]' : 'bg-[var(--site-bg-surface)]/30'
+                      ]}>
+                        <td class="px-5 py-4 text-[var(--site-text-secondary)] leading-relaxed">{row.feature}</td>
+                        <td class="px-5 py-4 text-[var(--site-text-primary)] leading-relaxed">{row.stoneforgeAdds}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        )}
+
+        <!-- Docs links -->
+        {docsLinks.length > 0 && (
+          <section class="mb-16">
+            <h2
+              class="text-[clamp(1.25rem,2.5vw+0.25rem,1.75rem)] font-semibold tracking-tight mb-6 text-[var(--site-text-primary)]"
+              style="font-family: var(--font-headline);"
+              data-reveal
+            >
+              Integration documentation
+            </h2>
+            <div class="grid gap-3" data-reveal-stagger>
+              {docsLinks.map(link => (
+                <a
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="group flex items-center gap-3 p-4 rounded-xl border border-[var(--site-border)] bg-[var(--site-bg-elevated)] hover:border-[var(--site-border-accent)] hover:bg-[var(--site-bg-surface)] transition-all duration-200"
+                >
+                  <div class="w-8 h-8 rounded-lg bg-[var(--site-accent-subtle)] border border-[var(--site-border-accent)] flex items-center justify-center flex-shrink-0">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--site-accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+                    </svg>
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <span class="text-sm font-medium text-[var(--site-text-primary)] group-hover:text-[var(--site-accent)] transition-colors">{link.title}</span>
+                    <span class="block text-[11px] text-[var(--site-text-ghost)]">docs.stoneforge.ai</span>
+                  </div>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-[var(--site-text-ghost)] group-hover:text-[var(--site-accent)] transition-colors flex-shrink-0">
+                    <line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/>
+                  </svg>
+                </a>
+              ))}
+            </div>
+          </section>
+        )}
+
+        <!-- CTA -->
+        <section class="text-center rounded-xl border border-[var(--site-border-accent)] bg-[var(--site-bg-elevated)] p-8 md:p-12" data-reveal>
+          <h2
+            class="text-xl font-semibold tracking-tight mb-3 text-[var(--site-text-primary)]"
+            style="font-family: var(--font-headline);"
+          >
+            Start orchestrating {agentName}
+          </h2>
+          <p class="text-[var(--site-text-secondary)] mb-6 max-w-md mx-auto">
+            Set up Stoneforge in under 30 seconds and run multiple {agentName} agents in parallel.
+          </p>
+          <div class="flex flex-wrap justify-center gap-4">
+            <Button href="https://docs.stoneforge.ai/getting-started/quick-start/">
+              Quick Start Guide
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+            </Button>
+            <Button variant="ghost" href="https://github.com/stoneforge-ai/stoneforge" target="_blank" rel="noopener noreferrer">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+              Star on GitHub
+            </Button>
+          </div>
+        </section>
+      </div>
+    </div>
+  </article>
+</BaseLayout>

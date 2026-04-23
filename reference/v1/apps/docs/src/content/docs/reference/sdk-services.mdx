@@ -1,0 +1,392 @@
+---
+title: SDK Services
+description: Reference for Stoneforge SDK service layer — dependency management, blocked cache, priority calculation, inbox, sync, embeddings, and ID resolution.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Services in `@stoneforge/quarry` provide the data layer: dependencies, blocked cache, priority, inbox, sync, search, and embeddings.
+
+---
+
+### DependencyService
+
+Manages relationships between elements with automatic cycle detection.
+
+```typescript
+import { createDependencyService } from '@stoneforge/quarry';
+const depService = createDependencyService(storage);
+```
+
+```typescript
+// Add (auto-checks for cycles on blocking types)
+depService.addDependency({
+  blockedId, blockerId, type: 'blocks', createdBy: actorId,
+  metadata: { /* gate config for 'awaits' type */ },
+});
+
+// Remove
+depService.removeDependency(blockedId, blockerId, type, actorId);
+
+// Query
+depService.exists(blockedId, blockerId, type);
+depService.getDependency(blockedId, blockerId, type);
+depService.getDependencies(blockedId, type?);         // Outgoing
+depService.getDependents(blockerId, type?);            // Incoming
+depService.getDependenciesForMany(blockedIds, type?);  // Bulk
+
+// Remove all
+depService.removeAllDependencies(blockedId, type?);
+depService.removeAllDependents(blockerId);
+
+// Count
+depService.countDependencies(blockedId, type?);
+
+// Cycle detection (BFS, depth limit: 100)
+depService.detectCycle(blockedId, blockerId, type);
+```
+
+<Aside>
+  `addDependency()` **automatically** checks for cycles on blocking types (`blocks`, `awaits`, `parent-child`). Self-referential dependencies are rejected immediately with `CYCLE_DETECTED`.
+</Aside>
+
+---
+
+### BlockedCacheService
+
+Materialized view of blocked status. Provides O(1) lookups instead of traversing the dependency graph.
+
+```typescript
+import { createBlockedCacheService } from '@stoneforge/quarry';
+const blockedCache = createBlockedCacheService(storage);
+```
+
+#### Queries
+
+```typescript
+blockedCache.isBlocked(elementId);         // BlockingInfo | null
+blockedCache.getAllBlocked();               // All blocked elements
+blockedCache.getBlockedBy(blockerId);      // Elements blocked by a specific element
+```
+
+#### Event handlers
+
+Call these after mutations to keep the cache in sync:
+
+```typescript
+blockedCache.onDependencyAdded(blockedId, blockerId, type, metadata?);
+blockedCache.onDependencyRemoved(blockedId, blockerId, type);
+blockedCache.onStatusChanged(elementId, oldStatus, newStatus);
+blockedCache.onElementDeleted(elementId);
+```
+
+#### Gate satisfaction
+
+```typescript
+blockedCache.satisfyGate(blockedId, blockerId, actor);
+blockedCache.recordApproval(blockedId, blockerId, approver);
+blockedCache.removeApproval(blockedId, blockerId, approver);
+```
+
+#### Auto-transitions
+
+Wire up automatic `blocked` / `unblocked` status transitions:
+
+```typescript
+blockedCache.setStatusTransitionCallback({
+  onBlock: (elementId, previousStatus) => {
+    // Task should become blocked — previousStatus is saved for restoration
+    api.update(elementId, { status: 'blocked' });
+  },
+  onUnblock: (elementId, statusToRestore) => {
+    // Task should unblock — restore to the status before blocking
+    api.update(elementId, { status: statusToRestore });
+  },
+});
+```
+
+Events generated: `auto_blocked` and `auto_unblocked` with actor `'system:blocked-cache'`.
+
+#### Rebuild
+
+```typescript
+blockedCache.rebuild(); // Full cache rebuild with topological ordering
+```
+
+---
+
+### PriorityService
+
+Calculates effective priority based on the dependency graph. A task's effective priority is the highest priority among all tasks that depend on it.
+
+```typescript
+import { createPriorityService } from '@stoneforge/quarry';
+const priorityService = createPriorityService(storage);
+```
+
+```typescript
+// Single task (synchronous)
+const result = priorityService.calculateEffectivePriority(taskId);
+// result.effectivePriority, result.basePriority, result.isInfluenced,
+// result.dependentInfluencers
+
+// Batch (synchronous)
+const results = priorityService.calculateEffectivePriorities(taskIds);
+// Map<ElementId, EffectivePriorityResult>
+
+// Enhance and sort tasks
+const enhanced = priorityService.enhanceTasksWithEffectivePriority(tasks);
+priorityService.sortByEffectivePriority(tasks); // WARNING: mutates in place!
+
+// Aggregate complexity (downstream direction)
+const complexity = priorityService.calculateAggregateComplexity(taskId);
+```
+
+| Metric | Direction | Description |
+| --- | --- | --- |
+| Effective priority | **Upstream** | Tasks that depend on this task |
+| Aggregate complexity | **Downstream** | Tasks this task depends on |
+
+---
+
+### InboxService
+
+Manages notification items for entities.
+
+```typescript
+import { createInboxService } from '@stoneforge/quarry';
+const inboxService = createInboxService(storage);
+```
+
+```typescript
+// Query
+inboxService.getInbox(recipientId, filter?);
+inboxService.getInboxPaginated(recipientId, filter?);
+inboxService.getUnreadCount(recipientId);
+
+// Status changes
+inboxService.markAsRead(itemId);
+inboxService.markAsUnread(itemId);
+inboxService.markAllAsRead(recipientId);
+inboxService.archive(itemId);
+inboxService.markAsReadBatch(itemIds);
+
+// Create (usually done automatically on message send)
+inboxService.addToInbox({
+  recipientId, messageId, channelId,
+  sourceType: 'direct' | 'mention' | 'thread_reply',
+});
+
+// Cascade delete
+inboxService.deleteByMessage(messageId);
+inboxService.deleteByRecipient(recipientId);
+```
+
+```typescript
+interface InboxFilter {
+  status?: InboxStatus | InboxStatus[];
+  sourceType?: InboxSourceType | InboxSourceType[];
+  channelId?: ChannelId;
+  after?: Timestamp;
+  before?: Timestamp;
+  limit?: number;
+  offset?: number;
+}
+```
+
+---
+
+### SyncService
+
+Manages JSONL-based export/import for data portability and git-based collaboration.
+
+```typescript
+import { createSyncService } from '@stoneforge/quarry';
+const syncService = createSyncService(storage);
+```
+
+#### Export
+
+```typescript
+// Incremental (dirty elements only)
+await syncService.export({ outputDir: '/path/to/output' });
+
+// Full export
+await syncService.export({ outputDir: '/path/to/output', full: true });
+
+// Synchronous (for CLI/testing)
+syncService.exportSync({ outputDir: '/path/to/output', full: true });
+
+// Export to string (for API use)
+const { elements, dependencies } = syncService.exportToString();
+```
+
+#### Import
+
+```typescript
+// Standard import (merge)
+const result = await syncService.import({ inputDir: '/path/to/input' });
+// result.elementsImported, result.elementsSkipped, result.conflicts
+
+// Force (remote always wins)
+await syncService.import({ inputDir: '/path/to/input', force: true });
+
+// Dry run
+await syncService.import({ inputDir: '/path/to/input', dryRun: true });
+
+// From strings (for API use)
+syncService.importFromStrings(elementsJsonl, dependenciesJsonl, { force: true });
+```
+
+#### Merge strategy
+
+- Newer `updatedAt` wins by default
+- `closed` and `tombstone` statuses **always win**
+- Tags merged as union (cannot remove via sync)
+- Content hash excludes timestamps for conflict detection
+
+---
+
+### EmbeddingService
+
+Manages document embeddings for semantic search.
+
+```typescript
+import { EmbeddingService, LocalEmbeddingProvider } from '@stoneforge/quarry/services';
+
+const provider = new LocalEmbeddingProvider('/path/to/model');
+const embeddingService = new EmbeddingService(storage, { provider });
+```
+
+```typescript
+// Semantic search
+const results = await embeddingService.searchSemantic(query, limit);
+// Array<{ documentId, similarity }>
+
+// Hybrid search (FTS5 + embeddings via Reciprocal Rank Fusion)
+const results = await embeddingService.searchHybrid(query, ftsDocIds, limit);
+// Array<{ documentId, score }>
+
+// Reindex all
+const result = await embeddingService.reindexAll(
+  documents.map(d => ({ id: d.id, content: d.content })),
+  (indexed, total) => console.log(`${indexed}/${total}`),
+);
+```
+
+Register with the API for auto-embedding on create/update/delete:
+
+```typescript
+api.registerEmbeddingService(embeddingService);
+```
+
+<Aside>
+  Auto-embedding is fire-and-forget. Documents added via import are **not** auto-embedded — use `sf embeddings reindex` after import.
+</Aside>
+
+---
+
+### SyncEngine (External Sync)
+
+Orchestrates bidirectional sync between Stoneforge elements and external systems (GitHub, Linear, Notion, local folders).
+
+```typescript
+import { SyncEngine } from '@stoneforge/quarry/external-sync';
+
+const engine = new SyncEngine({
+  api,                                    // SyncEngineAPI (QuarryAPI-compatible)
+  registry,                               // ProviderRegistry
+  settings,                               // SyncEngineSettings (optional)
+  defaultConflictStrategy: 'last_write_wins',  // ConflictStrategy (optional)
+  conflictResolver,                       // SyncConflictResolver (optional)
+  providerConfigs,                        // ProviderConfig[] (optional)
+});
+```
+
+#### Push and pull
+
+```typescript
+// Push local changes to external systems
+await engine.push({ all: true });                                // All linked elements
+await engine.push({ taskIds: ['el-3a8f'] });                     // Specific elements
+await engine.push({ all: true, adapterTypes: ['task'] });        // Tasks only
+await engine.push({ all: true, force: true });                   // Skip hash comparison
+
+// Pull changes from external systems
+await engine.pull();                                              // All providers
+await engine.pull({ adapterTypes: ['document'] });                // Documents only
+
+// Bidirectional sync (push then pull)
+await engine.sync({ all: true });
+await engine.sync({ dryRun: true });
+```
+
+#### Results
+
+All operations return an `ExternalSyncResult`:
+
+```typescript
+interface ExternalSyncResult {
+  success: boolean;
+  provider: string;
+  project: string;
+  adapterType: SyncAdapterType;
+  pushed: number;
+  pulled: number;
+  skipped: number;
+  conflicts: readonly ExternalSyncConflict[];
+  errors: readonly ExternalSyncError[];
+}
+```
+
+---
+
+### ProviderRegistry
+
+Manages external sync provider instances and adapter lookup.
+
+```typescript
+import { ProviderRegistry, createConfiguredProviderRegistry } from '@stoneforge/quarry/external-sync';
+
+// Create with configured providers (replaces placeholders when tokens are set)
+const registry = createConfiguredProviderRegistry(settingsService);
+```
+
+```typescript
+// List registered providers
+registry.list();                          // All providers
+registry.getAdaptersOfType('task');       // GitHub, Linear
+registry.getAdaptersOfType('document');   // Notion, Folder
+
+// Get a specific provider
+const github = registry.get('github');
+await github.testConnection();            // Verify credentials
+
+// Access the adapter
+const adapter = github.getTaskAdapter();
+await adapter.listIssuesSince(cursor);
+await adapter.createIssue(externalTask);
+await adapter.updateIssue(id, externalTask);
+```
+
+Each provider exposes either a `TaskSyncAdapter` or `DocumentSyncAdapter`:
+
+| Adapter | Methods |
+| --- | --- |
+| `TaskSyncAdapter` | `listIssuesSince`, `getIssue`, `createIssue`, `updateIssue` |
+| `DocumentSyncAdapter` | `listPagesSince`, `getPage`, `createPage`, `updatePage`, `deletePage` |
+
+---
+
+### IdLengthCache
+
+Calculates minimum unique ID prefix length for short IDs.
+
+```typescript
+import { createIdLengthCache } from '@stoneforge/quarry';
+const idLengthCache = createIdLengthCache(storage, { ttlMs: 60000 });
+
+idLengthCache.getHashLength();  // Min unique prefix length
+idLengthCache.refresh();        // Force refresh
+idLengthCache.isStale();        // Check if stale
+```

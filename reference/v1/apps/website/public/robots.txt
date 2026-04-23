@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://stoneforge.ai/sitemap-index.xml
+

@@ -1,0 +1,60 @@
+---
+import Icon from './Icon.astro';
+
+interface Props {
+  href: string;
+  title: string;
+  description?: string;
+  class?: string;
+}
+
+const { href, title, description, class: className = '' } = Astro.props;
+const fullUrl = `https://docs.stoneforge.ai${href}`;
+---
+
+<a
+  href={fullUrl}
+  target="_blank"
+  rel="noopener noreferrer"
+  class:list={[
+    'group block rounded-xl border border-[var(--site-border)] bg-[var(--site-bg-elevated)] p-5',
+    'transition-all duration-300',
+    'hover:border-[var(--site-border-accent)] hover:bg-[var(--site-bg-surface)]',
+    'hover:shadow-[0_0_24px_rgba(96,165,250,0.06)]',
+    'relative overflow-hidden',
+    className,
+  ]}
+>
+  <!-- Accent gradient on hover -->
+  <div
+    class="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[var(--site-accent)]/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+    aria-hidden="true"
+  ></div>
+
+  <div class="flex items-start justify-between gap-3">
+    <div class="flex-1 min-w-0">
+      <!-- Subdomain label -->
+      <span class="inline-flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.1em] text-[var(--site-text-ghost)] mb-2">
+        <Icon name="book-open" size={12} />
+        docs.stoneforge.ai
+      </span>
+
+      <!-- Title -->
+      <p class="text-sm font-medium text-[var(--site-text-primary)] group-hover:text-[var(--site-accent)] transition-colors duration-200 leading-snug">
+        {title}
+      </p>
+
+      <!-- Description -->
+      {description && (
+        <p class="mt-1.5 text-[13px] text-[var(--site-text-tertiary)] leading-relaxed line-clamp-2">
+          {description}
+        </p>
+      )}
+    </div>
+
+    <!-- External link icon -->
+    <div class="flex-shrink-0 mt-0.5 text-[var(--site-text-ghost)] group-hover:text-[var(--site-accent)] transition-colors duration-200">
+      <Icon name="external-link" size={16} />
+    </div>
+  </div>
+</a>

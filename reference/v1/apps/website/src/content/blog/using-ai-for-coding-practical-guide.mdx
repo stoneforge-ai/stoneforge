@@ -1,0 +1,131 @@
+---
+title: "Using AI for Coding: A Practical Guide"
+description: "How developers actually use AI for coding in 2026. From autocomplete to agents to orchestration, with practical advice for each level."
+date: 2026-03-09
+tags: ["ai-coding", "tutorial", "productivity"]
+relatedContent:
+  - title: "Best AI Coding Agents in 2026"
+    url: "/blog/best-ai-coding-agents-2026/"
+    type: "blog"
+  - title: "Run Multiple AI Coding Agents in Parallel"
+    url: "/blog/run-multiple-ai-coding-agents-parallel/"
+    type: "blog"
+  - title: "Free & Open Source AI Coding"
+    url: "/use-cases/free-open-source-ai-coding/"
+    type: "use-case"
+  - title: "Getting Started with Stoneforge"
+    url: "https://docs.stoneforge.ai/getting-started"
+    type: "docs"
+---
+
+{/* SEO CHECKLIST
+    [x] Title tag <=60 chars with primary keyword
+    [x] Meta description <=160 chars
+    [x] H1 = title, H2s for each section
+    [x] 2-3 internal links to docs.stoneforge.ai
+    [x] 1-2 internal links to use case or comparison pages
+    [x] 3-5 FAQ items
+    [x] Image alt text with keywords */}
+
+AI coding tools have moved well past autocomplete. In 2026, developers use AI across a spectrum that ranges from inline suggestions to fully autonomous agents that plan, write, test, and commit code. Over 70% of professional developers report using AI tools weekly, but the way they use them varies enormously depending on their workflow, codebase, and risk tolerance.
+
+This guide walks through the four levels of coding with AI, what each is good for, and how to get practical value from each without falling into the common traps.
+
+## Level 1: Autocomplete and Inline Suggestions
+
+The most common entry point. Tools like GitHub Copilot, Codeium, and Supermaven watch what you type and suggest the next few lines. You hit Tab to accept, or keep typing to ignore. There's almost no workflow change required.
+
+Autocomplete works best for boilerplate. Struct definitions, import statements, repetitive CRUD handlers, test scaffolding. Studies consistently show about 35% time savings on these tasks. It's less useful for code that requires domain-specific reasoning or architecture decisions. The model doesn't know your business logic. It knows patterns from training data.
+
+**Practical advice:**
+
+- Accept suggestions critically. Read the completion before hitting Tab, especially for conditionals and error handling.
+- Autocomplete shines in languages and frameworks with strong conventions. Writing a React component or a Go HTTP handler? The predictions will be good. Writing a custom DSL parser? Less so.
+- Turn it off for security-sensitive code. Autocomplete models optimize for plausibility, not correctness. Cryptographic operations, auth flows, and input sanitization deserve manual attention.
+
+## Level 2: Chat-Based Assistance
+
+The next level up: AI that you can talk to about your code. ChatGPT, Claude, and similar tools let you paste code snippets, ask questions, and get explanations or suggestions back. IDE-integrated versions like Cursor's chat and Continue bring this directly into your editor with access to your file context.
+
+Chat is powerful for understanding unfamiliar code. Paste a function you didn't write, ask what it does, and get a clear explanation faster than reading the source line by line. It's also useful for generating code from a natural-language description, exploring approaches before committing to one, and debugging error messages.
+
+**Practical advice:**
+
+- Provide context. The quality of AI output scales directly with the quality of your input. "Fix this bug" gets worse results than "This function should return a sorted list but returns unsorted when the input contains duplicates. Here's the function and a failing test case."
+- Use chat for exploration, not final implementation. Generate three different approaches to a problem, evaluate them yourself, then implement the best one. The AI is a brainstorming partner, not a decision-maker.
+- Be skeptical of API usage in generated code. Models frequently hallucinate function signatures, especially for newer or less popular libraries. Always verify against actual documentation.
+
+## Level 3: Autonomous Coding Agents
+
+This is where the workflow changes fundamentally. Instead of suggesting completions or answering questions, agents take ownership of a task. You describe what you want. The agent reads your codebase, plans an approach, writes code across multiple files, runs tests, and iterates on failures until the task is done.
+
+Tools at this level include [Claude Code](/blog/best-ai-coding-agents-2026/), Codex CLI, [Cline](/blog/open-source-ai-coding-agents/), Aider, and OpenCode. They differ in interface (terminal vs. IDE), model provider (locked vs. flexible), and autonomy level (ask permission for each step vs. run freely). But they share the core loop: read context, plan, execute, verify, iterate.
+
+Agents save the most time on well-defined, medium-complexity tasks. Refactoring a module to use a new API. Adding test coverage for an untested file. Migrating configuration from one format to another. These tasks have clear inputs, verifiable outputs, and don't require deep product judgment.
+
+**Practical advice:**
+
+- Treat agent output like a junior developer's pull request. Review every change. Run the tests yourself. Check edge cases the agent might have missed.
+- Give the agent access to your test suite. An agent that can run tests and iterate on failures produces dramatically better output than one that writes code blind. Most modern agents support this natively.
+- Start with low-risk tasks to build confidence. Documentation updates, test additions, and isolated bug fixes are good starting points. Move to feature work once you trust the tool's output quality in your specific codebase.
+- Break large tasks into smaller ones. An agent working on "add user authentication" will produce worse results than one working on "add a JWT verification middleware that checks the Authorization header and returns 401 on invalid tokens."
+
+## Level 4: Multi-Agent Orchestration
+
+When a single agent isn't enough, orchestration comes into play. Instead of one agent working through tasks serially, multiple agents work in parallel on different parts of your codebase, each in an isolated environment.
+
+This level addresses a specific bottleneck: you have a backlog of 10-20 well-defined tasks, and a single agent processes them one at a time. [Running agents in parallel](/blog/run-multiple-ai-coding-agents-parallel/) can reduce wall-clock time from the sum of all tasks to roughly the duration of the longest one.
+
+The coordination problems are real, though. Multiple agents editing the same codebase means merge conflicts, dependency ordering (you can't write tests for an API that doesn't exist yet), and context isolation (agents shouldn't read each other's half-finished work). Orchestration tools handle these problems so you don't have to.
+
+[Stoneforge](https://docs.stoneforge.ai/getting-started) is one such tool. It dispatches tasks to agents running in isolated [git worktrees](/use-cases/parallel-feature-development/), tracks dependencies between tasks, and manages the merge queue when agents finish their work. It currently supports Claude Code, Codex CLI, and OpenCode as worker agents.
+
+**Practical advice:**
+
+- Orchestration only makes sense if you have enough parallelizable work. A solo developer working on a focused feature doesn't need it. A team with a 15-task sprint backlog of independent work does.
+- Good test coverage is a prerequisite. With multiple agents producing changes independently, automated tests are your safety net for catching conflicts that only surface when branches merge.
+- [Start with a multi-agent vs. single-agent comparison](/comparisons/multi-agent-vs-single-agent/) to determine if the coordination overhead is worth the throughput gains for your specific workflow.
+
+## What AI Coding Is Bad At
+
+Knowing the limits matters as much as knowing the capabilities.
+
+**Architecture decisions.** AI can implement a design, but it can't tell you whether your service should be a monolith or microservices. Those decisions require understanding your team's capacity, deployment constraints, and business trajectory. That understanding doesn't live in the codebase.
+
+**Novel problem-solving.** Tasks with no existing patterns to draw from (new algorithms, unusual data structures, domain-specific logic) get mediocre results. The model's strength is pattern matching, and that requires patterns to exist in training data.
+
+**Security review.** AI tools can flag obvious issues (SQL injection, XSS) but miss subtle vulnerabilities that require reasoning about the full request lifecycle. Don't substitute AI output for a proper security audit.
+
+**Understanding intent.** "Make the user experience better" is a meaningless prompt. AI coding tools execute against specifications. They don't generate specifications from vague goals. The clearer your requirements, the better the output.
+
+## Choosing Your Level
+
+Most developers will use multiple levels simultaneously. Autocomplete is always on. Chat is available for questions. An agent handles the well-defined task you'd otherwise spend 30 minutes on manually. Orchestration is there when the backlog piles up.
+
+The key insight: each level has different trust requirements. Tab completion is low-risk. A wrong suggestion costs you a few seconds to delete. An autonomous agent rewriting your auth module is high-risk. A bug there has real consequences. Calibrate your review effort to the risk level.
+
+Start where your bottleneck is. If you're spending time on boilerplate, autocomplete solves that. If you're spending time on repetitive, well-defined tasks, agents solve that. If you're spending time juggling multiple agent sessions and merge conflicts, orchestration solves that.
+
+The tooling will keep evolving. Your ability to specify what you want, review what you get, and know when to trust the output will remain the differentiating skill.
+
+## Frequently Asked Questions
+
+### Is coding with AI replacing developers?
+
+No. AI coding tools handle implementation tasks faster, but they don't replace the judgment, product thinking, and system design that developers do. The role is shifting toward more specification-writing, review, and architecture work, and less manual line-by-line coding. Developers who use AI tools effectively ship more, not fewer, meaningful contributions.
+
+### What's the best AI coding tool for beginners?
+
+GitHub Copilot's free tier is the lowest-friction starting point. It integrates into VS Code with no configuration and provides inline suggestions immediately. For chat-based assistance, Claude and ChatGPT both have free tiers. Once you're comfortable with AI suggestions, try an agent like [Aider or OpenCode](/blog/open-source-ai-coding-agents/) to experience the next level.
+
+### How accurate is AI-generated code?
+
+Raw AI output has an initial correctness rate of roughly 60-75%, depending on the complexity of the task and the quality of your prompt. For boilerplate and well-established patterns, accuracy is higher. For complex logic and edge cases, it drops. Always review and test AI-generated code before committing it.
+
+### Can I use AI for coding in any programming language?
+
+Effectively, yes. AI coding tools work across 100+ languages. Performance is strongest in Python, JavaScript/TypeScript, Go, Rust, and Java, where training data is abundant. Less common languages (Elixir, Nim, Zig) still get reasonable results but with more hallucination in API usage. For niche languages, providing explicit API references in your prompt helps significantly.
+
+### Do AI coding agents work offline?
+
+Most don't. Tools that call cloud APIs (Claude Code, Codex CLI, Cursor) require an internet connection. However, tools like Aider, OpenCode, and Continue support local models through Ollama or similar local inference servers. Running a capable local model requires significant GPU memory (16GB+ VRAM for good performance), but it keeps your code entirely on your machine.

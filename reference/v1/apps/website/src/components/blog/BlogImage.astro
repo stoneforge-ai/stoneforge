@@ -1,0 +1,33 @@
+---
+import { Image } from "astro:assets";
+import type { ImageMetadata } from "astro";
+
+interface Props {
+  src: ImageMetadata;
+  alt: string;
+  prompt?: string;
+  caption?: string;
+  loading?: "lazy" | "eager";
+}
+
+const { src, alt, prompt, caption, loading = "lazy" } = Astro.props;
+
+// Build responsive widths capped at the native width (never upscale)
+const nativeWidth = src.width;
+const breakpoints = [400, 720, 1080, 1440].filter((w) => w < nativeWidth);
+breakpoints.push(nativeWidth);
+---
+
+<figure>
+  <Image
+    src={src}
+    alt={alt}
+    widths={breakpoints}
+    sizes="(max-width: 768px) 100vw, 720px"
+    format="webp"
+    quality={80}
+    loading={loading}
+    data-prompt={prompt}
+  />
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>

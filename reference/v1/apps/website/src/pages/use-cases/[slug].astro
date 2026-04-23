@@ -1,0 +1,27 @@
+---
+import { getCollection, render } from 'astro:content';
+import UseCaseLayout from '../../layouts/UseCaseLayout.astro';
+
+export async function getStaticPaths() {
+  const useCases = await getCollection('use-cases');
+  return useCases.map(useCase => ({
+    params: { slug: useCase.id },
+    props: { useCase },
+  }));
+}
+
+const { useCase } = Astro.props;
+const { Content } = await render(useCase);
+---
+
+<UseCaseLayout
+  title={useCase.data.title}
+  description={useCase.data.description}
+  problem={useCase.data.problem}
+  icon={useCase.data.icon}
+  docsLinks={useCase.data.docsLinks}
+  faqItems={useCase.data.faqItems}
+  slug={useCase.id}
+>
+  <Content />
+</UseCaseLayout>

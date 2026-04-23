@@ -1,0 +1,198 @@
+---
+title: "MCP and AI Agents: How Model Context Protocol Changes Coding"
+description: "What MCP is, why it matters for AI coding agents, and how to use MCP servers in practice. Practical examples with real tools."
+date: 2026-03-09
+tags: ["mcp", "ai-agents", "protocol", "tutorial"]
+relatedContent:
+  - title: "Open Source AI Coding Agents: The Complete List"
+    url: "/blog/open-source-ai-coding-agents/"
+    type: "blog"
+  - title: "Best AI Coding Agents in 2026"
+    url: "/blog/best-ai-coding-agents-2026/"
+    type: "blog"
+  - title: "Getting Started with Stoneforge"
+    url: "https://docs.stoneforge.ai/getting-started"
+    type: "docs"
+  - title: "Claude Code Integration"
+    url: "/integrations/claude-code/"
+    type: "docs"
+---
+
+{/* SEO CHECKLIST
+    [x] Title tag <=60 chars with primary keyword
+    [x] Meta description <=160 chars
+    [x] H1 = title, H2s for each section
+    [x] 2-3 internal links to docs.stoneforge.ai
+    [x] 1-2 internal links to use case or comparison pages
+    [x] 3-5 FAQ items
+    [x] Image alt text with keywords */}
+
+Before MCP, every AI coding tool built its own integrations from scratch. Claude Code had its own way of reading files. Cursor had its own database connector. Cline built its own browser automation. Each tool maintained bespoke code for every external system it needed to talk to. If you wanted your AI agent to query your PostgreSQL database, you needed to find (or build) an integration specific to that agent.
+
+Model Context Protocol (MCP) changed this. Introduced by Anthropic in November 2024 and now governed by the Agentic AI Foundation under the Linux Foundation, MCP is an open standard that gives AI agents a uniform way to connect to external tools, data sources, and services. One protocol, many tools, any agent.
+
+## What MCP Actually Is
+
+Think of MCP as a USB-C port for AI. Before USB-C, every device had its own connector. After USB-C, one cable works across devices from different manufacturers. MCP does the same thing for AI agent integrations.
+
+The protocol defines a client-server architecture. The AI agent (or the application hosting it) is the MCP client. External tools and data sources expose their capabilities through MCP servers. When an agent needs to interact with a tool, it communicates through the MCP protocol, which handles capability discovery, request formatting, and response parsing.
+
+An MCP server exposes three types of capabilities:
+
+- **Tools**: Actions the agent can invoke. A filesystem server exposes tools like `read_file`, `write_file`, and `list_directory`. A database server exposes `query` and `list_tables`.
+- **Resources**: Data the agent can read. A documentation server might expose your API docs as resources. A Git server might expose commit history and diffs.
+- **Prompts**: Pre-built instructions the server suggests to the agent. A code review server might provide a prompt template for reviewing pull requests against your team's conventions.
+
+The key insight: MCP servers are client-agnostic. A PostgreSQL MCP server works with Claude Code, Cursor, Cline, VS Code with Copilot, and any other tool that speaks MCP. Build the integration once, use it everywhere.
+
+## Why MCP Matters for AI Coding Agents
+
+Before MCP, the capabilities of your AI coding agent were fixed by whatever its developers had built in. Want your agent to query a database? Wait for the tool vendor to add that feature. Want it to read from your Confluence wiki? Write a custom plugin.
+
+MCP inverts this. An MCP AI agent can discover and use any MCP server without needing built-in support for that specific integration. The ecosystem has grown to thousands of pre-built servers covering databases, cloud services, monitoring tools, project management systems, and more.
+
+For coding workflows specifically, this means your agent can:
+
+- **Read documentation** from your internal wiki or API docs server, staying up to date without manual context pasting.
+- **Query databases** to understand schema, check data, or verify that migrations worked correctly.
+- **Interact with CI/CD** systems to trigger builds, check test results, or read deployment logs.
+- **Browse the web** to look up library documentation, check API references, or research error messages.
+- **Access project management** tools to read ticket descriptions, check acceptance criteria, or update task status.
+
+Each of these capabilities comes from a separate MCP server. The agent doesn't need to know the implementation details. It discovers what tools are available, understands their inputs and outputs through the protocol, and uses them as needed.
+
+## The MCP Ecosystem in 2026
+
+The protocol's adoption accelerated after OpenAI and Google DeepMind joined Anthropic in supporting it through 2025. By early 2026, MCP has become the de facto standard for AI tool integration.
+
+**Major agents with MCP support:**
+- Claude Code (Anthropic)
+- Cursor
+- Cline (the first agent to build an MCP marketplace)
+- VS Code with GitHub Copilot
+- OpenCode
+- Goose (Block)
+- Continue
+- Windsurf
+- Zed
+
+**Popular MCP servers for developers:**
+
+The official [modelcontextprotocol/servers](https://github.com/modelcontextprotocol/servers) repository on GitHub maintains reference implementations. Beyond that, the community has built servers for nearly every developer tool you'd want:
+
+- **Filesystem**: The official filesystem MCP provides secure file operations restricted to allowed directories. Desktop Commander extends this with terminal access and process management.
+- **Databases**: PostgreSQL, MySQL, SQLite, and MongoDB servers let agents query databases safely. Most expose schema information as resources and queries as tools, with read-only modes for safety.
+- **Git**: Servers that expose repository history, diffs, blame information, and branch management.
+- **Web browsing**: Playwright-based servers for navigating documentation, reading API references, and testing web applications.
+- **Cloud services**: AWS, GCP, and Azure servers for managing infrastructure, reading logs, and checking service status.
+
+## Practical Example: Using MCP Servers in a Coding Workflow
+
+Here's what MCP looks like in practice. Say you're working on a backend service and you ask your AI agent to add a new API endpoint that returns aggregated user statistics.
+
+Without MCP, you'd manually paste the database schema, the existing endpoint patterns, and the test conventions into the agent's context. With MCP, the agent can discover these itself.
+
+**Step 1: The agent queries your database server**
+
+Through the PostgreSQL MCP server, the agent runs `list_tables` and `describe_table` to understand your schema. It sees the `users`, `sessions`, and `events` tables, along with their columns and relationships. No manual schema pasting needed.
+
+**Step 2: The agent reads your project conventions**
+
+Through a filesystem MCP server scoped to your project, the agent reads your existing endpoint files to understand patterns. It finds your route registration, middleware chain, and response format conventions.
+
+**Step 3: The agent checks your test patterns**
+
+Same filesystem server, different directory. The agent reads your existing test files to understand your testing conventions: which test framework, how you mock the database, how you structure assertions.
+
+**Step 4: The agent writes the code**
+
+Armed with real schema information, actual project conventions, and concrete test patterns, the agent writes the endpoint and its tests. The code matches your existing patterns because it read the real source, not a training data approximation.
+
+**Step 5: The agent verifies**
+
+Through a terminal MCP server, the agent runs your test suite to verify the new code works. If tests fail, it reads the error output and iterates.
+
+Each of these steps used a different MCP server capability, but the agent didn't need custom code for any of them. The MCP protocol handled the communication.
+
+## How Stoneforge Agents Use MCP
+
+In a [multi-agent orchestration](/comparisons/multi-agent-vs-single-agent/) setup, MCP becomes even more valuable. When Stoneforge dispatches a worker agent to a task, that agent inherits the MCP configuration from the workspace. This means every worker agent automatically has access to the same tools: the project's database, documentation, CI system, and whatever else you've configured.
+
+This matters because orchestrated agents are ephemeral. A [Stoneforge worker](https://docs.stoneforge.ai/concepts/agents) is spawned for a specific task, works in an isolated git worktree, and shuts down when done. MCP servers give each ephemeral worker access to the full context it needs without manual setup per session.
+
+For example, a workspace might configure:
+
+- A filesystem MCP server scoped to the project directory (for code reading and writing)
+- A PostgreSQL MCP server pointing to the development database (for schema queries)
+- A documentation MCP server serving internal API docs (for reference)
+- The Stoneforge workspace itself exposes task details and [workspace documentation](https://docs.stoneforge.ai/concepts/workspaces) to agents
+
+Each worker agent spawned by the [daemon](/blog/run-multiple-ai-coding-agents-parallel/) gets all of these automatically. The agent working on a database migration has the same schema access as the agent writing API endpoints, because they share the same MCP configuration.
+
+## Building Your Own MCP Server
+
+If your team uses internal tools that don't have existing MCP servers, building one is straightforward. An MCP server is a process that speaks JSON-RPC over stdio or HTTP. The protocol is well-documented, and SDKs exist for TypeScript, Python, Go, and Rust.
+
+A minimal MCP server in TypeScript:
+
+```typescript
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+
+const server = new McpServer({
+  name: "internal-docs",
+  version: "1.0.0",
+});
+
+// Expose a tool that searches internal documentation
+server.tool(
+  "search_docs",
+  "Search internal documentation by query",
+  { query: { type: "string", description: "Search query" } },
+  async ({ query }) => {
+    const results = await searchInternalDocs(query);
+    return {
+      content: [{ type: "text", text: JSON.stringify(results) }],
+    };
+  }
+);
+
+const transport = new StdioServerTransport();
+await server.connect(transport);
+```
+
+Once built, any MCP-compatible agent can use it. You configure the server in your agent's MCP settings, and the agent discovers the `search_docs` tool automatically.
+
+## Security Considerations
+
+MCP servers have access to real systems. A database MCP server can run queries. A filesystem server can read and write files. This power requires careful configuration.
+
+**Principle of least privilege.** Give each MCP server only the access it needs. A database server for code generation should be read-only. A filesystem server should be scoped to the project directory, not the entire disk.
+
+**Use sandboxed modes first.** Most production MCP servers support read-only or sandboxed modes. Start there and expand access only after you've observed how the agent uses the tools in practice.
+
+**Manage secrets properly.** MCP server configurations often include database credentials, API keys, or access tokens. Use a secrets manager rather than hard-coding values in configuration files. Never commit MCP configuration with embedded secrets to version control.
+
+**Log and audit.** Record which agent called which MCP server with which arguments. This is essential for debugging unexpected agent behavior and for compliance in regulated environments.
+
+## Frequently Asked Questions
+
+### What does MCP stand for?
+
+MCP stands for Model Context Protocol. It's an open standard created by Anthropic for connecting AI agents to external tools and data sources. The protocol is now governed by the Agentic AI Foundation under the Linux Foundation, co-founded by Anthropic, Block, and OpenAI.
+
+### Which AI coding agents support MCP?
+
+Most major AI coding agents support MCP as of 2026, including Claude Code, Cursor, Cline, VS Code with GitHub Copilot, [OpenCode](/blog/open-source-ai-coding-agents/), Goose, Continue, Windsurf, and Zed. Cline has the most mature MCP integration, including an MCP Marketplace for discovering and installing servers.
+
+### How many MCP servers are available?
+
+Thousands. The [official MCP servers repository](https://github.com/modelcontextprotocol/servers) maintains reference implementations, and community-built servers cover databases, cloud services, project management tools, monitoring systems, documentation platforms, and more. Directories like [mcpservers.org](https://mcpservers.org/) catalog available servers.
+
+### Is MCP only for coding agents?
+
+No. MCP is a general-purpose protocol for connecting any AI application to external tools. It's used in coding agents, AI assistants, chatbots, automation systems, and more. The coding agent ecosystem adopted it early and heavily, but the protocol's scope is broader.
+
+### Do I need MCP to use AI coding agents?
+
+No. AI coding agents work without MCP. They can read and write files, run commands, and interact with your codebase using built-in capabilities. MCP extends what agents can do by giving them access to external systems like databases, documentation servers, cloud services, and custom internal tools. Think of it as optional but increasingly valuable as your workflow grows more complex.

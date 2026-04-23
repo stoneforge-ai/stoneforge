@@ -1,0 +1,54 @@
+---
+import SectionLabel from '../ui/SectionLabel.astro';
+import { getCollection } from 'astro:content';
+
+const posts = (await getCollection('blog', ({ data }) => !data.draft))
+  .sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf())
+  .slice(0, 1);
+
+const post = posts[0];
+if (!post) return;
+
+const formatter = new Intl.DateTimeFormat('en-US', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+  timeZone: 'UTC',
+});
+---
+
+<section class="site-section relative">
+  <div class="site-container">
+    <hr class="hr-gradient mb-16 md:mb-24" />
+
+    <div class="max-w-[680px] mx-auto text-center mb-10" data-reveal>
+      <SectionLabel class="mb-4">From the Blog</SectionLabel>
+      <h2 class="text-[clamp(1.75rem,3vw+0.5rem,2.75rem)] font-semibold tracking-[-0.025em]">
+        Latest post
+      </h2>
+    </div>
+
+    <div class="max-w-3xl mx-auto" data-reveal>
+      <a
+        href={`/blog/${post.id}/`}
+        class="glow-card block p-6 md:p-8 no-underline hover:no-underline group"
+      >
+        <span class="text-xs text-[var(--site-text-tertiary)]">
+          {formatter.format(post.data.date)}
+        </span>
+        <h3 class="text-lg md:text-xl font-semibold text-[var(--site-text-primary)] mt-2 mb-3 group-hover:text-[var(--site-accent)] transition-colors">
+          {post.data.title}
+        </h3>
+        <p class="text-sm text-[var(--site-text-secondary)] leading-relaxed">
+          {post.data.description}
+        </p>
+        <span class="inline-flex items-center gap-1.5 text-sm font-medium text-[var(--site-accent)] mt-4">
+          Read more
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>
+          </svg>
+        </span>
+      </a>
+    </div>
+  </div>
+</section>

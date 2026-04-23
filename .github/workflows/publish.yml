@@ -1,58 +1,13 @@
-name: Publish
+name: Publish Reference V1 (Paused)
 
 on:
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
-    branches: [main, master]
-
-permissions:
-  id-token: write # Required for OIDC npm publish
-  contents: write # Required for pushing version PR branch
-  pull-requests: write # Required for creating version PRs
-
-concurrency: ${{ github.workflow }}-${{ github.ref }}
+  workflow_dispatch:
 
 jobs:
-  publish:
+  notice:
     runs-on: ubuntu-latest
-    environment: main
-    if: github.event.workflow_run.conclusion == 'success'
 
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 8.15.5
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22.14.0'
-          cache: pnpm
-
-      - name: Upgrade npm for OIDC trusted publishing support
-        run: npm install -g npm@latest
-
-      - run: pnpm install --frozen-lockfile
-
-      - run: pnpm build
-
-      - name: Create release PR or publish
-        id: changesets
-        uses: changesets/action@v1
-        with:
-          publish: pnpm changeset publish
-          version: pnpm changeset version
-          createGithubReleases: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_CONFIG_PROVENANCE: true
-
-      - name: Create unified GitHub release
-        if: steps.changesets.outputs.published == 'true'
-        run: |
-          VERSION=$(node -p "require('./packages/smithy/package.json').version")
-          gh release create "v${VERSION}" --target "${{ github.sha }}" --title "v${VERSION}" --generate-notes
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - run: |
+          echo "Automatic publishing from the repository root is disabled after the V2 repo reorganization."
+          echo "If V1 publishing is still required, restore a dedicated release workflow under reference/v1 before publishing."

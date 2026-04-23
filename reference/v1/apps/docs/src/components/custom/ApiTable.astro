@@ -1,0 +1,70 @@
+---
+interface Props {
+  title?: string;
+  class?: string;
+}
+
+const { title, class: className = '' } = Astro.props;
+---
+
+<div class:list={['sf-api-table', className]}>
+  {title && <h4 class="sf-api-table-title">{title}</h4>}
+  <div class="sf-api-table-wrapper">
+    <slot />
+  </div>
+</div>
+
+<style>
+  .sf-api-table {
+    margin: 1.5rem 0;
+  }
+
+  .sf-api-table-title {
+    font-family: var(--sf-font-headline);
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--sl-color-white);
+    margin: 0 0 0.75rem;
+    padding-left: 0.25rem;
+  }
+
+  .sf-api-table-wrapper {
+    border: 1px solid var(--sl-color-hairline);
+    border-radius: 0.75rem;
+    overflow: hidden;
+  }
+
+  .sf-api-table-wrapper :global(table) {
+    margin: 0;
+    border: none;
+  }
+
+  .sf-api-table-wrapper :global(th) {
+    font-family: var(--sf-font-headline);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--sl-color-gray-3);
+    background: var(--sl-color-gray-6);
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--sl-color-hairline);
+  }
+
+  .sf-api-table-wrapper :global(td) {
+    padding: 0.625rem 1rem;
+    font-size: 0.8125rem;
+    border-bottom: 1px solid var(--sl-color-hairline);
+    vertical-align: top;
+  }
+
+  .sf-api-table-wrapper :global(tr:last-child td) {
+    border-bottom: none;
+  }
+
+  .sf-api-table-wrapper :global(td code) {
+    font-family: var(--sf-font-code);
+    font-size: 0.8125rem;
+    color: var(--sl-color-accent);
+  }
+</style>

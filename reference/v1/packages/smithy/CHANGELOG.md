@@ -1,0 +1,658 @@
+# @stoneforge/smithy
+
+## 1.23.1
+
+### Patch Changes
+
+- afbee04: Include ephemeral workflow tasks in dispatch daemon ready() call
+  - @stoneforge/core@1.23.1
+  - @stoneforge/storage@1.23.1
+  - @stoneforge/quarry@1.23.1
+  - @stoneforge/shared-routes@1.23.1
+
+## 1.23.0
+
+### Patch Changes
+
+- Updated dependencies [d9137d7]
+- Updated dependencies [d9137d7]
+- Updated dependencies [99e75d8]
+- Updated dependencies [f365a2d]
+  - @stoneforge/core@1.23.0
+  - @stoneforge/quarry@1.23.0
+  - @stoneforge/shared-routes@1.23.0
+  - @stoneforge/storage@1.23.0
+
+## 1.22.0
+
+### Patch Changes
+
+- Updated dependencies [9c9f3ec]
+- Updated dependencies [9c9f3ec]
+  - @stoneforge/quarry@1.22.0
+  - @stoneforge/core@1.22.0
+  - @stoneforge/storage@1.22.0
+  - @stoneforge/shared-routes@1.22.0
+
+## 1.21.0
+
+### Minor Changes
+
+- d93c864: Return agent count and daemon status from `startSmithyServer()` for use in polished startup summary
+
+### Patch Changes
+
+- Updated dependencies [a2ef9af]
+- Updated dependencies [e36265c]
+- Updated dependencies [d93c864]
+- Updated dependencies [00a58d3]
+  - @stoneforge/quarry@1.21.0
+  - @stoneforge/core@1.21.0
+  - @stoneforge/storage@1.21.0
+  - @stoneforge/shared-routes@1.21.0
+
+## 1.20.1
+
+### Patch Changes
+
+- @stoneforge/core@1.20.1
+- @stoneforge/storage@1.20.1
+- @stoneforge/quarry@1.20.1
+- @stoneforge/shared-routes@1.20.1
+
+## 1.20.0
+
+### Patch Changes
+
+- c3244fe: Fix --target-branch flag for sf agent register command: option was defined with kebab-case name causing the value to be silently ignored at runtime. Renamed to camelCase convention so the parser correctly maps --target-branch to options.targetBranch.
+- Updated dependencies [50aa516]
+  - @stoneforge/quarry@1.20.0
+  - @stoneforge/core@1.20.0
+  - @stoneforge/storage@1.20.0
+  - @stoneforge/shared-routes@1.20.0
+
+## 1.19.0
+
+### Minor Changes
+
+- 8d83b52: Propagate director targetBranch to task orchestrator metadata at dispatch time
+- 2100736: Add push enforcement to task completion flow. `completeTask()` now auto-pushes the task branch to origin before transitioning to REVIEW status, preventing silent commit loss when workers skip or fail to push.
+- c29843a: Accept optional targetBranch in agent API routes for director creation and update
+
+### Patch Changes
+
+- bc7a574: Add safety verification to `sf task merge-status merged` to ensure source branch commits are on origin/targetBranch before allowing the status update
+- 0d778dd: Add post-merge verification to `sf task merge` CLI command. After mergeBranch() succeeds, the command now independently verifies that commits landed on the remote target branch before marking the task as merged. Returns actionable error messages if verification fails.
+- fec32d8: Ensure target branch exists before worktree creation at dispatch time. Prevents worktree creation failures when a director's targetBranch doesn't exist locally or on the remote.
+- 3d47d68: Explicitly set CLAUDECODE=1 in interactive and headless session spawn environment to ensure spawned Claude Code sessions detect managed context on all platforms
+- a79190d: Fix ensureTargetBranchExists call ordering in mergeBranch to fetch from origin before attempting to create branches from remote refs
+- 4cc779f: Fix `sf task merge-status merged` to fail when source branch is deleted and merge is unverifiable, instead of silently allowing through. Adds `--force` flag to bypass verification in legitimate edge cases.
+- b30aebc: Fix mergeBranch() alreadyMerged check to use local source ref instead of remote, preventing unpushed commits from being skipped
+- 09effc1: Fix mock.module leak: replace global mock.module for ensureTargetBranchExists with dependency injection via DispatchDaemonConfig to prevent test interference across files
+- 7f9deb4: Fix PR creation to use task's targetBranch from orchestrator metadata instead of hardcoded 'main'. PRs now correctly target the configured target branch when set.
+- bcc47d7: Fix silent push failure in mergeBranch: return failure result when git push fails instead of reporting success, and add post-push verification to confirm the commit landed on the remote.
+- b31f8ce: Fix steward-scheduler to inform scheduled stewards that tasks may target different branches. Adds a per-task target branch override note to both merge/docs and custom steward prompts, instructing stewards to check each task's targetBranch before reviewing.
+- cbd16dd: Fix sf task merge CLI command to read targetBranch from orchestrator metadata and pass it to mergeBranch(), instead of always merging to the auto-detected default branch
+- f17aee3: Fix sf task sync to use per-task targetBranch instead of always syncing against the workspace default branch
+- 26c273c: Add shell:true to installDependencies and corepack exec options to fix ENOENT errors on Windows where npm and corepack are .cmd wrappers
+- a119fb8: Pass task targetBranch as baseBranch when creating worktrees at dispatch, so workers branch from the correct base.
+- dcf3da5: Use per-task targetBranch when rendering steward prompts instead of always using the global cached target branch
+- e87abc1: Preserve targetBranch in assignToAgent orchestrator metadata rebuild to prevent loss during task re-assignment
+- e6656b1: Record merge commit hash in task orchestrator metadata after `sf task merge` succeeds, enabling downstream verification of merged tasks
+- 3772deb: Thread targetBranch through AgentRegistry.registerDirector() metadata
+  - @stoneforge/core@1.19.0
+  - @stoneforge/storage@1.19.0
+  - @stoneforge/quarry@1.19.0
+  - @stoneforge/shared-routes@1.19.0
+
+## 1.18.0
+
+### Minor Changes
+
+- 48b0069: Add owningDirector field to OrchestratorTaskMeta, getDirectors()/getAvailableDirector() to AgentRegistry, and sf task set-owner CLI command for multi-director workspace support.
+- 6247446: Add POST /api/providers/:name/verify endpoint for fresh single-provider availability checks.
+- 2608cf1: Add --target-branch option to `sf agent register` CLI command for director agents. The option allows specifying a target merge branch when registering a director. Also displays target branch in `sf agent show` output.
+- 711343b: Add `targetBranch` field to `OrchestratorTaskMeta` interface for specifying the merge target branch at dispatch time
+- ccb002b: Add optional targetBranch field to DirectorMetadata and RegisterDirectorInput, allowing directors to specify the merge target branch for their tasks.
+- 1ed1113: Auto-resume all running directors on server restart instead of only the first one.
+- 57152b0: Dispatch daemon uses per-task owning director ID in worker/steward prompts and resolves owningDirector during task dispatch via plan creator or task creator.
+- efc955b: Add message fallback routing for offline directors. When a director is offline and has unread inbox messages, route those messages to another running director as a fallback. Each message is consumed exactly once.
+- 8cac30b: Refactor merge steward to resolve target branch per-task from orchestrator metadata, enabling tasks to merge to different branches (e.g. staging) while preserving the global default fallback
+- 07f3449: Inject SF_ENTITY_ID environment variable into agent sessions for correct CLI entity attribution
+
+### Patch Changes
+
+- c4495f5: Fix backward compatibility for legacy 'claude' provider alias in getOrThrow() and resolveProvider()
+- 8ded2a8: Remove CLAUDE_CODE_DISABLE_1M_CONTEXT env var workaround from spawn commands
+- Updated dependencies [07f3449]
+  - @stoneforge/quarry@1.18.0
+  - @stoneforge/core@1.18.0
+  - @stoneforge/storage@1.18.0
+  - @stoneforge/shared-routes@1.18.0
+
+## 1.17.0
+
+### Minor Changes
+
+- 713cea8: Add workflow preset-aware context to agent system prompts. Agents now receive preset-specific instructions about merge behavior, tool access, and approval requirements based on the active workflow preset (auto, review, approve).
+- 600e4fd: Capture cache read and cache creation tokens from Claude Code SDK events and update MetricsService aggregations
+- 7c63531: Add CostService for per-model cost calculation and enrich provider-metrics API with estimatedCost breakdowns
+- d3744f6: Add agent tool permission model with auto-allowed tools, configurable bash command allowlist, approval request service with SQLite storage, API endpoints for managing approval requests, and session-level permission monitoring.
+- dafa312: Add GET/PUT /api/settings/workflow-preset endpoints for reading and updating the workspace workflow preset from the frontend.
+- 705df96: Add GitHub PR merge approval flow for Approve preset. When `merge.requireApproval` is true, the merge steward creates GitHub PRs instead of auto-merging, adds `awaiting_approval` merge status, and polls for PR merge completion.
+- 6287e4d: Auto-create review branch when `merge.targetBranch` is set to a non-main branch (e.g. `stoneforge/review`). The merge steward now ensures the target branch exists before merging, creating it from main HEAD if needed.
+
+### Patch Changes
+
+- fe96d6a: Re-export SyncDirection, ProviderConfig, and ExternalSyncSettings types from smithy services barrel export
+- Updated dependencies [600e4fd]
+- Updated dependencies [7c63531]
+- Updated dependencies [7c63531]
+- Updated dependencies [d3744f6]
+- Updated dependencies [9015835]
+- Updated dependencies [b2ce7ce]
+- Updated dependencies [a77ec61]
+- Updated dependencies [3bc3e76]
+  - @stoneforge/storage@1.17.0
+  - @stoneforge/core@1.17.0
+  - @stoneforge/quarry@1.17.0
+  - @stoneforge/shared-routes@1.17.0
+
+## 1.16.1
+
+### Patch Changes
+
+- 2b1493b: Deduplicate daemon warning notifications to prevent repeated toasts from flooding the UI on every poll cycle
+- 8499c3a: Fix headless session termination: close() now interrupts the underlying SDK query/process to prevent zombie agents from continuing after stop
+- aa30908: Fix opencode spawn ENOENT on Windows by adding `shell: true` to the spawn call for proper PATH resolution
+  - @stoneforge/core@1.16.1
+  - @stoneforge/storage@1.16.1
+  - @stoneforge/quarry@1.16.1
+  - @stoneforge/shared-routes@1.16.1
+
+## 1.16.0
+
+### Minor Changes
+
+- f1f4099: Add per-agent token metrics aggregation via `groupBy=agent` on GET /api/provider-metrics endpoint
+
+### Patch Changes
+
+- 1d73eea: Use ensureAgentChannel in dispatch-service to auto-create missing agent channels instead of throwing an error
+- 7e192ef: Fix token capture: record metrics incrementally via upsert on each assistant event, fix accumulation bug that used falsy checks and replacement instead of Math.max, and cache task ID lookups
+- 00add6f: Fix workspace pane token display: add session-filtered metrics query via `getBySession()` method and `sessionId` API parameter. Reduce default polling interval to 5 seconds for faster realtime updates.
+- Updated dependencies [7691985]
+  - @stoneforge/quarry@1.16.0
+  - @stoneforge/core@1.16.0
+  - @stoneforge/storage@1.16.0
+  - @stoneforge/shared-routes@1.16.0
+
+## 1.15.0
+
+### Minor Changes
+
+- d7192a9: Add DemoModeService for enabling/disabling demo mode (opencode/minimax-m2.5-free) with REST API endpoints
+- 3733dbc: Auto-find available port on EADDRINUSE: server now retries up to 20 ports when the requested port is in use, and startSmithyServer returns { services, port } with the actual bound port.
+- 56a13a8: Add `ensureAgentChannel` method to `AgentRegistry` interface to recreate missing agent channels on startup, preventing dispatch failures when channels are lost due to partial registration failures, JSONL sync issues, or crashes.
+
+### Patch Changes
+
+- 583adbb: Apply OpenCode default model (minimax-m2.5-free) when no model is explicitly set in agent metadata, ensuring the --model flag is always passed to the CLI.
+- d55b152: Cap parsed rate limit reset times to 24 hours maximum and prevent setTimeout overflow by clamping delay values to the 32-bit signed integer max
+- 5646042: Consolidate duplicated rate limit pause logic in dispatch daemon into shared isDispatchPaused() method
+- 0a16c8b: Fix corepack ENOENT fallback in worktree dependency installation. When corepack is detected as available but fails with ENOENT at spawn time, the install now falls back to direct package manager invocation instead of failing fatally on both retry attempts.
+- 2c154cb: Fix DEMO_MODEL constant to use composite "opencode/minimax-m2.5-free" format expected by the OpenCode CLI --model flag
+- 27c4ddf: Fix false positive rate limit detection from assistant code discussion. Add 200-character length gate to `isRateLimitMessage()` and replace broad catch-all pattern with specific patterns for known provider rate limit formats.
+- fe971ac: Fix opencode provider to pass cwd and env to SDK correctly, resolving "Failed to change directory" error
+- ab7e924: Fix OpenCode interactive provider to pass initial prompt via --prompt flag instead of positional argument
+- 7f97968: Fix OpenCode session creation error handling: check result.error before result.data on session.create, session.get, and session.abort so actual server errors are surfaced. Pass working directory as query parameter on session.create for newer OpenCode server versions.
+- 5edf7e8: Fix opencode provider: spawn process with cwd directly instead of using SDK's createOpencode
+- 73415f8: Fix opencode provider: remove invalid `wd` config key from OPENCODE_CONFIG_CONTENT that caused ConfigInvalidError on opencode v1.1.64
+- c0c67f5: Fix getRateLimitStatus() returning isPaused: false when executable is rate-limited under a non-'claude' key
+- 24dd116: Pre-register the CLI plugin on globalThis so quarry can discover it without dynamic import under pnpm strict isolation.
+- 7cb4a82: Fix stale worktree directory cleanup in createWorktree to prevent infinite retry loops when a directory exists but is not registered as a git worktree
+- a338d0e: Fix worktree dependency install to respect packageManager field in package.json. When the field is present and corepack is available, the install command is wrapped with corepack to ensure the correct package manager version is used. Falls back to direct invocation when corepack is unavailable.
+- a57ffaa: Pass working directory as positional argument to the opencode CLI command to fix "Failed to change directory" errors in persistent agent sessions.
+- ebfee63: Record rate limit in tracker when hasRecentRateLimitPattern detects rapid-exit sessions, preventing infinite log spam and enabling dashboard banner display
+- eb5beaa: Add safety-net directory removal before git worktree add to prevent "fatal: path already exists" errors when retrying previously failed worktree creation
+- 25bee4b: Skip workers with missing channels during dispatch instead of crashing. When `dispatchService.dispatch` throws "Agent channel not found", the daemon logs a warning, writes to the operation log, and continues to the next worker.
+- c958f7d: Fix wake() to invalidate stale rate limit detection by recording a lastWakeAt timestamp, replacing the grace period and recency check approaches
+- 8031f37: Fix wake() to reset resumeCount for tasks stuck during rate limit period. Workers now resume normally instead of being routed to the recovery steward after a manual wake.
+- Updated dependencies [26adda9]
+- Updated dependencies [d7192a9]
+- Updated dependencies [fc09654]
+- Updated dependencies [3733dbc]
+- Updated dependencies [129024a]
+- Updated dependencies [24dd116]
+- Updated dependencies [f3ac2ea]
+  - @stoneforge/quarry@1.15.0
+  - @stoneforge/core@1.15.0
+  - @stoneforge/storage@1.15.0
+  - @stoneforge/shared-routes@1.15.0
+
+## 1.14.0
+
+### Patch Changes
+
+- 832d362: Pass idConfig to createWorkflowFromPlaybook in smithy workflow route for adaptive hash length and collision detection.
+- c5b5e07: Re-export SyncResultMeta type from smithy types index for direct import access
+- Updated dependencies [03260a5]
+- Updated dependencies [a82e4f8]
+- Updated dependencies [54e031a]
+- Updated dependencies [54e031a]
+- Updated dependencies [eb08c40]
+- Updated dependencies [66a831b]
+- Updated dependencies [4c78782]
+- Updated dependencies [42a2618]
+- Updated dependencies [ff96f34]
+- Updated dependencies [0497707]
+- Updated dependencies [f52c7bb]
+- Updated dependencies [d973b7b]
+- Updated dependencies [0fe35b1]
+- Updated dependencies [e50386c]
+- Updated dependencies [76f4eec]
+- Updated dependencies [4613863]
+- Updated dependencies [7b0894c]
+- Updated dependencies [5e12790]
+- Updated dependencies [a65a4dd]
+- Updated dependencies [3a02a16]
+- Updated dependencies [940fa7b]
+- Updated dependencies [b75f07f]
+- Updated dependencies [7b0894c]
+- Updated dependencies [89a73d8]
+- Updated dependencies [89a73d8]
+- Updated dependencies [f5af534]
+- Updated dependencies [832d362]
+- Updated dependencies [8794e6a]
+- Updated dependencies [e262b2e]
+- Updated dependencies [1033e1d]
+- Updated dependencies [4c3c57f]
+- Updated dependencies [7ccf4e1]
+- Updated dependencies [6a769ce]
+- Updated dependencies [6a769ce]
+- Updated dependencies [0f4412d]
+- Updated dependencies [ed6c56c]
+- Updated dependencies [a261b37]
+- Updated dependencies [411cd24]
+- Updated dependencies [bd19f33]
+  - @stoneforge/quarry@1.14.0
+  - @stoneforge/core@1.14.0
+  - @stoneforge/shared-routes@1.14.0
+  - @stoneforge/storage@1.14.0
+
+## 1.13.0
+
+### Minor Changes
+
+- 6d8c238: Wire autoLinkTask into HTTP task creation route to auto-create external issues when autoLink is enabled
+- 2c06cfa: Export `parseRateLimitResetTime` utility from package index for use by smithy-server daemon routes
+- e381bed: Add external sync background daemon service with polling-based automation for bidirectional sync with external services (GitHub, Linear, etc.). Includes zero-overhead guarantee for unconfigured workspaces.
+- 18314d8: Add external sync trigger and status HTTP endpoints. Provides POST endpoints for push/pull/sync operations and GET endpoints for sync status and provider listing at /api/external-sync/\*.
+- e9b59ad: Add EXTERNAL_SYNC to settings service with ExternalSyncSettings interface, ProviderConfig type, and helper methods for managing external sync provider configurations and sync cursors.
+- 0995fb6: Handle IANA timezone in rate limit reset time parser. Messages with timezone context like "resets 11pm (Pacific/Honolulu)" now correctly compute the reset time in the specified timezone instead of using server local time. Invalid or missing timezones gracefully fall back to existing behavior.
+- d7fde86: Wire auto-link into workflow/playbook instantiation: tasks created from playbooks get auto-linked to external provider when configured.
+
+### Patch Changes
+
+- 8531ae4: Fix daemon and server external-sync routes to configure real providers from tokens instead of using placeholder providers that always throw.
+- e803c95: Fix race condition where rate limit events emitted immediately after session initialization were lost because the onSessionStarted listener was attached after multiple async database operations. The listener is now attached immediately after startSession()/resumeSession() returns.
+- 174765e: Fix spawner executable path tracking for rate limit events from fallback executables. Session manager now passes the resolved executable path to the spawner so rate limit events identify the correct executable. Dispatch daemon marks all fallback chain entries as rate-limited when any chain entry hits a plan-level limit.
+- 695b3b8: Fix tsconfig types array to use "bun" instead of "bun-types" for robust type resolution via @types/bun
+- 8b831fb: Prevent recovery steward assignment to rate-limited or multi-assigned tasks. Added session history pattern detection to skip recovery steward spawn when task failures indicate rate limiting. Added multi-assignment guard to prevent stewards from being assigned multiple tasks across poll cycles.
+- 39299b8: Improve rapid-exit detector to catch rate limits from assistant messages. Previously only silent rate limits (no assistant events) were detected. Now rate limit messages shown as assistant output (e.g. "You've hit your limit · resets 11pm") are also caught, with reset time parsed from the message content.
+- 0f840b9: Add rate limit guard to session resume path in orphan recovery. Prevents burning resumeCount when all executables are rate-limited by checking limits inside recoverOrphanedTask() before attempting resume or spawn.
+- 456b9fd: Add Phase 3 to orphan recovery for recovery stewards. When a recovery steward's session exits without completing triage, the task is now automatically unassigned and reset for fresh worker dispatch, preventing tasks from becoming permanently stuck.
+- Updated dependencies [a6979b2]
+- Updated dependencies [b110e28]
+- Updated dependencies [6d8c238]
+- Updated dependencies [d7fde86]
+- Updated dependencies [2b9af01]
+- Updated dependencies [b55db0d]
+- Updated dependencies [ee163c2]
+- Updated dependencies [e9b59ad]
+- Updated dependencies [42e996d]
+- Updated dependencies [f056e73]
+- Updated dependencies [b6dbaeb]
+- Updated dependencies [1a52826]
+- Updated dependencies [21f4b95]
+- Updated dependencies [21f4b95]
+- Updated dependencies [aeec6bd]
+- Updated dependencies [15c7b60]
+- Updated dependencies [8531ae4]
+- Updated dependencies [6a29d53]
+- Updated dependencies [8ad678f]
+- Updated dependencies [695b3b8]
+- Updated dependencies [695b3b8]
+- Updated dependencies [695b3b8]
+- Updated dependencies [0db88ca]
+- Updated dependencies [ea9c12c]
+- Updated dependencies [0aa8ab9]
+- Updated dependencies [75a0dd2]
+- Updated dependencies [91a33de]
+- Updated dependencies [1902200]
+- Updated dependencies [e787cb8]
+- Updated dependencies [e787cb8]
+- Updated dependencies [e437527]
+- Updated dependencies [fb43e14]
+- Updated dependencies [f8c8a3f]
+- Updated dependencies [6c5a927]
+- Updated dependencies [2826bb1]
+- Updated dependencies [cb5e20d]
+- Updated dependencies [d0775f3]
+- Updated dependencies [fd6f593]
+- Updated dependencies [7c0a4ee]
+- Updated dependencies [f525584]
+- Updated dependencies [0fad1bc]
+  - @stoneforge/quarry@1.13.0
+  - @stoneforge/core@1.13.0
+  - @stoneforge/storage@1.13.0
+  - @stoneforge/shared-routes@1.13.0
+
+## 1.12.0
+
+### Minor Changes
+
+- 0c48e64: Add merge concurrency guard with optimistic locking to prevent race conditions when multiple merge steward instances process the same task simultaneously
+- beab0ba: Add MetricsService for provider usage tracking, GET /api/provider-metrics endpoint, and wire metrics recording into session lifecycle.
+- 1abb89d: Add OperationLogService for persistent operation logging with write/query API, wired into dispatch-daemon, session-manager, and merge-steward-service
+- 3a034ee: Add GET /api/health/diagnostics endpoint that returns runtime health diagnostics including rate limit status, stuck tasks, merge queue health, error rates, and agent pool utilization.
+- 72977d9: Add minimum duration floor and rapid-exit detection for rate limits. handleRateLimitDetected() now clamps reset times to a 15-minute minimum to prevent premature tracker expiry. Recovered sessions that exit within 10 seconds without output are treated as suspected silent rate limits — resumeCount is rolled back and a 1-hour fallback rate limit is applied.
+
+### Patch Changes
+
+- 3ebbf94: Add rate limit checks to spawnTriageSession in dispatch daemon and document rate limit requirements in worker-task-service
+- 1301012: Fix TOCTOU race condition in startup orphan recovery. Replace boolean `startupRecoveryInFlight` flag with a promise-based latch (`startupRecoveryDone`) that `runPollCycle()` awaits before running its own orphan recovery, preventing concurrent recovery on the same tasks.
+- 133ef38: Update merge steward prompt to systematically verify task acceptance criteria before approving merges. The steward now reads the task description, cross-references each acceptance criterion against the diff, and blocks merging if any criterion is not met.
+- Updated dependencies [0ebed52]
+- Updated dependencies [beab0ba]
+- Updated dependencies [3a034ee]
+- Updated dependencies [1abb89d]
+  - @stoneforge/quarry@1.12.0
+  - @stoneforge/core@1.12.0
+  - @stoneforge/storage@1.12.0
+  - @stoneforge/shared-routes@1.12.0
+
+## 1.11.0
+
+### Minor Changes
+
+- 09cec84: Persist rate limit tracker state to SQLite via SettingsService. Rate limit entries now survive server restarts, preventing the dispatch daemon from immediately re-hitting rate-limited executables after a restart.
+
+### Patch Changes
+
+- b5bf6a3: Fix premature resumeCount increment in orphan recovery. The counter is now only incremented after successful recovery, preventing workers from being incorrectly flagged as stuck when recovery fails.
+- 01631d3: Add rate limit checks to steward-scheduler spawn paths for docs and custom stewards
+- bf942ee: Update built-in role definition prompts to use `sf docs dir` command instead of the two-step `sf document search` + `sf document show` pattern. Add "Getting Up to Speed" sections to worker, persistent-worker, and steward prompts.
+- Updated dependencies [c943c00]
+- Updated dependencies [49631b0]
+  - @stoneforge/quarry@1.11.0
+  - @stoneforge/storage@1.11.0
+  - @stoneforge/shared-routes@1.11.0
+  - @stoneforge/core@1.11.0
+
+## 1.10.2
+
+### Patch Changes
+
+- Updated dependencies [fd1ae79]
+  - @stoneforge/quarry@1.10.2
+  - @stoneforge/core@1.10.2
+  - @stoneforge/storage@1.10.2
+  - @stoneforge/shared-routes@1.10.2
+
+## 1.10.1
+
+### Patch Changes
+
+- 08ffa58: Add `.stoneforge` to IGNORED_DIRECTORIES to prevent traversal into worktree directories
+  - @stoneforge/core@1.10.1
+  - @stoneforge/storage@1.10.1
+  - @stoneforge/quarry@1.10.1
+  - @stoneforge/shared-routes@1.10.1
+
+## 1.10.0
+
+### Minor Changes
+
+- 86032d2: Add asset upload and serving API (POST /api/assets/upload, GET /api/assets/:filename) for uploading images to .stoneforge/assets/ and serving them with immutable cache headers
+- f7df3bc: Centralize branch detection into a single canonical `detectTargetBranch()` function in `git/merge.ts`. All 5 consumers (worktree-manager, merge-steward-service, docs-steward-service, CLI merge command) now delegate to the canonical function with a unified fallback order: config baseBranch → symref → remote show → origin/main → origin/master → local main → local master → "main". Fixes inverted master/main fallback in the CLI merge command.
+- f4c7855: Replace hardcoded "master" references in steward prompt files with `{{baseBranch}}` template variable. Add `renderPromptTemplate()` function for variable substitution. Steward prompts now dynamically use the detected/configured branch name instead of assuming "master".
+
+### Patch Changes
+
+- 1828e64: Fix registerSteward in orchestrator-api silently dropping playbook and playbookId fields from input
+- 490b026: Add skills directory to build output (`cp -r src/skills dist/skills`) and add `./skills` entry to package exports map so skills are discoverable in published packages.
+- Updated dependencies [c089311]
+- Updated dependencies [8a17c01]
+- Updated dependencies [490b026]
+- Updated dependencies [69ab9e2]
+  - @stoneforge/quarry@1.10.0
+  - @stoneforge/core@1.10.0
+  - @stoneforge/shared-routes@1.10.0
+  - @stoneforge/storage@1.10.0
+
+## 1.9.0
+
+### Patch Changes
+
+- b4eca92: Prevent recovery steward cascade assignment during rate limiting by tracking stewards used per recovery cycle
+- c93577b: Skip resumeCount and stewardRecoveryCount increment during rate limits in orphan recovery, preventing false recovery steward triggers for non-stuck tasks
+- db8ae6c: Replace hardcoded `el-2rig` library ID in role prompts with generic `sf docs init` and `sf docs add` commands
+- Updated dependencies [c97555d]
+  - @stoneforge/quarry@1.9.0
+  - @stoneforge/core@1.9.0
+  - @stoneforge/storage@1.9.0
+  - @stoneforge/shared-routes@1.9.0
+
+## 1.8.0
+
+### Patch Changes
+
+- 0b521cd: Replace inline bulk task delete route with shared createTaskRoutes factory from @stoneforge/shared-routes.
+- Updated dependencies [0b521cd]
+- Updated dependencies [0b521cd]
+  - @stoneforge/quarry@1.8.0
+  - @stoneforge/shared-routes@1.8.0
+  - @stoneforge/core@1.8.0
+  - @stoneforge/storage@1.8.0
+
+## 1.7.0
+
+### Patch Changes
+
+- ddab519: Terminate active agent sessions when resetting tasks to prevent orphaned processes and duplicate work
+- 23c7deb: Fix non-atomic worker unassignment in spawnRecoveryStewardForTask to prevent task orphaning when steward session start fails
+- 61a672d: Fix startup blocking on stale session resume in dispatch daemon orphan recovery
+
+  The dispatch daemon's start() method no longer blocks on recoverOrphanedAssignments() before starting the poll loop. Orphan recovery now runs in the background, and a startupRecoveryInFlight flag prevents runPollCycle from duplicating the work. This ensures tasks are dispatched within the first poll interval after server restart, even if stale session resumes take a long time to timeout.
+
+- 9b29d2b: Fix inverted priority sort in steward task dispatch so CRITICAL (1) tasks are dispatched before MINIMAL (5) tasks
+- b884a2b: Fix terminated->terminated race condition in spawner catch blocks
+
+  Guard `transitionStatus(session, 'terminated')` calls in `spawnHeadless()`, `spawnInteractive()`, and `spawn()` catch blocks to prevent `Invalid status transition: terminated -> terminated` errors when concurrent async code paths (e.g., `processProviderMessages` finishing before `waitForInit` timeout) race to terminate the same session.
+
+- 0de4580: Make waitForInit reject immediately on resume_failed or session exit
+
+  waitForInit() now listens for `resume_failed` and `exit` events in addition to the `system/init` event. When a stale session resume fails or the process exits before init, the promise rejects immediately with a descriptive error instead of blocking for the full timeout duration.
+
+  - @stoneforge/core@1.7.0
+  - @stoneforge/storage@1.7.0
+  - @stoneforge/quarry@1.7.0
+  - @stoneforge/shared-routes@1.7.0
+
+## 1.6.0
+
+### Patch Changes
+
+- 8a9c57d: Fix agent registration to persist provider, model, and executablePath fields in agent metadata
+- e4d7815: Add git worktree prune after worktree removal in removeWorktree() for defensive cleanup of stale entries
+- Updated dependencies [e1d7d77]
+  - @stoneforge/quarry@1.6.0
+  - @stoneforge/core@1.6.0
+  - @stoneforge/storage@1.6.0
+  - @stoneforge/shared-routes@1.6.0
+
+## 1.5.0
+
+### Minor Changes
+
+- ac2db90: Add fallbackChain field to ServerAgentDefaults for executable rate-limit fallback configuration
+- a5a8ff0: Add daemon sleep and wake CLI commands for manual control of dispatch rate-limit state
+- f5eb10f: Add rate limit detection to headless session spawner. The spawner now detects rate limit messages in the headless session message stream using the rate-limit-parser utility and emits `rate_limited` events with the message content, parsed reset time, and executable path. Events are forwarded through the session manager's event pipeline.
+- 87e2883: Integrate rate limit detection, fallback selection, and dispatch pause into the dispatch daemon. The daemon now tracks rate-limited executables, resolves fallback alternatives at dispatch time, and pauses worker/steward spawning when all executables are limited while continuing non-dispatch polling. Rate limit status is exposed in the daemon status API.
+- 9a147df: Add rate limit message parser utility for detecting and parsing Claude Code rate limit messages
+- 4cded6a: Add in-memory rate limit tracker service for tracking executable rate limits and fallback chain resolution
+
+### Patch Changes
+
+- dcd3a8c: Clear stale sessionId from task metadata on failed resume to prevent infinite retry loops in orphan recovery
+- a40b09e: Detect already-merged branches before squash-merge attempt to prevent empty commits and infinite orphan recovery loops
+- 1ac72cc: Prune stale git worktree entries before creating new worktrees to prevent failures when a worktree directory was deleted but git's registry still has it registered
+- 6c22879: Expand rate limit parser with tomorrow format, optional "at" in date format, and fallback defaults when parsing fails
+- 53c79f5: Add retry cap for steward orphan recovery in dispatch daemon to prevent infinite re-dispatch loops
+- 3a909a2: Handle WORKTREE_EXISTS gracefully in createWorktree by removing stale worktrees instead of throwing
+  - @stoneforge/core@1.5.0
+  - @stoneforge/storage@1.5.0
+  - @stoneforge/quarry@1.5.0
+  - @stoneforge/shared-routes@1.5.0
+
+## 1.4.1
+
+### Patch Changes
+
+- b92e7d8: Spawn headless sessions through login shell when custom executable path is configured, enabling shell functions and aliases defined in user profiles to be found
+  - @stoneforge/core@1.4.1
+  - @stoneforge/storage@1.4.1
+  - @stoneforge/quarry@1.4.1
+  - @stoneforge/shared-routes@1.4.1
+
+## 1.4.0
+
+### Patch Changes
+
+- Updated dependencies [af799d2]
+- Updated dependencies [1ec9f66]
+  - @stoneforge/quarry@1.4.0
+  - @stoneforge/core@1.4.0
+  - @stoneforge/storage@1.4.0
+  - @stoneforge/shared-routes@1.4.0
+
+## 1.3.0
+
+### Minor Changes
+
+- 9bd5c22: Add optional executablePath field to agent metadata and registration inputs, allowing each agent to store a custom executable path for its provider CLI
+- 8e6aa99: Add server-side settings API with SettingsService and GET/PUT /api/settings/agent-defaults routes for workspace-wide executable path configuration
+- 7e0053c: Wire executable paths into provider resolution during spawn: resolve from agent metadata, workspace defaults, or provider built-in default. Pass pathToClaudeCodeExecutable to Claude SDK for headless sessions.
+
+### Patch Changes
+
+- 0ab3792: Add ID collision detection to agent registry to prevent intermittent SQLITE_CONSTRAINT_PRIMARYKEY errors during rapid agent registration
+- cfb1ee2: Remove dead --no-open flag from serve command schema
+- Updated dependencies [8e6aa99]
+- Updated dependencies [1949799]
+- Updated dependencies [cfb1ee2]
+  - @stoneforge/storage@1.3.0
+  - @stoneforge/quarry@1.3.0
+  - @stoneforge/shared-routes@1.3.0
+  - @stoneforge/core@1.3.0
+
+## 1.2.0
+
+### Minor Changes
+
+- acf6ed0: Extend PATCH /api/agents/:id endpoint to support updating steward triggers with validation and scheduler re-registration
+- a468899: Add Custom Steward support: extend StewardFocus type with 'custom' option, add playbook field to StewardMetadata, integrate playbook-based workflow creation in steward-scheduler, and validate playbook on agent registration routes.
+- 4fc3f2a: Compute and return effective 'blocked' status in task API responses for tasks with unresolved dependencies
+- bbd2d1f: Fix docs/custom steward sessions not terminating after agent completes
+
+  - Detect agent completion signal in spawner: close headless session when a
+    non-error `result` message is received, breaking the for-await loop that
+    previously kept sessions running indefinitely
+  - Add idle timeout monitoring for spawned steward sessions (configurable,
+    default 2 minutes) with max duration safety net (default 30 minutes)
+  - Add steward-specific session reaping in dispatch daemon with configurable
+    `maxStewardSessionDurationMs` (default 30 minutes)
+
+- 430695f: Add structured logging framework with log-level filtering. New `createLogger` factory and `getLogLevel` utility support DEBUG, INFO, WARNING, and ERROR levels configurable via `LOG_LEVEL` environment variable. All server service console calls migrated to use leveled logger.
+- c3030f7: Add plan auto-completion polling to dispatch daemon. Plans where all non-tombstone tasks are closed are now automatically marked as completed during the daemon's polling cycle.
+- 6ad6161: Add `playbookId` field to StewardMetadata and RegisterStewardInput for referencing Workflow Templates by ID. The steward scheduler resolves playbookId at execution time, falling back to inline playbook content for backward compatibility. API routes accept either `playbook` or `playbookId` for custom steward creation.
+- 6a03ab1: Add optional provider and model fields to PoolAgentTypeConfig, allowing each agent type within a pool to specify which AI provider and model to use when spawning agents. Extends CLI --agentType format, API validation, and pool show display.
+- 6835442: Add improper session exit detection and recovery steward spawning to dispatch daemon. When a worker is resumed 3+ times without a status change, the daemon stops resuming and spawns a recovery steward instead.
+- ff790e4: Register recovery steward prompt in the prompt system: add 'recovery' to StewardFocus type, register steward-recovery.md in PROMPT_FILES, and update all validation, CLI, server routes, and test helpers to accept the new focus area.
+- 70dd977: Remove legacy steward types (health, ops, reminder) from type definitions, UI components, CLI help text, prompt files, and documentation. StewardFocus now only supports 'merge' and 'docs'.
+- dfa164c: Steward scheduler improvements: spawn agent sessions for docs/health/reminder/ops stewards instead of calling dedicated services directly, auto-register stewards with the scheduler on agent creation/update, register all stewards when the dispatch daemon starts the scheduler, add structured logging throughout the scheduler lifecycle, and fix duplicate timer bug in `scheduleNextRun` where the `finally` block created orphaned timers on overlapping cron ticks.
+
+### Patch Changes
+
+- c7c3a2e: Add 'custom' to steward focus CLI help text, option descriptions, and code comments so users can discover the custom focus option.
+- 2cec11b: Rename 31 bun-specific test files to use .bun.test.ts naming convention and add vitest.config.ts to exclude them from vitest collection. This prevents vitest from reporting false failures when trying to run bun:test imports.
+- 9b92e7d: Fix agent pool creation by using createEntity() factory to generate element IDs, resolving NOT NULL constraint violation on tags.element_id
+- ab58a62: Update @anthropic-ai/claude-agent-sdk from ^0.2.41 to ^0.2.45 and @opencode-ai/sdk from ^1.1.64 to ^1.2.6
+- af0b8f3: Add critical session exit rules to worker prompt and create recovery steward prompt
+- Updated dependencies [4fc3f2a]
+- Updated dependencies [bd78abd]
+- Updated dependencies [dd47614]
+- Updated dependencies [dd47614]
+- Updated dependencies [dd47614]
+- Updated dependencies [2872120]
+  - @stoneforge/quarry@1.2.0
+  - @stoneforge/core@1.2.0
+  - @stoneforge/storage@1.2.0
+  - @stoneforge/shared-routes@1.2.0
+
+## 1.1.0
+
+### Patch Changes
+
+- Updated dependencies [24ca206]
+- Updated dependencies [2af42ec]
+  - @stoneforge/quarry@1.1.0
+  - @stoneforge/core@1.1.0
+  - @stoneforge/storage@1.1.0
+  - @stoneforge/shared-routes@1.1.0
+
+## 1.0.3
+
+### Patch Changes
+
+- f4c196e: - Wire up `AutoExportService` in the orchestrator server so JSONL files at `.stoneforge/sync/` stay in sync with the database automatically.
+- Updated dependencies [d088df0]
+  - @stoneforge/quarry@1.0.3
+  - @stoneforge/core@1.0.3
+  - @stoneforge/storage@1.0.3
+  - @stoneforge/shared-routes@1.0.3
+
+## 1.0.2
+
+### Patch Changes
+
+- 8d82c91: Fix `posix_spawnp failed` for bun users by ensuring node-pty spawn-helper permissions at runtime before pty.spawn(), since bun skips postinstall scripts by default.
+  - @stoneforge/quarry@1.0.2
+  - @stoneforge/core@1.0.2
+  - @stoneforge/storage@1.0.2
+  - @stoneforge/shared-routes@1.0.2
+
+## 1.0.1
+
+### Patch Changes
+
+- 1a52cad: Fix `posix_spawnp failed` error when node-pty spawn-helper lacks execute permissions after NPM install. The fix script now ships with the published package and uses `require.resolve` to locate node-pty regardless of package manager.
+  - @stoneforge/quarry@1.0.1
+  - @stoneforge/core@1.0.1
+  - @stoneforge/storage@1.0.1
+  - @stoneforge/shared-routes@1.0.1
+
+## 1.0.0
+
+### Minor Changes
+
+- 251485f: Fix plugin executor timeout by using process group kill to ensure child processes are terminated on CI
+
+### Patch Changes
+
+- Updated dependencies [251485f]
+  - @stoneforge/quarry@1.0.0
+  - @stoneforge/core@1.0.0
+  - @stoneforge/storage@1.0.0
+  - @stoneforge/shared-routes@1.0.0
