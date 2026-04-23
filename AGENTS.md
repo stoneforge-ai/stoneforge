@@ -111,16 +111,6 @@ npm --prefix reference/smithy-next install
 npm --prefix reference/smithy-next run dev
 ```
 
-## V1 Behavioral Notes
-
-These are reading notes for historical V1 code, not implementation rules for V2.
-
-- `blocked` status was computed from dependencies rather than set directly.
-- `sf dependency add --type=blocks A B` meant A was blocked by B.
-- SQLite was a cache; JSONL was the source of truth.
-- `relates-to` was effectively bidirectional in query behavior.
-- Closed and tombstone states won during merge conflict resolution.
-
 ## Implementation Guidelines
 
 ### Type Safety
@@ -152,8 +142,108 @@ When your changes affect documented V2 behavior:
 2. Use the legacy `sf` docs/search commands only when you need historical V1 context.
 3. Do not update V1 workspace docs or the V1 documentation directory unless the user explicitly asks for legacy-doc maintenance.
 
+## React rules
+
+Whenever you write or modify React code, first read https://react.dev/learn/you-might-not-need-an-effect and apply it. Every `useEffect` you add or keep must justify itself against that guide. Default to **no** effect and look for one of these alternatives first:
+
+- Deriving state from props during render (not in an effect).
+- Computing the next value in an event handler instead of after state changes.
+- `useMemo` / `useSyncExternalStore` for derived or external values.
+- Event handlers for user-triggered side effects (fetches, mutations, navigation).
+
+Acceptable reasons for `useEffect`: synchronising with something truly external to React (WebSocket lifecycle [likely should also use `useEffectEvent`], `window` event listeners, third-party DOM libraries like Konva's imperative APIs, timers). If the effect reads from or writes to React state only, it is almost certainly wrong — refactor.
+
+When you do write an effect, it must have: an exhaustive dependency array, a cleanup function where one is needed, and no cascading state updates that would re-run the effect. Consider using `useEffectEvent` where applicable (a common use case for `useEffectEvent` is when you want to do something in response to an Effect, but that “something” depends on a value you don’t want to react to. Reference https://react.dev/reference/react/useEffectEvent only if necessary.)
+
+**Async server state → TanStack Query.** Never put a fetch/mutation inside a `useEffect`. All async server state must go through `@tanstack/react-query`:
+
+- Read: `useQuery({ queryKey, queryFn })`. Use the returned `data`, `isLoading`, `error` directly in render. Do not mirror them into local state.
+- Write: `useMutation({ mutationFn, onSuccess })`. Call it from an event handler. Invalidate related queries via `queryClient.invalidateQueries({ queryKey })` on success.
+- The `QueryClient` should be mounted once at the app root; don't create one per component.
+- Derive UI state from query state during render; do not copy it with `useState` + `useEffect`.
+
+
 ## Commit Guidelines
 
 - Create commits after meaningful units of work.
 - Only commit the files you changed.
 - Use conventional commit prefixes such as `feat:`, `fix:`, `docs:`, or `chore:`.
+
+## Engineering Standards
+
+**Software must be simple, well-separated, encapsulated, cohesive, loosely coupled, and explicit. DRY and SOLID are tools to support those goals, not goals by themselves. When principles conflict, prefer clarity, simplicity, and ease of change over abstraction purity.**
+
+### Core standards
+
+These take priority over the rest.
+
+1. **Code must be simple.**
+   Choose the simplest design that correctly solves the real problem.
+
+2. **Code must have clear separation of concerns.**
+   Distinct responsibilities must be kept in distinct modules, layers, or services.
+
+3. **Modules must encapsulate their implementation details.**
+   Internals must be hidden behind small, stable, well-defined interfaces.
+
+### Structural standards
+
+These support the core standards.
+
+4. **Modules must be highly cohesive.**
+   Each module should contain closely related behavior and one clear purpose.
+
+5. **Modules must be loosely coupled.**
+   A change in one module should require minimal change elsewhere.
+
+6. **Code must be explicit and predictable.**
+   Avoid hidden behavior, unnecessary magic, surprising side effects, and unclear control flow.
+
+### Tactical standards
+
+Use these as implementation heuristics, not absolute goals.
+
+7. **Code must not duplicate knowledge or business rules.**
+   Maintain a single source of truth for logic, policy, and domain meaning.
+
+8. **Code must not introduce speculative abstraction.**
+   Do not generalize for hypothetical future requirements.
+
+9. **Composition should be preferred over inheritance.**
+   Build behavior from small, composable parts unless inheritance is clearly simpler and safer.
+
+10. **Software must follow SOLID where it improves maintainability.**
+    In particular:
+
+- modules should have one reason to change
+- interfaces should be small and purpose-specific
+- extensions should not require destabilizing existing code
+- substitutes must honor their contracts
+- high-level policy should depend on abstractions, not details
+
+### Decision rule
+
+When standards conflict, apply them in this order:
+
+**simplicity > separation of concerns > encapsulation > cohesion/coupling > explicitness > DRY/SOLID heuristics**
+
+### Required tradeoff rule
+
+These standards must be applied with judgment, not mechanically.
+
+- Do not apply **DRY** when doing so makes code harder to understand, test, or change.
+- Do not apply **SOLID** in ways that introduce needless indirection or abstraction.
+- Do not add abstractions until there is a real use case.
+- Prefer duplication over the wrong abstraction.
+- Prefer clarity over cleverness.
+
+### Review test
+
+A change is acceptable only if it makes the codebase, on balance:
+
+- simpler
+- easier to understand
+- easier to change safely
+- less coupled
+- less repetitive in knowledge
+- more predictable for future engineers
