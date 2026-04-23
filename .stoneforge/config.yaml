@@ -12,3 +12,11 @@ playbooks:
     - playbooks
 identity:
   mode: soft
+merge:
+  auto_merge: true
+  target_branch: null
+  require_approval: false
+workflow:
+  preset: auto
+agents:
+  permission_model: unrestricted

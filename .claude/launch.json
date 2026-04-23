@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "smithy-next",
+      "runtimeExecutable": "/bin/bash",
+      "runtimeArgs": ["-c", "export PATH=/usr/local/bin:$PATH && cd /Users/home/code/toolco/stoneforge && pnpm --filter @stoneforge/smithy-next dev"],
+      "port": 5180
+    }
+  ],
+  "autoVerify": true
+}

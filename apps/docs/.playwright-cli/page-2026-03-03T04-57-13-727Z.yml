@@ -1,0 +1,520 @@
+- generic [active] [ref=e1]:
+  - link "Skip to content" [ref=e2] [cursor=pointer]:
+    - /url: "#_top"
+  - generic [ref=e3]:
+    - banner [ref=e4]:
+      - generic [ref=e6]:
+        - link "stoneforge" [ref=e8] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e9]: stoneforge
+        - button "Search" [ref=e12] [cursor=pointer]:
+          - img [ref=e13]
+          - generic [ref=e15]: Search
+          - generic [ref=e16]:
+            - generic [ref=e17]: ⌘
+            - generic [ref=e18]: K
+        - generic [ref=e19]:
+          - generic [ref=e20]:
+            - link "GitHub" [ref=e21] [cursor=pointer]:
+              - /url: https://github.com/stoneforge-ai/stoneforge
+              - generic [ref=e22]: GitHub
+              - img [ref=e23]
+            - link "Discord" [ref=e25] [cursor=pointer]:
+              - /url: https://discord.gg/NBCaUUv8Vm
+              - generic [ref=e26]: Discord
+              - img [ref=e27]
+            - link "X" [ref=e29] [cursor=pointer]:
+              - /url: https://x.com/stoneforge_ai
+              - generic [ref=e30]: X
+              - img [ref=e31]
+          - generic [ref=e34]:
+            - generic [ref=e35]: Select theme
+            - img
+            - combobox "Select theme" [ref=e36] [cursor=pointer]:
+              - option "Dark"
+              - option "Light"
+              - option "Auto" [selected]
+            - img
+    - navigation "Main":
+      - generic [ref=e39]:
+        - tablist [ref=e41]:
+          - tab "Documentation" [ref=e42] [cursor=pointer]
+          - tab "SDK Reference" [ref=e43] [cursor=pointer]
+          - tab "CLI" [selected] [ref=e44] [cursor=pointer]
+        - tabpanel "CLI" [ref=e45]:
+          - list [ref=e47]:
+            - listitem [ref=e48]:
+              - group [ref=e49]:
+                - generic "Getting Started" [ref=e50] [cursor=pointer]:
+                  - generic [ref=e51]: Getting Started
+                  - img [ref=e52]
+                - list [ref=e54]:
+                  - listitem [ref=e55]:
+                    - link "Overview" [ref=e56] [cursor=pointer]:
+                      - /url: /reference/cli-overview/
+                  - listitem [ref=e57]:
+                    - link "Configuration" [ref=e58] [cursor=pointer]:
+                      - /url: /reference/configuration/
+                  - listitem [ref=e59]:
+                    - link "Plugins" [ref=e60] [cursor=pointer]:
+                      - /url: /reference/plugins/
+            - listitem [ref=e61]:
+              - group [ref=e62]:
+                - generic "Commands" [ref=e63] [cursor=pointer]:
+                  - generic [ref=e64]: Commands
+                  - img [ref=e65]
+                - list [ref=e67]:
+                  - listitem [ref=e68]:
+                    - link "Quick Reference" [ref=e69] [cursor=pointer]:
+                      - /url: /reference/cli/
+                  - listitem [ref=e70]:
+                    - link "Core & System" [ref=e71] [cursor=pointer]:
+                      - /url: /reference/cli-core/
+                  - listitem [ref=e72]:
+                    - link "Data & Workflow" [ref=e73] [cursor=pointer]:
+                      - /url: /reference/cli-data/
+                  - listitem [ref=e74]:
+                    - link "Orchestration" [ref=e75] [cursor=pointer]:
+                      - /url: /reference/cli-orchestration/
+    - generic [ref=e77]:
+      - complementary [ref=e78]:
+        - navigation "On this page" [ref=e83]:
+          - heading "On this page" [level=2] [ref=e84]
+          - list [ref=e85]:
+            - listitem [ref=e86]:
+              - link "Overview" [ref=e87] [cursor=pointer]:
+                - /url: "#_top"
+            - listitem [ref=e88]:
+              - link "Global flags" [ref=e89] [cursor=pointer]:
+                - /url: "#global-flags"
+            - listitem [ref=e90]:
+              - link "Command aliases" [ref=e91] [cursor=pointer]:
+                - /url: "#command-aliases"
+            - listitem [ref=e92]:
+              - link "All commands" [ref=e93] [cursor=pointer]:
+                - /url: "#all-commands"
+              - list [ref=e94]:
+                - listitem [ref=e95]:
+                  - link "Core & System" [ref=e96] [cursor=pointer]:
+                    - /url: "#core--system"
+                - listitem [ref=e97]:
+                  - link "Data & Workflow" [ref=e98] [cursor=pointer]:
+                    - /url: "#data--workflow"
+                - listitem [ref=e99]:
+                  - link "Orchestration" [ref=e100] [cursor=pointer]:
+                    - /url: "#orchestration"
+      - main [ref=e102]:
+        - heading "CLI Quick Reference" [level=1] [ref=e105]
+        - generic [ref=e107]:
+          - generic [ref=e108]:
+            - paragraph [ref=e109]:
+              - text: The
+              - code [ref=e110]: sf
+              - text: command-line interface is the primary way to interact with Stoneforge. While agents use the CLI internally, human operators typically use the
+              - link "web dashboard" [ref=e111] [cursor=pointer]:
+                - /url: /guides/first-multi-agent-project/
+              - text: — but the CLI is essential for setup, debugging, and scripting.
+            - heading "Global flags" [level=2] [ref=e112]
+            - paragraph [ref=e113]:
+              - text: These flags work with any
+              - code [ref=e114]: sf
+              - text: "command:"
+            - table [ref=e115]:
+              - rowgroup [ref=e116]:
+                - row "Flag Description" [ref=e117]:
+                  - columnheader "Flag" [ref=e118]
+                  - columnheader "Description" [ref=e119]
+              - rowgroup [ref=e120]:
+                - row "--help, -h Show help" [ref=e121]:
+                  - cell "--help, -h" [ref=e122]:
+                    - code [ref=e123]: "--help, -h"
+                  - cell "Show help" [ref=e124]
+                - row "--version, -V Show version" [ref=e125]:
+                  - cell "--version, -V" [ref=e126]:
+                    - code [ref=e127]: "--version, -V"
+                  - cell "Show version" [ref=e128]
+                - row "--json Output as JSON (machine-readable)" [ref=e129]:
+                  - cell "--json" [ref=e130]:
+                    - code [ref=e131]: "--json"
+                  - cell "Output as JSON (machine-readable)" [ref=e132]
+                - row "--quiet, -q Minimal output (IDs only)" [ref=e133]:
+                  - cell "--quiet, -q" [ref=e134]:
+                    - code [ref=e135]: "--quiet, -q"
+                  - cell "Minimal output (IDs only)" [ref=e136]
+                - row "--verbose, -v Enable debug output" [ref=e137]:
+                  - cell "--verbose, -v" [ref=e138]:
+                    - code [ref=e139]: "--verbose, -v"
+                  - cell "Enable debug output" [ref=e140]
+                - row "--actor <name> Specify acting entity" [ref=e141]:
+                  - cell "--actor <name>" [ref=e142]:
+                    - code [ref=e143]: "--actor <name>"
+                  - cell "Specify acting entity" [ref=e144]
+                - row "--from <name> Alias for --actor" [ref=e145]:
+                  - cell "--from <name>" [ref=e146]:
+                    - code [ref=e147]: "--from <name>"
+                  - cell "Alias for --actor" [ref=e148]:
+                    - text: Alias for
+                    - code [ref=e149]: "--actor"
+                - row "--db <path> Override database path" [ref=e150]:
+                  - cell "--db <path>" [ref=e151]:
+                    - code [ref=e152]: "--db <path>"
+                  - cell "Override database path" [ref=e153]
+                - row "--sign-key <key> Private key for signing (base64 PKCS8)" [ref=e154]:
+                  - cell "--sign-key <key>" [ref=e155]:
+                    - code [ref=e156]: "--sign-key <key>"
+                  - cell "Private key for signing (base64 PKCS8)" [ref=e157]
+                - row "--sign-key-file <path> Path to file containing private key" [ref=e158]:
+                  - cell "--sign-key-file <path>" [ref=e159]:
+                    - code [ref=e160]: "--sign-key-file <path>"
+                  - cell "Path to file containing private key" [ref=e161]
+            - complementary "Tip" [ref=e162]:
+              - paragraph [ref=e163]:
+                - img [ref=e164]
+                - text: Tip
+              - paragraph [ref=e168]:
+                - text: The
+                - code [ref=e169]: "--json"
+                - text: flag is useful for piping output to tools like
+                - code [ref=e170]: jq
+                - text: . The
+                - code [ref=e171]: "--quiet"
+                - text: "flag returns only IDs — great for scripting:"
+                - code [ref=e172]: sf create task --title "Fix bug" -q | xargs sf show
+                - text: .
+            - heading "Command aliases" [level=2] [ref=e173]
+            - paragraph [ref=e174]: "Many commands have shorter aliases for convenience:"
+            - table [ref=e175]:
+              - rowgroup [ref=e176]:
+                - row "Alias Maps to" [ref=e177]:
+                  - columnheader "Alias" [ref=e178]
+                  - columnheader "Maps to" [ref=e179]
+              - rowgroup [ref=e180]:
+                - row "add, new create" [ref=e181]:
+                  - cell "add, new" [ref=e182]:
+                    - code [ref=e183]: add
+                    - text: ","
+                    - code [ref=e184]: new
+                  - cell "create" [ref=e185]:
+                    - code [ref=e186]: create
+                - row "rm, remove delete" [ref=e187]:
+                  - cell "rm, remove" [ref=e188]:
+                    - code [ref=e189]: rm
+                    - text: ","
+                    - code [ref=e190]: remove
+                  - cell "delete" [ref=e191]:
+                    - code [ref=e192]: delete
+                - row "ls list" [ref=e193]:
+                  - cell "ls" [ref=e194]:
+                    - code [ref=e195]: ls
+                  - cell "list" [ref=e196]:
+                    - code [ref=e197]: list
+                - row "s, get show" [ref=e198]:
+                  - cell "s, get" [ref=e199]:
+                    - code [ref=e200]: s
+                    - text: ","
+                    - code [ref=e201]: get
+                  - cell "show" [ref=e202]:
+                    - code [ref=e203]: show
+                - row "todo, tasks ready" [ref=e204]:
+                  - cell "todo, tasks" [ref=e205]:
+                    - code [ref=e206]: todo
+                    - text: ","
+                    - code [ref=e207]: tasks
+                  - cell "ready" [ref=e208]:
+                    - code [ref=e209]: ready
+                - row "done, complete close" [ref=e210]:
+                  - cell "done, complete" [ref=e211]:
+                    - code [ref=e212]: done
+                    - text: ","
+                    - code [ref=e213]: complete
+                  - cell "close" [ref=e214]:
+                    - code [ref=e215]: close
+                - row "st status" [ref=e216]:
+                  - cell "st" [ref=e217]:
+                    - code [ref=e218]: st
+                  - cell "status" [ref=e219]:
+                    - code [ref=e220]: status
+                - row "dep dependency" [ref=e221]:
+                  - cell "dep" [ref=e222]:
+                    - code [ref=e223]: dep
+                  - cell "dependency" [ref=e224]:
+                    - code [ref=e225]: dependency
+                - row "msg message" [ref=e226]:
+                  - cell "msg" [ref=e227]:
+                    - code [ref=e228]: msg
+                  - cell "message" [ref=e229]:
+                    - code [ref=e230]: message
+                - row "doc document" [ref=e231]:
+                  - cell "doc" [ref=e232]:
+                    - code [ref=e233]: doc
+                  - cell "document" [ref=e234]:
+                    - code [ref=e235]: document
+            - separator [ref=e236]
+            - heading "All commands" [level=2] [ref=e237]
+            - heading "Core & System" [level=3] [ref=e238]:
+              - link "Core & System" [ref=e239] [cursor=pointer]:
+                - /url: /reference/cli-core/
+            - table [ref=e240]:
+              - rowgroup [ref=e241]:
+                - row "Command Description" [ref=e242]:
+                  - columnheader "Command" [ref=e243]
+                  - columnheader "Description" [ref=e244]
+              - rowgroup [ref=e245]:
+                - row "sf init Initialize a new workspace" [ref=e246]:
+                  - cell "sf init" [ref=e247]:
+                    - code [ref=e248]: sf init
+                  - cell "Initialize a new workspace" [ref=e249]
+                - row "sf serve Start server and web dashboard" [ref=e250]:
+                  - cell "sf serve" [ref=e251]:
+                    - code [ref=e252]: sf serve
+                  - cell "Start server and web dashboard" [ref=e253]
+                - row "sf doctor Check system health" [ref=e254]:
+                  - cell "sf doctor" [ref=e255]:
+                    - code [ref=e256]: sf doctor
+                  - cell "Check system health" [ref=e257]
+                - row "sf stats Show workspace statistics" [ref=e258]:
+                  - cell "sf stats" [ref=e259]:
+                    - code [ref=e260]: sf stats
+                  - cell "Show workspace statistics" [ref=e261]
+                - row "sf completion Generate shell completions" [ref=e262]:
+                  - cell "sf completion" [ref=e263]:
+                    - code [ref=e264]: sf completion
+                  - cell "Generate shell completions" [ref=e265]
+                - row "sf migrate Run database migrations" [ref=e266]:
+                  - cell "sf migrate" [ref=e267]:
+                    - code [ref=e268]: sf migrate
+                  - cell "Run database migrations" [ref=e269]
+                - row "sf reset Reset workspace" [ref=e270]:
+                  - cell "sf reset" [ref=e271]:
+                    - code [ref=e272]: sf reset
+                  - cell "Reset workspace" [ref=e273]
+                - row "sf create Create an element" [ref=e274]:
+                  - cell "sf create" [ref=e275]:
+                    - code [ref=e276]: sf create
+                  - cell "Create an element" [ref=e277]
+                - row "sf list List elements" [ref=e278]:
+                  - cell "sf list" [ref=e279]:
+                    - code [ref=e280]: sf list
+                  - cell "List elements" [ref=e281]
+                - row "sf show Show element details" [ref=e282]:
+                  - cell "sf show" [ref=e283]:
+                    - code [ref=e284]: sf show
+                  - cell "Show element details" [ref=e285]
+                - row "sf update Update an element" [ref=e286]:
+                  - cell "sf update" [ref=e287]:
+                    - code [ref=e288]: sf update
+                  - cell "Update an element" [ref=e289]
+                - row "sf delete Soft-delete an element" [ref=e290]:
+                  - cell "sf delete" [ref=e291]:
+                    - code [ref=e292]: sf delete
+                  - cell "Soft-delete an element" [ref=e293]
+                - row "sf embeddings Install, status, reindex, search embeddings" [ref=e294]:
+                  - cell "sf embeddings" [ref=e295]:
+                    - code [ref=e296]: sf embeddings
+                  - cell "Install, status, reindex, search embeddings" [ref=e297]
+                - row "sf export Export data to JSONL" [ref=e298]:
+                  - cell "sf export" [ref=e299]:
+                    - code [ref=e300]: sf export
+                  - cell "Export data to JSONL" [ref=e301]
+                - row "sf import Import data from JSONL" [ref=e302]:
+                  - cell "sf import" [ref=e303]:
+                    - code [ref=e304]: sf import
+                  - cell "Import data from JSONL" [ref=e305]
+                - row "sf status Show sync status" [ref=e306]:
+                  - cell "sf status" [ref=e307]:
+                    - code [ref=e308]: sf status
+                  - cell "Show sync status" [ref=e309]
+                - row "sf config View and modify configuration" [ref=e310]:
+                  - cell "sf config" [ref=e311]:
+                    - code [ref=e312]: sf config
+                  - cell "View and modify configuration" [ref=e313]
+                - row "sf identity Identity and key management" [ref=e314]:
+                  - cell "sf identity" [ref=e315]:
+                    - code [ref=e316]: sf identity
+                  - cell "Identity and key management" [ref=e317]
+                - row "sf gc Garbage collection" [ref=e318]:
+                  - cell "sf gc" [ref=e319]:
+                    - code [ref=e320]: sf gc
+                  - cell "Garbage collection" [ref=e321]
+                - row "sf history View element event timeline" [ref=e322]:
+                  - cell "sf history" [ref=e323]:
+                    - code [ref=e324]: sf history
+                  - cell "View element event timeline" [ref=e325]
+                - row "sf install Install Claude skills" [ref=e326]:
+                  - cell "sf install" [ref=e327]:
+                    - code [ref=e328]: sf install
+                  - cell "Install Claude skills" [ref=e329]
+                - row "sf docs Manage documentation library" [ref=e330]:
+                  - cell "sf docs" [ref=e331]:
+                    - code [ref=e332]: sf docs
+                  - cell "Manage documentation library" [ref=e333]
+            - heading "Data & Workflow" [level=3] [ref=e334]:
+              - link "Data & Workflow" [ref=e335] [cursor=pointer]:
+                - /url: /reference/cli-data/
+            - table [ref=e336]:
+              - rowgroup [ref=e337]:
+                - row "Command Description" [ref=e338]:
+                  - columnheader "Command" [ref=e339]
+                  - columnheader "Description" [ref=e340]
+              - rowgroup [ref=e341]:
+                - row "sf task Create, list, ready, blocked, backlog, assign, close, reopen, defer, describe" [ref=e342]:
+                  - cell "sf task" [ref=e343]:
+                    - code [ref=e344]: sf task
+                  - cell "Create, list, ready, blocked, backlog, assign, close, reopen, defer, describe" [ref=e345]
+                - row "sf dependency Add, remove, list, tree" [ref=e346]:
+                  - cell "sf dependency" [ref=e347]:
+                    - code [ref=e348]: sf dependency
+                  - cell "Add, remove, list, tree" [ref=e349]
+                - row "sf plan Create, list, show, activate, complete, cancel, manage tasks" [ref=e350]:
+                  - cell "sf plan" [ref=e351]:
+                    - code [ref=e352]: sf plan
+                  - cell "Create, list, show, activate, complete, cancel, manage tasks" [ref=e353]
+                - row "sf workflow Create, list, show, tasks, progress, delete, promote, gc" [ref=e354]:
+                  - cell "sf workflow" [ref=e355]:
+                    - code [ref=e356]: sf workflow
+                  - cell "Create, list, show, tasks, progress, delete, promote, gc" [ref=e357]
+                - row "sf entity Register, list, manage hierarchy" [ref=e358]:
+                  - cell "sf entity" [ref=e359]:
+                    - code [ref=e360]: sf entity
+                  - cell "Register, list, manage hierarchy" [ref=e361]
+                - row "sf document Create, list, search, update, history, rollback, archive, reindex" [ref=e362]:
+                  - cell "sf document" [ref=e363]:
+                    - code [ref=e364]: sf document
+                  - cell "Create, list, search, update, history, rollback, archive, reindex" [ref=e365]
+                - row "sf channel Create, list, join, leave, members, merge" [ref=e366]:
+                  - cell "sf channel" [ref=e367]:
+                    - code [ref=e368]: sf channel
+                  - cell "Create, list, join, leave, members, merge" [ref=e369]
+                - row "sf message Send, reply, list, thread" [ref=e370]:
+                  - cell "sf message" [ref=e371]:
+                    - code [ref=e372]: sf message
+                  - cell "Send, reply, list, thread" [ref=e373]
+                - row "sf inbox View, read, archive notifications" [ref=e374]:
+                  - cell "sf inbox" [ref=e375]:
+                    - code [ref=e376]: sf inbox
+                  - cell "View, read, archive notifications" [ref=e377]
+                - row "sf library Create, list, manage documents and hierarchy" [ref=e378]:
+                  - cell "sf library" [ref=e379]:
+                    - code [ref=e380]: sf library
+                  - cell "Create, list, manage documents and hierarchy" [ref=e381]
+                - row "sf team Create, list, manage members" [ref=e382]:
+                  - cell "sf team" [ref=e383]:
+                    - code [ref=e384]: sf team
+                  - cell "Create, list, manage members" [ref=e385]
+                - row "sf playbook List, show, validate, create" [ref=e386]:
+                  - cell "sf playbook" [ref=e387]:
+                    - code [ref=e388]: sf playbook
+                  - cell "List, show, validate, create" [ref=e389]
+            - heading "Orchestration" [level=3] [ref=e390]:
+              - link "Orchestration" [ref=e391] [cursor=pointer]:
+                - /url: /reference/cli-orchestration/
+            - table [ref=e392]:
+              - rowgroup [ref=e393]:
+                - row "Command Description" [ref=e394]:
+                  - columnheader "Command" [ref=e395]
+                  - columnheader "Description" [ref=e396]
+              - rowgroup [ref=e397]:
+                - row "sf agent Register, start, stop, list, show, stream agents" [ref=e398]:
+                  - cell "sf agent" [ref=e399]:
+                    - code [ref=e400]: sf agent
+                  - cell "Register, start, stop, list, show, stream agents" [ref=e401]
+                - row "sf daemon Start, stop, status, sleep, wake the dispatch daemon" [ref=e402]:
+                  - cell "sf daemon" [ref=e403]:
+                    - code [ref=e404]: sf daemon
+                  - cell "Start, stop, status, sleep, wake the dispatch daemon" [ref=e405]
+                - row "sf dispatch Manually dispatch a task to an agent" [ref=e406]:
+                  - cell "sf dispatch" [ref=e407]:
+                    - code [ref=e408]: sf dispatch
+                  - cell "Manually dispatch a task to an agent" [ref=e409]
+                - row "sf merge Squash-merge a branch into the default branch" [ref=e410]:
+                  - cell "sf merge" [ref=e411]:
+                    - code [ref=e412]: sf merge
+                  - cell "Squash-merge a branch into the default branch" [ref=e413]
+                - row "sf pool Create, list, show, update, delete, status, refresh pools" [ref=e414]:
+                  - cell "sf pool" [ref=e415]:
+                    - code [ref=e416]: sf pool
+                  - cell "Create, list, show, update, delete, status, refresh pools" [ref=e417]
+                - row "sf task handoff Hand off a task to another agent" [ref=e418]:
+                  - cell "sf task handoff" [ref=e419]:
+                    - code [ref=e420]: sf task handoff
+                  - cell "Hand off a task to another agent" [ref=e421]
+                - row "sf task complete Complete a task with optional merge request" [ref=e422]:
+                  - cell "sf task complete" [ref=e423]:
+                    - code [ref=e424]: sf task complete
+                  - cell "Complete a task with optional merge request" [ref=e425]
+                - row "sf task merge Squash-merge a task branch and close" [ref=e426]:
+                  - cell "sf task merge" [ref=e427]:
+                    - code [ref=e428]: sf task merge
+                  - cell "Squash-merge a task branch and close" [ref=e429]
+                - row "sf task reject Reject a task merge and reopen" [ref=e430]:
+                  - cell "sf task reject" [ref=e431]:
+                    - code [ref=e432]: sf task reject
+                  - cell "Reject a task merge and reopen" [ref=e433]
+                - row "sf task sync Sync task branch with main" [ref=e434]:
+                  - cell "sf task sync" [ref=e435]:
+                    - code [ref=e436]: sf task sync
+                  - cell "Sync task branch with main" [ref=e437]
+                - row "sf task merge-status Update merge status" [ref=e438]:
+                  - cell "sf task merge-status" [ref=e439]:
+                    - code [ref=e440]: sf task merge-status
+                  - cell "Update merge status" [ref=e441]
+          - generic [ref=e444]:
+            - generic [ref=e445]:
+              - generic [ref=e446]:
+                - link "stoneforge" [ref=e447] [cursor=pointer]:
+                  - /url: https://stoneforge.ai
+                  - generic [ref=e448]: stoneforge
+                - paragraph [ref=e449]: Multi-agent orchestration platform for AI coding agents. Open source, Apache 2.0.
+              - generic [ref=e450]:
+                - generic [ref=e451]:
+                  - heading "Documentation" [level=4] [ref=e452]
+                  - list [ref=e453]:
+                    - listitem [ref=e454]:
+                      - link "Getting Started" [ref=e455] [cursor=pointer]:
+                        - /url: /getting-started/introduction/
+                    - listitem [ref=e456]:
+                      - link "SDK Reference" [ref=e457] [cursor=pointer]:
+                        - /url: /reference/core-types/
+                    - listitem [ref=e458]:
+                      - link "CLI" [ref=e459] [cursor=pointer]:
+                        - /url: /reference/cli/
+                    - listitem [ref=e460]:
+                      - link "Configuration" [ref=e461] [cursor=pointer]:
+                        - /url: /reference/configuration/
+                - generic [ref=e462]:
+                  - heading "Community" [level=4] [ref=e463]
+                  - list [ref=e464]:
+                    - listitem [ref=e465]:
+                      - link "GitHub" [ref=e466] [cursor=pointer]:
+                        - /url: https://github.com/stoneforge-ai/stoneforge
+                    - listitem [ref=e467]:
+                      - link "Discord" [ref=e468] [cursor=pointer]:
+                        - /url: https://discord.gg/NBCaUUv8Vm
+                    - listitem [ref=e469]:
+                      - link "X / Twitter" [ref=e470] [cursor=pointer]:
+                        - /url: https://x.com/stoneforge_ai
+                - generic [ref=e471]:
+                  - heading "More" [level=4] [ref=e472]
+                  - list [ref=e473]:
+                    - listitem [ref=e474]:
+                      - link "Website" [ref=e475] [cursor=pointer]:
+                        - /url: https://stoneforge.ai
+                    - listitem [ref=e476]:
+                      - link "Apache 2.0 License" [ref=e477] [cursor=pointer]:
+                        - /url: https://github.com/stoneforge-ai/stoneforge/blob/master/LICENSE
+            - generic [ref=e478]:
+              - separator [ref=e479]
+              - generic [ref=e480]: © 2026 Stoneforge
+  - generic [ref=e483]:
+    - button "Menu" [ref=e484]:
+      - img [ref=e486]
+      - generic: Menu
+    - button "Inspect" [ref=e490]:
+      - img [ref=e492]
+      - generic: Inspect
+    - button "Audit" [ref=e494]:
+      - img [ref=e496]
+      - generic: Audit
+    - button "Settings" [ref=e499]:
+      - img [ref=e501]
+      - generic: Settings
