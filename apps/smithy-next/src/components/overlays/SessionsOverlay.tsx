@@ -1,8 +1,12 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef, type MouseEvent as ReactMouseEvent } from 'react'
+import { LayoutList, LayoutDashboard, Plus } from 'lucide-react'
 import type { Session, SessionEvent, ToolName } from './sessions/session-types'
 import { SessionListView } from './sessions/SessionListView'
 import { SessionDetailView } from './sessions/SessionDetailView'
 import { CreateSessionDialog } from './sessions/CreateSessionDialog'
+import { CanvasView } from './sessions/canvas/CanvasView'
+import { CanvasLayoutPicker } from './sessions/canvas/CanvasLayoutPicker'
+import type { LayoutMode, SizePreset, AspectMode } from './sessions/canvas/canvas-layout'
 
 // ── Simulated live messages for active sessions ──
 const simulatedMessages: { type: SessionEvent['type']; content: string; toolName?: ToolName; toolInput?: string; toolResult?: string; toolStatus?: 'completed' | 'error' }[] = [
@@ -34,15 +38,67 @@ interface SessionsOverlayProps {
   agents?: Array<{ id: string; name: string; model: string; status: string }>
   tasks?: Array<{ id: string; title: string }>
   onCreateSession?: (config: { agentId: string; agentName: string; taskId?: string; initialMessage?: string }) => void
+  initialView?: 'list' | 'canvas'
+  onViewChange?: (view: 'list' | 'canvas') => void
 }
+
+const VIEW_STORAGE_KEY = 'sf-next.sessions.view'
 
 export function SessionsOverlay({
   sessions, onBack,
   initialSessionId, initialEventId, onSessionChange,
   onNavigateToAgent, onNavigateToTask, onNavigateToMR, onNavigateToWhiteboard, onResumeSession,
   agents, tasks, onCreateSession,
+  initialView, onViewChange,
 }: SessionsOverlayProps) {
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
+
+  // View mode: explicit prop wins → else localStorage → else 'list' (default per plan)
+  const [view, setView] = useState<'list' | 'canvas'>(() => {
+    if (initialView) return initialView
+    try {
+      const stored = localStorage.getItem(VIEW_STORAGE_KEY)
+      if (stored === 'canvas') return 'canvas'
+    } catch { /* ignore */ }
+    return 'list'
+  })
+
+  useEffect(() => {
+    if (initialView && initialView !== view) setView(initialView)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialView])
+
+  const changeView = useCallback((next: 'list' | 'canvas') => {
+    setView(next)
+    try { localStorage.setItem(VIEW_STORAGE_KEY, next) } catch { /* ignore */ }
+    onViewChange?.(next)
+  }, [onViewChange])
+
+  // Canvas-level UI state (lifted so the Layout picker can live in the header
+  // while the Size picker lives in the floating toolbar).
+  const [canvasLayoutMode, setCanvasLayoutMode] = useState<LayoutMode>(() => {
+    try { return (localStorage.getItem('sf-next.canvas.layout-mode') as LayoutMode) || 'cluster' } catch { return 'cluster' }
+  })
+  useEffect(() => {
+    try { localStorage.setItem('sf-next.canvas.layout-mode', canvasLayoutMode) } catch { /* ignore */ }
+  }, [canvasLayoutMode])
+
+  const [canvasSizePreset, setCanvasSizePreset] = useState<SizePreset>(() => {
+    try { return (localStorage.getItem('sf-next.canvas.size-preset') as SizePreset) || 'default' } catch { return 'default' }
+  })
+  useEffect(() => {
+    try { localStorage.setItem('sf-next.canvas.size-preset', canvasSizePreset) } catch { /* ignore */ }
+  }, [canvasSizePreset])
+
+  const [canvasAspectMode, setCanvasAspectMode] = useState<AspectMode>(() => {
+    try { return (localStorage.getItem('sf-next.canvas.aspect-mode') as AspectMode) || 'balanced' } catch { return 'balanced' }
+  })
+  useEffect(() => {
+    try { localStorage.setItem('sf-next.canvas.aspect-mode', canvasAspectMode) } catch { /* ignore */ }
+  }, [canvasAspectMode])
+
+  const [canvasReapplyNonce, setCanvasReapplyNonce] = useState(0)
+  const reapplyCanvasLayout = useCallback(() => setCanvasReapplyNonce(n => n + 1), [])
   // Live sessions with simulated updates for active ones
   const [liveSessions, setLiveSessions] = useState<Session[]>(sessions)
   const simIndexRef = useRef<Map<string, number>>(new Map())
@@ -150,7 +206,7 @@ export function SessionsOverlay({
   }, [liveSessions, onSessionChange])
 
   // Resize handle for detail panel
-  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+  const handleResizeStart = useCallback((e: ReactMouseEvent) => {
     e.preventDefault()
     const container = containerRef.current
     if (!container) return
@@ -208,6 +264,134 @@ export function SessionsOverlay({
     )
   }
 
+  const viewToggle = (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: 2,
+      padding: 2,
+      background: 'var(--color-surface)',
+      borderRadius: 'var(--radius-sm)',
+    }}>
+      <ViewToggleBtn active={view === 'list'} onClick={() => changeView('list')} label="List" Icon={LayoutList} />
+      <ViewToggleBtn active={view === 'canvas'} onClick={() => changeView('canvas')} label="Canvas" Icon={LayoutDashboard} />
+    </div>
+  )
+
+  const canNewSession = !!(onCreateSession && agents)
+
+  const createDialog = createDialogOpen && agents ? (
+    <CreateSessionDialog
+      agents={agents}
+      tasks={tasks}
+      onClose={() => setCreateDialogOpen(false)}
+      onCreate={(config) => {
+        const newSession: Session = {
+          id: `sess-${Date.now().toString(36)}`,
+          title: config.initialMessage
+            ? config.initialMessage.slice(0, 60) + (config.initialMessage.length > 60 ? '...' : '')
+            : `Session with ${config.agentName}`,
+          agent: {
+            id: config.agentId,
+            name: config.agentName,
+            version: '1.0',
+            status: 'active',
+            model: 'sonnet-4.6',
+            provider: 'claude-code',
+            rolePrompt: '',
+            recentSessions: [],
+          },
+          status: 'active',
+          startedAt: 'just now',
+          duration: '0s',
+          tokensIn: 0,
+          tokensOut: 0,
+          environment: 'local',
+          linkedTaskId: config.taskId,
+          events: [
+            { id: `ev-${Date.now()}`, type: 'session_start', title: 'Session started', content: 'Session initialized', timestamp: 0, duration: 500 },
+            ...(config.initialMessage ? [{
+              id: `ev-${Date.now() + 1}`, type: 'user_message' as const, title: config.initialMessage.slice(0, 40),
+              content: config.initialMessage, timestamp: 500, duration: 800,
+            }] : []),
+          ],
+        }
+        setLiveSessions(prev => [newSession, ...prev])
+        setSelectedSession(newSession)
+        onSessionChange?.(newSession.id, null)
+        onCreateSession?.(config)
+        setCreateDialogOpen(false)
+      }}
+    />
+  ) : null
+  const canvasHeader = (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      padding: '8px 16px',
+      borderBottom: '1px solid var(--color-border-subtle)',
+      flexShrink: 0,
+    }}>
+      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>Sessions</span>
+      <span
+        className="hidden md:inline"
+        style={{ fontSize: 12, color: 'var(--color-text-tertiary)', fontFamily: 'var(--font-mono)' }}
+      >
+        {liveSessions.filter(s => s.status === 'active').length} active
+      </span>
+      {viewToggle}
+      <div style={{ flex: 1 }} />
+      <CanvasLayoutPicker
+        mode={canvasLayoutMode}
+        onChange={(m) => { setCanvasLayoutMode(m); reapplyCanvasLayout() }}
+        onReapply={reapplyCanvasLayout}
+      />
+      {canNewSession && (
+        <button
+          onClick={() => setCreateDialogOpen(true)}
+          style={{
+            height: 26, padding: '0 10px',
+            display: 'flex', alignItems: 'center', gap: 5,
+            background: 'var(--color-primary)', border: 'none', borderRadius: 'var(--radius-sm)',
+            color: 'white', cursor: 'pointer', fontSize: 12, fontWeight: 500,
+          }}
+        >
+          <Plus size={12} strokeWidth={2} /> New Session
+        </button>
+      )}
+    </div>
+  )
+
+  if (view === 'canvas') {
+    return (
+      <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {canvasHeader}
+        <CanvasView
+          sessions={liveSessions}
+          selectedSessionId={selectedSession?.id ?? null}
+          onSelectedSessionChange={(id) => {
+            if (!id) { handleCloseDetail(); return }
+            const s = liveSessions.find(ss => ss.id === id)
+            if (s) handleSelectSession(s)
+          }}
+          onNavigateToAgent={onNavigateToAgent}
+          onNavigateToTask={onNavigateToTask}
+          onNavigateToMR={onNavigateToMR}
+          onNavigateToWhiteboard={onNavigateToWhiteboard}
+          onResumeSession={onResumeSession}
+          layoutMode={canvasLayoutMode}
+          sizePreset={canvasSizePreset}
+          onSizePresetChange={setCanvasSizePreset}
+          aspectMode={canvasAspectMode}
+          onAspectModeChange={setCanvasAspectMode}
+          reapplyNonce={canvasReapplyNonce}
+        />
+        {createDialog}
+      </div>
+    )
+  }
+
   return (
     <div ref={containerRef} style={{ height: '100%', display: 'flex', overflow: 'hidden' }}>
       {/* Left: Session list (always visible) */}
@@ -225,6 +409,7 @@ export function SessionsOverlay({
           selectedSessionId={selectedSession?.id ?? null}
           compact={!!selectedSession}
           onCreateSession={onCreateSession && agents ? () => setCreateDialogOpen(true) : undefined}
+          afterTitleSlot={viewToggle}
         />
       </div>
 
@@ -260,55 +445,41 @@ export function SessionsOverlay({
         </>
       )}
 
-      {createDialogOpen && agents && (
-        <CreateSessionDialog
-          agents={agents}
-          tasks={tasks}
-          onClose={() => setCreateDialogOpen(false)}
-          onCreate={(config) => {
-            const newSession: Session = {
-              id: `sess-${Date.now().toString(36)}`,
-              title: config.initialMessage
-                ? config.initialMessage.slice(0, 60) + (config.initialMessage.length > 60 ? '...' : '')
-                : `Session with ${config.agentName}`,
-              agent: {
-                id: config.agentId,
-                name: config.agentName,
-                version: '1.0',
-                status: 'active',
-                model: 'sonnet-4.6',
-                provider: 'claude-code',
-                rolePrompt: '',
-                recentSessions: [],
-              },
-              status: 'active',
-              startedAt: 'just now',
-              duration: '0s',
-              tokensIn: 0,
-              tokensOut: 0,
-              environment: 'local',
-              linkedTaskId: config.taskId,
-              events: [
-                { id: `ev-${Date.now()}`, type: 'session_start', title: 'Session started', content: 'Session initialized', timestamp: 0, duration: 500 },
-                ...(config.initialMessage ? [{
-                  id: `ev-${Date.now() + 1}`, type: 'user_message' as const, title: config.initialMessage.slice(0, 40),
-                  content: config.initialMessage, timestamp: 500, duration: 800,
-                }] : []),
-              ],
-            }
-            setLiveSessions(prev => [newSession, ...prev])
-            setSelectedSession(newSession)
-            onSessionChange?.(newSession.id, null)
-            onCreateSession?.(config)
-            setCreateDialogOpen(false)
-          }}
-        />
-      )}
+      {createDialog}
     </div>
   )
 }
 
-function ResizeHandle({ onMouseDown }: { onMouseDown: (e: React.MouseEvent) => void }) {
+function ViewToggleBtn({ active, onClick, label, Icon }: { active: boolean; onClick: () => void; label: string; Icon: typeof LayoutList }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 5,
+        padding: '3px 8px',
+        height: 22,
+        background: active ? 'var(--color-bg-elevated)' : 'transparent',
+        color: active ? 'var(--color-text)' : 'var(--color-text-tertiary)',
+        border: 'none',
+        borderRadius: 'var(--radius-sm)',
+        boxShadow: active ? 'var(--shadow-hover)' : 'none',
+        fontSize: 11,
+        fontWeight: 500,
+        cursor: 'pointer',
+        transition: 'background var(--duration-fast), color var(--duration-fast)',
+      }}
+      onMouseEnter={(e) => { if (!active) e.currentTarget.style.color = 'var(--color-text-secondary)' }}
+      onMouseLeave={(e) => { if (!active) e.currentTarget.style.color = 'var(--color-text-tertiary)' }}
+    >
+      <Icon size={12} strokeWidth={1.8} />
+      <span>{label}</span>
+    </button>
+  )
+}
+
+function ResizeHandle({ onMouseDown }: { onMouseDown: (e: ReactMouseEvent) => void }) {
   const [hovered, setHovered] = useState(false)
   return (
     <div
