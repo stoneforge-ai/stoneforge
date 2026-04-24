@@ -40,6 +40,22 @@ importers:
         specifier: ^4.0.18
         version: 4.0.18
 
+  packages/merge-request:
+    dependencies:
+      '@stoneforge/core':
+        specifier: workspace:*
+        version: link:../core
+      '@stoneforge/execution':
+        specifier: workspace:*
+        version: link:../execution
+      '@stoneforge/workspace':
+        specifier: workspace:*
+        version: link:../workspace
+    devDependencies:
+      vitest:
+        specifier: ^4.0.18
+        version: 4.0.18
+
   packages/workspace:
     dependencies:
       '@stoneforge/core':

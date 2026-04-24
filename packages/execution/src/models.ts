@@ -1,6 +1,7 @@
 import type {
   Agent,
   AgentId,
+  MergeRequestId,
   RoleDefinition,
   RoleDefinitionId,
   Runtime,
@@ -57,8 +58,10 @@ export interface Task {
   dependencyIds: TaskId[];
   planId?: string;
   state: TaskState;
+  requiresMergeRequest: boolean;
   dispatchConstraints: TaskDispatchConstraints;
   continuity: TaskContinuityCheckpoint[];
+  repairContexts: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -71,6 +74,7 @@ export interface CreateTaskInput {
   priority?: TaskPriority;
   dependencyIds?: TaskId[];
   planId?: string;
+  requiresMergeRequest?: boolean;
   dispatchConstraints?: Partial<TaskDispatchConstraints>;
 }
 
@@ -84,6 +88,8 @@ export interface UpdateTaskInput {
 }
 
 export type DispatchAction = "implement";
+export type MergeRequestDispatchAction = "review" | "merge_evaluate";
+export type DispatchTargetType = "task" | "merge_request";
 
 export type DispatchIntentState =
   | "created"
@@ -99,9 +105,10 @@ export type DispatchIntentState =
 export interface DispatchIntent {
   id: DispatchIntentId;
   workspaceId: WorkspaceId;
-  targetType: "task";
-  taskId: TaskId;
-  action: DispatchAction;
+  targetType: DispatchTargetType;
+  taskId?: TaskId;
+  mergeRequestId?: MergeRequestId;
+  action: DispatchAction | MergeRequestDispatchAction;
   state: DispatchIntentState;
   roleDefinitionId?: RoleDefinitionId;
   requiredAgentTags: string[];
@@ -140,10 +147,30 @@ export type AssignmentState =
   | "escalated"
   | "canceled";
 
+export interface TaskAssignmentOwner {
+  type: "task";
+  taskId: TaskId;
+}
+
+export interface MergeRequestAssignmentOwner {
+  type: "merge_request";
+  mergeRequestId: MergeRequestId;
+}
+
+export type AssignmentOwner = TaskAssignmentOwner | MergeRequestAssignmentOwner;
+
+export interface MergeRequestAssignmentContext {
+  id: MergeRequestId;
+  title: string;
+  providerPullRequestUrl: string;
+}
+
 export interface Assignment {
   id: AssignmentId;
   workspaceId: WorkspaceId;
-  taskId: TaskId;
+  owner: AssignmentOwner;
+  taskId?: TaskId;
+  mergeRequestId?: MergeRequestId;
   dispatchIntentId: DispatchIntentId;
   roleDefinitionId: RoleDefinitionId;
   agentId: AgentId;
@@ -186,7 +213,15 @@ export interface Session {
 }
 
 export interface AgentAdapterStartContext {
-  task: Task;
+  target:
+    | {
+        type: "task";
+        task: Task;
+      }
+    | {
+        type: "merge_request";
+        mergeRequest: MergeRequestAssignmentContext;
+      };
   assignment: Assignment;
   agent: Agent;
   runtime: Runtime;
@@ -196,6 +231,15 @@ export interface AgentAdapterStartContext {
 export interface AgentAdapterResumeContext extends AgentAdapterStartContext {
   checkpoint: Checkpoint;
   failedSession: Session;
+}
+
+export interface CreateMergeRequestDispatchIntentInput {
+  workspaceId: WorkspaceId;
+  mergeRequest: MergeRequestAssignmentContext;
+  action: MergeRequestDispatchAction;
+  roleDefinitionId?: RoleDefinitionId;
+  requiredAgentTags?: string[];
+  requiredRuntimeTags?: string[];
 }
 
 export interface SessionHandle {

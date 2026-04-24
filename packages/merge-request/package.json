@@ -1,0 +1,30 @@
+{
+  "name": "@stoneforge/merge-request",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Stoneforge V2 MergeRequest, CI, review, policy, and merge flow",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "lint": "pnpm run typecheck",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@stoneforge/core": "workspace:*",
+    "@stoneforge/execution": "workspace:*",
+    "@stoneforge/workspace": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.18"
+  }
+}

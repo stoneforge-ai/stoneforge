@@ -1,6 +1,7 @@
 import type {
   Agent,
   AgentId,
+  MergeRequestId,
   RoleDefinition,
   RoleDefinitionId,
   Runtime,
@@ -32,8 +33,11 @@ import type {
 } from "./ids.js";
 import type {
   AgentAdapter,
+  AgentAdapterStartContext,
   Assignment,
+  AssignmentOwner,
   Checkpoint,
+  CreateMergeRequestDispatchIntentInput,
   CreateTaskInput,
   DispatchIntent,
   DispatchPolicy,
@@ -61,6 +65,7 @@ export class TaskDispatchService {
   private readonly assignments = new Map<AssignmentId, Assignment>();
   private readonly sessions = new Map<SessionId, Session>();
   private readonly leases = new Map<LeaseId, Lease>();
+  private readonly mergeRequestContexts = new Map<MergeRequestId, CreateMergeRequestDispatchIntentInput["mergeRequest"]>();
   private readonly counters: Record<CounterName, number> = {
     task: 0,
     dispatchIntent: 0,
@@ -107,10 +112,12 @@ export class TaskDispatchService {
       dependencyIds: [...(input.dependencyIds ?? [])],
       planId: input.planId,
       state: "planned",
+      requiresMergeRequest: input.requiresMergeRequest ?? false,
       dispatchConstraints: normalizeDispatchConstraints(
         input.dispatchConstraints,
       ),
       continuity: [],
+      repairContexts: [],
       createdAt: now,
       updatedAt: now,
     };
@@ -157,6 +164,52 @@ export class TaskDispatchService {
     return cloneTask(task);
   }
 
+  createMergeRequestDispatchIntent(
+    input: CreateMergeRequestDispatchIntentInput,
+  ): DispatchIntent {
+    this.requireWorkspace(input.workspaceId);
+    this.mergeRequestContexts.set(input.mergeRequest.id, {
+      ...input.mergeRequest,
+    });
+
+    const existingIntent = Array.from(this.dispatchIntents.values()).find(
+      (intent) => {
+        return (
+          intent.targetType === "merge_request" &&
+          intent.mergeRequestId === input.mergeRequest.id &&
+          intent.action === input.action &&
+          intent.state !== "completed" &&
+          intent.state !== "escalated" &&
+          intent.state !== "canceled"
+        );
+      },
+    );
+
+    if (existingIntent) {
+      return cloneDispatchIntent(existingIntent);
+    }
+
+    const now = this.now();
+    const intent: DispatchIntent = {
+      id: asDispatchIntentId(this.nextId("dispatchIntent")),
+      workspaceId: input.workspaceId,
+      targetType: "merge_request",
+      mergeRequestId: input.mergeRequest.id,
+      action: input.action,
+      state: "queued",
+      roleDefinitionId: input.roleDefinitionId,
+      requiredAgentTags: [...(input.requiredAgentTags ?? [])],
+      requiredRuntimeTags: [...(input.requiredRuntimeTags ?? [])],
+      placementFailureCount: 0,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    this.dispatchIntents.set(intent.id, intent);
+
+    return cloneDispatchIntent(intent);
+  }
+
   async runSchedulerOnce(): Promise<DispatchIntent | null> {
     const intent = this.nextDispatchIntent();
 
@@ -169,12 +222,18 @@ export class TaskDispatchService {
       intent.updatedAt = this.now();
     }
 
-    const task = this.requireTask(intent.taskId);
-    this.evaluateTaskReadiness(task);
+    const task =
+      intent.targetType === "task" && intent.taskId
+        ? this.requireTask(intent.taskId)
+        : undefined;
 
-    if (task.state !== "ready") {
-      this.recordPlacementFailure(intent, "task_not_ready");
-      return cloneDispatchIntent(intent);
+    if (task) {
+      this.evaluateTaskReadiness(task);
+
+      if (task.state !== "ready") {
+        this.recordPlacementFailure(intent, "task_not_ready");
+        return cloneDispatchIntent(intent);
+      }
     }
 
     const placement = this.resolvePlacement(intent);
@@ -187,7 +246,6 @@ export class TaskDispatchService {
     const lease = this.createLease(intent, placement.agent, placement.runtime);
     const assignment = this.createAssignment(
       intent,
-      task,
       lease,
       placement.agent,
       placement.runtime,
@@ -198,7 +256,7 @@ export class TaskDispatchService {
       intent.state = "starting";
       intent.updatedAt = this.now();
       const handle = await this.adapter.start({
-        task: cloneTask(task),
+        target: this.buildAdapterTarget(intent, task),
         assignment: cloneAssignment(assignment),
         agent: cloneAgent(placement.agent),
         runtime: cloneRuntime(placement.runtime),
@@ -218,8 +276,10 @@ export class TaskDispatchService {
       this.releaseLease(lease.id);
       assignment.state = "canceled";
       assignment.updatedAt = this.now();
-      task.state = "ready";
-      task.updatedAt = this.now();
+      if (task) {
+        task.state = "ready";
+        task.updatedAt = this.now();
+      }
       this.recordPlacementFailure(intent, "adapter_start_failed");
 
       return cloneDispatchIntent(intent);
@@ -230,7 +290,6 @@ export class TaskDispatchService {
     const session = this.requireSession(sessionId);
     const assignment = this.requireAssignment(session.assignmentId);
     const intent = this.requireDispatchIntent(assignment.dispatchIntentId);
-    const task = this.requireTask(assignment.taskId);
     const observedAt = this.now();
     const heartbeat: SessionHeartbeat = {
       sessionId,
@@ -245,8 +304,12 @@ export class TaskDispatchService {
     assignment.updatedAt = observedAt;
     intent.state = "running";
     intent.updatedAt = observedAt;
-    task.state = "in_progress";
-    task.updatedAt = observedAt;
+
+    if (assignment.owner.type === "task") {
+      const task = this.requireTask(assignment.owner.taskId);
+      task.state = "in_progress";
+      task.updatedAt = observedAt;
+    }
 
     return { ...heartbeat };
   }
@@ -254,18 +317,20 @@ export class TaskDispatchService {
   recordCheckpoint(sessionId: SessionId, checkpoint: Checkpoint): Session {
     const session = this.requireSession(sessionId);
     const assignment = this.requireAssignment(session.assignmentId);
-    const task = this.requireTask(assignment.taskId);
     const storedCheckpoint = cloneCheckpoint(checkpoint);
 
     session.checkpoints.push(storedCheckpoint);
     session.state = "checkpointed";
     session.updatedAt = storedCheckpoint.capturedAt;
-    task.continuity.push({
-      ...storedCheckpoint,
-      assignmentId: assignment.id,
-      sessionId: session.id,
-    });
-    task.updatedAt = storedCheckpoint.capturedAt;
+    if (assignment.owner.type === "task") {
+      const task = this.requireTask(assignment.owner.taskId);
+      task.continuity.push({
+        ...storedCheckpoint,
+        assignmentId: assignment.id,
+        sessionId: session.id,
+      });
+      task.updatedAt = storedCheckpoint.capturedAt;
+    }
 
     return cloneSession(session);
   }
@@ -277,7 +342,14 @@ export class TaskDispatchService {
   ): Promise<Session> {
     const failedSession = this.requireSession(sessionId);
     const assignment = this.requireAssignment(failedSession.assignmentId);
-    const task = this.requireTask(assignment.taskId);
+
+    if (assignment.owner.type !== "task") {
+      throw new Error(
+        `Assignment ${assignment.id} is not a Task-owned Assignment and cannot use task recovery.`,
+      );
+    }
+
+    const task = this.requireTask(assignment.owner.taskId);
 
     this.recordCheckpoint(sessionId, checkpoint);
 
@@ -318,7 +390,10 @@ export class TaskDispatchService {
       "RoleDefinition",
     );
     const handle = await this.adapter.resume({
-      task: cloneTask(task),
+      target: {
+        type: "task",
+        task: cloneTask(task),
+      },
       assignment: cloneAssignment(assignment),
       agent: cloneAgent(agent),
       runtime: cloneRuntime(runtime),
@@ -338,7 +413,6 @@ export class TaskDispatchService {
   completeAssignment(assignmentId: AssignmentId): Assignment {
     const assignment = this.requireAssignment(assignmentId);
     const intent = this.requireDispatchIntent(assignment.dispatchIntentId);
-    const task = this.requireTask(assignment.taskId);
     const now = this.now();
 
     for (const sessionId of assignment.sessionIds) {
@@ -355,11 +429,40 @@ export class TaskDispatchService {
     assignment.updatedAt = now;
     intent.state = "completed";
     intent.updatedAt = now;
-    task.state = "completed";
-    task.updatedAt = now;
+
+    if (assignment.owner.type === "task") {
+      const task = this.requireTask(assignment.owner.taskId);
+      task.state = task.requiresMergeRequest ? "awaiting_review" : "completed";
+      task.updatedAt = now;
+    }
+
     this.releaseLease(assignment.leaseId);
 
     return cloneAssignment(assignment);
+  }
+
+  reopenTaskForRepair(taskId: TaskId, reason: string): Task {
+    const task = this.requireTask(taskId);
+
+    if (task.state === "completed" || task.state === "canceled") {
+      throw new Error(`Task ${taskId} cannot be reopened from state ${task.state}.`);
+    }
+
+    task.repairContexts.push(reason);
+    task.state = "ready";
+    task.updatedAt = this.now();
+    this.ensureDispatchIntentForTask(task);
+
+    return cloneTask(task);
+  }
+
+  completeTaskAfterMerge(taskId: TaskId): Task {
+    const task = this.requireTask(taskId);
+
+    task.state = "completed";
+    task.updatedAt = this.now();
+
+    return cloneTask(task);
   }
 
   getTask(taskId: TaskId): Task {
@@ -475,7 +578,8 @@ export class TaskDispatchService {
   private hasActiveWork(taskId: TaskId): boolean {
     return Array.from(this.assignments.values()).some((assignment) => {
       return (
-        assignment.taskId === taskId &&
+        assignment.owner.type === "task" &&
+        assignment.owner.taskId === taskId &&
         (assignment.state === "created" ||
           assignment.state === "running" ||
           assignment.state === "resume_pending")
@@ -621,17 +725,20 @@ export class TaskDispatchService {
 
   private createAssignment(
     intent: DispatchIntent,
-    task: Task,
     lease: Lease,
     agent: Agent,
     runtime: Runtime,
     roleDefinition: RoleDefinition,
   ): Assignment {
     const now = this.now();
+    const owner = buildAssignmentOwner(intent);
     const assignment: Assignment = {
       id: asAssignmentId(this.nextId("assignment")),
       workspaceId: intent.workspaceId,
-      taskId: task.id,
+      owner,
+      taskId: owner.type === "task" ? owner.taskId : undefined,
+      mergeRequestId:
+        owner.type === "merge_request" ? owner.mergeRequestId : undefined,
       dispatchIntentId: intent.id,
       roleDefinitionId: roleDefinition.id,
       agentId: agent.id,
@@ -648,8 +755,12 @@ export class TaskDispatchService {
     lease.assignmentId = assignment.id;
     intent.assignmentId = assignment.id;
     intent.updatedAt = now;
-    task.state = "leased";
-    task.updatedAt = now;
+
+    if (owner.type === "task") {
+      const task = this.requireTask(owner.taskId);
+      task.state = "leased";
+      task.updatedAt = now;
+    }
 
     return assignment;
   }
@@ -685,18 +796,22 @@ export class TaskDispatchService {
     intent.lastFailureReason = reason;
     intent.updatedAt = this.now();
 
-    const task = this.requireTask(intent.taskId);
-
     if (intent.placementFailureCount >= this.policy.maxPlacementFailures) {
       intent.state = "escalated";
-      task.state = "human_review_required";
-      task.updatedAt = intent.updatedAt;
+      if (intent.targetType === "task" && intent.taskId) {
+        const task = this.requireTask(intent.taskId);
+        task.state = "human_review_required";
+        task.updatedAt = intent.updatedAt;
+      }
       return;
     }
 
     intent.state = "retry_wait";
-    task.state = "ready";
-    task.updatedAt = intent.updatedAt;
+    if (intent.targetType === "task" && intent.taskId) {
+      const task = this.requireTask(intent.taskId);
+      task.state = "ready";
+      task.updatedAt = intent.updatedAt;
+    }
   }
 
   private releaseLease(leaseId: LeaseId): void {
@@ -770,6 +885,57 @@ export class TaskDispatchService {
   private now(): string {
     return new Date().toISOString();
   }
+
+  private buildAdapterTarget(
+    intent: DispatchIntent,
+    task: Task | undefined,
+  ): AgentAdapterStartContext["target"] {
+    if (intent.targetType === "task") {
+      if (!task) {
+        throw new Error(`Task dispatch intent ${intent.id} has no Task.`);
+      }
+
+      return {
+        type: "task",
+        task: cloneTask(task),
+      };
+    }
+
+    if (!intent.mergeRequestId) {
+      throw new Error(`MergeRequest dispatch intent ${intent.id} has no target.`);
+    }
+
+    const mergeRequest = this.mergeRequestContexts.get(intent.mergeRequestId);
+
+    if (!mergeRequest) {
+      throw new Error(
+        `MergeRequest context ${intent.mergeRequestId} does not exist.`,
+      );
+    }
+
+    return {
+      type: "merge_request",
+      mergeRequest: { ...mergeRequest },
+    };
+  }
+}
+
+function buildAssignmentOwner(intent: DispatchIntent): AssignmentOwner {
+  if (intent.targetType === "task" && intent.taskId) {
+    return {
+      type: "task",
+      taskId: intent.taskId,
+    };
+  }
+
+  if (intent.targetType === "merge_request" && intent.mergeRequestId) {
+    return {
+      type: "merge_request",
+      mergeRequestId: intent.mergeRequestId,
+    };
+  }
+
+  throw new Error(`Dispatch intent ${intent.id} does not have a valid owner.`);
 }
 
 function normalizeDispatchConstraints(
@@ -846,6 +1012,7 @@ function cloneTask(task: Task): Task {
       remainingWork: [...checkpoint.remainingWork],
       importantContext: [...checkpoint.importantContext],
     })),
+    repairContexts: [...task.repairContexts],
   };
 }
 

@@ -6,6 +6,8 @@ export type RuntimeId = Brand<string, "RuntimeId">;
 export type AgentId = Brand<string, "AgentId">;
 export type RoleDefinitionId = Brand<string, "RoleDefinitionId">;
 export type AuditEventId = Brand<string, "AuditEventId">;
+export type MergeRequestId = Brand<string, "MergeRequestId">;
+export type CIRunId = Brand<string, "CIRunId">;
 
 export function asOrgId(value: string): OrgId {
   return brand<"OrgId">(value);
@@ -29,4 +31,12 @@ export function asRoleDefinitionId(value: string): RoleDefinitionId {
 
 export function asAuditEventId(value: string): AuditEventId {
   return brand<"AuditEventId">(value);
+}
+
+export function asMergeRequestId(value: string): MergeRequestId {
+  return brand<"MergeRequestId">(value);
+}
+
+export function asCIRunId(value: string): CIRunId {
+  return brand<"CIRunId">(value);
 }

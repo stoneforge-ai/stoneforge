@@ -221,11 +221,32 @@ Use these as implementation heuristics, not absolute goals.
 - substitutes must honor their contracts
 - high-level policy should depend on abstractions, not details
 
+### Quality metrics
+
+These metrics are acceptance gates for code quality. They do not replace judgment: a change that satisfies the numbers while making the system harder to understand, change, or test is still not acceptable. When tooling for a metric does not exist yet, write code and tests as if the metric were already enforced.
+
+1. **Test coverage must prove behavior.**
+   New or changed production behavior is expected to have 100% meaningful test coverage for its observable decisions, boundaries, and failure modes. Package-level coverage should not fall below 90% statements, 90% lines, 90% functions, and 85% branches. Critical policy, state-machine, authorization, parser, and persistence logic should meet at least 95% branch coverage. Do not use broad snapshot tests or incidental render coverage as a substitute for assertions about behavior.
+
+2. **Dependency structure must point inward.**
+   Dependencies must flow from volatile details toward stable policy. Domain and policy modules must not depend on UI, transport, persistence, framework, or process-level details. Cross-layer imports, circular dependencies, and broad shared modules are quality failures; fix the boundary instead of hiding the problem behind pass-through wrappers.
+
+3. **Cyclomatic complexity must stay low.**
+   New or changed functions should target cyclomatic complexity of 5 or less and must not exceed 10. If logic wants to exceed that limit, split it into named predicates, cohesive helper functions, explicit state machines, or strategy objects. Do not use extraction to hide tangled control flow; the result must be easier to read and test.
+
+4. **Module sizes must stay focused.**
+   Production source modules should stay under 300 non-comment lines, and most should be smaller than 200. Test modules should stay under 500 non-comment lines unless they are mostly data tables or fixtures. A large module is acceptable only when it remains highly cohesive and is easier to understand together than apart. Do not add new responsibilities to an already-large module; split policy, adapters, validation, rendering, orchestration, and helpers into clear boundaries.
+
+5. **Mutation testing should validate critical logic.**
+   Critical business rules, state transitions, policy checks, parsers, and persistence decisions should achieve at least an 80% mutation score, with 90% expected for the highest-risk modules. Surviving mutations in changed critical code must either be killed with stronger tests or documented as equivalent mutations. When mutation tooling is not available, write tests that explicitly catch likely mutations such as inverted predicates, skipped guards, changed boundaries, removed error paths, and incorrect default cases.
+
 ### Decision rule
 
 When standards conflict, apply them in this order:
 
 **simplicity > separation of concerns > encapsulation > cohesion/coupling > explicitness > DRY/SOLID heuristics**
+
+Quality metrics validate these standards. They are never a reason to add indirection, obscure behavior, or split cohesive code mechanically.
 
 ### Required tradeoff rule
 
