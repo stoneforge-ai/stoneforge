@@ -1,9 +1,9 @@
 {
-  "name": "@stoneforge/workspace",
+  "name": "@stoneforge/execution",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Stoneforge V2 workspace onboarding and readiness domain package",
+  "description": "Stoneforge V2 task dispatch, assignment, and session domain package",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -20,7 +20,8 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@stoneforge/core": "workspace:*"
+    "@stoneforge/core": "workspace:*",
+    "@stoneforge/workspace": "workspace:*"
   },
   "devDependencies": {
     "vitest": "^4.0.18"

@@ -1,11 +1,14 @@
 import {
+  cloneAgent,
+  cloneRoleDefinition,
+  cloneRuntime,
   asAgentId,
   asAuditEventId,
   asOrgId,
   asRoleDefinitionId,
   asRuntimeId,
   asWorkspaceId,
-} from "./ids.js";
+} from "@stoneforge/core";
 import type {
   Agent,
   AuditActor,
@@ -626,30 +629,6 @@ function cloneRepositoryLink(
 ): GitHubRepositoryLink {
   return {
     ...repository,
-  };
-}
-
-function cloneRuntime(runtime: Runtime): Runtime {
-  return {
-    ...runtime,
-    tags: [...runtime.tags],
-  };
-}
-
-function cloneAgent(agent: Agent): Agent {
-  return {
-    ...agent,
-    tags: [...agent.tags],
-  };
-}
-
-function cloneRoleDefinition(roleDefinition: RoleDefinition): RoleDefinition {
-  return {
-    ...roleDefinition,
-    toolAccess: [...roleDefinition.toolAccess],
-    skillAccess: [...roleDefinition.skillAccess],
-    lifecycleHooks: [...roleDefinition.lifecycleHooks],
-    tags: [...roleDefinition.tags],
   };
 }
 

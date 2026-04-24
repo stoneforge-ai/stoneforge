@@ -6,6 +6,15 @@ import type {
   RuntimeId,
   WorkspaceId,
 } from "./ids.js";
+import type {
+  Agent,
+  AgentHarness,
+  HealthStatus,
+  RoleDefinition,
+  Runtime,
+  RuntimeLocation,
+  RuntimeMode,
+} from "@stoneforge/core";
 
 export type WorkspaceState =
   | "draft"
@@ -23,10 +32,15 @@ export type PolicyPreset = "supervised" | "autonomous";
 
 export type RepositoryConnectionStatus = "connected" | "disconnected";
 
-export type RuntimeLocation = "customer_host" | "managed";
-export type RuntimeMode = "local_worktree" | "container" | "managed_sandbox";
-export type HealthStatus = "healthy" | "unhealthy";
-export type AgentHarness = "claude-code" | "openai-codex";
+export type {
+  Agent,
+  AgentHarness,
+  HealthStatus,
+  RoleDefinition,
+  Runtime,
+  RuntimeLocation,
+  RuntimeMode,
+} from "@stoneforge/core";
 
 /**
  * Setup-path audit actions emitted by this package's workspace-ready flow.
@@ -74,43 +88,6 @@ export interface GitHubRepositoryLink {
   defaultBranch: string;
   connectionStatus: RepositoryConnectionStatus;
   connectedAt: string;
-}
-
-export interface Runtime {
-  id: RuntimeId;
-  workspaceId: WorkspaceId;
-  name: string;
-  location: RuntimeLocation;
-  mode: RuntimeMode;
-  healthStatus: HealthStatus;
-  tags: string[];
-  hostId?: string;
-  managedProvider?: "daytona";
-}
-
-export interface Agent {
-  id: AgentId;
-  workspaceId: WorkspaceId;
-  runtimeId: RuntimeId;
-  name: string;
-  harness: AgentHarness;
-  model: string;
-  concurrencyLimit: number;
-  healthStatus: HealthStatus;
-  tags: string[];
-  launcher: string;
-}
-
-export interface RoleDefinition {
-  id: RoleDefinitionId;
-  workspaceId: WorkspaceId;
-  name: string;
-  prompt: string;
-  toolAccess: string[];
-  skillAccess: string[];
-  lifecycleHooks: string[];
-  tags: string[];
-  enabled: boolean;
 }
 
 export interface WorkspaceExecutionPath {
