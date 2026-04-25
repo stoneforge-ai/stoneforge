@@ -13,6 +13,7 @@ export type {
   CIRunState,
   GitHubMergeRequestAdapter,
   MergeRequest,
+  MergeRequestSnapshot,
   MergeRequestServiceOptions,
   MergeRequestState,
   OpenTaskMergeRequestInput,

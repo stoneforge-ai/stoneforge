@@ -151,6 +151,12 @@ export interface AuditEvent {
   policyPreset?: PolicyPreset;
 }
 
+export interface WorkspaceSetupSnapshot {
+  orgs: Org[];
+  workspaces: Workspace[];
+  auditEvents: AuditEvent[];
+}
+
 export interface CreateOrgInput {
   name: string;
 }

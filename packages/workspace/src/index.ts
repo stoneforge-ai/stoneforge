@@ -38,6 +38,7 @@ export type {
   Runtime,
   Workspace,
   WorkspaceExecutionPath,
+  WorkspaceSetupSnapshot,
   WorkspaceSetupAuditAction,
   WorkspaceSetupAuditTargetType,
   WorkspaceState,

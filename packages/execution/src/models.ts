@@ -49,8 +49,14 @@ export interface TaskDispatchConstraints {
   requiredRuntimeTags: string[];
 }
 
+export type FollowUpSourceOutcome =
+  | "completed"
+  | "canceled"
+  | "closed_unmerged";
+
 export interface FollowUpSource {
   taskId: TaskId;
+  sourceOutcome: FollowUpSourceOutcome;
   mergeRequestId?: MergeRequestId;
 }
 
@@ -270,4 +276,14 @@ export interface WorkspaceExecutionCapabilities {
   runtimes: Runtime[];
   agents: Agent[];
   roleDefinitions: RoleDefinition[];
+}
+
+export interface ExecutionSnapshot {
+  workspaces: WorkspaceExecutionCapabilities[];
+  tasks: Task[];
+  dispatchIntents: DispatchIntent[];
+  assignments: Assignment[];
+  sessions: Session[];
+  leases: Lease[];
+  mergeRequestContexts: MergeRequestAssignmentContext[];
 }

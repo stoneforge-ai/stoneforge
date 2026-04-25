@@ -6,6 +6,7 @@ import type {
   CIRun,
   GitHubMergeRequestAdapter,
   MergeRequest,
+  MergeRequestSnapshot,
   MergeRequestServiceOptions,
   OpenTaskMergeRequestInput,
   ProviderPullRequest,
@@ -46,8 +47,12 @@ export class MergeRequestService {
     private readonly execution: TaskDispatchService,
     private readonly gitHubAdapter: GitHubMergeRequestAdapter,
     private readonly options: MergeRequestServiceOptions = defaultOptions,
+    snapshot?: MergeRequestSnapshot,
   ) {
     this.policyFlow = new MergeRequestPolicyFlow(execution, gitHubAdapter, options, this.ciRuns);
+    if (snapshot) {
+      this.restoreSnapshot(snapshot);
+    }
   }
 
   async openOrUpdateTaskMergeRequest(
@@ -186,6 +191,13 @@ export class MergeRequestService {
     return Array.from(this.ciRuns.values()).map(cloneCIRun);
   }
 
+  exportSnapshot(): MergeRequestSnapshot {
+    return {
+      mergeRequests: this.listMergeRequests(),
+      ciRuns: this.listCIRuns(),
+    };
+  }
+
   private requireMergeRequest(mergeRequestId: MergeRequestId): MergeRequest {
     const mergeRequest = this.mergeRequests.get(mergeRequestId);
 
@@ -254,4 +266,39 @@ export class MergeRequestService {
 
     await this.policyFlow.evaluatePolicy(mergeRequest);
   }
+
+  private restoreSnapshot(snapshot: MergeRequestSnapshot): void {
+    for (const mergeRequest of snapshot.mergeRequests) {
+      this.mergeRequests.set(mergeRequest.id, cloneMergeRequest(mergeRequest));
+      this.mergeRequestIdsByTaskId.set(
+        mergeRequest.sourceOwner.taskId,
+        mergeRequest.id,
+      );
+    }
+
+    for (const ciRun of snapshot.ciRuns) {
+      this.ciRuns.set(ciRun.id, cloneCIRun(ciRun));
+    }
+
+    this.counters.mergeRequest = maxNumericSuffix(
+      snapshot.mergeRequests.map((mergeRequest) => mergeRequest.id),
+      "mergeRequest_",
+    );
+    this.counters.ciRun = maxNumericSuffix(
+      snapshot.ciRuns.map((ciRun) => ciRun.id),
+      "ciRun_",
+    );
+  }
+}
+
+function maxNumericSuffix(values: readonly string[], prefix: string): number {
+  return values.reduce((max, value) => {
+    const suffix = value.startsWith(prefix) ? Number(value.slice(prefix.length)) : 0;
+
+    if (Number.isInteger(suffix) && suffix > max) {
+      return suffix;
+    }
+
+    return max;
+  }, 0);
 }

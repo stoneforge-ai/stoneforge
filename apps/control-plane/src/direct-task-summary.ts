@@ -22,6 +22,7 @@ export interface DirectTaskRunSummary {
   providerSessionIds: string[];
   providerPullRequestUrl: string;
   workspaceState: Workspace["state"];
+  policyPreset: Workspace["policyPreset"];
   taskState: Task["state"];
   implementationAssignmentState: Assignment["state"];
   implementationSessionState: Session["state"];
@@ -65,6 +66,7 @@ export function buildSummary(
     providerSessionIds: input.providerSessionIds,
     providerPullRequestUrl: input.mergeRequest.providerPullRequest.url,
     workspaceState: input.workspace.state,
+    policyPreset: input.workspace.policyPreset,
     taskState: input.task.state,
     implementationAssignmentState: input.implementation.assignment.state,
     implementationSessionState: input.implementation.session.state,
@@ -84,6 +86,7 @@ export function formatDirectTaskRunSummary(
   return [
     "Stoneforge V2 direct-task scenario complete",
     `Workspace ${summary.workspaceId}: ${summary.workspaceState}`,
+    `Policy preset: ${summary.policyPreset ?? "unconfigured"}`,
     `Task ${summary.taskId}: ${summary.taskState}`,
     `Implementation Assignment ${summary.implementationAssignmentId}: ${summary.implementationAssignmentState}`,
     `Implementation Session ${summary.implementationSessionId}: ${summary.implementationSessionState}`,

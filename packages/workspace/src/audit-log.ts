@@ -4,8 +4,13 @@ import { cloneAuditEvent } from "./cloning.js";
 import type { AuditEvent } from "./models.js";
 
 export class WorkspaceAuditLog {
-  private readonly events: AuditEvent[] = [];
-  private counter = 0;
+  private readonly events: AuditEvent[];
+  private counter: number;
+
+  constructor(events: AuditEvent[] = []) {
+    this.events = events.map(cloneAuditEvent);
+    this.counter = maxNumericSuffix(events.map((event) => event.id), "audit_");
+  }
 
   append(input: Omit<AuditEvent, "id" | "timestamp">): void {
     const event: AuditEvent = {
@@ -23,8 +28,28 @@ export class WorkspaceAuditLog {
       .map(cloneAuditEvent);
   }
 
+  exportEvents(): AuditEvent[] {
+    return this.events.map(cloneAuditEvent);
+  }
+
   private nextId(): string {
     this.counter += 1;
     return `audit_${this.counter}`;
   }
+}
+
+function maxNumericSuffix(values: readonly string[], prefix: string): number {
+  return values.reduce((max, value) => {
+    if (!value.startsWith(prefix)) {
+      return max;
+    }
+
+    const numericSuffix = Number(value.slice(prefix.length));
+
+    if (Number.isInteger(numericSuffix) && numericSuffix > max) {
+      return numericSuffix;
+    }
+
+    return max;
+  }, 0);
 }

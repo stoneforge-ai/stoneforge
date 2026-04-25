@@ -14,6 +14,7 @@ import type {
   RoleDefinition,
   Runtime,
   Workspace,
+  WorkspaceSetupSnapshot,
   WorkspaceValidationResult,
 } from "./models.js";
 import type { OrgId, RuntimeId, WorkspaceId } from "./ids.js";
@@ -42,8 +43,13 @@ import { validateWorkspaceRecord } from "./workspace-validation-flow.js";
  * storage layer, or UI surface is frozen.
  */
 export class WorkspaceSetupService {
-  private readonly state = new WorkspaceSetupState();
-  private readonly capabilities = new WorkspaceCapabilityRegistration(this.state);
+  private readonly state: WorkspaceSetupState;
+  private readonly capabilities: WorkspaceCapabilityRegistration;
+
+  constructor(snapshot?: WorkspaceSetupSnapshot) {
+    this.state = new WorkspaceSetupState(snapshot);
+    this.capabilities = new WorkspaceCapabilityRegistration(this.state);
+  }
 
   createOrg(input: CreateOrgInput): Org {
     return createOrgRecordInState(this.state, input);
@@ -196,5 +202,9 @@ export class WorkspaceSetupService {
 
   listAuditEventsForWorkspace(workspaceId: WorkspaceId): AuditEvent[] {
     return this.state.listAuditEventsForWorkspace(workspaceId);
+  }
+
+  exportSnapshot(): WorkspaceSetupSnapshot {
+    return this.state.exportSnapshot();
   }
 }

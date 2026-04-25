@@ -30,6 +30,7 @@ export type {
   CreateTaskInput,
   DispatchIntent,
   DispatchPolicy,
+  ExecutionSnapshot,
   Lease,
   MergeRequestAssignmentContext,
   Session,

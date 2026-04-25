@@ -1,7 +1,13 @@
 import type { AgentId } from "@stoneforge/core";
 import type { Workspace } from "@stoneforge/workspace";
 
-import { cloneAssignment, cloneDispatchIntent, cloneLease, cloneSession, cloneTask } from "./cloning.js";
+import {
+  cloneAssignment,
+  cloneDispatchIntent,
+  cloneLease,
+  cloneSession,
+  cloneTask,
+} from "./cloning.js";
 import { DispatchScheduler } from "./dispatch-scheduler.js";
 import { ExecutionState } from "./execution-state.js";
 import type {
@@ -18,6 +24,7 @@ import type {
   CreateTaskInput,
   DispatchIntent,
   DispatchPolicy,
+  ExecutionSnapshot,
   Lease,
   Session,
   SessionHeartbeat,
@@ -34,15 +41,18 @@ const defaultPolicy: DispatchPolicy = {
 };
 
 export class TaskDispatchService {
-  private readonly state = new ExecutionState();
-  private readonly tasks = new TaskLifecycle(this.state);
+  private readonly state: ExecutionState;
+  private readonly tasks: TaskLifecycle;
   private readonly scheduler: DispatchScheduler;
   private readonly sessions: SessionLifecycle;
 
   constructor(
     adapter: AgentAdapter,
     policy: DispatchPolicy = defaultPolicy,
+    snapshot?: ExecutionSnapshot,
   ) {
+    this.state = new ExecutionState(snapshot);
+    this.tasks = new TaskLifecycle(this.state);
     this.scheduler = new DispatchScheduler(
       this.state,
       this.tasks,
@@ -145,5 +155,9 @@ export class TaskDispatchService {
 
   activeLeaseCount(agentId: AgentId): number {
     return this.scheduler.activeLeaseCount(agentId);
+  }
+
+  exportSnapshot(): ExecutionSnapshot {
+    return this.state.exportSnapshot();
   }
 }

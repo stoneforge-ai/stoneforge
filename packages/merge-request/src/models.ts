@@ -123,3 +123,8 @@ export interface MergeRequestServiceOptions {
   policyPreset: PolicyPreset;
   targetBranch?: string;
 }
+
+export interface MergeRequestSnapshot {
+  mergeRequests: MergeRequest[];
+  ciRuns: CIRun[];
+}
