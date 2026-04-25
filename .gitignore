@@ -37,6 +37,9 @@ Thumbs.db
 
 # Test coverage
 coverage/
+reports/
+.stryker-tmp/
+stryker.log
 
 # Playwright
 .playwright/

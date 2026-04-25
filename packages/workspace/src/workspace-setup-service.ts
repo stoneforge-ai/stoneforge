@@ -1,14 +1,3 @@
-import {
-  cloneAgent,
-  cloneRoleDefinition,
-  cloneRuntime,
-  asAgentId,
-  asAuditEventId,
-  asOrgId,
-  asRoleDefinitionId,
-  asRuntimeId,
-  asWorkspaceId,
-} from "@stoneforge/core";
 import type {
   Agent,
   AuditActor,
@@ -16,7 +5,6 @@ import type {
   ConnectGitHubRepositoryInput,
   CreateOrgInput,
   CreateWorkspaceInput,
-  GitHubRepositoryLink,
   HealthStatus,
   Org,
   PolicyPreset,
@@ -26,20 +14,27 @@ import type {
   RoleDefinition,
   Runtime,
   Workspace,
-  WorkspaceExecutionPath,
-  WorkspaceState,
-  WorkspaceValidationIssue,
   WorkspaceValidationResult,
 } from "./models.js";
 import type { OrgId, RuntimeId, WorkspaceId } from "./ids.js";
-
-type CounterName =
-  | "org"
-  | "workspace"
-  | "runtime"
-  | "agent"
-  | "roleDefinition"
-  | "audit";
+import { cloneWorkspace } from "./cloning.js";
+import {
+  createRepositoryLink,
+} from "./workspace-records.js";
+import { computeConfiguredState } from "./workspace-validation.js";
+import { WorkspaceSetupState } from "./workspace-state.js";
+import { WorkspaceCapabilityRegistration } from "./workspace-capabilities.js";
+import {
+  assertRepositoryLinkCompatible,
+  repositoryAuditOutcome,
+  repositoryConnectReason,
+  repositoryStatusReason,
+} from "./repository-connection.js";
+import {
+  createOrgRecordInState,
+  createWorkspaceRecordInState,
+} from "./workspace-creation.js";
+import { validateWorkspaceRecord } from "./workspace-validation-flow.js";
 
 /**
  * In-memory application service for the Slice 1 workspace onboarding path.
@@ -47,29 +42,11 @@ type CounterName =
  * storage layer, or UI surface is frozen.
  */
 export class WorkspaceSetupService {
-  private readonly orgs = new Map<OrgId, Org>();
-  private readonly workspaces = new Map<WorkspaceId, Workspace>();
-  private readonly auditEvents: AuditEvent[] = [];
-  private readonly counters: Record<CounterName, number> = {
-    org: 0,
-    workspace: 0,
-    runtime: 0,
-    agent: 0,
-    roleDefinition: 0,
-    audit: 0,
-  };
+  private readonly state = new WorkspaceSetupState();
+  private readonly capabilities = new WorkspaceCapabilityRegistration(this.state);
 
   createOrg(input: CreateOrgInput): Org {
-    const now = this.now();
-    const org: Org = {
-      id: asOrgId(this.nextId("org")),
-      name: input.name,
-      createdAt: now,
-    };
-
-    this.orgs.set(org.id, org);
-
-    return cloneOrg(org);
+    return createOrgRecordInState(this.state, input);
   }
 
   createWorkspace(
@@ -77,38 +54,7 @@ export class WorkspaceSetupService {
     input: CreateWorkspaceInput,
     actor: AuditActor,
   ): Workspace {
-    const org = this.orgs.get(orgId);
-
-    if (!org) {
-      throw new Error(`Org ${orgId} does not exist.`);
-    }
-
-    const now = this.now();
-    const workspace: Workspace = {
-      id: asWorkspaceId(this.nextId("workspace")),
-      orgId,
-      name: input.name,
-      targetBranch: input.targetBranch,
-      state: "draft",
-      runtimes: [],
-      agents: [],
-      roleDefinitions: [],
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    this.workspaces.set(workspace.id, workspace);
-    this.appendAuditEvent({
-      actor,
-      action: "workspace.created",
-      orgId,
-      workspaceId: workspace.id,
-      targetId: workspace.id,
-      targetType: "workspace",
-      outcome: "success",
-    });
-
-    return cloneWorkspace(workspace);
+    return createWorkspaceRecordInState(this.state, orgId, input, actor);
   }
 
   connectGitHubRepository(
@@ -116,44 +62,26 @@ export class WorkspaceSetupService {
     input: ConnectGitHubRepositoryInput,
     actor: AuditActor,
   ): Workspace {
-    const workspace = this.requireWorkspace(workspaceId);
+    const workspace = this.state.requireWorkspace(workspaceId);
 
-    if (
-      workspace.repository &&
-      (workspace.repository.owner !== input.owner ||
-        workspace.repository.repository !== input.repository)
-    ) {
-      throw new Error(
-        `Workspace ${workspaceId} is already linked to ${workspace.repository.owner}/${workspace.repository.repository}.`,
-      );
-    }
+    assertRepositoryLinkCompatible(workspace, input);
 
-    const now = this.now();
-    const repository: GitHubRepositoryLink = {
-      installationId: input.installationId,
-      owner: input.owner,
-      repository: input.repository,
-      defaultBranch: input.defaultBranch,
-      connectionStatus: input.connectionStatus ?? "connected",
-      connectedAt: now,
-    };
+    const now = this.state.now();
+    const repository = createRepositoryLink(input, now);
 
     workspace.repository = repository;
     workspace.updatedAt = now;
-    workspace.state = this.computeConfiguredState(workspace);
+    workspace.state = computeConfiguredState(workspace);
 
-    this.appendAuditEvent({
+    this.state.appendAuditEvent({
       actor,
       action: "workspace.github_repository_connected",
       orgId: workspace.orgId,
       workspaceId: workspace.id,
       targetId: `${repository.owner}/${repository.repository}`,
       targetType: "repository",
-      outcome: repository.connectionStatus === "connected" ? "success" : "failure",
-      reason:
-        repository.connectionStatus === "connected"
-          ? undefined
-          : "Repository link was saved without a live connection.",
+      outcome: repositoryAuditOutcome(repository.connectionStatus),
+      reason: repositoryConnectReason(repository.connectionStatus),
       policyPreset: workspace.policyPreset,
     });
 
@@ -165,13 +93,13 @@ export class WorkspaceSetupService {
     preset: PolicyPreset,
     actor: AuditActor,
   ): Workspace {
-    const workspace = this.requireWorkspace(workspaceId);
+    const workspace = this.state.requireWorkspace(workspaceId);
 
     workspace.policyPreset = preset;
-    workspace.updatedAt = this.now();
-    workspace.state = this.computeConfiguredState(workspace);
+    workspace.updatedAt = this.state.now();
+    workspace.state = computeConfiguredState(workspace);
 
-    this.appendAuditEvent({
+    this.state.appendAuditEvent({
       actor,
       action: "workspace.policy_preset_selected",
       orgId: workspace.orgId,
@@ -190,36 +118,7 @@ export class WorkspaceSetupService {
     input: RegisterRuntimeInput,
     actor: AuditActor,
   ): Runtime {
-    const workspace = this.requireWorkspace(workspaceId);
-
-    const runtime: Runtime = {
-      id: asRuntimeId(this.nextId("runtime")),
-      workspaceId,
-      name: input.name,
-      location: input.location,
-      mode: input.mode,
-      healthStatus: input.healthStatus ?? "healthy",
-      tags: [...(input.tags ?? [])],
-      hostId: input.hostId,
-      managedProvider: input.managedProvider,
-    };
-
-    workspace.runtimes.push(runtime);
-    workspace.updatedAt = this.now();
-    workspace.state = this.computeConfiguredState(workspace);
-
-    this.appendAuditEvent({
-      actor,
-      action: "workspace.runtime_registered",
-      orgId: workspace.orgId,
-      workspaceId: workspace.id,
-      targetId: runtime.id,
-      targetType: "runtime",
-      outcome: "success",
-      policyPreset: workspace.policyPreset,
-    });
-
-    return cloneRuntime(runtime);
+    return this.capabilities.registerRuntime(workspaceId, input, actor);
   }
 
   registerAgent(
@@ -227,50 +126,7 @@ export class WorkspaceSetupService {
     input: RegisterAgentInput,
     actor: AuditActor,
   ): Agent {
-    const workspace = this.requireWorkspace(workspaceId);
-    const runtime = workspace.runtimes.find(
-      (existingRuntime) => existingRuntime.id === input.runtimeId,
-    );
-
-    if (!runtime) {
-      throw new Error(
-        `Runtime ${input.runtimeId} does not exist in workspace ${workspaceId}.`,
-      );
-    }
-
-    if (input.concurrencyLimit < 1) {
-      throw new Error("Agent concurrencyLimit must be at least 1.");
-    }
-
-    const agent: Agent = {
-      id: asAgentId(this.nextId("agent")),
-      workspaceId,
-      runtimeId: input.runtimeId,
-      name: input.name,
-      harness: input.harness,
-      model: input.model,
-      concurrencyLimit: input.concurrencyLimit,
-      healthStatus: input.healthStatus ?? "healthy",
-      tags: [...(input.tags ?? [])],
-      launcher: input.launcher,
-    };
-
-    workspace.agents.push(agent);
-    workspace.updatedAt = this.now();
-    workspace.state = this.computeConfiguredState(workspace);
-
-    this.appendAuditEvent({
-      actor,
-      action: "workspace.agent_registered",
-      orgId: workspace.orgId,
-      workspaceId: workspace.id,
-      targetId: agent.id,
-      targetType: "agent",
-      outcome: "success",
-      policyPreset: workspace.policyPreset,
-    });
-
-    return cloneAgent(agent);
+    return this.capabilities.registerAgent(workspaceId, input, actor);
   }
 
   registerRoleDefinition(
@@ -278,36 +134,7 @@ export class WorkspaceSetupService {
     input: RegisterRoleDefinitionInput,
     actor: AuditActor,
   ): RoleDefinition {
-    const workspace = this.requireWorkspace(workspaceId);
-
-    const roleDefinition: RoleDefinition = {
-      id: asRoleDefinitionId(this.nextId("roleDefinition")),
-      workspaceId,
-      name: input.name,
-      prompt: input.prompt,
-      toolAccess: [...(input.toolAccess ?? [])],
-      skillAccess: [...(input.skillAccess ?? [])],
-      lifecycleHooks: [...(input.lifecycleHooks ?? [])],
-      tags: [...(input.tags ?? [])],
-      enabled: input.enabled ?? true,
-    };
-
-    workspace.roleDefinitions.push(roleDefinition);
-    workspace.updatedAt = this.now();
-    workspace.state = this.computeConfiguredState(workspace);
-
-    this.appendAuditEvent({
-      actor,
-      action: "workspace.role_definition_registered",
-      orgId: workspace.orgId,
-      workspaceId: workspace.id,
-      targetId: roleDefinition.id,
-      targetType: "role_definition",
-      outcome: "success",
-      policyPreset: workspace.policyPreset,
-    });
-
-    return cloneRoleDefinition(roleDefinition);
+    return this.capabilities.registerRoleDefinition(workspaceId, input, actor);
   }
 
   recordGitHubRepositoryConnectionStatus(
@@ -315,7 +142,7 @@ export class WorkspaceSetupService {
     status: "connected" | "disconnected",
     actor: AuditActor,
   ): Workspace {
-    const workspace = this.requireWorkspace(workspaceId);
+    const workspace = this.state.requireWorkspace(workspaceId);
 
     if (!workspace.repository) {
       throw new Error(`Workspace ${workspaceId} is not linked to a repository.`);
@@ -325,20 +152,17 @@ export class WorkspaceSetupService {
       ...workspace.repository,
       connectionStatus: status,
     };
-    workspace.updatedAt = this.now();
+    workspace.updatedAt = this.state.now();
 
-    this.appendAuditEvent({
+    this.state.appendAuditEvent({
       actor,
       action: "workspace.github_repository_connection_updated",
       orgId: workspace.orgId,
       workspaceId: workspace.id,
       targetId: `${workspace.repository.owner}/${workspace.repository.repository}`,
       targetType: "repository",
-      outcome: status === "connected" ? "success" : "failure",
-      reason:
-        status === "connected"
-          ? undefined
-          : "Repository connectivity check failed.",
+      outcome: repositoryAuditOutcome(status),
+      reason: repositoryStatusReason(status),
       policyPreset: workspace.policyPreset,
     });
 
@@ -351,304 +175,26 @@ export class WorkspaceSetupService {
     status: HealthStatus,
     actor: AuditActor,
   ): Runtime {
-    const workspace = this.requireWorkspace(workspaceId);
-    const runtime = workspace.runtimes.find(
-      (existingRuntime) => existingRuntime.id === runtimeId,
-    );
-
-    if (!runtime) {
-      throw new Error(
-        `Runtime ${runtimeId} does not exist in workspace ${workspaceId}.`,
-      );
-    }
-
-    runtime.healthStatus = status;
-    workspace.updatedAt = this.now();
-
-    this.appendAuditEvent({
+    return this.capabilities.updateRuntimeHealthStatus(
+      workspaceId,
+      runtimeId,
+      status,
       actor,
-      action: "workspace.runtime_health_updated",
-      orgId: workspace.orgId,
-      workspaceId: workspace.id,
-      targetId: runtime.id,
-      targetType: "runtime",
-      outcome: status === "healthy" ? "success" : "failure",
-      reason:
-        status === "healthy" ? undefined : "Runtime health check failed.",
-      policyPreset: workspace.policyPreset,
-    });
-
-    return cloneRuntime(runtime);
+    );
   }
 
   validateWorkspace(
     workspaceId: WorkspaceId,
     actor: AuditActor,
   ): WorkspaceValidationResult {
-    const workspace = this.requireWorkspace(workspaceId);
-    const validation = this.buildValidationResult(workspace);
-
-    workspace.validation = validation;
-    workspace.updatedAt = validation.validatedAt;
-    workspace.state = this.computeValidatedState(workspace, validation);
-
-    this.appendAuditEvent({
-      actor,
-      action: "workspace.validated",
-      orgId: workspace.orgId,
-      workspaceId: workspace.id,
-      targetId: workspace.id,
-      targetType: "workspace",
-      outcome: validation.ready ? "success" : "failure",
-      reason: validation.ready
-        ? undefined
-        : validation.issues.map((issue) => issue.code).join(", "),
-      policyPreset: workspace.policyPreset,
-    });
-
-    return cloneValidationResult(validation);
+    return validateWorkspaceRecord(this.state, workspaceId, actor);
   }
 
   getWorkspace(workspaceId: WorkspaceId): Workspace {
-    return cloneWorkspace(this.requireWorkspace(workspaceId));
+    return cloneWorkspace(this.state.requireWorkspace(workspaceId));
   }
 
   listAuditEventsForWorkspace(workspaceId: WorkspaceId): AuditEvent[] {
-    return this.auditEvents
-      .filter((event) => event.workspaceId === workspaceId)
-      .map(cloneAuditEvent);
+    return this.state.listAuditEventsForWorkspace(workspaceId);
   }
-
-  private requireWorkspace(workspaceId: WorkspaceId): Workspace {
-    const workspace = this.workspaces.get(workspaceId);
-
-    if (!workspace) {
-      throw new Error(`Workspace ${workspaceId} does not exist.`);
-    }
-
-    return workspace;
-  }
-
-  private computeConfiguredState(workspace: Workspace): WorkspaceState {
-    if (workspace.state === "archived") {
-      return "archived";
-    }
-
-    const repoConnected =
-      workspace.repository?.connectionStatus === "connected";
-
-    if (!repoConnected) {
-      return "draft";
-    }
-
-    if (hasExecutionConfiguration(workspace)) {
-      return "execution_configured";
-    }
-
-    return "repo_connected";
-  }
-
-  private computeValidatedState(
-    workspace: Workspace,
-    validation: WorkspaceValidationResult,
-  ): WorkspaceState {
-    if (workspace.state === "archived") {
-      return "archived";
-    }
-
-    if (validation.ready) {
-      return "ready";
-    }
-
-    if (workspace.state === "ready") {
-      return "degraded";
-    }
-
-    return this.computeConfiguredState(workspace);
-  }
-
-  private buildValidationResult(
-    workspace: Workspace,
-  ): WorkspaceValidationResult {
-    const issues: WorkspaceValidationIssue[] = [];
-
-    const repoConnected = workspace.repository?.connectionStatus === "connected";
-    if (!repoConnected) {
-      issues.push({
-        code: "repo_not_connected",
-        message:
-          "Workspace readiness requires one GitHub App-linked repository with live connectivity.",
-      });
-    }
-
-    const policyConfigured = workspace.policyPreset !== undefined;
-    if (!policyConfigured) {
-      issues.push({
-        code: "policy_not_configured",
-        message: "Workspace readiness requires a policy preset.",
-      });
-    }
-
-    if (workspace.runtimes.length === 0) {
-      issues.push({
-        code: "runtime_not_configured",
-        message: "Workspace readiness requires at least one Runtime.",
-      });
-    }
-
-    if (workspace.agents.length === 0) {
-      issues.push({
-        code: "agent_not_configured",
-        message: "Workspace readiness requires at least one Agent.",
-      });
-    }
-
-    if (workspace.roleDefinitions.length === 0) {
-      issues.push({
-        code: "role_definition_not_configured",
-        message: "Workspace readiness requires at least one RoleDefinition.",
-      });
-    }
-
-    const selectedExecutionPath = selectExecutionPath(workspace);
-    if (!selectedExecutionPath) {
-      issues.push({
-        code: "no_valid_execution_path",
-        message:
-          "Workspace readiness requires one healthy Runtime/Agent/RoleDefinition path.",
-      });
-    }
-
-    return {
-      repoConnected,
-      policyConfigured,
-      executionConfigured: hasExecutionConfiguration(workspace),
-      ready: issues.length === 0,
-      issues,
-      selectedExecutionPath: selectedExecutionPath ?? undefined,
-      validatedAt: this.now(),
-    };
-  }
-
-  private appendAuditEvent(
-    input: Omit<AuditEvent, "id" | "timestamp">,
-  ): void {
-    const event: AuditEvent = {
-      ...input,
-      id: asAuditEventId(this.nextId("audit")),
-      timestamp: this.now(),
-    };
-
-    this.auditEvents.push(event);
-  }
-
-  private nextId(counterName: CounterName): string {
-    this.counters[counterName] += 1;
-    return `${counterName}_${this.counters[counterName]}`;
-  }
-
-  private now(): string {
-    return new Date().toISOString();
-  }
-}
-
-function hasExecutionConfiguration(workspace: Workspace): boolean {
-  return (
-    workspace.policyPreset !== undefined &&
-    workspace.runtimes.length > 0 &&
-    workspace.agents.length > 0 &&
-    workspace.roleDefinitions.length > 0
-  );
-}
-
-function selectExecutionPath(
-  workspace: Workspace,
-): WorkspaceExecutionPath | null {
-  const enabledRole = workspace.roleDefinitions.find((roleDefinition) => {
-    return roleDefinition.enabled;
-  });
-
-  if (!enabledRole) {
-    return null;
-  }
-
-  for (const agent of workspace.agents) {
-    const runtime = workspace.runtimes.find(
-      (candidateRuntime) => candidateRuntime.id === agent.runtimeId,
-    );
-
-    if (!runtime) {
-      continue;
-    }
-
-    if (agent.healthStatus !== "healthy") {
-      continue;
-    }
-
-    if (agent.concurrencyLimit < 1) {
-      continue;
-    }
-
-    if (runtime.healthStatus !== "healthy") {
-      continue;
-    }
-
-    return {
-      runtimeId: runtime.id,
-      agentId: agent.id,
-      roleDefinitionId: enabledRole.id,
-    };
-  }
-
-  return null;
-}
-
-function cloneOrg(org: Org): Org {
-  return {
-    ...org,
-  };
-}
-
-function cloneWorkspace(workspace: Workspace): Workspace {
-  return {
-    ...workspace,
-    repository: workspace.repository
-      ? cloneRepositoryLink(workspace.repository)
-      : undefined,
-    runtimes: workspace.runtimes.map(cloneRuntime),
-    agents: workspace.agents.map(cloneAgent),
-    roleDefinitions: workspace.roleDefinitions.map(cloneRoleDefinition),
-    validation: workspace.validation
-      ? cloneValidationResult(workspace.validation)
-      : undefined,
-  };
-}
-
-function cloneRepositoryLink(
-  repository: GitHubRepositoryLink,
-): GitHubRepositoryLink {
-  return {
-    ...repository,
-  };
-}
-
-function cloneValidationResult(
-  validation: WorkspaceValidationResult,
-): WorkspaceValidationResult {
-  return {
-    ...validation,
-    issues: validation.issues.map((issue) => ({ ...issue })),
-    selectedExecutionPath: validation.selectedExecutionPath
-      ? { ...validation.selectedExecutionPath }
-      : undefined,
-  };
-}
-
-function cloneAuditEvent(event: AuditEvent): AuditEvent {
-  return {
-    ...event,
-    actor: {
-      ...event.actor,
-    },
-  };
 }

@@ -234,11 +234,20 @@ These metrics are acceptance gates for code quality. They do not replace judgmen
 3. **Cyclomatic complexity must stay low.**
    New or changed functions should target cyclomatic complexity of 5 or less and must not exceed 10. If logic wants to exceed that limit, split it into named predicates, cohesive helper functions, explicit state machines, or strategy objects. Do not use extraction to hide tangled control flow; the result must be easier to read and test.
 
-4. **Module sizes must stay focused.**
+4. **CRAP scores must stay very low.**
+   CRAP score should be below 5 for new or changed functions and must not exceed 10. Treat any function above the target as a design or test-strength smell: either reduce cyclomatic complexity, add behavior-proving tests, or both. Do not accept poorly tested complexity just because package-level coverage remains high.
+
+5. **Module sizes must stay focused.**
    Production source modules should stay under 300 non-comment lines, and most should be smaller than 200. Test modules should stay under 500 non-comment lines unless they are mostly data tables or fixtures. A large module is acceptable only when it remains highly cohesive and is easier to understand together than apart. Do not add new responsibilities to an already-large module; split policy, adapters, validation, rendering, orchestration, and helpers into clear boundaries.
 
-5. **Mutation testing should validate critical logic.**
+6. **Mutation testing should validate critical logic.**
    Critical business rules, state transitions, policy checks, parsers, and persistence decisions should achieve at least an 80% mutation score, with 90% expected for the highest-risk modules. Surviving mutations in changed critical code must either be killed with stronger tests or documented as equivalent mutations. When mutation tooling is not available, write tests that explicitly catch likely mutations such as inverted predicates, skipped guards, changed boundaries, removed error paths, and incorrect default cases.
+
+### Quality automation
+
+Run `pnpm quality` before handing off code. The Husky pre-commit hook runs this hygiene gate so commits stay easy to make while still meeting lint, coverage, dependency, CRAP, and structure standards. The Husky pre-push hook runs `pnpm quality:ci`, including mutation testing, so code cannot be pushed until the full quality gate passes. Repo-local Codex and Claude hooks run `pnpm quality:fast` after Edit/Write tool use and `pnpm quality:ci` at Stop through `pnpm quality:turn`, so agent turns should end only after the full toolchain passes. Do not bypass these checks unless the user explicitly asks for a partial or investigative change.
+
+Codex and Claude Stop hooks are session-gated. Edit/Write hooks create a marker under `.git/stoneforge-quality-hooks/sessions/`, and Stop hooks run the full gate only when that marker exists for the current session. Hook receipts are appended to `.git/stoneforge-quality-hooks/history.log`, which provides local evidence of marked, skipped, passed, and failed hook runs without dirtying the worktree.
 
 ### Decision rule
 

@@ -274,6 +274,18 @@ describe("WorkspaceSetupService", () => {
       },
       operator,
     );
+    service.updateRuntimeHealthStatus(
+      workspace.id,
+      runtime.id,
+      "unhealthy",
+      scheduler,
+    );
+    service.updateRuntimeHealthStatus(
+      workspace.id,
+      runtime.id,
+      "healthy",
+      scheduler,
+    );
 
     service.connectGitHubRepository(
       workspace.id,
@@ -317,6 +329,7 @@ describe("WorkspaceSetupService", () => {
       "workspace.github_repository_connected",
       "workspace.policy_preset_selected",
       "workspace.runtime_registered",
+      "workspace.runtime_health_updated",
       "workspace.agent_registered",
       "workspace.role_definition_registered",
       "workspace.validated",
@@ -325,5 +338,13 @@ describe("WorkspaceSetupService", () => {
     for (const action of expectedActions) {
       expect(actions.has(action)).toBe(true);
     }
+
+    expect(service.listAuditEventsForWorkspace(workspace.id)).toContainEqual(
+      expect.objectContaining({
+        action: "workspace.runtime_health_updated",
+        outcome: "failure",
+        reason: "Runtime health check failed.",
+      }),
+    );
   });
 });

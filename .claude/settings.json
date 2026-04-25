@@ -1,0 +1,29 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/run-quality-fast.mjs\"",
+            "timeout": 120,
+            "statusMessage": "Running fast quality checks"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/run-quality-turn.mjs\"",
+            "timeout": 600,
+            "statusMessage": "Running full quality gate"
+          }
+        ]
+      }
+    ]
+  }
+}

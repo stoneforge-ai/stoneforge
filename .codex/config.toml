@@ -1,0 +1,19 @@
+[features]
+codex_hooks = true
+
+[[hooks.PostToolUse]]
+matcher = "Edit|Write"
+
+[[hooks.PostToolUse.hooks]]
+type = "command"
+command = 'node "$(git rev-parse --show-toplevel)/.codex/hooks/run-quality-fast.mjs"'
+timeout = 120
+statusMessage = "Running fast quality checks"
+
+[[hooks.Stop]]
+
+[[hooks.Stop.hooks]]
+type = "command"
+command = 'node "$(git rev-parse --show-toplevel)/.codex/hooks/run-quality-turn.mjs"'
+timeout = 600
+statusMessage = "Running full quality gate"
