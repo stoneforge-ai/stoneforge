@@ -1,0 +1,54 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: stoneforge
+      POSTGRES_PASSWORD: stoneforge
+      POSTGRES_USER: stoneforge
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stoneforge -d stoneforge"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    ports:
+      - "5432:5432"
+    volumes:
+      - stoneforge-postgres-data:/var/lib/postgresql/data
+
+  control-plane:
+    image: node:22-bookworm
+    profiles: ["app"]
+    working_dir: /workspace
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      STONEFORGE_CONTROL_PLANE_POSTGRES_URL: postgres://stoneforge:stoneforge@postgres:5432/stoneforge
+    command:
+      - sh
+      - -lc
+      - corepack enable && pnpm install --frozen-lockfile && pnpm --dir apps/control-plane start -- tracer-bullet --store-backend postgres
+    volumes:
+      - .:/workspace
+      - stoneforge-pnpm-store:/root/.local/share/pnpm/store
+
+  control-plane-postgres-tests:
+    image: node:22-bookworm
+    profiles: ["test"]
+    working_dir: /workspace
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      STONEFORGE_CONTROL_PLANE_POSTGRES_TEST_URL: postgres://stoneforge:stoneforge@postgres:5432/stoneforge
+    command:
+      - sh
+      - -lc
+      - corepack enable && pnpm install --frozen-lockfile && pnpm --dir apps/control-plane test
+    volumes:
+      - .:/workspace
+      - stoneforge-pnpm-store:/root/.local/share/pnpm/store
+
+volumes:
+  stoneforge-postgres-data:
+  stoneforge-pnpm-store:

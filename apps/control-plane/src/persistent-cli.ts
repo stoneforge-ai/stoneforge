@@ -5,11 +5,14 @@ import {
   formatDirectTaskRunSummary,
 } from "./direct-task-summary.js";
 import {
-  FileControlPlaneStore,
   type ControlPlaneCommandStatus,
+  type ControlPlaneStore,
 } from "./control-plane-store.js";
+import { FileControlPlaneStore } from "./json-control-plane-store.js";
 import { PersistentControlPlane } from "./persistent-control-plane.js";
 import { runPersistentTracerBullet } from "./persistent-tracer-bullet.js";
+import { PostgresControlPlaneStore } from "./postgres-control-plane-store.js";
+import { SQLiteControlPlaneStore } from "./sqlite-control-plane-store.js";
 
 export interface CommandIo {
   write(text: string): void;
@@ -43,11 +46,11 @@ export async function runControlPlaneCommand(
   argv: readonly string[],
   io: CommandIo,
 ): Promise<number> {
-  const parsed = parseArgs(argv);
-  const store = new FileControlPlaneStore(parsed.storePath);
-  const controlPlane = new PersistentControlPlane(store);
-
   try {
+    const parsed = parseArgs(argv);
+    const store = createControlPlaneStore(parsed.store);
+    const controlPlane = new PersistentControlPlane(store);
+
     if (parsed.command === "tracer-bullet") {
       const summary = await runPersistentTracerBullet(store);
       expectDirectTaskRunComplete(summary);
@@ -89,21 +92,136 @@ function runCommand(
 
 function parseArgs(argv: readonly string[]): {
   command: string;
-  storePath: string;
+  store: ControlPlaneStoreConfig;
   json: boolean;
 } {
-  const storeIndex = argv.indexOf("--store");
-  const explicitStorePath = storeIndex >= 0 ? argv[storeIndex + 1] : undefined;
+  const valueFlags = [
+    "--store",
+    "--store-backend",
+    "--sqlite-path",
+    "--postgres-url",
+    "--json-store",
+  ];
   const command = argv.find((arg, index) => {
-    return !arg.startsWith("--") && index !== storeIndex + 1;
+    return !arg.startsWith("--") && !isOptionValue(argv, index, valueFlags);
   });
 
   return {
     command: command ?? "tracer-bullet",
-    storePath:
-      explicitStorePath ?? join(process.cwd(), ".stoneforge", "control-plane.json"),
+    store: parseStoreConfig(argv),
     json: argv.includes("--json"),
   };
+}
+
+type StoreBackend = "json" | "postgres" | "sqlite";
+
+interface ControlPlaneStoreConfig {
+  backend: StoreBackend;
+  jsonPath?: string;
+  postgresUrl?: string;
+  sqlitePath?: string;
+}
+
+function parseStoreConfig(argv: readonly string[]): ControlPlaneStoreConfig {
+  const legacyStorePath = optionValue(argv, "--store");
+  const backend = storeBackend(
+    optionValue(argv, "--store-backend") ??
+      process.env.STONEFORGE_CONTROL_PLANE_STORE ??
+      legacyBackend(legacyStorePath),
+  );
+
+  if (backend === "json") {
+    return { backend, jsonPath: jsonPath(argv, legacyStorePath) };
+  }
+
+  if (backend === "postgres") {
+    return {
+      backend,
+      postgresUrl:
+        optionValue(argv, "--postgres-url") ??
+        process.env.STONEFORGE_CONTROL_PLANE_POSTGRES_URL,
+    };
+  }
+
+  return {
+    backend,
+    sqlitePath:
+      optionValue(argv, "--sqlite-path") ??
+      process.env.STONEFORGE_CONTROL_PLANE_SQLITE_PATH ??
+      join(process.cwd(), ".stoneforge", "control-plane.sqlite"),
+  };
+}
+
+function createControlPlaneStore(config: ControlPlaneStoreConfig): ControlPlaneStore {
+  if (config.backend === "json") {
+    return new FileControlPlaneStore(
+      config.jsonPath ?? join(process.cwd(), ".stoneforge", "control-plane.json"),
+    );
+  }
+
+  if (config.backend === "postgres") {
+    return new PostgresControlPlaneStore(config.postgresUrl);
+  }
+
+  return new SQLiteControlPlaneStore(
+    config.sqlitePath ?? join(process.cwd(), ".stoneforge", "control-plane.sqlite"),
+  );
+}
+
+function legacyBackend(legacyStorePath: string | undefined): StoreBackend {
+  if (legacyStorePath === undefined) {
+    return "sqlite";
+  }
+
+  return "json";
+}
+
+function jsonPath(
+  argv: readonly string[],
+  legacyStorePath: string | undefined,
+): string {
+  return (
+    optionValue(argv, "--json-store") ??
+    legacyStorePath ??
+    process.env.STONEFORGE_CONTROL_PLANE_JSON_PATH ??
+    join(process.cwd(), ".stoneforge", "control-plane.json")
+  );
+}
+
+function storeBackend(value: string): StoreBackend {
+  if (value === "json" || value === "postgres" || value === "sqlite") {
+    return value;
+  }
+
+  throw new Error(
+    `Unknown control-plane store backend ${value}. Use sqlite, postgres, or json.`,
+  );
+}
+
+function optionValue(argv: readonly string[], option: string): string | undefined {
+  const index = argv.indexOf(option);
+
+  if (index < 0) {
+    return undefined;
+  }
+
+  const value = argv[index + 1];
+
+  if (value === undefined || value.startsWith("--")) {
+    throw new Error(`Missing value for ${option}.`);
+  }
+
+  return value;
+}
+
+function isOptionValue(
+  argv: readonly string[],
+  index: number,
+  valueFlags: readonly string[],
+): boolean {
+  const previous = argv[index - 1];
+
+  return previous !== undefined && valueFlags.includes(previous);
 }
 
 function writeStatus(

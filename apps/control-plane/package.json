@@ -12,6 +12,7 @@
     "lint": "pnpm run typecheck",
     "start": "pnpm --workspace-root turbo run build --filter=@stoneforge/control-plane... && node dist/cli.js",
     "test": "vitest run",
+    "test:postgres": "STONEFORGE_CONTROL_PLANE_POSTGRES_TEST_URL=${STONEFORGE_CONTROL_PLANE_POSTGRES_TEST_URL:-postgres://stoneforge:stoneforge@localhost:5432/stoneforge} vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "clean": "rm -rf dist coverage"
   },
@@ -19,9 +20,13 @@
     "@stoneforge/core": "workspace:*",
     "@stoneforge/execution": "workspace:*",
     "@stoneforge/merge-request": "workspace:*",
-    "@stoneforge/workspace": "workspace:*"
+    "@stoneforge/workspace": "workspace:*",
+    "better-sqlite3": "^11.10.0",
+    "pg": "^8.20.0"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/pg": "^8.20.0",
     "@vitest/coverage-v8": "^4.0.18",
     "vitest": "^4.0.18"
   }

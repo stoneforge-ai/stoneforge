@@ -40,6 +40,18 @@ Intentionally not specified yet:
 - exact host transport protocol
 - exact provider SDK usage
 
+## Control-Plane Persistence Boundary
+
+The control-plane persistence tracer bullet is SQL-backed for active V2 work:
+
+- SQLite is the default local development store
+- PostgreSQL is the deployment-oriented store for cloud and self-hosted control planes
+- the previous JSON file store remains a dev/test fallback only
+
+Persistence stays an app/infrastructure concern. Domain packages own their snapshot export and restore shapes, and the control-plane store persists those cohesive snapshots as JSON payloads while keeping only useful operational metadata, such as current Org and Workspace identifiers, relational. Domain packages must not depend on SQL drivers, filesystem APIs, process environment, CLI parsing, or app framework details.
+
+SQL stores initialize themselves idempotently and record a schema migration marker. The first schema intentionally avoids table normalization beyond the metadata required by the current tracer bullet because no query or partial-update need has been proven yet.
+
 ## Component Boundaries
 
 | Component | Owns | Does Not Own |

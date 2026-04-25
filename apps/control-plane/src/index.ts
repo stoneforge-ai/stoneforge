@@ -15,12 +15,14 @@ export {
 } from "./fake-agent-adapter.js";
 export { runDirectTaskScenario } from "./run-direct-task-scenario.js";
 export {
-  FileControlPlaneStore,
   createEmptyControlPlaneSnapshot,
   type ControlPlaneCommandStatus,
   type ControlPlaneSnapshot,
   type ControlPlaneStore,
 } from "./control-plane-store.js";
+export { FileControlPlaneStore } from "./json-control-plane-store.js";
 export { PersistentControlPlane } from "./persistent-control-plane.js";
+export { PostgresControlPlaneStore } from "./postgres-control-plane-store.js";
 export { runControlPlaneCommand } from "./persistent-cli.js";
 export { runPersistentTracerBullet } from "./persistent-tracer-bullet.js";
+export { SQLiteControlPlaneStore } from "./sqlite-control-plane-store.js";

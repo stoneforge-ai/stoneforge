@@ -1,6 +1,3 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
-
 import type {
   AgentId,
   CIRunId,
@@ -19,7 +16,7 @@ import type {
 import type { MergeRequestSnapshot } from "@stoneforge/merge-request";
 import type { WorkspaceSetupSnapshot } from "@stoneforge/workspace";
 
-const snapshotVersion = 1;
+export const controlPlaneSnapshotVersion = 1;
 
 export interface CurrentControlPlaneIds {
   orgId?: OrgId;
@@ -37,7 +34,7 @@ export interface CurrentControlPlaneIds {
 }
 
 export interface ControlPlaneSnapshot {
-  version: typeof snapshotVersion;
+  version: typeof controlPlaneSnapshotVersion;
   workspace: WorkspaceSetupSnapshot;
   execution: ExecutionSnapshot;
   mergeRequests: MergeRequestSnapshot;
@@ -56,37 +53,11 @@ export interface ControlPlaneCommandStatus {
   state?: string;
 }
 
-export class FileControlPlaneStore implements ControlPlaneStore {
-  constructor(private readonly filePath: string) {}
-
-  async load(): Promise<ControlPlaneSnapshot> {
-    try {
-      const contents = await readFile(this.filePath, "utf8");
-      return JSON.parse(contents) as ControlPlaneSnapshot;
-    } catch (error) {
-      if (error instanceof Error && "code" in error && error.code === "ENOENT") {
-        return createEmptyControlPlaneSnapshot();
-      }
-
-      throw new Error(
-        `Could not read control-plane store at ${this.filePath}. Check that the file contains valid JSON.`,
-      );
-    }
-  }
-
-  async save(snapshot: ControlPlaneSnapshot): Promise<void> {
-    await mkdir(dirname(this.filePath), { recursive: true });
-    await writeFile(this.filePath, `${JSON.stringify(snapshot, null, 2)}\n`);
-  }
-
-  async reset(): Promise<void> {
-    await rm(this.filePath, { force: true });
-  }
-}
+export class ControlPlanePersistenceError extends Error {}
 
 export function createEmptyControlPlaneSnapshot(): ControlPlaneSnapshot {
   return {
-    version: snapshotVersion,
+    version: controlPlaneSnapshotVersion,
     workspace: {
       orgs: [],
       workspaces: [],
@@ -107,4 +78,91 @@ export function createEmptyControlPlaneSnapshot(): ControlPlaneSnapshot {
     },
     current: {},
   };
+}
+
+export function parseControlPlaneSnapshot(
+  contents: string,
+  source: string,
+): ControlPlaneSnapshot {
+  try {
+    return validateControlPlaneSnapshot(
+      JSON.parse(contents) as Partial<ControlPlaneSnapshot>,
+      source,
+    );
+  } catch (error) {
+    if (error instanceof ControlPlanePersistenceError) {
+      throw error;
+    }
+
+    throw new ControlPlanePersistenceError(
+      `Could not read persisted control-plane snapshot from ${source}. The snapshot is corrupt or incompatible.`,
+    );
+  }
+}
+
+export function validateControlPlaneSnapshot(
+  snapshot: Partial<ControlPlaneSnapshot>,
+  source: string,
+): ControlPlaneSnapshot {
+  if (snapshot.version !== controlPlaneSnapshotVersion) {
+    throw new ControlPlanePersistenceError(
+      `Persisted control-plane snapshot in ${source} uses version ${snapshotVersionText(
+        snapshot,
+      )}; this build supports version ${controlPlaneSnapshotVersion}. Reset the store or run a compatible migration.`,
+    );
+  }
+
+  if (!hasRequiredCollections(snapshot)) {
+    throw new ControlPlanePersistenceError(
+      `Persisted control-plane snapshot in ${source} is missing required domain snapshot collections. Reset the store or restore a compatible snapshot.`,
+    );
+  }
+
+  return snapshot as ControlPlaneSnapshot;
+}
+
+function hasRequiredCollections(snapshot: Partial<ControlPlaneSnapshot>): boolean {
+  return (
+    hasWorkspaceCollections(snapshot) &&
+    hasExecutionCollections(snapshot) &&
+    hasMergeRequestCollections(snapshot) &&
+    snapshot.current !== undefined
+  );
+}
+
+function hasWorkspaceCollections(snapshot: Partial<ControlPlaneSnapshot>): boolean {
+  return [
+    snapshot.workspace?.orgs,
+    snapshot.workspace?.workspaces,
+    snapshot.workspace?.auditEvents,
+  ].every(Array.isArray);
+}
+
+function hasExecutionCollections(snapshot: Partial<ControlPlaneSnapshot>): boolean {
+  return [
+    snapshot.execution?.workspaces,
+    snapshot.execution?.tasks,
+    snapshot.execution?.dispatchIntents,
+    snapshot.execution?.assignments,
+    snapshot.execution?.sessions,
+    snapshot.execution?.leases,
+    snapshot.execution?.mergeRequestContexts,
+  ].every(Array.isArray);
+}
+
+function hasMergeRequestCollections(
+  snapshot: Partial<ControlPlaneSnapshot>,
+): boolean {
+  return [
+    snapshot.mergeRequests?.mergeRequests,
+    snapshot.mergeRequests?.ciRuns,
+  ].every(Array.isArray);
+}
+
+function snapshotVersionText(snapshot: Partial<ControlPlaneSnapshot>): string {
+  if (snapshot.version === undefined) {
+    return "missing";
+  }
+
+  return String(snapshot.version);
 }
