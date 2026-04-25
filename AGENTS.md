@@ -20,6 +20,7 @@ Read these first for V2 work:
 - `docs/v2/runtime-architecture.md` — runtime and dispatch
 - `docs/v2/policy-auth-audit.md` — policy, auth, and audit
 - `docs/v2/integrations-and-first-slice.md` — first build slice
+- `docs/v2/typescript-type-driven-apis.md` — TypeScript interface typing principles
 
 For historical behavior, old UX patterns, or prior implementations, use `docs/v2/v1-reference.md`. Do not edit `reference/` unless the user explicitly asks for legacy or prototype work.
 
@@ -33,6 +34,21 @@ Use V2 docs as planning contracts: they should explain product intent, domain la
 - Implement type guards instead of spreading unchecked casts.
 - Use casts only at trust boundaries.
 - NEVER use `any` or `unknown` except if approved by the user.
+
+### Type-Driven API Design
+
+For TypeScript interfaces, read `docs/v2/typescript-type-driven-apis.md` before designing exported APIs, builders, registries, clients, or config surfaces.
+
+- Make runtime structure visible to the type system without requiring duplicate user-written types.
+- Prefer inference from user-provided functions, schemas, literals, and config objects over mandatory explicit generics.
+- Preserve literal intent with `const` generics, `as const`, and `satisfies`; do not widen to `string`, `number`, or `Record<...>` too early.
+- Use generics as type memory: capture user intent at the boundary and reflect it back at later callsites.
+- Shape runtime APIs to help inference; structured objects usually carry more type information than stringly registrations.
+- Make illegal states unrepresentable with discriminated unions, constrained options, and mode-specific types.
+- Design for callsite autocomplete, precise return types, and understandable errors, not only internal correctness.
+- Hide advanced generic machinery behind named public helper types and simple exported interfaces.
+- Keep the common path inferred and ergonomic; reserve explicit generics for escape hatches.
+- Keep `any` and `unknown` out of public APIs; if an approved trust boundary needs `unknown`, narrow it immediately.
 
 ### V2 Design Discipline
 
