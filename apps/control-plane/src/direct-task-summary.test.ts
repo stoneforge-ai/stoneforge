@@ -20,11 +20,11 @@ import { describe, expect, it } from "vitest";
 
 import type {
   DirectTaskRunSummaryInput,
-} from "./direct-task-summary.js";
+} from "./index.js";
 import {
   buildSummary,
   expectState,
-} from "./direct-task-summary.js";
+} from "./index.js";
 
 describe("direct-task scenario summary assertions", () => {
   it("throws a clear error when a required state is not reached", () => {

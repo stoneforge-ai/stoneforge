@@ -20,7 +20,7 @@ import {
 } from "@stoneforge/execution";
 import { describe, expect, it } from "vitest";
 
-import { createFakeAgentFixture } from "./fake-agent-adapter.js";
+import { createFakeAgentFixture } from "./index.js";
 
 describe("fake agent adapter", () => {
   it("records starts, resumes, and cancellations deterministically", async () => {

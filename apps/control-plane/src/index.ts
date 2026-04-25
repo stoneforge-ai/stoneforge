@@ -1,6 +1,16 @@
 export {
+  buildSummary,
+  expectDirectTaskRunComplete,
+  expectState,
   formatDirectTaskRunSummary,
-  runDirectTaskScenario,
   type DirectTaskRunResult,
+  type DirectTaskRunSummaryInput,
   type DirectTaskRunSummary,
-} from "./run-direct-task-scenario.js";
+} from "./direct-task-summary.js";
+export {
+  createFakeAgentFixture,
+  type FakeAgentFixture,
+  type FakeAgentSessionResume,
+  type FakeAgentSessionStart,
+} from "./fake-agent-adapter.js";
+export { runDirectTaskScenario } from "./run-direct-task-scenario.js";
