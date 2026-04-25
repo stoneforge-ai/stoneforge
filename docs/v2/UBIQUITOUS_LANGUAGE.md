@@ -52,7 +52,7 @@ This glossary captures the canonical domain language for Stoneforge V2 work. It 
 | **Repair Context** | Additional task-local context attached after a Repair Trigger to steer the next repair assignment. | Follow-Up Context, comment, failure text |
 | **Follow-Up Context** | Additional context used to create and steer a Follow-Up Task from prior terminal work that needs additional action. | Reopen context, repair context, bug report |
 | **Follow-Up Task** | A new task created from prior terminal work that needs additional action and linked to its source task. | Reopened task, continuation task |
-| **Follow-Up Source** | The first-class reference from a Follow-Up Task to the prior terminal source Task and, when relevant, source MergeRequest. | Document link, prose reference |
+| **Follow-Up Source** | The first-class reference from a Follow-Up Task to the prior terminal source Task, explicit source outcome, and, when relevant, source MergeRequest. | Document link, prose reference |
 
 ## Execution and capacity
 
@@ -64,16 +64,24 @@ This glossary captures the canonical domain language for Stoneforge V2 work. It 
 | **Runtime** | A reusable execution environment contract combining an execution location and execution mode. | Environment, runner, sandbox |
 | **Execution Mode** | The way a runtime executes work, such as local worktree, container, sandbox, or VM. | Runtime type, backend |
 | **Agent** | A dispatchable executable worker capability that binds a harness and model to one runtime with a concurrency limit. | Bot, role, session |
+| **Director Agent** | An Agent acting under a director-category RoleDefinition to clarify intent, decompose work, shape plans, or supervise execution. | Director role, planning bot |
+| **Worker Agent** | An Agent acting under a worker-category RoleDefinition to implement, repair, or otherwise execute task work. | Worker role, coding bot |
+| **Review Agent** | An Agent acting under a reviewer-category RoleDefinition to evaluate MergeRequests, produce Review Outcomes, or perform merge evaluation work. | Reviewer role, merge evaluator |
 | **RoleDefinition** | The concrete prompt, tools, skills, hooks, category, and behavioral contract selected for a session. | Role, prompt, agent type |
 | **Role Category** | A required controlled classification for a RoleDefinition, currently director, worker, reviewer, or custom. | Role tag, agent type |
-| **Reviewer Role Category** | The Role Category for RoleDefinitions that evaluate MergeRequests, including review and merge evaluation work. | Merge evaluator, review agent |
+| **Director Role Category** | The Role Category for RoleDefinitions intended for Director Agent work. | Director Agent type, planning tag |
+| **Worker Role Category** | The Role Category for RoleDefinitions intended for Worker Agent work. | Worker Agent type, coding tag |
+| **Reviewer Role Category** | The Role Category for RoleDefinitions intended for Review Agent work. | Review Agent type, merge evaluator category |
+| **Custom Role Category** | The Role Category for RoleDefinitions that do not fit director, worker, or reviewer categories; configuration-only until a product workflow needs a named actor phrase. | Custom Agent, automation actor |
 | **Default RoleDefinition** | The concrete RoleDefinition an Automation selects when no task-specific or one-off override is supplied. | Default role, automation role |
 | **Role Override** | A task-specific or one-off replacement for an Automation's Default RoleDefinition. | Role tag, role preference |
 | **Tag** | A short hard constraint label used to narrow eligible runtimes, agents, role definitions, tasks, or automations. | Label, preference, score |
 | **Dispatch Intent** | A durable request for the scheduler to evaluate a workflow action such as implement, review, merge evaluation, or escalation. | Queue item, job request |
+| **Qualified Dispatch Intent Phrase** | A descriptive phrase such as review Dispatch Intent, repair Dispatch Intent, merge-evaluation Dispatch Intent, or escalation Dispatch Intent used to clarify requested action without creating a separate canonical intent object. | Review Intent, Merge Evaluation Intent, Repair Intent |
 | **Scheduler** | The durable internal system that evaluates readiness, queues work, leases capacity, places execution, retries, resumes, escalates, and propagates cancellation. | Daemon, automation, runner |
-| **Lease** | A time-bound reservation of agent, runtime, and host or provider capacity for one dispatch attempt. | Lock, assignment, slot |
+| **Lease** | A scheduler-owned, time-bound reservation of agent, runtime, and host or provider capacity for one dispatch attempt. | Lock, assignment, slot |
 | **Assignment** | The durable dispatch envelope for one implementation, repair, review, or merge-evaluation job. | Run, task execution, session |
+| **Qualified Assignment Phrase** | A descriptive phrase such as implementation Assignment, repair Assignment, review Assignment, or merge-evaluation Assignment used to clarify workflow purpose without creating a separate canonical object. | Assignment subtype, job type object |
 | **Session** | The concrete provider execution thread or process under an assignment. | Assignment, run, agent |
 | **Adapter** | A provider-specific boundary that launches, resumes, cancels, observes, and reports execution facts without owning planning or policy decisions. | Integration, driver |
 | **Concurrency Limit** | The maximum number of live assignments an agent may serve at one time. | Capacity, rate limit |
@@ -84,15 +92,17 @@ This glossary captures the canonical domain language for Stoneforge V2 work. It 
 | --- | --- | --- |
 | **MergeRequest** | The provider-neutral internal artifact for review and merge flow. | PR, pull request, branch |
 | **PR** | The GitHub-facing and first-slice user-facing representation of a MergeRequest. | MergeRequest in internal model |
+| **Merge Topology** | The policy-selected branch and MergeRequest shape used to integrate Task and Plan work. | Branch strategy, PR mode |
 | **Task Branch** | The source branch for work produced by a code-changing task. | Feature branch, worker branch |
-| **Plan Branch** | The integration branch for code-changing tasks that belong to a plan. | Staging branch, aggregate branch |
+| **Plan Branch** | An optional integration branch used when the Merge Topology aggregates task work at the plan level. | Staging branch, aggregate branch |
 | **Workspace Target Branch** | The branch configured as the merge target for completed workspace work. | Main, default branch |
-| **Unplanned Task Flow** | The topology where a task branch opens a PR directly to the workspace target branch. | Direct PR flow |
-| **Planned Task Flow** | The topology where task branches merge into a plan branch and the plan branch opens a plan PR to the workspace target branch. | Aggregation flow |
+| **Staging Branch** | A future first-class branch concept for requiring task and plan work to merge into a staging integration branch before policy-gated promotion to the Workspace Target Branch. In the current MVP, teams can approximate this by configuring the staging branch as the Workspace Target Branch. | Parent branch, plan branch |
+| **Unplanned Task Flow** | The Merge Topology where a task branch opens a PR directly to the Workspace Target Branch. | Direct PR flow |
+| **Planned Task Flow** | A Merge Topology where planned task branches either merge directly to the Workspace Target Branch or aggregate through an optional Plan Branch before merging onward. | Aggregation flow |
 | **CIRun** | An execution record for observed CI state associated with a MergeRequest. | Build, check run, status |
-| **Review Outcome** | The recorded result of human or reviewer-role evaluation, usually approval or a Change Request. | Review comment, PR state |
+| **Review Outcome** | The recorded result of Human Reviewer or Review Agent evaluation, usually approval or a Change Request. | Review comment, PR state |
 | **Repair Trigger** | Any review, CI, mergeability, policy, or branch-health condition that requires task repair before completion. | Failure, rejection, reopen |
-| **Change Request** | A repair trigger produced by a Human Reviewer or reviewer RoleDefinition. | Rejection, failure |
+| **Change Request** | A repair trigger produced by a Human Reviewer or Review Agent. | Rejection, failure |
 | **Gate Failure** | A repair trigger produced by CI, mergeability, branch drift, or policy evaluation. | Change request, broken check |
 | **Human Approval Gate** | A policy requirement that a qualified human approve before merge or another sensitive action. | Manual review, GitHub approval |
 | **Stoneforge Policy Check** | The Stoneforge-owned GitHub status or check that represents the canonical policy decision for merge readiness. | CI check, approval check |
@@ -170,20 +180,26 @@ These state names are semantic product contracts, not required storage enum stri
 - A **Plan** must be **active** before its **Tasks** may become dispatchable.
 - A **Document** may be referenced by many **Tasks**, **Plans**, **Assignments**, **MergeRequests**, or **Automations**.
 - **Task-Local Continuity** belongs on the **Task** and may reference the relevant **Assignment** and checkpoint event.
-- An **Automation** creates **Dispatch Intent** or other workflow intent; it does not directly start **Sessions**.
+- An **Automation** creates **Dispatch Intent** or outbound code-first webhook calls; it does not directly start **Sessions**.
+- A **Dispatch Intent** may request implementation, review, repair, merge evaluation, or escalation through its action/type and target; those are not separate canonical intent objects unless their ownership, lifecycle, or scheduler behavior diverge later.
 - The **Scheduler** resolves exactly one **RoleDefinition**, one **Agent**, and one **Runtime** before execution starts.
 - A **RoleDefinition** has exactly one **Role Category**; **Tags** further constrain capability inside that category.
+- **Director Agent**, **Worker Agent**, and **Review Agent** are product actor phrases derived from the resolved **Agent** and **RoleDefinition** category; they are not separate persisted actor types.
+- **Custom Role Category** is configuration-only; do not introduce a **Custom Agent** product actor phrase until a concrete workflow requires it.
 - An **Automation** has one **Default RoleDefinition**, unless a task-specific or one-off **Role Override** supersedes it.
 - A **Runtime** belongs to one **Host** or one managed provider path; a **Runtime** may be reused by many **Agents**.
 - An **Agent** is bound to exactly one **Runtime** and may execute many **Assignments** over time.
+- A **Lease** reserves execution capacity before or during launch; an **Assignment** records the durable execution envelope after dispatch starts.
+- A **Lease** may expire or be released without becoming an **Assignment**; an **Assignment** may reference the **Lease** that reserved its capacity.
 - An **Assignment** belongs to exactly one **Task** or exactly one **MergeRequest**.
+- **Qualified Assignment Phrases** describe why an **Assignment** exists; they are not separate persisted types unless their lifecycle or invariants diverge later.
 - An **Assignment** contains one or more **Sessions**; a **Session** belongs to exactly one **Assignment**.
 - A **Session** may emit checkpoint events, but **Checkpoint** content belongs to **Task-Local Continuity** rather than the **Session**.
 - A recoverable crash or context exhaustion creates a new **Session** under the same **Assignment**.
 - A **Repair Trigger** attaches **Repair Context** and creates a new task-owned **Assignment** on the same **Task** before completion.
 - **Follow-Up Context** creates a **Follow-Up Task** when prior terminal work needs additional action.
 - A **Follow-Up Task** has exactly one **Follow-Up Source**.
-- A **Follow-Up Source** references exactly one prior terminal source **Task** and may reference one source **MergeRequest**.
+- A **Follow-Up Source** references exactly one prior terminal source **Task**, records one source outcome such as `completed`, `canceled`, or `closed_unmerged`, and may reference one source **MergeRequest**.
 - A **MergeRequest** belongs to exactly one **Task** or exactly one **Plan**.
 - A **MergeRequest** may contain many **CIRuns** and many review outcomes over time.
 - **CIRuns** are observed from GitHub checks and statuses; Stoneforge does not author native CI in the first slice.
@@ -210,16 +226,22 @@ These state names are semantic product contracts, not required storage enum stri
 
 ## Flagged ambiguities
 
-- "Agent" can mean **Agent**, **Host Agent**, a role category, or **Session**; use **Agent** only for the dispatchable harness/model/runtime capability and use **RoleDefinition**, **Role Category**, or **Session** for the other concepts.
+- "Agent" can mean **Agent**, **Host Agent**, **Director Agent**, **Worker Agent**, **Review Agent**, a role category, or **Session**; use **Agent** only for the dispatchable harness/model/runtime capability, use **Director Agent**, **Worker Agent**, or **Review Agent** for product actor phrases, use **RoleDefinition** or **Role Category** for configuration, and use **Session** for concrete provider execution.
+- **Director Agent**, **Worker Agent**, and **Review Agent** should not become duplicated persisted types; persist **Agent**, **RoleDefinition**, **Role Category**, **Assignment**, and **Session**, then derive the product actor phrase from that combination.
+- "Custom Agent" is not canonical language; use **Custom Role Category** for configuration and wait for a real product workflow before naming a custom actor phrase.
 - "Run" is too overloaded; use **Assignment** for the durable dispatch envelope, **Session** for the concrete provider execution, and **CIRun** for observed CI state.
+- "Implementation Assignment", "repair Assignment", "review Assignment", and "merge-evaluation Assignment" are acceptable **Qualified Assignment Phrases** in prose, but **Assignment** remains the canonical object.
+- "Lease" must not be collapsed into **Assignment** capacity fields; use **Lease** for scheduler reservation and **Assignment** for durable execution history.
+- "Review Intent", "Repair Intent", "Merge Evaluation Intent", and "Escalation Intent" are not canonical object names; use **Dispatch Intent** with action/type qualifiers or **Qualified Dispatch Intent Phrases** in prose.
 - "PR" is acceptable in GitHub-facing UI and prose, but internal model discussions and code should use **MergeRequest** unless they are inside a GitHub adapter boundary.
-- "Automation" and "Scheduler" must stay separate; **Automation** creates workflow intent, while the **Scheduler** owns readiness evaluation, queueing, leasing, placement, retry, resume, and escalation.
+- "Parent branch" should not be used as canonical language; use **Workspace Target Branch** for the configured workspace merge target and **Merge Topology** for intermediate branch shapes.
+- "Automation" and "Scheduler" must stay separate; **Automation** creates **Dispatch Intent** or outbound code-first webhook calls, while the **Scheduler** owns readiness evaluation, queueing, leasing, placement, retry, resume, and escalation.
 - "Runtime", "Host", and "Agent" must stay separate; a **Host** supplies capacity, a **Runtime** defines the execution environment contract, and an **Agent** binds a harness/model pair to a runtime.
 - "Role" should not replace **RoleDefinition** or **Role Category**; a **RoleDefinition** is the concrete prompt, tools, skills, hooks, category, and behavioral contract attached at dispatch time, while **Role Category** is only the required broad classification.
 - "Ready" must not be treated as a manual flag; **Readiness** is computed from dependencies, plan activation, policy, active execution, and evaluable capability constraints.
 - "Document" must not be used as the default place for task progress; reusable context belongs in **Documents**, while checkpoints, remaining work, and repair context belong in **Task-Local Continuity**.
 - "Reopen" should not describe task correction flows; use **Repair Trigger** and **Repair Context** before terminal states, and use **Follow-Up Context** when new work is created from prior terminal work.
-- "Reviewer" can mean a person or a RoleDefinition category; use **Human Reviewer** for people and **Reviewer Role Category** for role definitions.
+- "Reviewer" can mean a person, product actor, or configuration category; use **Human Reviewer** for people, **Review Agent** for the agent actor, and **Reviewer Role Category** for RoleDefinition classification.
 - "Review" and "approval" are distinct; **Review Outcome** evaluates work quality or correctness, while a **Human Approval Gate** satisfies policy.
 - "Changes requested" is broader than the noun **Change Request** in many workflow tools; use **Task `repair_required`** or **MergeRequest `repair_required`** for the state, **Repair Trigger** for the umbrella cause, **Change Request** for reviewer feedback, and **Gate Failure** for CI, mergeability, branch drift, or policy failures.
 - "Credentials" should be narrowed to **Secrets** and then to **Control-Plane Secrets** or **Workspace-Runtime Secrets** so boundary-specific handling stays explicit.

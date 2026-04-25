@@ -279,12 +279,14 @@ describe("TaskDispatchService edge cases", () => {
       acceptanceCriteria: ["Follow-up work completes."],
       followUpSource: {
         taskId: original.id,
+        sourceOutcome: "closed_unmerged",
         mergeRequestId: asMergeRequestId("merge_request_1"),
       },
     });
 
     expect(followUp.followUpSource).toEqual({
       taskId: original.id,
+      sourceOutcome: "closed_unmerged",
       mergeRequestId: asMergeRequestId("merge_request_1"),
     });
   });

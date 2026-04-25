@@ -109,7 +109,7 @@ This is the expected default workflow for the platform.
 
 ### Before work starts: the workspace defines execution capabilities
 
-Before a user asks a director agent to scope work, the workspace needs the execution capabilities that Stoneforge can dispatch against.
+Before a user asks a Director Agent to scope work, the workspace needs the execution capabilities that Stoneforge can dispatch against.
 
 The workspace should define:
 
@@ -126,7 +126,7 @@ Because those are separate concepts:
 - the same runtime can be reused across multiple agents
 - multiple runtimes can exist in one workspace at the same time
 - the same agent can be reused with different role definitions
-- director, worker, review, and specialized automation sessions can use the same underlying agent differently
+- Director Agent, Worker Agent, Review Agent, and specialized automation sessions can use the same underlying Agent differently
 - scheduler decisions can consider runtime capacity, agent concurrency, role requirements, policy, and tags independently
 
 Agents and role definitions should both support tags so tasks and automations can target a specific group of eligible agents or roles.
@@ -144,28 +144,28 @@ The user has an idea, request, or plan for a codebase. Examples:
 
 That intent may be rough and newly formed, or already fleshed out by a team and ready for implementation.
 
-### 2. A director agent clarifies the request
+### 2. A Director Agent clarifies the request
 
-The human explains the intent to a director agent.
+The human explains the intent to a Director Agent.
 
-The director should ask meaningful questions until the path forward is clear enough to execute responsibly.
+The Director Agent should ask meaningful questions until the path forward is clear enough to execute responsibly.
 
-The director's job is not to immediately start coding. Its first job is to create clarity.
+The Director Agent's job is not to immediately start coding. Its first job is to create clarity.
 
-### 3. The director decomposes the work
+### 3. The Director Agent decomposes the work
 
-Once the request is clear, the director creates one or more tasks.
+Once the request is clear, the Director Agent creates one or more tasks.
 
-The director may also:
+The Director Agent may also:
 
 - define acceptance criteria
 - create dependencies between tasks
 - identify which tasks can run in parallel
 - determine whether the work belongs inside a larger coordinated plan
 
-### 4. The director optionally creates a plan
+### 4. The Director Agent optionally creates a plan
 
-If there are multiple related tasks or dependencies that belong to a larger scope, the director creates a plan.
+If there are multiple related tasks or dependencies that belong to a larger scope, the Director Agent creates a plan.
 
 A plan is an execution-supervision grouping object, not a second task engine.
 
@@ -176,7 +176,7 @@ Plans exist so that Stoneforge can:
 - track grouped progress
 - optionally aggregate merge flow according to workspace policy
 
-### 5. The director activates the plan when the graph is ready
+### 5. The Director Agent activates the plan when the graph is ready
 
 Tasks can be created, linked, and dependency-shaped before they are eligible for dispatch.
 
@@ -214,7 +214,7 @@ Important terminology:
 
 We are intentionally preferring `scheduler` over `daemon` as the core internal concept. There may still be per-workspace orchestration processes, but the important internal responsibility is durable scheduling, not a vague daemon abstraction.
 
-### 7. Worker sessions execute with checkpointed continuity
+### 7. Worker Agent sessions execute with checkpointed continuity
 
 When a task is dispatched, Stoneforge creates an assignment for that work.
 
@@ -222,7 +222,7 @@ One or more agent sessions may work under that assignment.
 
 Sessions must be resumable.
 
-If a worker session:
+If a Worker Agent session:
 
 - crashes
 - restarts
@@ -250,13 +250,13 @@ When a code-changing task is completed, Stoneforge automatically creates a PR fo
 
 This PR is where CI and review usually begin.
 
-### 9. A review agent evaluates the PR
+### 9. A Review Agent evaluates the PR
 
-When a PR is created, Stoneforge can automatically assign a reviewing agent.
+When a PR is created, Stoneforge can automatically assign a Review Agent.
 
 This is typically driven by automation on PR creation.
 
-The reviewing agent may:
+The Review Agent may:
 
 - approve the PR
 - request changes
@@ -515,7 +515,7 @@ A role definition combines:
 - skill access, including Claude and Codex skills
 - session hooks, such as startup, shutdown, pre-tool-call, and post-tool-call hooks
 
-The same agent can be reused with different role definitions. For example, one agent may run as a director, worker, reviewer, frontend-specialist worker, or custom automation agent depending on which role definition is attached at dispatch.
+The same Agent can be reused with different role definitions. For example, one Agent may run as a Director Agent, Worker Agent, Review Agent, frontend-specialist Worker Agent, or custom automation agent depending on which role definition is attached at dispatch.
 
 Role definitions should support tags so tasks and automations can request specialized roles without hard-coding a specific agent.
 
@@ -718,10 +718,10 @@ Stoneforge should:
 - onboard a repo-scoped workspace cleanly
 - define workspace runtimes, agents, role definitions, and dispatch tags
 - connect customer-managed hosts and a first-class managed sandbox predictably
-- let a director decompose work into tasks and plans
+- let a Director Agent decompose work into tasks and plans
 - preserve dependencies and activation boundaries
 - dispatch and supervise real agent work by matching tasks to eligible roles, agents, runtimes, and capacity
-- support Claude Code and OpenAI Codex as first-class worker backends
+- support Claude Code and OpenAI Codex as first-class Worker Agent backends
 - checkpoint and resume sessions cleanly
 - correlate tasks, sessions, PRs, and CI into one coherent operator view
 - enforce policy on sensitive actions

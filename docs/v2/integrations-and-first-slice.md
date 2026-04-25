@@ -18,7 +18,7 @@ Frozen in this doc:
 
 - GitHub is the only repository and PR provider for the first slice
 - `MergeRequest` is the internal term and `PR` is the GitHub-facing term
-- planned code-changing tasks aggregate through a plan branch and plan PR by default
+- planned code-changing tasks follow the workspace Merge Topology, which may aggregate through a plan branch and plan PR or merge directly to the workspace target branch
 - unplanned code-changing tasks use direct task PRs to the workspace target branch
 - CI is observed from GitHub checks and statuses, not run natively by Stoneforge
 
@@ -89,7 +89,7 @@ Use this when:
 
 First-slice default:
 
-- if a code-changing task belongs to an active Plan, aggregate through the plan branch by default
+- if a code-changing task belongs to an active Plan, use the workspace Merge Topology to decide whether it aggregates through a plan branch or merges directly to the workspace target branch
 - if a code-changing task is unplanned, create a direct task PR to the workspace target branch
 - plan-level review may use the normal review path, but code repair still flows back into Tasks rather than turning the Plan into a coding surface
 
@@ -336,7 +336,7 @@ Dependencies:
 Acceptance criteria:
 
 - tasks inside an inactive Plan do not dispatch
-- active planned tasks merge into a plan branch by default
+- active planned tasks use the workspace Merge Topology, either merging into a plan branch or directly to the workspace target branch
 - the plan PR can observe CI and review state
 - plan-level repair triggers update or create Tasks rather than dispatching coding directly on the Plan
 - plan PR merge completes the Plan cleanly
@@ -419,11 +419,11 @@ Intent example only. This is not final implementation code.
 Workspace onboarded to GitHub
   -> task created
   -> task ready
-  -> scheduler dispatches worker RoleDefinition
+  -> scheduler dispatches Worker Agent
   -> Codex Session runs in Daytona
   -> task PR opens in GitHub
   -> CI passes
-  -> review agent approves
+  -> Review Agent approves
   -> Stoneforge human approval recorded
   -> stoneforge/policy check passes
   -> GitHub PR merges

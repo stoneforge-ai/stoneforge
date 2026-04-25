@@ -119,6 +119,7 @@ It should capture at least:
 ### Lease
 
 A lease is a temporary reservation of execution capacity.
+It is not the Assignment itself: the lease records scheduler capacity ownership, while the Assignment records the durable execution envelope created from a successful dispatch start.
 
 It should capture at least:
 
@@ -216,8 +217,9 @@ Concurrency rules for the first slice:
 
 - Agent concurrency is the primary execution-slot limit
 - Runtime and Host capacity may further constrain placement
-- one live Assignment consumes one Agent slot
-- resumed Sessions inside the same Assignment continue to consume the same assignment slot
+- one active Lease consumes one Agent slot
+- a live Assignment references the Lease that reserved its slot
+- resumed Sessions inside the same Assignment continue under the same assignment-level capacity reservation unless policy releases and reacquires capacity
 - multiple RoleDefinitions may share the same Agent over time, but only within the Agent's concurrency limit
 
 Behavior when concurrency is exhausted:

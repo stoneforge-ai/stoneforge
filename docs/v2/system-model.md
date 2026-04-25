@@ -134,7 +134,7 @@ Key associations:
 - may reference Documents
 - may accumulate many Assignments over time
 - may accumulate one or more MergeRequests across repair loops
-- may reference one prior terminal source Task and optionally one source MergeRequest when created as a Follow-Up Task
+- may reference one prior terminal source Task, source outcome, and optionally one source MergeRequest when created as a Follow-Up Task
 
 Frozen semantics:
 
@@ -161,7 +161,7 @@ Frozen semantics:
 
 - a Plan is an execution-supervision grouping object, not a second task engine
 - Tasks in a Plan are not dispatchable until the Plan is activated
-- in the first slice, planned code-changing Tasks aggregate through a plan branch and plan PR by default
+- in the first slice, planned code-changing Tasks follow the workspace Merge Topology, which may aggregate through a Plan Branch and plan PR or merge directly to the Workspace Target Branch
 - a Plan may own a plan-level MergeRequest, but implementation, repair, review, and merge-evaluation execution attach to Tasks or MergeRequests rather than directly to the Plan
 
 ### Document
@@ -196,7 +196,7 @@ Owned by:
 Key associations:
 
 - may listen to task, plan, MergeRequest, CIRun, schedule, or inbound webhook events
-- may create dispatch intent, review intent, merge-evaluation intent, escalation intent, or an outbound code-first webhook call
+- may create Dispatch Intent for implementation, review, repair, merge evaluation, or escalation, or may create an outbound code-first webhook call
 
 Frozen semantics:
 
