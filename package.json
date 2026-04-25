@@ -18,6 +18,7 @@
     "quality:crap": "node scripts/check-crap.mjs",
     "quality:deps": "depcruise --config .dependency-cruiser.cjs packages apps",
     "quality:architecture": "node scripts/check-architecture.mjs",
+    "quality:architecture:update-baseline": "node scripts/check-architecture.mjs --update-baseline",
     "quality:fast": "pnpm lint && pnpm quality:deps && pnpm quality:structure && pnpm quality:architecture",
     "quality:precommit": "pnpm quality",
     "quality:prepush": "pnpm quality:ci",

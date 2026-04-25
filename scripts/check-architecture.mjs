@@ -19,7 +19,9 @@ import {
 const root = process.cwd();
 const codeRoots = ["packages", "apps"];
 const architectureSkillPath = ".agents/skills/improve-codebase-architecture/SKILL.md";
+const baselinePath = path.join(root, "scripts", "architecture-baseline.json");
 const maxItemsPerSection = 8;
+const updateBaseline = process.argv.includes("--update-baseline");
 const domainAliasesToWatch = [
   "chat app",
   "project tracker",
@@ -62,6 +64,19 @@ const sections = [
   return entry.items.length > 0;
 });
 
+if (updateBaseline) {
+  writeBaseline(sections);
+}
+
+const baseline = readBaseline();
+const newFindings = sections.flatMap((entry) => {
+  return entry.items.filter((item) => {
+    return !baselineFindingsFor(entry.title).has(item);
+  }).map((item) => {
+    return { title: entry.title, item };
+  });
+});
+
 if (sections.length === 0) {
   console.log("Architecture report passed: no deepening opportunities detected.");
 } else {
@@ -77,8 +92,53 @@ if (sections.length === 0) {
   }
 }
 
+if (newFindings.length > 0) {
+  console.error(
+    `\nArchitecture regression check failed: ${newFindings.length} finding(s) are not in ${relative(baselinePath)}.`,
+  );
+  console.error(
+    "Fix the architecture issue, or update the baseline only after deciding the finding is acceptable technical debt.",
+  );
+
+  for (const finding of newFindings.slice(0, maxItemsPerSection)) {
+    console.error(`- [${finding.title}] ${finding.item}`);
+  }
+
+  if (newFindings.length > maxItemsPerSection) {
+    console.error(`- ...and ${newFindings.length - maxItemsPerSection} more`);
+  }
+
+  process.exit(1);
+}
+
 function section(title, items) {
   return { title, items };
+}
+
+function readBaseline() {
+  if (!fs.existsSync(baselinePath)) {
+    return { findings: {} };
+  }
+
+  return JSON.parse(fs.readFileSync(baselinePath, "utf8"));
+}
+
+function writeBaseline(reportSections) {
+  const findings = Object.fromEntries(
+    reportSections.map((entry) => {
+      return [entry.title, entry.items];
+    }),
+  );
+
+  fs.writeFileSync(
+    baselinePath,
+    `${JSON.stringify({ findings }, null, 2)}\n`,
+  );
+  console.log(`Updated architecture baseline at ${relative(baselinePath)}.`);
+}
+
+function baselineFindingsFor(title) {
+  return new Set(baseline.findings?.[title] ?? []);
 }
 
 function printSection(entry) {

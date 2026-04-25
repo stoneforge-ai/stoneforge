@@ -150,6 +150,8 @@ Metrics are quality gates, not substitutes for judgment. Passing numbers do not 
 
 Run `pnpm quality` before handing off code. Pre-commit runs `quality`; pre-push and agent Stop hooks run `quality:ci`; Edit/Write hooks run ESLint `--fix` and Prettier `--write` on changed files before `quality:fast`. Do not bypass these checks unless the user explicitly asks for a partial or investigative change.
 
+`quality:architecture` is a regression gate: it still reports architecture opportunities, but fails only on findings not present in `scripts/architecture-baseline.json`. Fix new findings when possible; update the baseline with `pnpm quality:architecture:update-baseline` only after deciding the finding is acceptable technical debt.
+
 Codex and Claude Stop hooks are session-gated: Edit/Write hooks create a marker under `.git/stoneforge-quality-hooks/sessions/`, and Stop hooks run only when that marker exists. Hook receipts are appended to `.git/stoneforge-quality-hooks/history.log`.
 
 When committing, commit only files you changed after a meaningful unit of work and use conventional prefixes such as `feat:`, `fix:`, `docs:`, or `chore:`.
