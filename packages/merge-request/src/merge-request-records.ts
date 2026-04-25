@@ -15,7 +15,7 @@ export function applyProviderPullRequestUpdate(
 ): void {
   mergeRequest.providerPullRequest = providerPullRequest;
   mergeRequest.state =
-    mergeRequest.state === "draft" || mergeRequest.state === "changes_requested"
+    mergeRequest.state === "draft" || mergeRequest.state === "repair_required"
       ? "open"
       : mergeRequest.state;
   mergeRequest.updatedAt = updatedAt;

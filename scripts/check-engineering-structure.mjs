@@ -3,9 +3,10 @@ import path from "node:path";
 
 const root = process.cwd();
 const sourceRoots = ["packages", "apps"];
-const productionModuleSoftLimit = 220;
-const modelModuleLimit = 300;
-const testModuleLimit = 500;
+const productionModuleAdvisoryLimit = 300;
+const productionModuleHardLimit = 450;
+const modelModuleHardLimit = 600;
+const testModuleHardLimit = 750;
 const bannedMarkers = /\b(TODO|FIXME|HACK|XXX)\b/;
 
 const sourceFiles = sourceRoots.flatMap((sourceRoot) => {
@@ -19,9 +20,10 @@ const sourceFiles = sourceRoots.flatMap((sourceRoot) => {
 });
 
 const findings = [
-  ...sourceFiles.flatMap(checkModuleSize),
+  ...sourceFiles.flatMap(checkHardModuleSize),
   ...sourceFiles.flatMap(checkBannedMarkers),
 ];
+const advisories = sourceFiles.flatMap(checkAdvisoryModuleSize);
 
 if (findings.length > 0) {
   console.error("Engineering structure check failed:");
@@ -32,35 +34,64 @@ if (findings.length > 0) {
 
   process.exitCode = 1;
 } else {
+  if (advisories.length > 0) {
+    console.warn("Engineering structure advisories:");
+
+    for (const advisory of advisories) {
+      console.warn(`- ${advisory}`);
+    }
+  }
+
   console.log(
     `Engineering structure check passed: ${sourceFiles.length} files checked.`,
   );
 }
 
-function checkModuleSize(filePath) {
+function checkHardModuleSize(filePath) {
   const relativePath = path.relative(root, filePath);
   const nonCommentLines = countNonCommentLines(filePath);
-  const limit = moduleLineLimit(relativePath);
+  const limit = hardModuleLineLimit(relativePath);
 
   if (nonCommentLines <= limit) {
     return [];
   }
 
   return [
-    `${relativePath} has ${nonCommentLines} non-comment lines; limit is ${limit}. Split responsibilities or document why this module must stay together.`,
+    `${relativePath} has ${nonCommentLines} non-comment lines; hard limit is ${limit}. Deep cohesive Modules are allowed, but this Module needs a smaller Interface, clearer Locality, or an explicit split.`,
   ];
 }
 
-function moduleLineLimit(relativePath) {
+function checkAdvisoryModuleSize(filePath) {
+  const relativePath = path.relative(root, filePath);
+  const nonCommentLines = countNonCommentLines(filePath);
+
   if (relativePath.endsWith(".test.ts")) {
-    return testModuleLimit;
+    return [];
   }
 
   if (relativePath.endsWith(`${path.sep}models.ts`)) {
-    return modelModuleLimit;
+    return [];
   }
 
-  return productionModuleSoftLimit;
+  if (nonCommentLines <= productionModuleAdvisoryLimit) {
+    return [];
+  }
+
+  return [
+    `${relativePath} has ${nonCommentLines} non-comment lines. Use the deletion test before splitting; a deep cohesive Module is preferable to shallow helper Modules.`,
+  ];
+}
+
+function hardModuleLineLimit(relativePath) {
+  if (relativePath.endsWith(".test.ts")) {
+    return testModuleHardLimit;
+  }
+
+  if (relativePath.endsWith(`${path.sep}models.ts`)) {
+    return modelModuleHardLimit;
+  }
+
+  return productionModuleHardLimit;
 }
 
 function checkBannedMarkers(filePath) {

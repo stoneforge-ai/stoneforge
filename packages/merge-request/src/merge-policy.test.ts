@@ -2,8 +2,7 @@ import { asMergeRequestId } from "@stoneforge/core";
 import { asTaskId } from "@stoneforge/execution";
 import { describe, expect, it } from "vitest";
 
-import { evaluateMergePolicy } from "./merge-policy.js";
-import type { CIRun, MergeRequest } from "./models.js";
+import { evaluateMergePolicy, type CIRun, type MergeRequest } from "./index.js";
 
 describe("evaluateMergePolicy", () => {
   it("ignores terminal MergeRequests", () => {

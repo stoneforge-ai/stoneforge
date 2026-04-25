@@ -287,6 +287,7 @@ function createReadyWorkspace(): { workspace: Workspace } {
     workspace.id,
     {
       name: "implementation-worker",
+      category: "worker",
       prompt: "Implement or review the assigned work.",
     },
     operator,

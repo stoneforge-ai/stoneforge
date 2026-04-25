@@ -223,7 +223,7 @@ Key associations:
 
 Frozen semantics:
 
-- a new Assignment is created for each new dispatch attempt such as initial implementation, repair after change request, or review pass
+- a new Assignment is created for each new dispatch attempt such as initial implementation, repair after a repair trigger, or review pass
 - crash recovery and context-exhaustion recovery stay within the same Assignment by creating a new Session
 - Task-owned Assignments are used for implementation and repair work
 - MergeRequest-owned Assignments are used for review or merge-evaluation work
@@ -432,7 +432,7 @@ First-slice rules:
 - an Assignment belongs to exactly one Task or exactly one MergeRequest
 - one Session belongs to exactly one Assignment
 - resumed work after crash or context exhaustion creates a new Session under the same Assignment when policy allows
-- reopened work after change request creates a new Task-owned Assignment on the same Task
+- reopened work after a repair trigger creates a new Task-owned Assignment on the same Task
 - a MergeRequest belongs to one Task or one Plan, never both
 - review or merge-evaluation work may use MergeRequest-owned Assignments; coding repair still reopens or creates Tasks
 - GitHub-first terminology may say `PR`, but the product model keeps `MergeRequest` as the canonical internal noun
@@ -453,7 +453,7 @@ These are semantic event names for reasoning and docs. They are not frozen API o
 | `session.checkpoint_created` | a session persisted resumable task-local continuity |
 | `merge_request.opened` | a provider PR now exists for a task or plan |
 | `ci_run.observed` | new CI status/check information was recorded |
-| `review.changes_requested` | review logic requires the task or plan to reopen for repair |
+| `repair.trigger_recorded` | review, CI, mergeability, policy, or branch health requires task or plan repair |
 | `policy.decision_recorded` | a policy-sensitive action was evaluated and its decision stored |
 | `audit.event_emitted` | a required audit record was persisted |
 

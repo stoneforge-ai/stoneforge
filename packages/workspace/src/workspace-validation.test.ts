@@ -5,8 +5,8 @@ import {
   buildValidationResult,
   computeConfiguredState,
   computeValidatedState,
-} from "./workspace-validation.js";
-import type { Workspace } from "./models.js";
+  type Workspace,
+} from "./index.js";
 
 describe("workspace validation policy", () => {
   it("preserves archived state during configuration and validation", () => {
@@ -172,6 +172,7 @@ function workspace(options: WorkspaceOptions = {}): Workspace {
             id: asRoleDefinitionId("role_definition_1"),
             workspaceId: "workspace_1" as never,
             name: "implementation-worker",
+            category: "worker",
             prompt: "Implement the assigned task.",
             toolAccess: [],
             skillAccess: [],

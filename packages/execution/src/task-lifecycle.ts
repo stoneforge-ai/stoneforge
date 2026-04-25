@@ -114,9 +114,9 @@ export class TaskLifecycle {
     }
 
     task.repairContexts.push(reason);
-    task.state = "ready";
+    task.state = "repair_required";
     task.updatedAt = this.state.now();
-    this.ensureDispatchIntentForTask(task);
+    this.evaluateTaskReadiness(task);
 
     return cloneTask(task);
   }

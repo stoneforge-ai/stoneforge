@@ -70,7 +70,7 @@ Key transitions:
 | `leased` | scheduler reserved capacity for an assignment but execution has not fully started yet |
 | `in_progress` | at least one live Assignment/Session is executing task work |
 | `awaiting_review` | implementation or repair work is complete and review/CI gates are pending |
-| `changes_requested` | review or merge-readiness checks require repair work |
+| `repair_required` | a repair trigger requires repair work |
 | `awaiting_human_review` | automated gates passed but policy requires human review or approval |
 | `merge_ready` | the task-level MergeRequest satisfies required checks and approval conditions |
 | `completed` | task work is finished, including merge when code changes were required |
@@ -86,13 +86,13 @@ Key transitions:
 - `leased -> ready`: the lease expires or launch fails before execution starts.
 - `in_progress -> awaiting_review`: work completes and a task MergeRequest is opened or updated for review.
 - `in_progress -> completed`: non-code task finishes without needing MergeRequest flow.
-- `awaiting_review -> changes_requested`: agent review, human review, CI, mergeability checks, or policy evaluation require repair.
-- `changes_requested -> ready`: reopen context is attached and the task becomes dispatchable again.
+- `awaiting_review -> repair_required`: agent review, human review, CI, mergeability checks, policy evaluation, or branch health requires repair.
+- `repair_required -> ready`: reopen context is attached and the task becomes dispatchable again.
 - `awaiting_review -> awaiting_human_review`: automated review passes but a human approval gate remains.
 - `awaiting_review -> merge_ready`: all required automated gates pass and no human review is required.
 - `awaiting_human_review -> merge_ready`: required human approvals are recorded.
 - `merge_ready -> completed`: merge succeeds or equivalent completion action is recorded.
-- `planned`, `ready`, `leased`, `in_progress`, `awaiting_review`, `changes_requested`, `awaiting_human_review`, or `merge_ready -> human_review_required`: repeated failure, stall, no-placement loop, or other escalation threshold is reached.
+- `planned`, `ready`, `leased`, `in_progress`, `awaiting_review`, `repair_required`, `awaiting_human_review`, or `merge_ready -> human_review_required`: repeated failure, stall, no-placement loop, or other escalation threshold is reached.
 - `human_review_required -> ready`: a human explicitly reauthorizes continued automated work.
 - `human_review_required -> canceled`: a human stops the task.
 - `any nonterminal -> canceled`: an authorized human cancels the task.
@@ -117,7 +117,7 @@ Whenever those conditions move from false to true, Stoneforge should emit a read
 | `draft` | plan graph is still being assembled |
 | `active` | tasks may dispatch when individually ready |
 | `integration_in_review` | plan-level aggregation branch/PR is under review |
-| `integration_changes_requested` | plan-level review or CI requires more task or integration work |
+| `integration_repair_required` | a plan-level repair trigger requires more task or integration work |
 | `completed` | plan work and plan-level merge are complete |
 | `canceled` | plan execution is intentionally stopped |
 
@@ -125,8 +125,8 @@ Key transitions:
 
 - `draft -> active`: the plan graph is coherent and an authorized human or director activates it.
 - `active -> integration_in_review`: all required planned task work is complete and the plan PR is opened.
-- `integration_in_review -> integration_changes_requested`: plan-level review, CI, or mergeability checks require more work.
-- `integration_changes_requested -> active`: the plan is reopened so underlying tasks or integration work can continue.
+- `integration_in_review -> integration_repair_required`: plan-level review, CI, mergeability checks, policy evaluation, or branch health requires more work.
+- `integration_repair_required -> active`: the plan is reopened so underlying tasks or integration work can continue.
 - `integration_in_review -> completed`: the plan PR merges to the workspace target branch.
 - `any nonterminal -> canceled`: an authorized human stops the plan.
 
@@ -220,7 +220,7 @@ Key transitions:
 | --- | --- |
 | `draft` | internal MergeRequest exists but the provider PR is not yet open for normal review |
 | `open` | provider PR is open and collecting CI or review signals |
-| `changes_requested` | review, CI, or mergeability requires more work |
+| `repair_required` | a repair trigger requires more work |
 | `policy_pending` | technical checks passed but Stoneforge policy approval is still outstanding |
 | `merge_ready` | all required checks and approvals are satisfied |
 | `merged` | provider PR merged successfully |
@@ -229,8 +229,8 @@ Key transitions:
 Key transitions:
 
 - `draft -> open`: provider PR is created and visible for review.
-- `open -> changes_requested`: CI fails, reviewer requests changes, branch drift cannot be resolved safely, or mergeability fails.
-- `changes_requested -> open`: repair work updates the PR and review restarts.
+- `open -> repair_required`: CI fails, reviewer requests changes, branch drift cannot be resolved safely, policy evaluation fails, or mergeability fails.
+- `repair_required -> open`: repair work updates the PR and review restarts.
 - `open -> policy_pending`: technical checks pass and only human approval policy remains.
 - `open -> merge_ready`: all required checks pass and no human approval is required.
 - `policy_pending -> merge_ready`: required human approvals are recorded.
@@ -262,7 +262,7 @@ Failure escalation is a product requirement, not an implementation detail.
 
 Conditions that should route work into `human_review_required` or `escalated` paths:
 
-- repeated `changes_requested` loops with the same reason
+- repeated `repair_required` loops with the same reason
 - repeated CI failure without meaningful progress
 - repeated Session crashes or expirations
 - no eligible Agent or exhausted concurrency beyond policy thresholds
@@ -289,7 +289,7 @@ Task planned
   -> leased
   -> in_progress
   -> awaiting_review
-  -> changes_requested
+  -> repair_required
   -> ready
   -> leased
   -> in_progress

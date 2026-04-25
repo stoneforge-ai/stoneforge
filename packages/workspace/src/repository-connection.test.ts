@@ -5,8 +5,9 @@ import {
   repositoryAuditOutcome,
   repositoryConnectReason,
   repositoryStatusReason,
-} from "./repository-connection.js";
-import type { ConnectGitHubRepositoryInput, Workspace } from "./models.js";
+  type ConnectGitHubRepositoryInput,
+  type Workspace,
+} from "./index.js";
 
 describe("repository connection policy", () => {
   it("allows first links and idempotent links to the same repository", () => {

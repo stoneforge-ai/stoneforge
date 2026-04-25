@@ -24,6 +24,7 @@ export type TaskState =
   | "leased"
   | "in_progress"
   | "awaiting_review"
+  | "repair_required"
   | "completed"
   | "human_review_required"
   | "canceled";

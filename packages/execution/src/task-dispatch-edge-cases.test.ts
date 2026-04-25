@@ -261,6 +261,30 @@ describe("TaskDispatchService edge cases", () => {
     );
   });
 
+  it("keeps repair-required tasks undispatched until readiness gates pass", () => {
+    const { workspace } = createReadyWorkspace();
+    const service = new TaskDispatchService(new RecordingAdapter());
+
+    service.configureWorkspace(workspace);
+    const task = service.createTask({
+      workspaceId: workspace.id,
+      title: "Blocked repair",
+      intent: "Needs acceptance criteria before repair can dispatch.",
+      requiresMergeRequest: true,
+    });
+    const reopened = service.reopenTaskForRepair(task.id, "Repair trigger");
+
+    expect(reopened.state).toBe("repair_required");
+    expect(service.listDispatchIntents()).toEqual([]);
+
+    const dispatchable = service.updateTask(task.id, {
+      acceptanceCriteria: ["Repair work can dispatch."],
+    });
+
+    expect(dispatchable.state).toBe("ready");
+    expect(service.listDispatchIntents()).toHaveLength(1);
+  });
+
   it("escalates after exceeding session recovery policy", async () => {
     const { workspace } = createReadyWorkspace();
     const service = new TaskDispatchService(new RecordingAdapter(), {
@@ -384,6 +408,7 @@ function createReadyWorkspace(): { workspace: Workspace } {
     workspace.id,
     {
       name: "implementation-worker",
+      category: "worker",
       prompt: "Implement or review the assigned work.",
       toolAccess: ["git", "shell"],
       tags: ["worker"],

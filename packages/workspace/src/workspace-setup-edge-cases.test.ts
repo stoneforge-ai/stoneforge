@@ -174,6 +174,7 @@ describe("WorkspaceSetupService edge cases", () => {
       workspaceId,
       {
         name: "implementation-worker",
+        category: "worker",
         prompt: "Implement the assigned task.",
         enabled: false,
       },

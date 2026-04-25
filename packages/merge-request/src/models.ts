@@ -10,7 +10,7 @@ import type { PolicyPreset } from "@stoneforge/workspace";
 export type MergeRequestState =
   | "draft"
   | "open"
-  | "changes_requested"
+  | "repair_required"
   | "policy_pending"
   | "merge_ready"
   | "merged"

@@ -1,2 +1,25 @@
-export * from "./models.js";
-export * from "./merge-request-service.js";
+export {
+  evaluateMergePolicy,
+  type PolicyDecision,
+} from "./merge-policy.js";
+export { MergeRequestService } from "./merge-request-service.js";
+export {
+  assertMergeRequestReviewAssignment,
+  rememberReviewAssignment,
+  requireMergeRequestAssignmentId,
+} from "./review-assignments.js";
+export type {
+  CIRun,
+  CIRunState,
+  GitHubMergeRequestAdapter,
+  MergeRequest,
+  MergeRequestServiceOptions,
+  MergeRequestState,
+  OpenTaskMergeRequestInput,
+  PolicyCheckState,
+  ProviderPullRequest,
+  RecordCIRunInput,
+  RecordReviewOutcomeInput,
+  RequestReviewInput,
+  ReviewOutcome,
+} from "./models.js";

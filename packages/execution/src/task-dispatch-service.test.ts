@@ -307,6 +307,7 @@ function createReadyWorkspace(options?: {
     workspace.id,
     {
       name: "implementation-worker",
+      category: "worker",
       prompt: "Implement the assigned task.",
       toolAccess: ["git", "shell"],
       tags: ["worker"],

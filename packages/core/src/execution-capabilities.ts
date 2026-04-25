@@ -9,6 +9,7 @@ export type RuntimeLocation = "customer_host" | "managed";
 export type RuntimeMode = "local_worktree" | "container" | "managed_sandbox";
 export type HealthStatus = "healthy" | "unhealthy";
 export type AgentHarness = "claude-code" | "openai-codex";
+export type RoleCategory = "director" | "worker" | "reviewer" | "custom";
 
 export interface Runtime {
   id: RuntimeId;
@@ -39,6 +40,7 @@ export interface RoleDefinition {
   id: RoleDefinitionId;
   workspaceId: WorkspaceId;
   name: string;
+  category: RoleCategory;
   prompt: string;
   toolAccess: string[];
   skillAccess: string[];

@@ -22,7 +22,7 @@ export class MergeRequestPolicyFlow {
     mergeRequest: MergeRequest,
     reason: string,
   ): Promise<void> {
-    mergeRequest.state = "changes_requested";
+    mergeRequest.state = "repair_required";
     mergeRequest.updatedAt = this.now();
     await this.publishPolicyCheck(mergeRequest, "failed", reason);
     this.execution.reopenTaskForRepair(mergeRequest.sourceOwner.taskId, reason);

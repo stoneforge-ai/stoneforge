@@ -67,6 +67,7 @@ describe("WorkspaceSetupService", () => {
       workspace.id,
       {
         name: "implementation-worker",
+        category: "worker",
         prompt: "Implement the assigned task against the repository.",
         toolAccess: ["git", "shell"],
         tags: ["worker"],
@@ -136,6 +137,7 @@ describe("WorkspaceSetupService", () => {
       workspace.id,
       {
         name: "implementation-worker",
+        category: "worker",
         prompt: "Implement the assigned task.",
       },
       operator,
@@ -231,6 +233,7 @@ describe("WorkspaceSetupService", () => {
       workspace.id,
       {
         name: "review-worker",
+        category: "reviewer",
         prompt: "Review the assigned work.",
       },
       operator,
@@ -314,6 +317,7 @@ describe("WorkspaceSetupService", () => {
       workspace.id,
       {
         name: "implementation-worker",
+        category: "worker",
         prompt: "Implement the assigned task.",
       },
       operator,

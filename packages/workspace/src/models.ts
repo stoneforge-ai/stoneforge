@@ -11,6 +11,7 @@ import type {
   AgentHarness,
   HealthStatus,
   RoleDefinition,
+  RoleCategory,
   Runtime,
   RuntimeLocation,
   RuntimeMode,
@@ -37,6 +38,7 @@ export type {
   AgentHarness,
   HealthStatus,
   RoleDefinition,
+  RoleCategory,
   Runtime,
   RuntimeLocation,
   RuntimeMode,
@@ -189,6 +191,7 @@ export interface RegisterAgentInput {
 
 export interface RegisterRoleDefinitionInput {
   name: string;
+  category: RoleCategory;
   prompt: string;
   toolAccess?: string[];
   skillAccess?: string[];

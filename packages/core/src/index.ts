@@ -1,3 +1,32 @@
-export * from "./brand.js";
-export * from "./execution-capabilities.js";
-export * from "./ids.js";
+export { brand, type Brand } from "./brand.js";
+export {
+  asAgentId,
+  asAuditEventId,
+  asCIRunId,
+  asMergeRequestId,
+  asOrgId,
+  asRoleDefinitionId,
+  asRuntimeId,
+  asWorkspaceId,
+  type AgentId,
+  type AuditEventId,
+  type CIRunId,
+  type MergeRequestId,
+  type OrgId,
+  type RoleDefinitionId,
+  type RuntimeId,
+  type WorkspaceId,
+} from "./ids.js";
+export {
+  cloneAgent,
+  cloneRoleDefinition,
+  cloneRuntime,
+  type Agent,
+  type AgentHarness,
+  type HealthStatus,
+  type RoleCategory,
+  type RoleDefinition,
+  type Runtime,
+  type RuntimeLocation,
+  type RuntimeMode,
+} from "./execution-capabilities.js";

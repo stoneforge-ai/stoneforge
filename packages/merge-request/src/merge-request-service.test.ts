@@ -221,13 +221,13 @@ describe("MergeRequestService", () => {
     );
   });
 
-  it("reopens a task after review changes are requested and redispatches repair work", async () => {
+  it("marks the MergeRequest repair_required after review changes are requested and redispatches repair work", async () => {
     const { execution, mergeRequests, mergeRequest } =
       await createOpenMergeRequestFlow();
     const reviewAssignment = await startReviewAssignment(execution, mergeRequests, mergeRequest.id);
 
     execution.completeAssignment(reviewAssignment.id);
-    await mergeRequests.recordReviewOutcome(mergeRequest.id, {
+    const repaired = await mergeRequests.recordReviewOutcome(mergeRequest.id, {
       assignmentId: reviewAssignment.id,
       outcome: "changes_requested",
       reason: "Tighten the tests.",
@@ -235,6 +235,7 @@ describe("MergeRequestService", () => {
 
     const reopenedTask = execution.getTask(mergeRequest.sourceOwner.taskId);
 
+    expect(repaired.state).toBe("repair_required");
     expect(reopenedTask.state).toBe("ready");
     expect(reopenedTask.repairContexts).toContain("Tighten the tests.");
 
@@ -248,7 +249,7 @@ describe("MergeRequestService", () => {
     });
   });
 
-  it("reopens a task after CI failure and redispatches repair work", async () => {
+  it("marks the MergeRequest repair_required after CI failure and redispatches repair work", async () => {
     const { execution, mergeRequests, mergeRequest } =
       await createOpenMergeRequestFlow();
 
@@ -258,6 +259,9 @@ describe("MergeRequestService", () => {
       state: "failed",
     });
 
+    const repaired = mergeRequests.getMergeRequest(mergeRequest.id);
+
+    expect(repaired.state).toBe("repair_required");
     expect(execution.getTask(mergeRequest.sourceOwner.taskId).state).toBe(
       "ready",
     );
@@ -388,6 +392,7 @@ function createReadyWorkspace(): { workspace: Workspace; agent: Agent } {
     workspace.id,
     {
       name: "implementation-worker",
+      category: "worker",
       prompt: "Implement or review the assigned work.",
       toolAccess: ["git", "shell"],
       tags: ["worker"],

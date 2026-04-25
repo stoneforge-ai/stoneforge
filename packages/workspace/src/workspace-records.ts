@@ -100,6 +100,7 @@ export function createRoleDefinitionRecord(
     id,
     workspaceId,
     name: input.name,
+    category: input.category,
     prompt: input.prompt,
     toolAccess: cloneArray(input.toolAccess),
     skillAccess: cloneArray(input.skillAccess),

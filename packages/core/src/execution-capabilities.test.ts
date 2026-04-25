@@ -38,6 +38,7 @@ describe("execution capability cloning", () => {
       id: asRoleDefinitionId("role_1"),
       workspaceId,
       name: "implementation worker",
+      category: "worker",
       prompt: "Implement the task.",
       toolAccess: ["git"],
       skillAccess: ["repo"],

@@ -338,7 +338,7 @@ Acceptance criteria:
 - tasks inside an inactive Plan do not dispatch
 - active planned tasks merge into a plan branch by default
 - the plan PR can observe CI and review state
-- plan-level changes requested reopen or create Tasks rather than dispatching coding directly on the Plan
+- plan-level repair triggers reopen or create Tasks rather than dispatching coding directly on the Plan
 - plan PR merge completes the Plan cleanly
 
 ## Proving Scenarios

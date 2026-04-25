@@ -1,12 +1,13 @@
 import { asRoleDefinitionId, asWorkspaceId } from "@stoneforge/core";
 import { describe, expect, it } from "vitest";
 
-import { asTaskId } from "./ids.js";
-import type {
+import {
+  asTaskId,
+  isTaskDispatchable,
   Task,
+  type TaskReadinessContext,
   WorkspaceExecutionCapabilities,
-} from "./models.js";
-import { isTaskDispatchable, type TaskReadinessContext } from "./task-readiness.js";
+} from "./index.js";
 
 const workspaceId = asWorkspaceId("workspace_1");
 const taskId = asTaskId("task_1");
@@ -92,6 +93,7 @@ function capabilities(): WorkspaceExecutionCapabilities {
         id: asRoleDefinitionId("role_1"),
         workspaceId,
         name: "implementation worker",
+        category: "worker",
         prompt: "Implement.",
         toolAccess: [],
         skillAccess: [],

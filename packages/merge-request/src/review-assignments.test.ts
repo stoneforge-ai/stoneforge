@@ -16,8 +16,8 @@ import {
   assertMergeRequestReviewAssignment,
   rememberReviewAssignment,
   requireMergeRequestAssignmentId,
-} from "./review-assignments.js";
-import type { MergeRequest } from "./models.js";
+  type MergeRequest,
+} from "./index.js";
 
 describe("review assignment guards", () => {
   it("accepts assignments owned by the expected MergeRequest", () => {

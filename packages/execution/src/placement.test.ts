@@ -9,9 +9,12 @@ import {
 } from "@stoneforge/core";
 import { describe, expect, it } from "vitest";
 
-import { asDispatchIntentId } from "./ids.js";
-import type { DispatchIntent, WorkspaceExecutionCapabilities } from "./models.js";
-import { resolvePlacement } from "./placement.js";
+import {
+  asDispatchIntentId,
+  resolvePlacement,
+  type DispatchIntent,
+  type WorkspaceExecutionCapabilities,
+} from "./index.js";
 
 const workspaceId = asWorkspaceId("workspace_1");
 const runtimeId = asRuntimeId("runtime_1");
@@ -162,6 +165,7 @@ function roleDefinition(
     id: roleDefinitionId,
     workspaceId,
     name: "implementation worker",
+    category: "worker",
     prompt: "Implement the task.",
     toolAccess: [],
     skillAccess: [],
