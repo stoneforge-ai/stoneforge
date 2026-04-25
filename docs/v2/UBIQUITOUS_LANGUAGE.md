@@ -47,9 +47,12 @@ This glossary captures the canonical domain language for Stoneforge V2 work. It 
 | **Acceptance Criteria** | The concrete conditions that define whether a task's intended work is complete. | Requirements, checklist |
 | **Priority** | A task ordering signal used for planning and scheduler decisions. | Rank, severity |
 | **Document** | Durable shared workspace context such as specs, runbooks, design notes, and reusable review knowledge. | Hidden memory, task progress note |
-| **Task-Local Continuity** | Structured task state for checkpoints, completed work, remaining work, and reopen context that survives across sessions. | Document, prompt memory, transcript |
+| **Task-Local Continuity** | Structured task state for checkpoints, completed work, remaining work, and repair context that survives across sessions. | Document, prompt memory, transcript |
 | **Checkpoint** | A resumable task-local handoff snapshot containing completed work, remaining work, and important continuation context. | Session state, summary, savepoint, memory |
-| **Reopen Context** | Review, CI, mergeability, or policy feedback attached to a task when repair work is required. | Comment, failure text |
+| **Repair Context** | Additional task-local context attached after a Repair Trigger to steer the next repair assignment. | Follow-Up Context, comment, failure text |
+| **Follow-Up Context** | Additional context used to create and steer a Follow-Up Task from prior terminal work that needs additional action. | Reopen context, repair context, bug report |
+| **Follow-Up Task** | A new task created from prior terminal work that needs additional action and linked to its source task. | Reopened task, continuation task |
+| **Follow-Up Source** | The first-class reference from a Follow-Up Task to the prior terminal source Task and, when relevant, source MergeRequest. | Document link, prose reference |
 
 ## Execution and capacity
 
@@ -88,8 +91,8 @@ This glossary captures the canonical domain language for Stoneforge V2 work. It 
 | **Planned Task Flow** | The topology where task branches merge into a plan branch and the plan branch opens a plan PR to the workspace target branch. | Aggregation flow |
 | **CIRun** | An execution record for observed CI state associated with a MergeRequest. | Build, check run, status |
 | **Review Outcome** | The recorded result of human or reviewer-role evaluation, usually approval or a Change Request. | Review comment, PR state |
-| **Repair Trigger** | Any review, CI, mergeability, policy, or branch-health condition that requires task repair. | Failure, rejection, reopen |
-| **Change Request** | A repair trigger produced by a Human Reviewer or reviewer RoleDefinition. | Rejection, failure, reopen |
+| **Repair Trigger** | Any review, CI, mergeability, policy, or branch-health condition that requires task repair before completion. | Failure, rejection, reopen |
+| **Change Request** | A repair trigger produced by a Human Reviewer or reviewer RoleDefinition. | Rejection, failure |
 | **Gate Failure** | A repair trigger produced by CI, mergeability, branch drift, or policy evaluation. | Change request, broken check |
 | **Human Approval Gate** | A policy requirement that a qualified human approve before merge or another sensitive action. | Manual review, GitHub approval |
 | **Stoneforge Policy Check** | The Stoneforge-owned GitHub status or check that represents the canonical policy decision for merge readiness. | CI check, approval check |
@@ -177,7 +180,10 @@ These state names are semantic product contracts, not required storage enum stri
 - An **Assignment** contains one or more **Sessions**; a **Session** belongs to exactly one **Assignment**.
 - A **Session** may emit checkpoint events, but **Checkpoint** content belongs to **Task-Local Continuity** rather than the **Session**.
 - A recoverable crash or context exhaustion creates a new **Session** under the same **Assignment**.
-- A **Repair Trigger** creates a new task-owned **Assignment** on the same **Task** for repair.
+- A **Repair Trigger** attaches **Repair Context** and creates a new task-owned **Assignment** on the same **Task** before completion.
+- **Follow-Up Context** creates a **Follow-Up Task** when prior terminal work needs additional action.
+- A **Follow-Up Task** has exactly one **Follow-Up Source**.
+- A **Follow-Up Source** references exactly one prior terminal source **Task** and may reference one source **MergeRequest**.
 - A **MergeRequest** belongs to exactly one **Task** or exactly one **Plan**.
 - A **MergeRequest** may contain many **CIRuns** and many review outcomes over time.
 - **CIRuns** are observed from GitHub checks and statuses; Stoneforge does not author native CI in the first slice.
@@ -194,9 +200,9 @@ These state names are semantic product contracts, not required storage enum stri
 >
 > **Domain expert:** "No. The **Automation** creates **Dispatch Intent** with its **Default RoleDefinition**, unless a **Role Override** supersedes it. The **Scheduler** then resolves the **RoleDefinition**, **Agent**, **Runtime**, and **Lease**, creates the **Assignment**, and starts a **Session**."
 >
-> **Dev:** "If that **Session** runs out of context, do we reopen the **Task**?"
+> **Dev:** "If that **Session** runs out of context, do we require task repair?"
 >
-> **Domain expert:** "No. A recoverable context limit starts a new **Session** under the same **Assignment** from a **Checkpoint**; the **Task** reopens only when review, CI, mergeability, policy, or branch health creates a **Repair Trigger**."
+> **Domain expert:** "No. A recoverable context limit starts a new **Session** under the same **Assignment** from a **Checkpoint**; the **Task** requires repair only when review, CI, mergeability, policy, or branch health creates a **Repair Trigger**."
 >
 > **Dev:** "And in GitHub we call the review artifact a PR?"
 >
@@ -211,7 +217,8 @@ These state names are semantic product contracts, not required storage enum stri
 - "Runtime", "Host", and "Agent" must stay separate; a **Host** supplies capacity, a **Runtime** defines the execution environment contract, and an **Agent** binds a harness/model pair to a runtime.
 - "Role" should not replace **RoleDefinition** or **Role Category**; a **RoleDefinition** is the concrete prompt, tools, skills, hooks, category, and behavioral contract attached at dispatch time, while **Role Category** is only the required broad classification.
 - "Ready" must not be treated as a manual flag; **Readiness** is computed from dependencies, plan activation, policy, active execution, and evaluable capability constraints.
-- "Document" must not be used as the default place for task progress; reusable context belongs in **Documents**, while checkpoints, remaining work, and reopen context belong in **Task-Local Continuity**.
+- "Document" must not be used as the default place for task progress; reusable context belongs in **Documents**, while checkpoints, remaining work, and repair context belong in **Task-Local Continuity**.
+- "Reopen" should not describe task correction flows; use **Repair Trigger** and **Repair Context** before terminal states, and use **Follow-Up Context** when new work is created from prior terminal work.
 - "Reviewer" can mean a person or a RoleDefinition category; use **Human Reviewer** for people and **Reviewer Role Category** for role definitions.
 - "Review" and "approval" are distinct; **Review Outcome** evaluates work quality or correctness, while a **Human Approval Gate** satisfies policy.
 - "Changes requested" is broader than the noun **Change Request** in many workflow tools; use **Task `repair_required`** or **MergeRequest `repair_required`** for the state, **Repair Trigger** for the umbrella cause, **Change Request** for reviewer feedback, and **Gate Failure** for CI, mergeability, branch drift, or policy failures.

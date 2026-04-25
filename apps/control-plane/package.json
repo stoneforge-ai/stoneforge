@@ -1,0 +1,28 @@
+{
+  "name": "@stoneforge/control-plane",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Stoneforge V2 control-plane executable scenarios",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "coverage": "vitest run --coverage",
+    "lint": "pnpm run typecheck",
+    "start": "pnpm --workspace-root turbo run build --filter=@stoneforge/control-plane... && node dist/cli.js",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "clean": "rm -rf dist coverage"
+  },
+  "dependencies": {
+    "@stoneforge/core": "workspace:*",
+    "@stoneforge/execution": "workspace:*",
+    "@stoneforge/merge-request": "workspace:*",
+    "@stoneforge/workspace": "workspace:*"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^4.0.18",
+    "vitest": "^4.0.18"
+  }
+}

@@ -29,13 +29,13 @@ describe("resolvePlacement", () => {
       () => 0,
     );
 
-    expect(placement).toEqual(
-      expect.objectContaining({
-        agent: expect.objectContaining({ id: asAgentId("agent_1") }),
-        runtime: expect.objectContaining({ id: runtimeId }),
-        roleDefinition: expect.objectContaining({ id: roleDefinitionId }),
-      }),
-    );
+    if ("reason" in placement) {
+      throw new Error(`Expected placement but received ${placement.reason}.`);
+    }
+
+    expect(placement.agent.id).toBe(asAgentId("agent_1"));
+    expect(placement.runtime.id).toBe(runtimeId);
+    expect(placement.roleDefinition.id).toBe(roleDefinitionId);
   });
 
   it("rejects missing or disabled RoleDefinitions", () => {

@@ -106,14 +106,14 @@ export class TaskLifecycle {
     return cloneDispatchIntent(intent);
   }
 
-  reopenTaskForRepair(taskId: TaskId, reason: string): Task {
+  requireTaskRepair(taskId: TaskId, reason: string): Task {
     const task = this.state.requireTask(taskId);
 
     if (task.state === "completed" || task.state === "canceled") {
-      throw new Error(`Task ${taskId} cannot be reopened from state ${task.state}.`);
+      throw new Error(`Task ${taskId} cannot require repair from state ${task.state}.`);
     }
 
-    task.repairContexts.push(reason);
+    task.repairContext.push(reason);
     task.state = "repair_required";
     task.updatedAt = this.state.now();
     this.evaluateTaskReadiness(task);

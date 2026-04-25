@@ -26,7 +26,8 @@ export function createTaskRecord(
     requiresMergeRequest: withDefault(input.requiresMergeRequest, false),
     dispatchConstraints: normalizeDispatchConstraints(input.dispatchConstraints),
     continuity: [],
-    repairContexts: [],
+    repairContext: [],
+    followUpSource: input.followUpSource,
     createdAt: now,
     updatedAt: now,
   };

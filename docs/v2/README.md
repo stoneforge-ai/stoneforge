@@ -238,7 +238,7 @@ That resumed session should receive:
 - the relevant task context
 - any important prior review or failure feedback
 
-Stoneforge documents are the durable shared context layer for the workspace. Task-local continuity such as checkpoints, remaining work, and review-driven reopen context should live on the task itself as structured state.
+Stoneforge documents are the durable shared context layer for the workspace. Task-local continuity such as checkpoints, remaining work, and review-driven repair context should live on the task itself as structured state.
 
 Hidden prompt state is not the memory model.
 
@@ -271,12 +271,12 @@ Reasons to request changes include:
 
 Workspaces may disable agent review. In those workspaces, review outcomes may depend only on CI and/or humans.
 
-### 10. Change requests reopen the task
+### 10. Repair triggers require task repair
 
-If changes are requested:
+If a change request or other repair trigger occurs before task completion:
 
-- the task is reopened
-- the review feedback is attached as task context
+- the task enters a repair-required path
+- the repair context is attached as task context
 - the task is dispatched to a new agent session
 
 This creates a repair loop that stays attached to the same planning and execution history.
@@ -400,7 +400,7 @@ Failure handling is part of the operating model, not a later implementation deta
 
 The platform must detect and escalate failure conditions such as:
 
-- repeated reopen loops with the same review reason
+- repeated repair loops with the same reason
 - repeated CI failure without meaningful progress
 - session crashes or repeated restarts
 - stalled work
@@ -431,7 +431,7 @@ A task is the planning unit.
 
 - it represents intended work
 - it is where prioritization, sequencing, acceptance criteria, and dependencies live
-- it should carry structured operational continuity such as checkpoints, remaining work, and reopen context
+- it should carry structured operational continuity such as checkpoints, remaining work, and repair context
 - it is not the same thing as execution history
 
 ### Plan

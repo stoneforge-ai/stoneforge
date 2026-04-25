@@ -68,7 +68,7 @@ module.exports = {
       path: "node_modules",
     },
     exclude: {
-      path: "^(reference|packages/.*/dist|packages/.*/coverage|node_modules)/",
+      path: "^(reference|(apps|packages)/.*/dist|(apps|packages)/.*/coverage|node_modules)/",
     },
     tsPreCompilationDeps: true,
     tsConfig: {

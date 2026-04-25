@@ -9,7 +9,7 @@ This document is a subordinate build-shaping spec for lifecycle semantics in the
 First-slice scope:
 
 - workspace onboarding and execution readiness
-- task readiness, dispatch, execution, review, approval, merge, reopen, escalation, and cancellation
+- task readiness, dispatch, execution, review, approval, merge, repair, escalation, and cancellation
 - plan activation and plan-level aggregation
 - scheduler queueing and leasing
 - Assignment and Session checkpoint/resume behavior
@@ -18,7 +18,7 @@ Frozen in this doc:
 
 - semantic state names are part of the product model
 - readiness is gated by dependencies, plan activation, policy, and active execution
-- reopened work creates a new Task-owned Assignment on the same Task
+- repair work creates a new Task-owned Assignment on the same Task
 - session crash and context-exhaustion recovery create a new Session under the same Assignment when possible
 - failure escalation routes work into a human-review-required path instead of infinite autonomous loops
 
@@ -87,7 +87,7 @@ Key transitions:
 - `in_progress -> awaiting_review`: work completes and a task MergeRequest is opened or updated for review.
 - `in_progress -> completed`: non-code task finishes without needing MergeRequest flow.
 - `awaiting_review -> repair_required`: agent review, human review, CI, mergeability checks, policy evaluation, or branch health requires repair.
-- `repair_required -> ready`: reopen context is attached and the task becomes dispatchable again.
+- `repair_required -> ready`: repair context is attached and the task becomes dispatchable again.
 - `awaiting_review -> awaiting_human_review`: automated review passes but a human approval gate remains.
 - `awaiting_review -> merge_ready`: all required automated gates pass and no human review is required.
 - `awaiting_human_review -> merge_ready`: required human approvals are recorded.
@@ -126,14 +126,14 @@ Key transitions:
 - `draft -> active`: the plan graph is coherent and an authorized human or director activates it.
 - `active -> integration_in_review`: all required planned task work is complete and the plan PR is opened.
 - `integration_in_review -> integration_repair_required`: plan-level review, CI, mergeability checks, policy evaluation, or branch health requires more work.
-- `integration_repair_required -> active`: the plan is reopened so underlying tasks or integration work can continue.
+- `integration_repair_required -> active`: the plan returns to active so underlying tasks or integration work can continue.
 - `integration_in_review -> completed`: the plan PR merges to the workspace target branch.
 - `any nonterminal -> canceled`: an authorized human stops the plan.
 
 Plan repair rule:
 
 - plan-level review or merge evaluation attaches to the plan MergeRequest rather than the Plan itself
-- if plan-level feedback requires code changes, repair work must reopen or create Tasks within the Plan rather than dispatching general coding directly on the Plan
+- if plan-level feedback requires code changes, repair work must update or create Tasks within the Plan rather than dispatching general coding directly on the Plan
 
 ## Dispatch Intent And Lease Lifecycle
 

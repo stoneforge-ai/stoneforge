@@ -103,8 +103,8 @@ export class TaskDispatchService {
     return this.scheduler.completeAssignment(assignmentId);
   }
 
-  reopenTaskForRepair(taskId: TaskId, reason: string): Task {
-    return this.tasks.reopenTaskForRepair(taskId, reason);
+  requireTaskRepair(taskId: TaskId, reason: string): Task {
+    return this.tasks.requireTaskRepair(taskId, reason);
   }
 
   completeTaskAfterMerge(taskId: TaskId): Task {

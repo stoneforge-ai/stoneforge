@@ -1,0 +1,15 @@
+.claude/settings.local.json
+.claude/worktrees/
+.git/
+.stoneforge/
+.turbo/
+**/.turbo/
+coverage/
+dist/
+node_modules/
+packages/*/coverage/
+packages/*/dist/
+apps/*/coverage/
+apps/*/dist/
+reference/
+pnpm-lock.yaml

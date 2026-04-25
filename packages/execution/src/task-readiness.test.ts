@@ -194,7 +194,7 @@ function task(overrides: Partial<Task> = {}): Task {
       requiredRuntimeTags: [],
     },
     continuity: [],
-    repairContexts: [],
+    repairContext: [],
     createdAt: now,
     updatedAt: now,
     ...overrides,

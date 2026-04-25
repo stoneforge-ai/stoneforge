@@ -1,12 +1,21 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const hookStateRoot = resolve(repoRoot, ".git", "stoneforge-quality-hooks");
 const markerRoot = resolve(hookStateRoot, "sessions");
 const historyPath = resolve(hookStateRoot, "history.log");
+const eslintExtensions = new Set([".cjs", ".cts", ".js", ".jsx", ".mjs", ".mts", ".ts", ".tsx"]);
 
 const hookTargets = {
   fast: {
@@ -30,6 +39,131 @@ function readHookInput() {
   } catch {
     return {};
   }
+}
+
+function editedPathFrom(value) {
+  if (typeof value !== "string" || value.trim() === "") {
+    return null;
+  }
+
+  const absolutePath = isAbsolute(value) ? resolve(value) : resolve(repoRoot, value);
+  const relativePath = relative(repoRoot, absolutePath);
+
+  if (relativePath.startsWith("..") || isAbsolute(relativePath) || !existsSync(absolutePath)) {
+    return null;
+  }
+
+  return absolutePath;
+}
+
+function collectEditedPaths(value, paths = new Set()) {
+  if (!value || typeof value !== "object") {
+    return paths;
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      collectEditedPaths(item, paths);
+    }
+
+    return paths;
+  }
+
+  for (const [key, entry] of Object.entries(value)) {
+    const looksLikePathKey = /^(file_?path|path|filename|target_?file)$/i.test(key);
+    const editedPath = looksLikePathKey ? editedPathFrom(entry) : null;
+
+    if (editedPath) {
+      paths.add(editedPath);
+      continue;
+    }
+
+    collectEditedPaths(entry, paths);
+  }
+
+  return paths;
+}
+
+function extensionFor(filePath) {
+  const match = filePath.match(/\.[^.]+$/);
+  return match ? match[0] : "";
+}
+
+function filesForEslint(paths) {
+  return paths.filter((filePath) => {
+    if (!existsSync(filePath) || !statSync(filePath).isFile()) {
+      return false;
+    }
+
+    return eslintExtensions.has(extensionFor(filePath));
+  });
+}
+
+function runCommand(label, command, args) {
+  if (args.length === 0) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolveRun, rejectRun) => {
+    const child = spawn(command, args, {
+      cwd: repoRoot,
+      stdio: ["ignore", "pipe", "pipe"],
+      shell: process.platform === "win32",
+    });
+
+    child.stdout.on("data", (chunk) => {
+      process.stderr.write(chunk);
+    });
+
+    child.stderr.on("data", (chunk) => {
+      process.stderr.write(chunk);
+    });
+
+    child.on("error", (error) => {
+      rejectRun(new Error(`${label} failed to start: ${error.message}`));
+    });
+
+    child.on("exit", (code, signal) => {
+      if (code === 0) {
+        resolveRun();
+        return;
+      }
+
+      const reason = signal ? `${label} was interrupted by ${signal}` : `${label} exited with ${code}`;
+      rejectRun(new Error(reason));
+    });
+  });
+}
+
+async function autofixEditedFiles(agentName, sessionKey, hookInput) {
+  const editedPaths = [...collectEditedPaths(hookInput)];
+
+  if (editedPaths.length === 0) {
+    writeReceipt(agentName, sessionKey, "autofix", "skipped", "no-edited-file-paths");
+    return;
+  }
+
+  const eslintFiles = filesForEslint(editedPaths);
+
+  if (eslintFiles.length > 0) {
+    await runCommand("ESLint auto-fix", "pnpm", [
+      "exec",
+      "eslint",
+      "--fix",
+      "--no-error-on-unmatched-pattern",
+      ...eslintFiles,
+    ]);
+  }
+
+  await runCommand("Prettier auto-format", "pnpm", [
+    "exec",
+    "prettier",
+    "--write",
+    "--ignore-unknown",
+    ...editedPaths,
+  ]);
+
+  writeReceipt(agentName, sessionKey, "autofix", "passed", `${editedPaths.length}-file(s)`);
 }
 
 function writeReceipt(agentName, sessionKey, targetName, status, detail) {
@@ -101,7 +235,7 @@ function clearClaimedMarker(markerPath) {
   }
 }
 
-export function runQualityHook(targetName, options = {}) {
+export async function runQualityHook(targetName, options = {}) {
   const target = hookTargets[targetName];
   const agentName = options.agentName ?? "unknown-agent";
   const hookInput = readHookInput();
@@ -114,6 +248,13 @@ export function runQualityHook(targetName, options = {}) {
 
   if (targetName === "fast") {
     markSessionChanged(agentName, sessionKey, targetName);
+    try {
+      await autofixEditedFiles(agentName, sessionKey, hookInput);
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      writeReceipt(agentName, sessionKey, "autofix", "failed");
+      process.exit(2);
+    }
   }
 
   const claimedMarkerPath = targetName === "turn" ? claimSessionMarker(sessionKey) : null;

@@ -25,6 +25,9 @@ export default {
   ignorePatterns: [
     ".claude/**",
     ".stoneforge/**",
+    "**/.turbo/**",
+    "**/coverage/**",
+    "**/dist/**",
     "coverage/**",
     "dist/**",
     "reference/**",

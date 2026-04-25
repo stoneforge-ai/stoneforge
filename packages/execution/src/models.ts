@@ -49,6 +49,11 @@ export interface TaskDispatchConstraints {
   requiredRuntimeTags: string[];
 }
 
+export interface FollowUpSource {
+  taskId: TaskId;
+  mergeRequestId?: MergeRequestId;
+}
+
 export interface Task {
   id: TaskId;
   workspaceId: WorkspaceId;
@@ -62,7 +67,8 @@ export interface Task {
   requiresMergeRequest: boolean;
   dispatchConstraints: TaskDispatchConstraints;
   continuity: TaskContinuityCheckpoint[];
-  repairContexts: string[];
+  repairContext: string[];
+  followUpSource?: FollowUpSource;
   createdAt: string;
   updatedAt: string;
 }
@@ -76,6 +82,7 @@ export interface CreateTaskInput {
   dependencyIds?: TaskId[];
   planId?: string;
   requiresMergeRequest?: boolean;
+  followUpSource?: FollowUpSource;
   dispatchConstraints?: Partial<TaskDispatchConstraints>;
 }
 

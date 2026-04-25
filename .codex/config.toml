@@ -8,7 +8,7 @@ matcher = "Edit|Write"
 type = "command"
 command = 'node "$(git rev-parse --show-toplevel)/.codex/hooks/run-quality-fast.mjs"'
 timeout = 120
-statusMessage = "Running fast quality checks"
+statusMessage = "Auto-fixing changed files and running fast quality checks"
 
 [[hooks.Stop]]
 

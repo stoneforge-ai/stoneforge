@@ -1,5 +1,5 @@
 import { type CIRunId } from "@stoneforge/core";
-import { TaskDispatchService } from "@stoneforge/execution";
+import { type TaskDispatchService } from "@stoneforge/execution";
 
 import { evaluateMergePolicy } from "./merge-policy.js";
 import type {
@@ -25,7 +25,7 @@ export class MergeRequestPolicyFlow {
     mergeRequest.state = "repair_required";
     mergeRequest.updatedAt = this.now();
     await this.publishPolicyCheck(mergeRequest, "failed", reason);
-    this.execution.reopenTaskForRepair(mergeRequest.sourceOwner.taskId, reason);
+    this.execution.requireTaskRepair(mergeRequest.sourceOwner.taskId, reason);
   }
 
   async evaluatePolicy(mergeRequest: MergeRequest): Promise<void> {
@@ -39,7 +39,7 @@ export class MergeRequestPolicyFlow {
       return;
     }
 
-    if (decision.nextState) {
+    if (decision.nextState !== undefined) {
       mergeRequest.state = decision.nextState;
     }
 

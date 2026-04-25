@@ -148,7 +148,7 @@ Metrics are quality gates, not substitutes for judgment. Passing numbers do not 
 
 ### Quality automation
 
-Run `pnpm quality` before handing off code. Pre-commit runs `quality`; pre-push and agent Stop hooks run `quality:ci`; Edit/Write hooks run `quality:fast`. Do not bypass these checks unless the user explicitly asks for a partial or investigative change.
+Run `pnpm quality` before handing off code. Pre-commit runs `quality`; pre-push and agent Stop hooks run `quality:ci`; Edit/Write hooks run ESLint `--fix` and Prettier `--write` on changed files before `quality:fast`. Do not bypass these checks unless the user explicitly asks for a partial or investigative change.
 
 Codex and Claude Stop hooks are session-gated: Edit/Write hooks create a marker under `.git/stoneforge-quality-hooks/sessions/`, and Stop hooks run only when that marker exists. Hook receipts are appended to `.git/stoneforge-quality-hooks/history.log`.
 

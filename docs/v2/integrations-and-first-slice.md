@@ -106,7 +106,7 @@ Supported behavior:
 
 - observe GitHub checks and statuses for task and plan PRs
 - record those observations as CIRuns
-- use observed CI state in review, approval, merge, reopen, and escalation logic
+- use observed CI state in review, approval, merge, repair, and escalation logic
 - publish a required `stoneforge/policy` status or check to GitHub
 
 Not a first-slice goal:
@@ -196,13 +196,13 @@ The first vertical proving scenario should use the simplest full path that exerc
 7. run one worker Session on a real execution path
 8. open one task PR in GitHub
 9. observe CI and run review
-10. either merge successfully or reopen the Task for repair and redispatch
+10. either merge successfully or require Task repair and redispatch
 
 Why this is the build entrypoint:
 
 - it proves the repo-scoped Workspace boundary
 - it proves the Runtime, Agent, and RoleDefinition separation
-- it proves dispatch, Assignment, Session, PR, CI, review, approval, merge, and reopen on one narrow path
+- it proves dispatch, Assignment, Session, PR, CI, review, approval, merge, and repair on one narrow path
 - it avoids plan aggregation complexity until the direct task path is stable
 
 ## Implementation Slices
@@ -265,7 +265,7 @@ Acceptance criteria:
 
 Exact outcome:
 
-- a completed code-changing Task Assignment opens a task PR, and subsequent MergeRequest-owned Assignments observe CI, record review outcomes, and either merge or reopen the Task for repair
+- a completed code-changing Task Assignment opens a task PR, and subsequent MergeRequest-owned Assignments observe CI, record review outcomes, and either merge or require Task repair
 
 Touched subsystems:
 
@@ -275,7 +275,7 @@ Touched subsystems:
 - review automation
 - approval and policy evaluation
 - merge execution
-- reopen and redispatch logic
+- repair and redispatch logic
 
 Dependencies:
 
@@ -288,7 +288,7 @@ Acceptance criteria:
 - review can run through a MergeRequest-owned Assignment and record approve or changes-requested outcomes
 - `stoneforge/policy` is published and gates merge correctly
 - successful approval and CI allow merge
-- change-request or CI failure reopens the Task and creates a new repair Assignment on redispatch
+- change request or CI failure requires Task repair and creates a new repair Assignment on redispatch
 
 ### Slice 4: Failure And Recovery Hardening
 
@@ -327,7 +327,7 @@ Touched subsystems:
 - Plan activation
 - plan-branch and plan-PR integration
 - plan-level MergeRequest-owned review or merge-evaluation Assignments
-- task reopen-from-plan-feedback behavior
+- task repair-from-plan-feedback behavior
 
 Dependencies:
 
@@ -338,7 +338,7 @@ Acceptance criteria:
 - tasks inside an inactive Plan do not dispatch
 - active planned tasks merge into a plan branch by default
 - the plan PR can observe CI and review state
-- plan-level repair triggers reopen or create Tasks rather than dispatching coding directly on the Plan
+- plan-level repair triggers update or create Tasks rather than dispatching coding directly on the Plan
 - plan PR merge completes the Plan cleanly
 
 ## Proving Scenarios
@@ -366,7 +366,7 @@ The first slice is successful only if a new engineer or agent can map these scen
 ### Repair And Recovery
 
 - resume after Session crash or context exhaustion
-- reopen a task from review feedback
+- require task repair from review feedback
 - redispatch repair work as a new Assignment
 
 ### Review, Approval, And Merge

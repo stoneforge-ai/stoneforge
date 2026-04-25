@@ -232,7 +232,7 @@ describe("TaskDispatchService edge cases", () => {
     expect(service.listAssignments()[0].state).toBe("canceled");
   });
 
-  it("reopens and completes task records through explicit lifecycle methods", async () => {
+  it("requires repair and completes task records through explicit lifecycle methods", async () => {
     const { workspace } = createReadyWorkspace();
     const service = new TaskDispatchService(new RecordingAdapter());
 
@@ -240,25 +240,53 @@ describe("TaskDispatchService edge cases", () => {
     const task = service.createTask({
       workspaceId: workspace.id,
       title: "Repairable task",
-      intent: "Can reopen before merge.",
+      intent: "Can require repair before merge.",
       acceptanceCriteria: ["Repair context is captured."],
       requiresMergeRequest: true,
     });
 
     await service.runSchedulerOnce();
     const assignment = service.completeAssignment(service.listAssignments()[0].id);
-    const reopened = service.reopenTaskForRepair(task.id, "Review requested changes");
+    const repairRequired = service.requireTaskRepair(task.id, "Review requested changes");
 
     expect(assignment.state).toBe("succeeded");
-    expect(reopened.state).toBe("ready");
-    expect(reopened.repairContexts).toContain("Review requested changes");
+    expect(repairRequired.state).toBe("ready");
+    expect(repairRequired.repairContext).toContain("Review requested changes");
 
     const completed = service.completeTaskAfterMerge(task.id);
 
     expect(completed.state).toBe("completed");
-    expect(() => service.reopenTaskForRepair(task.id, "Too late")).toThrow(
-      /cannot be reopened/i,
+    expect(() => service.requireTaskRepair(task.id, "Too late")).toThrow(
+      /cannot require repair/i,
     );
+  });
+
+  it("records first-class follow-up task lineage to prior terminal work", () => {
+    const { workspace } = createReadyWorkspace();
+    const service = new TaskDispatchService(new RecordingAdapter());
+
+    service.configureWorkspace(workspace);
+    const original = service.createTask({
+      workspaceId: workspace.id,
+      title: "Original task",
+      intent: "Complete behavior.",
+      acceptanceCriteria: ["Original work completes."],
+    });
+    const followUp = service.createTask({
+      workspaceId: workspace.id,
+      title: "Follow-up task",
+      intent: "Continue from prior terminal work.",
+      acceptanceCriteria: ["Follow-up work completes."],
+      followUpSource: {
+        taskId: original.id,
+        mergeRequestId: asMergeRequestId("merge_request_1"),
+      },
+    });
+
+    expect(followUp.followUpSource).toEqual({
+      taskId: original.id,
+      mergeRequestId: asMergeRequestId("merge_request_1"),
+    });
   });
 
   it("keeps repair-required tasks undispatched until readiness gates pass", () => {
@@ -272,9 +300,9 @@ describe("TaskDispatchService edge cases", () => {
       intent: "Needs acceptance criteria before repair can dispatch.",
       requiresMergeRequest: true,
     });
-    const reopened = service.reopenTaskForRepair(task.id, "Repair trigger");
+    const repairRequired = service.requireTaskRepair(task.id, "Repair trigger");
 
-    expect(reopened.state).toBe("repair_required");
+    expect(repairRequired.state).toBe("repair_required");
     expect(service.listDispatchIntents()).toEqual([]);
 
     const dispatchable = service.updateTask(task.id, {

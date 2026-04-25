@@ -1,5 +1,5 @@
 import type { Assignment, Task, TaskId } from "@stoneforge/execution";
-import { TaskDispatchService } from "@stoneforge/execution";
+import { type TaskDispatchService } from "@stoneforge/execution";
 
 import type {
   GitHubMergeRequestAdapter,

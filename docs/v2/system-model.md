@@ -28,7 +28,7 @@ Working assumptions:
 - Org is the top-level tenant, identity, and membership boundary
 - Workspace policy is the main enforcement context, with Org policy supplying defaults and guardrails
 - tags are supported on Runtime, Agent, RoleDefinition, Task, and Automation for matching and reporting
-- a code-changing Task usually has one primary open MergeRequest at a time, but reopen loops may update the same provider PR or replace the internal artifact if needed
+- a code-changing Task usually has one primary open MergeRequest at a time, but repair loops may update the same provider PR or replace the internal artifact if needed
 
 Intentionally not specified yet:
 
@@ -133,7 +133,8 @@ Key associations:
 - may depend on other Tasks
 - may reference Documents
 - may accumulate many Assignments over time
-- may accumulate one or more MergeRequests across reopen loops
+- may accumulate one or more MergeRequests across repair loops
+- may reference one prior terminal source Task and optionally one source MergeRequest when created as a Follow-Up Task
 
 Frozen semantics:
 
@@ -432,11 +433,12 @@ First-slice rules:
 - an Assignment belongs to exactly one Task or exactly one MergeRequest
 - one Session belongs to exactly one Assignment
 - resumed work after crash or context exhaustion creates a new Session under the same Assignment when policy allows
-- reopened work after a repair trigger creates a new Task-owned Assignment on the same Task
+- repair work after a repair trigger creates a new Task-owned Assignment on the same Task
+- Follow-Up Context creates a Follow-Up Task from prior terminal work rather than reopening the source Task
 - a MergeRequest belongs to one Task or one Plan, never both
-- review or merge-evaluation work may use MergeRequest-owned Assignments; coding repair still reopens or creates Tasks
+- review or merge-evaluation work may use MergeRequest-owned Assignments; coding repair still updates or creates Tasks
 - GitHub-first terminology may say `PR`, but the product model keeps `MergeRequest` as the canonical internal noun
-- Documents are reusable workspace context; task-local checkpoints, remaining work, and reopen notes belong on the Task
+- Documents are reusable workspace context; task-local checkpoints, remaining work, and repair context belong on the Task
 - AuditEvents are required for sensitive actions and must capture actor, target, and outcome
 - policies constrain what automation, scheduler, agents, and humans may do; none of those subsystems bypass policy
 

@@ -1,11 +1,11 @@
 import type { MergeRequestId } from "@stoneforge/core";
-import { TaskDispatchService } from "@stoneforge/execution";
+import { type TaskDispatchService } from "@stoneforge/execution";
 
 import type {
   MergeRequest,
   RecordReviewOutcomeInput,
 } from "./models.js";
-import { MergeRequestPolicyFlow } from "./merge-request-policy-flow.js";
+import { type MergeRequestPolicyFlow } from "./merge-request-policy-flow.js";
 import {
   assertMergeRequestReviewAssignment,
   rememberReviewAssignment,

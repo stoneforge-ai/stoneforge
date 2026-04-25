@@ -1,5 +1,5 @@
 import { type CIRunId, type MergeRequestId } from "@stoneforge/core";
-import { type Assignment, TaskDispatchService } from "@stoneforge/execution";
+import { type Assignment, type TaskDispatchService } from "@stoneforge/execution";
 import type { Task } from "@stoneforge/execution";
 
 import type {

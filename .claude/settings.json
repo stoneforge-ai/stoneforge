@@ -8,7 +8,7 @@
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/run-quality-fast.mjs\"",
             "timeout": 120,
-            "statusMessage": "Running fast quality checks"
+            "statusMessage": "Auto-fixing changed files and running fast quality checks"
           }
         ]
       }

@@ -37,7 +37,7 @@ export function cloneTask(task: Task): Task {
       remainingWork: [...checkpoint.remainingWork],
       importantContext: [...checkpoint.importantContext],
     })),
-    repairContexts: [...task.repairContexts],
+    repairContext: [...task.repairContext],
   };
 }
 

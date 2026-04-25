@@ -233,11 +233,11 @@ describe("MergeRequestService", () => {
       reason: "Tighten the tests.",
     });
 
-    const reopenedTask = execution.getTask(mergeRequest.sourceOwner.taskId);
+    const repairTask = execution.getTask(mergeRequest.sourceOwner.taskId);
 
     expect(repaired.state).toBe("repair_required");
-    expect(reopenedTask.state).toBe("ready");
-    expect(reopenedTask.repairContexts).toContain("Tighten the tests.");
+    expect(repairTask.state).toBe("ready");
+    expect(repairTask.repairContext).toContain("Tighten the tests.");
 
     await execution.runSchedulerOnce();
 

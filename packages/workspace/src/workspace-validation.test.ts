@@ -99,7 +99,8 @@ describe("workspace validation policy", () => {
       fc.property(workspaceOptionArbitrary, (options) => {
         const validation = buildValidationResult(workspace(options), now);
         const expectedExecutionPath = hasHealthyExecutionPath(options);
-        const expectedReady = options.repositoryConnected && expectedExecutionPath;
+        const expectedReady =
+          options.repositoryConnected === true && expectedExecutionPath;
 
         expect(validation.ready).toBe(expectedReady);
         expect(validation.issues.length === 0).toBe(expectedReady);
@@ -181,7 +182,8 @@ function workspace(options: WorkspaceOptions = {}): Workspace {
     targetBranch: "main",
     state: options.state ?? "draft",
     repository: repository(options),
-    policyPreset: options.policyConfigured ? "supervised" : undefined,
+    policyPreset:
+      options.policyConfigured === true ? "supervised" : undefined,
     runtimes: runtimes(options),
     agents: agents(options, agentRuntimeId),
     roleDefinitions: roleDefinitions(options),
@@ -191,7 +193,7 @@ function workspace(options: WorkspaceOptions = {}): Workspace {
 }
 
 function repository(options: WorkspaceOptions): Workspace["repository"] {
-  if (!options.repositoryConnected) {
+  if (options.repositoryConnected !== true) {
     return undefined;
   }
 
@@ -206,7 +208,7 @@ function repository(options: WorkspaceOptions): Workspace["repository"] {
 }
 
 function runtimes(options: WorkspaceOptions): Workspace["runtimes"] {
-  if (!options.runtimeHealth) {
+  if (options.runtimeHealth === undefined) {
     return [];
   }
 
@@ -227,7 +229,7 @@ function agents(
   options: WorkspaceOptions,
   agentRuntimeId: ReturnType<typeof asRuntimeId>,
 ): Workspace["agents"] {
-  if (!options.agentHealth) {
+  if (options.agentHealth === undefined) {
     return [];
   }
 
@@ -248,7 +250,7 @@ function agents(
 }
 
 function roleDefinitions(options: WorkspaceOptions): Workspace["roleDefinitions"] {
-  if (!options.policyConfigured) {
+  if (options.policyConfigured !== true) {
     return [];
   }
 
