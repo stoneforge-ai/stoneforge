@@ -47,8 +47,8 @@ This glossary captures the canonical domain language for Stoneforge V2 work. It 
 | **Acceptance Criteria** | The concrete conditions that define whether a task's intended work is complete. | Requirements, checklist |
 | **Priority** | A task ordering signal used for planning and scheduler decisions. | Rank, severity |
 | **Document** | Durable shared workspace context such as specs, runbooks, design notes, and reusable review knowledge. | Hidden memory, task progress note |
-| **Task-Local Continuity** | Structured task state for checkpoints, completed work, remaining work, and reopen context. | Document, prompt memory, transcript |
-| **Checkpoint** | A resumable handoff snapshot containing completed work, remaining work, and important continuation context. | Summary, savepoint, memory |
+| **Task-Local Continuity** | Structured task state for checkpoints, completed work, remaining work, and reopen context that survives across sessions. | Document, prompt memory, transcript |
+| **Checkpoint** | A resumable task-local handoff snapshot containing completed work, remaining work, and important continuation context. | Session state, summary, savepoint, memory |
 | **Reopen Context** | Review, CI, mergeability, or policy feedback attached to a task when repair work is required. | Comment, failure text |
 
 ## Execution and capacity
@@ -166,7 +166,7 @@ These state names are semantic product contracts, not required storage enum stri
 - A **Task** may depend on many other **Tasks**; unresolved **Dependencies** block **Readiness**.
 - A **Plan** must be **active** before its **Tasks** may become dispatchable.
 - A **Document** may be referenced by many **Tasks**, **Plans**, **Assignments**, **MergeRequests**, or **Automations**.
-- **Task-Local Continuity** belongs on the **Task** and may reference the relevant **Assignment** and **Session**.
+- **Task-Local Continuity** belongs on the **Task** and may reference the relevant **Assignment** and checkpoint event.
 - An **Automation** creates **Dispatch Intent** or other workflow intent; it does not directly start **Sessions**.
 - The **Scheduler** resolves exactly one **RoleDefinition**, one **Agent**, and one **Runtime** before execution starts.
 - A **RoleDefinition** has exactly one **Role Category**; **Tags** further constrain capability inside that category.
@@ -175,6 +175,7 @@ These state names are semantic product contracts, not required storage enum stri
 - An **Agent** is bound to exactly one **Runtime** and may execute many **Assignments** over time.
 - An **Assignment** belongs to exactly one **Task** or exactly one **MergeRequest**.
 - An **Assignment** contains one or more **Sessions**; a **Session** belongs to exactly one **Assignment**.
+- A **Session** may emit checkpoint events, but **Checkpoint** content belongs to **Task-Local Continuity** rather than the **Session**.
 - A recoverable crash or context exhaustion creates a new **Session** under the same **Assignment**.
 - A **Repair Trigger** creates a new task-owned **Assignment** on the same **Task** for repair.
 - A **MergeRequest** belongs to exactly one **Task** or exactly one **Plan**.

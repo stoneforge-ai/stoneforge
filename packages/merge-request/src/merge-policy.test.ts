@@ -1,5 +1,6 @@
 import { asMergeRequestId } from "@stoneforge/core";
 import { asTaskId } from "@stoneforge/execution";
+import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 
 import { evaluateMergePolicy, type CIRun, type MergeRequest } from "./index.js";
@@ -64,6 +65,75 @@ describe("evaluateMergePolicy", () => {
       reason: "Stoneforge policy gates are satisfied.",
     });
   });
+
+  it("returns the policy state implied by terminal, CI, review, preset, and approval signals", () => {
+    fc.assert(
+      fc.property(policyCaseArbitrary, (policyCase) => {
+        const result = evaluateMergePolicy(
+          mergeRequest({
+            state: policyCase.state,
+            reviewOutcome: policyCase.reviewApproved
+              ? "approved"
+              : "changes_requested",
+            humanApproval: policyCase.humanApproved
+              ? {
+                  approvedBy: "user_1",
+                  approvedAt: "2026-04-24T00:00:00.000Z",
+                }
+              : undefined,
+          }),
+          policyCase.ciPassed ? [ciRun("passed")] : [ciRun("failed")],
+          {
+            policyPreset: policyCase.supervised ? "supervised" : "autonomous",
+            targetBranch: "main",
+          },
+        );
+
+        if (["merged", "closed_unmerged"].includes(policyCase.state)) {
+          expect(result).toBeNull();
+          return;
+        }
+
+        if (!policyCase.ciPassed || !policyCase.reviewApproved) {
+          expect(result).toEqual(expect.objectContaining({ checkState: "pending" }));
+          return;
+        }
+
+        if (policyCase.supervised && !policyCase.humanApproved) {
+          expect(result).toEqual(
+            expect.objectContaining({
+              checkState: "pending",
+              nextState: "policy_pending",
+            }),
+          );
+          return;
+        }
+
+        expect(result).toEqual(
+          expect.objectContaining({
+            checkState: "passed",
+            nextState: "merge_ready",
+          }),
+        );
+      }),
+    );
+  });
+});
+
+const policyCaseArbitrary = fc.record({
+  state: fc.constantFrom(
+    "draft" as const,
+    "open" as const,
+    "repair_required" as const,
+    "policy_pending" as const,
+    "merge_ready" as const,
+    "merged" as const,
+    "closed_unmerged" as const,
+  ),
+  ciPassed: fc.boolean(),
+  reviewApproved: fc.boolean(),
+  supervised: fc.boolean(),
+  humanApproved: fc.boolean(),
 });
 
 const supervised = {

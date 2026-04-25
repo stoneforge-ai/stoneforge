@@ -56,6 +56,7 @@
     "dependency-cruiser": "^17.3.10",
     "eslint": "^10.2.1",
     "eslint-plugin-sonarjs": "^4.0.3",
+    "fast-check": "^4.3.0",
     "husky": "^9.1.7",
     "turbo": "^2.8.14",
     "typescript": "^5.0.0",
