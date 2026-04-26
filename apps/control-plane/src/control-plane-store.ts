@@ -1,37 +1,15 @@
-import type {
-  AgentId,
-  CIRunId,
-  MergeRequestId,
-  OrgId,
-  RoleDefinitionId,
-  RuntimeId,
-  WorkspaceId,
-} from "@stoneforge/core";
-import type {
-  AssignmentId,
-  ExecutionSnapshot,
-  SessionId,
-  TaskId,
-} from "@stoneforge/execution";
+import type { ExecutionSnapshot } from "@stoneforge/execution";
 import type { MergeRequestSnapshot } from "@stoneforge/merge-request";
 import type { WorkspaceSetupSnapshot } from "@stoneforge/workspace";
 
-export const controlPlaneSnapshotVersion = 1;
+import {
+  parseCurrentControlPlaneIds,
+  type CurrentControlPlaneIds,
+} from "./control-plane-current-ids.js";
 
-export interface CurrentControlPlaneIds {
-  orgId?: OrgId;
-  workspaceId?: WorkspaceId;
-  runtimeId?: RuntimeId;
-  agentId?: AgentId;
-  roleDefinitionId?: RoleDefinitionId;
-  taskId?: TaskId;
-  implementationAssignmentId?: AssignmentId;
-  implementationSessionId?: SessionId;
-  mergeRequestId?: MergeRequestId;
-  ciRunId?: CIRunId;
-  reviewAssignmentId?: AssignmentId;
-  reviewSessionId?: SessionId;
-}
+export type { CurrentControlPlaneIds } from "./control-plane-current-ids.js";
+
+export const controlPlaneSnapshotVersion = 1;
 
 export interface ControlPlaneSnapshot {
   version: typeof controlPlaneSnapshotVersion;
@@ -118,10 +96,21 @@ export function validateControlPlaneSnapshot(
     );
   }
 
-  return snapshot as ControlPlaneSnapshot;
+  const validSnapshot = snapshot as ControlPlaneSnapshot;
+
+  return {
+    ...validSnapshot,
+    current: parseCurrentControlPlaneIds(
+      validSnapshot.current,
+      source,
+      invalidCurrentIdError,
+    ),
+  };
 }
 
-function hasRequiredCollections(snapshot: Partial<ControlPlaneSnapshot>): boolean {
+function hasRequiredCollections(
+  snapshot: Partial<ControlPlaneSnapshot>,
+): boolean {
   return (
     hasWorkspaceCollections(snapshot) &&
     hasExecutionCollections(snapshot) &&
@@ -130,7 +119,9 @@ function hasRequiredCollections(snapshot: Partial<ControlPlaneSnapshot>): boolea
   );
 }
 
-function hasWorkspaceCollections(snapshot: Partial<ControlPlaneSnapshot>): boolean {
+function hasWorkspaceCollections(
+  snapshot: Partial<ControlPlaneSnapshot>,
+): boolean {
   return [
     snapshot.workspace?.orgs,
     snapshot.workspace?.workspaces,
@@ -138,7 +129,9 @@ function hasWorkspaceCollections(snapshot: Partial<ControlPlaneSnapshot>): boole
   ].every(Array.isArray);
 }
 
-function hasExecutionCollections(snapshot: Partial<ControlPlaneSnapshot>): boolean {
+function hasExecutionCollections(
+  snapshot: Partial<ControlPlaneSnapshot>,
+): boolean {
   return [
     snapshot.execution?.workspaces,
     snapshot.execution?.tasks,
@@ -165,4 +158,13 @@ function snapshotVersionText(snapshot: Partial<ControlPlaneSnapshot>): string {
   }
 
   return String(snapshot.version);
+}
+
+function invalidCurrentIdError(
+  label: string,
+  source: string,
+): ControlPlanePersistenceError {
+  return new ControlPlanePersistenceError(
+    `Persisted control-plane snapshot in ${source} has invalid ${label}. Reset the store or restore a compatible snapshot.`,
+  );
 }

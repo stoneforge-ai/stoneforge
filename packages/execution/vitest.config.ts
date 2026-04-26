@@ -4,7 +4,7 @@ export default defineConfig({
   test: {
     coverage: {
       all: true,
-      exclude: ["src/**/*.test.ts", "src/index.ts", "src/models.ts", "src/ids.ts"],
+      exclude: ["src/**/*.test.ts", "src/index.ts", "src/models.ts"],
       include: ["src/**/*.ts"],
       provider: "v8",
       reporter: ["text", "json", "lcov"],

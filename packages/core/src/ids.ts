@@ -40,3 +40,47 @@ export function asMergeRequestId(value: string): MergeRequestId {
 export function asCIRunId(value: string): CIRunId {
   return brand<"CIRunId">(value);
 }
+
+export function parseOrgId(value: string): OrgId {
+  return asOrgId(validIdValue(value, "OrgId"));
+}
+
+export function parseWorkspaceId(value: string): WorkspaceId {
+  return asWorkspaceId(validIdValue(value, "WorkspaceId"));
+}
+
+export function parseRuntimeId(value: string): RuntimeId {
+  return asRuntimeId(validIdValue(value, "RuntimeId"));
+}
+
+export function parseAgentId(value: string): AgentId {
+  return asAgentId(validIdValue(value, "AgentId"));
+}
+
+export function parseRoleDefinitionId(value: string): RoleDefinitionId {
+  return asRoleDefinitionId(validIdValue(value, "RoleDefinitionId"));
+}
+
+export function parseAuditEventId(value: string): AuditEventId {
+  return asAuditEventId(validIdValue(value, "AuditEventId"));
+}
+
+export function parseMergeRequestId(value: string): MergeRequestId {
+  return asMergeRequestId(validIdValue(value, "MergeRequestId"));
+}
+
+export function parseCIRunId(value: string): CIRunId {
+  return asCIRunId(validIdValue(value, "CIRunId"));
+}
+
+const idPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
+
+function validIdValue(value: string, label: string): string {
+  if (idPattern.test(value)) {
+    return value;
+  }
+
+  throw new Error(
+    `${label} must be a non-empty identifier containing only letters, numbers, ".", "_", "-", or ":".`,
+  );
+}
