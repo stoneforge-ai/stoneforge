@@ -5,29 +5,35 @@ import {
   readFileSync,
   renameSync,
   rmSync,
-  statSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, isAbsolute, relative, resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import {
+  collectEditedPaths,
+  filesForEslint,
+  nonMarkdownFiles,
+} from "./quality-hook-paths.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const hookStateRoot = resolve(repoRoot, ".git", "stoneforge-quality-hooks");
 const markerRoot = resolve(hookStateRoot, "sessions");
 const historyPath = resolve(hookStateRoot, "history.log");
-const eslintExtensions = new Set([".cjs", ".cts", ".js", ".jsx", ".mjs", ".mts", ".ts", ".tsx"]);
 
 const hookTargets = {
   fast: {
     script: "quality:fast",
     interrupted: "Fast quality checks were interrupted",
-    failed: "Fast quality checks failed after a file edit. Fix the issue before continuing.",
+    failed:
+      "Fast quality checks failed after a file edit. Fix the issue before continuing.",
     startup: "Unable to start fast quality checks",
   },
   turn: {
     script: "quality:turn",
     interrupted: "Full quality gate was interrupted",
-    failed: "Full quality gate failed at end of turn. Inspect the output, fix the failures, and run the gate again.",
+    failed:
+      "Full quality gate failed at end of turn. Inspect the output, fix the failures, and run the gate again.",
     startup: "Unable to start full quality gate",
   },
 };
@@ -39,64 +45,6 @@ function readHookInput() {
   } catch {
     return {};
   }
-}
-
-function editedPathFrom(value) {
-  if (typeof value !== "string" || value.trim() === "") {
-    return null;
-  }
-
-  const absolutePath = isAbsolute(value) ? resolve(value) : resolve(repoRoot, value);
-  const relativePath = relative(repoRoot, absolutePath);
-
-  if (relativePath.startsWith("..") || isAbsolute(relativePath) || !existsSync(absolutePath)) {
-    return null;
-  }
-
-  return absolutePath;
-}
-
-function collectEditedPaths(value, paths = new Set()) {
-  if (!value || typeof value !== "object") {
-    return paths;
-  }
-
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      collectEditedPaths(item, paths);
-    }
-
-    return paths;
-  }
-
-  for (const [key, entry] of Object.entries(value)) {
-    const looksLikePathKey = /^(file_?path|path|filename|target_?file)$/i.test(key);
-    const editedPath = looksLikePathKey ? editedPathFrom(entry) : null;
-
-    if (editedPath) {
-      paths.add(editedPath);
-      continue;
-    }
-
-    collectEditedPaths(entry, paths);
-  }
-
-  return paths;
-}
-
-function extensionFor(filePath) {
-  const match = filePath.match(/\.[^.]+$/);
-  return match ? match[0] : "";
-}
-
-function filesForEslint(paths) {
-  return paths.filter((filePath) => {
-    if (!existsSync(filePath) || !statSync(filePath).isFile()) {
-      return false;
-    }
-
-    return eslintExtensions.has(extensionFor(filePath));
-  });
 }
 
 function runCommand(label, command, args) {
@@ -129,17 +77,23 @@ function runCommand(label, command, args) {
         return;
       }
 
-      const reason = signal ? `${label} was interrupted by ${signal}` : `${label} exited with ${code}`;
+      const reason = signal
+        ? `${label} was interrupted by ${signal}`
+        : `${label} exited with ${code}`;
       rejectRun(new Error(reason));
     });
   });
 }
 
-async function autofixEditedFiles(agentName, sessionKey, hookInput) {
-  const editedPaths = [...collectEditedPaths(hookInput)];
-
+async function autofixEditedFiles(agentName, sessionKey, editedPaths) {
   if (editedPaths.length === 0) {
-    writeReceipt(agentName, sessionKey, "autofix", "skipped", "no-edited-file-paths");
+    writeReceipt(
+      agentName,
+      sessionKey,
+      "autofix",
+      "skipped",
+      "no-edited-file-paths",
+    );
     return;
   }
 
@@ -163,7 +117,37 @@ async function autofixEditedFiles(agentName, sessionKey, hookInput) {
     ...editedPaths,
   ]);
 
-  writeReceipt(agentName, sessionKey, "autofix", "passed", `${editedPaths.length}-file(s)`);
+  writeReceipt(
+    agentName,
+    sessionKey,
+    "autofix",
+    "passed",
+    `${editedPaths.length}-file(s)`,
+  );
+}
+
+async function prepareFastHook(agentName, sessionKey, hookInput) {
+  const editedPaths = [...collectEditedPaths(repoRoot, hookInput)];
+  const changedCodePaths = nonMarkdownFiles(editedPaths);
+
+  if (changedCodePaths.length === 0) {
+    const detail =
+      editedPaths.length === 0 ? "no-edited-file-paths" : "markdown-only";
+    writeReceipt(agentName, sessionKey, "fast", "skipped", detail);
+    return false;
+  }
+
+  markSessionChanged(agentName, sessionKey, "fast");
+
+  try {
+    await autofixEditedFiles(agentName, sessionKey, editedPaths);
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    writeReceipt(agentName, sessionKey, "autofix", "failed");
+    process.exit(2);
+  }
+
+  return true;
 }
 
 function writeReceipt(agentName, sessionKey, targetName, status, detail) {
@@ -247,20 +231,24 @@ export async function runQualityHook(targetName, options = {}) {
   }
 
   if (targetName === "fast") {
-    markSessionChanged(agentName, sessionKey, targetName);
-    try {
-      await autofixEditedFiles(agentName, sessionKey, hookInput);
-    } catch (error) {
-      console.error(error instanceof Error ? error.message : String(error));
-      writeReceipt(agentName, sessionKey, "autofix", "failed");
-      process.exit(2);
+    const shouldRun = await prepareFastHook(agentName, sessionKey, hookInput);
+
+    if (!shouldRun) {
+      process.exit(0);
     }
   }
 
-  const claimedMarkerPath = targetName === "turn" ? claimSessionMarker(sessionKey) : null;
+  const claimedMarkerPath =
+    targetName === "turn" ? claimSessionMarker(sessionKey) : null;
 
   if (targetName === "turn" && !claimedMarkerPath) {
-    writeReceipt(agentName, sessionKey, targetName, "skipped", "no-session-file-edits");
+    writeReceipt(
+      agentName,
+      sessionKey,
+      targetName,
+      "skipped",
+      "no-session-file-edits",
+    );
     process.exit(0);
   }
 
@@ -292,11 +280,19 @@ export async function runQualityHook(targetName, options = {}) {
       process.exit(0);
     }
 
-    const reason = signal ? `${target.interrupted} by ${signal}.` : target.failed;
+    const reason = signal
+      ? `${target.interrupted} by ${signal}.`
+      : target.failed;
 
     console.error(reason);
     restoreSessionMarker(claimedMarkerPath);
-    writeReceipt(agentName, sessionKey, targetName, "failed", signal ?? `exit-${code}`);
+    writeReceipt(
+      agentName,
+      sessionKey,
+      targetName,
+      "failed",
+      signal ?? `exit-${code}`,
+    );
     process.exit(2);
   });
 }
