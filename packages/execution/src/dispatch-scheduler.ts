@@ -20,7 +20,7 @@ import {
   type AgentAdapterService,
   type AdapterStartFailed,
   startAgentSession,
-} from "./effect-boundary.js";
+} from "./agent-adapter-runtime.js";
 import type { ExecutionState } from "./execution-state.js";
 import type { TaskLifecycle } from "./task-lifecycle.js";
 import type {
@@ -62,7 +62,7 @@ export class DispatchScheduler {
       const task = this.readyTaskForIntent(intent);
 
       if (intent.targetType === "task" && !task) {
-        return this.recordPlacementFailureEffect(intent, "task_not_ready");
+        return this.recordPlacementFailureOutcome(intent, "task_not_ready");
       }
 
       const placement = resolvePlacement(
@@ -72,7 +72,7 @@ export class DispatchScheduler {
       );
 
       if ("reason" in placement) {
-        return this.recordPlacementFailureEffect(intent, placement.reason);
+        return this.recordPlacementFailureOutcome(intent, placement.reason);
       }
 
       return this.startAssignment(intent, task, placement).pipe(
@@ -142,7 +142,7 @@ export class DispatchScheduler {
     this.markTaskReadyForRetry(intent);
   }
 
-  private recordPlacementFailureEffect(
+  private recordPlacementFailureOutcome(
     intent: DispatchIntent,
     reason: PlacementFailureReason,
   ): Effect.Effect<DispatchIntent> {

@@ -4,7 +4,12 @@ import {
   type AssignmentId,
   type TaskDispatchService,
 } from "@stoneforge/execution";
+import { Effect } from "effect";
 
+import type {
+  MergeRequestAdapterService,
+  PublishPolicyCheckFailed,
+} from "./merge-request-runtime.js";
 import type { MergeRequest, RecordReviewOutcomeInput } from "./models.js";
 import { type MergeRequestPolicyFlow } from "./merge-request-policy-flow.js";
 import {
@@ -12,40 +17,48 @@ import {
   rememberReviewAssignment,
 } from "./review-assignments.js";
 
-export async function recordReviewOutcomeOnMergeRequest(
+export function recordReviewOutcomeOnMergeRequest(
   execution: TaskDispatchService,
   policyFlow: MergeRequestPolicyFlow,
   mergeRequestId: MergeRequestId,
   mergeRequest: MergeRequest,
   input: RecordReviewOutcomeInput,
   now: string,
-): Promise<void> {
-  rememberCompletedReviewAssignment(
-    execution,
-    mergeRequestId,
-    mergeRequest,
-    input.assignmentId,
-    now,
-  );
-
-  mergeRequest.reviewOutcomes.push({
-    reviewerKind: input.reviewerKind,
-    reviewerId: input.reviewerId,
-    outcome: input.outcome,
-    reason: input.reason,
-    assignmentId: input.assignmentId,
-    recordedAt: now,
-  });
-
-  if (input.outcome === "changes_requested") {
-    await policyFlow.requestRepair(
+): Effect.Effect<void, PublishPolicyCheckFailed, MergeRequestAdapterService> {
+  return Effect.sync(() => {
+    rememberCompletedReviewAssignment(
+      execution,
+      mergeRequestId,
       mergeRequest,
-      input.reason ?? "Review requested changes",
+      input.assignmentId,
+      now,
     );
-    return;
-  }
 
-  await policyFlow.evaluatePolicy(mergeRequest);
+    mergeRequest.reviewOutcomes.push({
+      reviewerKind: input.reviewerKind,
+      reviewerId: input.reviewerId,
+      outcome: input.outcome,
+      reason: input.reason,
+      assignmentId: input.assignmentId,
+      recordedAt: now,
+    });
+  }).pipe(
+    Effect.flatMap(() => {
+      if (input.outcome === "changes_requested") {
+        return policyFlow.requestRepair(
+          mergeRequest,
+          input.reason ?? "Review requested changes",
+        );
+      }
+
+      return policyFlow.evaluatePolicy(mergeRequest);
+    }),
+    Effect.withSpan("merge_request.record_review_outcome", {
+      attributes: {
+        "stoneforge.merge_request.id": mergeRequestId,
+      },
+    }),
+  );
 }
 
 function rememberCompletedReviewAssignment(

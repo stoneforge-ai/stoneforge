@@ -95,6 +95,10 @@ importers:
         version: 4.0.18
 
   packages/core:
+    dependencies:
+      effect:
+        specifier: ^3.21.2
+        version: 3.21.2
     devDependencies:
       vitest:
         specifier: ^4.0.18
@@ -127,6 +131,9 @@ importers:
       '@stoneforge/workspace':
         specifier: workspace:*
         version: link:../workspace
+      effect:
+        specifier: ^3.21.2
+        version: 3.21.2
     devDependencies:
       vitest:
         specifier: ^4.0.18

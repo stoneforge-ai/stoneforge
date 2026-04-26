@@ -18,6 +18,7 @@ module.exports = {
           "(^|/)eslint\\.config\\.js$",
           "(^|/)vitest\\.config\\.ts$",
           "(^|/)tsconfig(\\.build)?\\.json$",
+          "^packages/core/src/internal/program-runtime\\.ts$",
         ],
       },
       to: {},

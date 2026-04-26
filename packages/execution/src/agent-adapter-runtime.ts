@@ -12,7 +12,7 @@ export class AgentAdapterService extends Context.Tag(
   "@stoneforge/execution/AgentAdapterService",
 )<AgentAdapterService, AgentAdapter>() {}
 
-export function agentAdapterLayer(
+export function agentAdapterRuntime(
   adapter: AgentAdapter,
 ): Layer.Layer<AgentAdapterService> {
   return Layer.succeed(AgentAdapterService, adapter);

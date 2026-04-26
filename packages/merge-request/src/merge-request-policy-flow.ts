@@ -1,10 +1,15 @@
 import { type VerificationRunId } from "@stoneforge/core";
 import { type TaskDispatchService } from "@stoneforge/execution";
+import { Effect } from "effect";
 
 import { evaluateMergePolicy } from "./merge-policy.js";
+import {
+  type MergeRequestAdapterService,
+  type PublishPolicyCheckFailed,
+  publishPolicyCheck,
+} from "./merge-request-runtime.js";
 import type {
   VerificationRun,
-  GitHubMergeRequestAdapter,
   MergeRequest,
   MergeRequestServiceOptions,
   PolicyCheckState,
@@ -13,22 +18,35 @@ import type {
 export class MergeRequestPolicyFlow {
   constructor(
     private readonly execution: TaskDispatchService,
-    private readonly gitHubAdapter: GitHubMergeRequestAdapter,
     private readonly options: MergeRequestServiceOptions,
     private readonly verificationRuns: Map<VerificationRunId, VerificationRun>,
   ) {}
 
-  async requestRepair(
+  requestRepair(
     mergeRequest: MergeRequest,
     reason: string,
-  ): Promise<void> {
-    mergeRequest.state = "repair_required";
-    mergeRequest.updatedAt = this.now();
-    await this.publishPolicyCheck(mergeRequest, "failed", reason);
-    this.execution.requireTaskRepair(mergeRequest.sourceOwner.taskId, reason);
+  ): Effect.Effect<void, PublishPolicyCheckFailed, MergeRequestAdapterService> {
+    const self = this;
+
+    return Effect.gen(function* () {
+      mergeRequest.state = "repair_required";
+      mergeRequest.updatedAt = self.now();
+      yield* self.publishPolicyCheck(mergeRequest, "failed", reason);
+      self.execution.requireTaskRepair(mergeRequest.sourceOwner.taskId, reason);
+    }).pipe(
+      Effect.withSpan("policy.evaluate_merge_request", {
+        attributes: policyAttributes(
+          mergeRequest,
+          this.options.policyPreset,
+          "repair_required",
+        ),
+      }),
+    );
   }
 
-  async evaluatePolicy(mergeRequest: MergeRequest): Promise<void> {
+  evaluatePolicy(
+    mergeRequest: MergeRequest,
+  ): Effect.Effect<void, PublishPolicyCheckFailed, MergeRequestAdapterService> {
     const decision = evaluateMergePolicy(
       mergeRequest,
       this.verificationRunsForMergeRequest(mergeRequest),
@@ -36,21 +54,35 @@ export class MergeRequestPolicyFlow {
     );
 
     if (!decision) {
-      return;
+      return Effect.void;
     }
 
-    if (decision.nextState !== undefined) {
-      mergeRequest.state = decision.nextState;
-    }
+    const self = this;
 
-    await this.publishPolicyCheck(
-      mergeRequest,
-      decision.checkState,
-      decision.reason,
+    return Effect.gen(function* () {
+      if (decision.nextState !== undefined) {
+        mergeRequest.state = decision.nextState;
+      }
+
+      yield* self.publishPolicyCheck(
+        mergeRequest,
+        decision.checkState,
+        decision.reason,
+      );
+    }).pipe(
+      Effect.withSpan("policy.evaluate_merge_request", {
+        attributes: policyAttributes(
+          mergeRequest,
+          this.options.policyPreset,
+          decision.checkState,
+        ),
+      }),
     );
   }
 
-  private verificationRunsForMergeRequest(mergeRequest: MergeRequest): VerificationRun[] {
+  private verificationRunsForMergeRequest(
+    mergeRequest: MergeRequest,
+  ): VerificationRun[] {
     return mergeRequest.verificationRunIds.flatMap((verificationRunId) => {
       const verificationRun = this.verificationRuns.get(verificationRunId);
 
@@ -58,11 +90,11 @@ export class MergeRequestPolicyFlow {
     });
   }
 
-  private async publishPolicyCheck(
+  private publishPolicyCheck(
     mergeRequest: MergeRequest,
     state: PolicyCheckState,
     reason: string,
-  ): Promise<void> {
+  ): Effect.Effect<void, PublishPolicyCheckFailed, MergeRequestAdapterService> {
     const publishedAt = this.now();
 
     mergeRequest.policyCheck = {
@@ -70,7 +102,8 @@ export class MergeRequestPolicyFlow {
       reason,
       publishedAt,
     };
-    await this.gitHubAdapter.publishPolicyCheck({
+
+    return publishPolicyCheck({
       mergeRequestId: mergeRequest.id,
       providerPullRequest: mergeRequest.providerPullRequest,
       state,
@@ -81,4 +114,18 @@ export class MergeRequestPolicyFlow {
   private now(): string {
     return new Date().toISOString();
   }
+}
+
+function policyAttributes(
+  mergeRequest: MergeRequest,
+  policyPreset: string,
+  decision: string,
+): Record<string, string> {
+  return {
+    "stoneforge.workspace.id": mergeRequest.workspaceId,
+    "stoneforge.task.id": mergeRequest.sourceOwner.taskId,
+    "stoneforge.merge_request.id": mergeRequest.id,
+    "stoneforge.policy.preset": policyPreset,
+    "stoneforge.policy.decision": decision,
+  };
 }

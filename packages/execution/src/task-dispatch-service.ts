@@ -1,6 +1,7 @@
 import type { AgentId } from "@stoneforge/core";
+import { runLayeredProgram } from "@stoneforge/core/internal/program-runtime";
 import type { Workspace } from "@stoneforge/workspace";
-import { Effect, type Layer } from "effect";
+import type { Layer } from "effect";
 
 import {
   cloneAssignment,
@@ -12,8 +13,8 @@ import {
 import { DispatchScheduler } from "./dispatch-scheduler.js";
 import {
   type AgentAdapterService,
-  agentAdapterLayer,
-} from "./effect-boundary.js";
+  agentAdapterRuntime,
+} from "./agent-adapter-runtime.js";
 import { ExecutionState } from "./execution-state.js";
 import type {
   AssignmentId,
@@ -50,7 +51,7 @@ export class TaskDispatchService {
   private readonly tasks: TaskLifecycle;
   private readonly scheduler: DispatchScheduler;
   private readonly sessions: SessionLifecycle;
-  private readonly adapterLayer: Layer.Layer<AgentAdapterService>;
+  private readonly adapterRuntime: Layer.Layer<AgentAdapterService>;
 
   constructor(
     adapter: AgentAdapter,
@@ -58,7 +59,7 @@ export class TaskDispatchService {
     snapshot?: ExecutionSnapshot,
   ) {
     this.state = new ExecutionState(snapshot);
-    this.adapterLayer = agentAdapterLayer(adapter);
+    this.adapterRuntime = agentAdapterRuntime(adapter);
     this.tasks = new TaskLifecycle(this.state);
     this.scheduler = new DispatchScheduler(this.state, this.tasks, policy);
     this.sessions = new SessionLifecycle(this.state, this.scheduler, policy);
@@ -83,7 +84,7 @@ export class TaskDispatchService {
   }
 
   runSchedulerOnce(): Promise<DispatchIntent | null> {
-    return this.runEffect(this.scheduler.runOnce());
+    return runLayeredProgram(this.scheduler.runOnce(), this.adapterRuntime);
   }
 
   recordHeartbeat(sessionId: SessionId, note?: string): SessionHeartbeat {
@@ -99,12 +100,13 @@ export class TaskDispatchService {
     failureState: "crashed" | "expired",
     checkpoint: Checkpoint,
   ): Promise<Session> {
-    return this.runEffect(
+    return runLayeredProgram(
       this.sessions.recordRecoverableSessionFailure(
         sessionId,
         failureState,
         checkpoint,
       ),
+      this.adapterRuntime,
     );
   }
 
@@ -160,11 +162,5 @@ export class TaskDispatchService {
 
   exportSnapshot(): ExecutionSnapshot {
     return this.state.exportSnapshot();
-  }
-
-  private runEffect<TResult, TError>(
-    program: Effect.Effect<TResult, TError, AgentAdapterService>,
-  ): Promise<TResult> {
-    return Effect.runPromise(Effect.provide(program, this.adapterLayer));
   }
 }

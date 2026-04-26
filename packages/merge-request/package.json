@@ -23,7 +23,8 @@
   "dependencies": {
     "@stoneforge/core": "workspace:*",
     "@stoneforge/execution": "workspace:*",
-    "@stoneforge/workspace": "workspace:*"
+    "@stoneforge/workspace": "workspace:*",
+    "effect": "^3.21.2"
   },
   "devDependencies": {
     "vitest": "^4.0.18"

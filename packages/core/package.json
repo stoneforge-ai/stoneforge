@@ -10,6 +10,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./internal/program-runtime": {
+      "types": "./dist/internal/program-runtime.d.ts",
+      "import": "./dist/internal/program-runtime.js"
     }
   },
   "scripts": {
@@ -19,6 +23,9 @@
     "test": "vitest run",
     "lint": "pnpm run typecheck",
     "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "effect": "^3.21.2"
   },
   "devDependencies": {
     "vitest": "^4.0.18"

@@ -19,7 +19,7 @@ import {
   resumeAgentSession,
   SessionRecoveryPolicyExceeded,
   TaskRecoveryUnavailable,
-} from "./effect-boundary.js";
+} from "./agent-adapter-runtime.js";
 import type { ExecutionState } from "./execution-state.js";
 import type {
   Assignment,
