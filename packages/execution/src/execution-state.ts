@@ -26,7 +26,12 @@ import type {
   WorkspaceExecutionCapabilities,
 } from "./models.js";
 
-type CounterName = "task" | "dispatchIntent" | "assignment" | "session" | "lease";
+type CounterName =
+  | "task"
+  | "dispatchIntent"
+  | "assignment"
+  | "session"
+  | "lease";
 
 export class ExecutionState {
   readonly workspaces = new Map<WorkspaceId, WorkspaceExecutionCapabilities>();
@@ -58,7 +63,9 @@ export class ExecutionState {
     const capabilities = this.workspaces.get(workspaceId);
 
     if (!capabilities) {
-      throw new Error(`Workspace ${workspaceId} is not configured for dispatch.`);
+      throw new Error(
+        `Workspace ${workspaceId} is not configured for dispatch.`,
+      );
     }
 
     return capabilities;
@@ -102,6 +109,16 @@ export class ExecutionState {
     }
 
     return session;
+  }
+
+  requireLease(leaseId: LeaseId): Lease {
+    const lease = this.leases.get(leaseId);
+
+    if (!lease) {
+      throw new Error(`Lease ${leaseId} does not exist.`);
+    }
+
+    return lease;
   }
 
   nextId(counterName: CounterName): string {
@@ -216,7 +233,9 @@ export class ExecutionState {
 
 function maxNumericSuffix(values: readonly string[], prefix: string): number {
   return values.reduce((max, value) => {
-    const suffix = value.startsWith(prefix) ? Number(value.slice(prefix.length)) : 0;
+    const suffix = value.startsWith(prefix)
+      ? Number(value.slice(prefix.length))
+      : 0;
 
     if (Number.isInteger(suffix) && suffix > max) {
       return suffix;

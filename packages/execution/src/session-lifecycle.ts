@@ -3,6 +3,7 @@ import {
   cloneRoleDefinition,
   cloneRuntime,
 } from "@stoneforge/core";
+import { Effect } from "effect";
 
 import type { SessionId } from "./ids.js";
 import {
@@ -12,27 +13,37 @@ import {
   cloneTask,
 } from "./cloning.js";
 import type { DispatchScheduler } from "./dispatch-scheduler.js";
+import {
+  type AdapterResumeFailed,
+  type AgentAdapterService,
+  resumeAgentSession,
+  SessionRecoveryPolicyExceeded,
+  TaskRecoveryUnavailable,
+} from "./effect-boundary.js";
 import type { ExecutionState } from "./execution-state.js";
 import type {
-  AgentAdapter,
+  Assignment,
   Checkpoint,
   DispatchPolicy,
   Session,
+  SessionHandle,
   SessionHeartbeat,
+  Task,
 } from "./models.js";
 
 export class SessionLifecycle {
   constructor(
     private readonly state: ExecutionState,
     private readonly scheduler: DispatchScheduler,
-    private readonly adapter: AgentAdapter,
     private readonly policy: DispatchPolicy,
   ) {}
 
   recordHeartbeat(sessionId: SessionId, note?: string): SessionHeartbeat {
     const session = this.state.requireSession(sessionId);
     const assignment = this.state.requireAssignment(session.assignmentId);
-    const intent = this.state.requireDispatchIntent(assignment.dispatchIntentId);
+    const intent = this.state.requireDispatchIntent(
+      assignment.dispatchIntentId,
+    );
     const observedAt = this.state.now();
     const heartbeat: SessionHeartbeat = {
       sessionId,
@@ -79,40 +90,120 @@ export class SessionLifecycle {
     return cloneSession(session);
   }
 
-  async recordRecoverableSessionFailure(
+  recordRecoverableSessionFailure(
     sessionId: SessionId,
     failureState: "crashed" | "expired",
     checkpoint: Checkpoint,
-  ): Promise<Session> {
-    const failedSession = this.state.requireSession(sessionId);
-    const assignment = this.state.requireAssignment(failedSession.assignmentId);
+  ): Effect.Effect<
+    Session,
+    | AdapterResumeFailed
+    | SessionRecoveryPolicyExceeded
+    | TaskRecoveryUnavailable,
+    AgentAdapterService
+  > {
+    const self = this;
 
-    if (assignment.owner.type !== "task") {
-      throw new Error(
-        `Assignment ${assignment.id} is not a Task-owned Assignment and cannot use task recovery.`,
+    return Effect.gen(function* () {
+      const failedSession = self.state.requireSession(sessionId);
+      const assignment = self.state.requireAssignment(
+        failedSession.assignmentId,
       );
-    }
 
-    const task = this.state.requireTask(assignment.owner.taskId);
+      if (assignment.owner.type !== "task") {
+        return yield* Effect.fail(
+          new TaskRecoveryUnavailable({ assignmentId: assignment.id }),
+        );
+      }
 
-    this.recordCheckpoint(sessionId, checkpoint);
-    failSession(failedSession, failureState, this.state.now());
-    assignment.recoveryFailureCount += 1;
+      const task = self.state.requireTask(assignment.owner.taskId);
 
-    if (assignment.recoveryFailureCount > this.policy.maxSessionRecoveryFailures) {
-      assignment.state = "escalated";
+      yield* self.recordRecoverableTaskFailure(
+        sessionId,
+        failureState,
+        checkpoint,
+        failedSession,
+        assignment,
+        task,
+      );
+      const handle = yield* self.resumeTaskSession(
+        task,
+        assignment,
+        checkpoint,
+        failedSession,
+      );
+      const replacement = self.scheduler.createSession(
+        assignment,
+        handle.providerSessionId,
+      );
+
+      assignment.sessionIds.push(replacement.id);
+      assignment.state = "running";
+      assignment.updatedAt = self.state.now();
+
+      return cloneSession(replacement);
+    }).pipe(
+      Effect.withSpan("assignment.resume_session", {
+        attributes: {
+          "stoneforge.session.id": sessionId,
+        },
+      }),
+    );
+  }
+
+  private recordRecoverableTaskFailure(
+    sessionId: SessionId,
+    failureState: "crashed" | "expired",
+    checkpoint: Checkpoint,
+    failedSession: Session,
+    assignment: Assignment,
+    task: Task,
+  ): Effect.Effect<void, SessionRecoveryPolicyExceeded> {
+    return Effect.sync(() => {
+      this.recordCheckpoint(sessionId, checkpoint);
+      failSession(failedSession, failureState, this.state.now());
+      assignment.recoveryFailureCount += 1;
+
+      if (
+        assignment.recoveryFailureCount > this.policy.maxSessionRecoveryFailures
+      ) {
+        this.escalateRecoveryFailure(assignment, task);
+        return "escalated";
+      }
+
+      assignment.state = "resume_pending";
       assignment.updatedAt = this.state.now();
-      task.state = "human_review_required";
-      task.updatedAt = assignment.updatedAt;
-      this.scheduler.releaseLease(assignment.leaseId);
-      throw new Error(
-        `Assignment ${assignment.id} exceeded session recovery policy.`,
-      );
-    }
+      return "resume";
+    }).pipe(
+      Effect.tap((decision) =>
+        Effect.annotateCurrentSpan(
+          "stoneforge.policy.decision",
+          decision === "escalated" ? "escalate" : "resume",
+        ),
+      ),
+      Effect.flatMap((decision) =>
+        decision === "escalated"
+          ? Effect.fail(
+              new SessionRecoveryPolicyExceeded({
+                assignmentId: assignment.id,
+              }),
+            )
+          : Effect.void,
+      ),
+      Effect.withSpan("dispatch.recovery_decision", {
+        attributes: {
+          "stoneforge.assignment.id": assignment.id,
+          "stoneforge.session.id": failedSession.id,
+        },
+      }),
+    );
+  }
 
-    assignment.state = "resume_pending";
-    assignment.updatedAt = this.state.now();
-
+  private resumeTaskSession(
+    task: Task,
+    assignment: Assignment,
+    checkpoint: Checkpoint,
+    failedSession: Session,
+  ): Effect.Effect<SessionHandle, AdapterResumeFailed, AgentAdapterService> {
     const capabilities = this.state.requireWorkspace(task.workspaceId);
     const agent = requireById(capabilities.agents, assignment.agentId, "Agent");
     const runtime = requireById(
@@ -125,7 +216,8 @@ export class SessionLifecycle {
       assignment.roleDefinitionId,
       "RoleDefinition",
     );
-    const handle = await this.adapter.resume({
+
+    return resumeAgentSession({
       target: {
         type: "task",
         task: cloneTask(task),
@@ -137,16 +229,14 @@ export class SessionLifecycle {
       checkpoint: cloneCheckpoint(checkpoint),
       failedSession: cloneSession(failedSession),
     });
-    const replacement = this.scheduler.createSession(
-      assignment,
-      handle.providerSessionId,
-    );
+  }
 
-    assignment.sessionIds.push(replacement.id);
-    assignment.state = "running";
+  private escalateRecoveryFailure(assignment: Assignment, task: Task): void {
+    assignment.state = "escalated";
     assignment.updatedAt = this.state.now();
-
-    return cloneSession(replacement);
+    task.state = "human_review_required";
+    task.updatedAt = assignment.updatedAt;
+    this.scheduler.releaseLease(assignment.leaseId);
   }
 }
 

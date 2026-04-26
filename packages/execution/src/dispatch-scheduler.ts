@@ -4,6 +4,7 @@ import {
   cloneRuntime,
 } from "@stoneforge/core";
 import type { Agent, Runtime, RoleDefinition } from "@stoneforge/core";
+import { Effect } from "effect";
 
 import type { AgentId } from "@stoneforge/core";
 import type { LeaseId } from "./ids.js";
@@ -15,10 +16,14 @@ import {
   createSession,
   endActiveSession,
 } from "./dispatch-records.js";
+import {
+  type AgentAdapterService,
+  type AdapterStartFailed,
+  startAgentSession,
+} from "./effect-boundary.js";
 import type { ExecutionState } from "./execution-state.js";
 import type { TaskLifecycle } from "./task-lifecycle.js";
 import type {
-  AgentAdapter,
   Assignment,
   DispatchIntent,
   DispatchPolicy,
@@ -33,44 +38,53 @@ export class DispatchScheduler {
   constructor(
     private readonly state: ExecutionState,
     private readonly tasks: TaskLifecycle,
-    private readonly adapter: AgentAdapter,
     private readonly policy: DispatchPolicy,
   ) {}
 
-  async runOnce(): Promise<DispatchIntent | null> {
-    const intent = this.nextDispatchIntent();
+  runOnce(): Effect.Effect<DispatchIntent | null, never, AgentAdapterService> {
+    return Effect.suspend(() => {
+      const intent = this.nextDispatchIntent();
 
-    if (!intent) {
-      return null;
-    }
+      if (!intent) {
+        return Effect.succeed(null);
+      }
 
-    return this.dispatchIntent(intent);
+      return this.dispatchIntent(intent);
+    }).pipe(Effect.withSpan("scheduler.evaluate_readiness"));
   }
 
-  private async dispatchIntent(
+  private dispatchIntent(
     intent: DispatchIntent,
-  ): Promise<DispatchIntent> {
-    this.requeueRetryIntent(intent);
+  ): Effect.Effect<DispatchIntent, never, AgentAdapterService> {
+    return Effect.suspend(() => {
+      this.requeueRetryIntent(intent);
 
-    const task = this.readyTaskForIntent(intent);
+      const task = this.readyTaskForIntent(intent);
 
-    if (intent.targetType === "task" && !task) {
-      this.recordPlacementFailure(intent, "task_not_ready");
-      return cloneDispatchIntent(intent);
-    }
+      if (intent.targetType === "task" && !task) {
+        return this.recordPlacementFailureEffect(intent, "task_not_ready");
+      }
 
-    const placement = resolvePlacement(
-      this.state.requireWorkspace(intent.workspaceId),
-      intent,
-      (agent) => this.activeLeaseCount(agent.id),
+      const placement = resolvePlacement(
+        this.state.requireWorkspace(intent.workspaceId),
+        intent,
+        (agent) => this.activeLeaseCount(agent.id),
+      );
+
+      if ("reason" in placement) {
+        return this.recordPlacementFailureEffect(intent, placement.reason);
+      }
+
+      return this.startAssignment(intent, task, placement).pipe(
+        Effect.withSpan("dispatch.acquire_lease", {
+          attributes: dispatchAttributes(intent),
+        }),
+      );
+    }).pipe(
+      Effect.withSpan("dispatch.evaluate_intent", {
+        attributes: dispatchAttributes(intent),
+      }),
     );
-
-    if ("reason" in placement) {
-      this.recordPlacementFailure(intent, placement.reason);
-      return cloneDispatchIntent(intent);
-    }
-
-    return this.startAssignment(intent, task, placement);
   }
 
   completeAssignment(assignmentId: Assignment["id"]): Assignment {
@@ -128,6 +142,27 @@ export class DispatchScheduler {
     this.markTaskReadyForRetry(intent);
   }
 
+  private recordPlacementFailureEffect(
+    intent: DispatchIntent,
+    reason: PlacementFailureReason,
+  ): Effect.Effect<DispatchIntent> {
+    return Effect.sync(() => {
+      this.recordPlacementFailure(intent, reason);
+
+      return cloneDispatchIntent(intent);
+    }).pipe(
+      Effect.tap(() =>
+        Effect.annotateCurrentSpan(
+          "stoneforge.policy.decision",
+          retryDecision(intent),
+        ),
+      ),
+      Effect.withSpan("dispatch.retry_decision", {
+        attributes: dispatchAttributes(intent),
+      }),
+    );
+  }
+
   releaseLease(leaseId: LeaseId): void {
     const lease = this.state.leases.get(leaseId);
 
@@ -139,7 +174,7 @@ export class DispatchScheduler {
     lease.releasedAt = this.state.now();
   }
 
-  private async startAssignment(
+  private startAssignment(
     intent: DispatchIntent,
     task: Task | undefined,
     placement: {
@@ -147,35 +182,42 @@ export class DispatchScheduler {
       runtime: Runtime;
       roleDefinition: RoleDefinition;
     },
-  ): Promise<DispatchIntent> {
-    const lease = createLease(
-      this.state,
-      intent,
-      placement.agent,
-      placement.runtime,
-    );
-    const assignment = createAssignment(this.state, intent, lease, placement);
+  ): Effect.Effect<DispatchIntent, never, AgentAdapterService> {
+    const self = this;
 
-    try {
+    return Effect.gen(function* () {
+      const lease = createLease(
+        self.state,
+        intent,
+        placement.agent,
+        placement.runtime,
+      );
+      const assignment = createAssignment(self.state, intent, lease, placement);
+
       intent.state = "starting";
-      intent.updatedAt = this.state.now();
-      const handle = await this.adapter.start({
-        target: buildAdapterTarget(this.state, intent, task),
+      intent.updatedAt = self.state.now();
+      const handle = yield* startAgentSession({
+        target: buildAdapterTarget(self.state, intent, task),
         assignment: cloneAssignment(assignment),
         agent: cloneAgent(placement.agent),
         runtime: cloneRuntime(placement.runtime),
         roleDefinition: cloneRoleDefinition(placement.roleDefinition),
       });
 
-      const session = this.createSession(assignment, handle.providerSessionId);
+      const session = self.createSession(assignment, handle.providerSessionId);
       assignment.sessionIds.push(session.id);
       assignment.state = "running";
-      assignment.updatedAt = this.state.now();
-    } catch {
-      this.handleAdapterStartFailure(intent, lease, assignment, task);
-    }
+      assignment.updatedAt = self.state.now();
 
-    return cloneDispatchIntent(intent);
+      return cloneDispatchIntent(intent);
+    }).pipe(
+      Effect.catchTag("AdapterStartFailed", (error) =>
+        this.recordAdapterStartFailure(error, intent, task),
+      ),
+      Effect.withSpan("assignment.start_session", {
+        attributes: dispatchAttributes(intent),
+      }),
+    );
   }
 
   private readyTaskForIntent(intent: DispatchIntent): Task | undefined {
@@ -224,6 +266,31 @@ export class DispatchScheduler {
     this.recordPlacementFailure(intent, "adapter_start_failed");
   }
 
+  private recordAdapterStartFailure(
+    error: AdapterStartFailed,
+    intent: DispatchIntent,
+    task: Task | undefined,
+  ): Effect.Effect<DispatchIntent> {
+    return Effect.sync(() => {
+      const assignment = this.state.requireAssignment(error.assignmentId);
+      const lease = this.state.requireLease(assignment.leaseId);
+
+      this.handleAdapterStartFailure(intent, lease, assignment, task);
+
+      return cloneDispatchIntent(intent);
+    }).pipe(
+      Effect.tap(() =>
+        Effect.annotateCurrentSpan(
+          "stoneforge.policy.decision",
+          retryDecision(intent),
+        ),
+      ),
+      Effect.withSpan("dispatch.retry_decision", {
+        attributes: dispatchAttributes(intent),
+      }),
+    );
+  }
+
   private escalatePlacementFailure(intent: DispatchIntent): void {
     intent.state = "escalated";
 
@@ -243,4 +310,23 @@ export class DispatchScheduler {
     task.state = "ready";
     task.updatedAt = intent.updatedAt;
   }
+}
+
+function dispatchAttributes(intent: DispatchIntent): Record<string, string> {
+  const attributes: Record<string, string> = {
+    "stoneforge.workspace.id": intent.workspaceId,
+    "stoneforge.dispatch_intent.id": intent.id,
+  };
+
+  if (intent.targetType === "task") {
+    attributes["stoneforge.task.id"] = intent.taskId;
+    return attributes;
+  }
+
+  attributes["stoneforge.merge_request.id"] = intent.mergeRequestId;
+  return attributes;
+}
+
+function retryDecision(intent: DispatchIntent): string {
+  return intent.state === "escalated" ? "escalate" : "retry";
 }
