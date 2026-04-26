@@ -20,6 +20,11 @@ export {
   type ControlPlaneSnapshot,
   type ControlPlaneStore,
 } from "./control-plane-store.js";
+export {
+  controlPlaneOperationNames,
+  runControlPlaneOperation,
+  type ControlPlaneOperationName,
+} from "./control-plane-operations.js";
 export { FileControlPlaneStore } from "./json-control-plane-store.js";
 export {
   GitHubAppInstallationTokenProvider,
@@ -45,8 +50,14 @@ export { parseJsonObject } from "./github-json.js";
 export { GitHubAppMergeRequestClient } from "./github-merge-request-adapter.js";
 export { providerPullRequest } from "./github-merge-request-mapping.js";
 export { createMergeRequestAdapter } from "./merge-request-provider.js";
-export { PersistentControlPlane } from "./persistent-control-plane.js";
+export {
+  ControlPlaneApplication,
+  PersistentControlPlane,
+} from "./persistent-control-plane.js";
 export { PostgresControlPlaneStore } from "./postgres-control-plane-store.js";
 export { runControlPlaneCommand } from "./persistent-cli.js";
-export { runPersistentTracerBullet } from "./persistent-tracer-bullet.js";
+export {
+  runControlPlaneSmokeFlow,
+  runPersistentTracerBullet,
+} from "./persistent-tracer-bullet.js";
 export { SQLiteControlPlaneStore } from "./sqlite-control-plane-store.js";

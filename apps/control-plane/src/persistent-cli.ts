@@ -1,13 +1,20 @@
 import { join } from "node:path";
 
-import {
-  expectDirectTaskRunComplete,
-  formatDirectTaskRunSummary,
-} from "./direct-task-summary.js";
+import { expectDirectTaskRunComplete } from "./direct-task-summary.js";
 import {
   type ControlPlaneCommandStatus,
   type ControlPlaneStore,
 } from "./control-plane-store.js";
+import {
+  isSmokeFlowCommand,
+  operationForCommand,
+} from "./control-plane-cli-commands.js";
+import {
+  type CommandIo,
+  writeStatus,
+  writeSummary,
+} from "./control-plane-cli-output.js";
+import { runControlPlaneOperation } from "./control-plane-operations.js";
 import { FileControlPlaneStore } from "./json-control-plane-store.js";
 import {
   githubValueFlags,
@@ -16,44 +23,9 @@ import {
 import { createMergeRequestAdapter } from "./merge-request-provider.js";
 import type { LoadControlPlaneOptions } from "./persistent-control-plane-context.js";
 import { PersistentControlPlane } from "./persistent-control-plane.js";
-import { runPersistentTracerBullet } from "./persistent-tracer-bullet.js";
+import { runControlPlaneSmokeFlow } from "./persistent-tracer-bullet.js";
 import { PostgresControlPlaneStore } from "./postgres-control-plane-store.js";
 import { SQLiteControlPlaneStore } from "./sqlite-control-plane-store.js";
-
-export interface CommandIo {
-  write(text: string): void;
-  writeError(text: string): void;
-}
-
-type CommandHandler = (
-  controlPlane: PersistentControlPlane,
-) => Promise<ControlPlaneCommandStatus>;
-
-const commandHandlers = {
-  reset: (controlPlane) => controlPlane.reset(),
-  "initialize-workspace": (controlPlane) => controlPlane.initializeWorkspace(),
-  "configure-repo": (controlPlane) => controlPlane.configureRepository(),
-  "configure-runtime": (controlPlane) => controlPlane.configureRuntime(),
-  "configure-agent": (controlPlane) => controlPlane.configureAgent(),
-  "configure-role": (controlPlane) => controlPlane.configureRole(),
-  "configure-policy": (controlPlane) => controlPlane.configurePolicy(),
-  "validate-workspace": (controlPlane) => controlPlane.validateWorkspace(),
-  "create-direct-task": (controlPlane) => controlPlane.createDirectTask(),
-  "run-worker": (controlPlane) => controlPlane.runWorker(),
-  "open-merge-request": (controlPlane) => controlPlane.openMergeRequest(),
-  "observe-provider-state": (controlPlane) =>
-    controlPlane.observeProviderState(),
-  "require-provider-verification-passed": (controlPlane) =>
-    controlPlane.requireObservedProviderVerificationPassed(),
-  "record-verification-passed": (controlPlane) =>
-    controlPlane.recordVerificationPassed(),
-  "request-review": (controlPlane) => controlPlane.requestReview(),
-  "complete-review": (controlPlane) => controlPlane.completeReview(),
-  approve: (controlPlane) => controlPlane.approve(),
-  merge: (controlPlane) => controlPlane.merge(),
-} satisfies Record<string, CommandHandler>;
-
-type CommandName = keyof typeof commandHandlers;
 
 export async function runControlPlaneCommand(
   argv: readonly string[],
@@ -67,8 +39,8 @@ export async function runControlPlaneCommand(
       controlPlaneOptions(parsed.mergeProvider),
     );
 
-    if (parsed.command === "tracer-bullet") {
-      const summary = await runPersistentTracerBullet(
+    if (isSmokeFlowCommand(parsed.command)) {
+      const summary = await runControlPlaneSmokeFlow(
         store,
         controlPlaneOptions(parsed.mergeProvider),
       );
@@ -87,7 +59,7 @@ export async function runControlPlaneCommand(
     writeStatus(
       io,
       parsed.json,
-      await runCommand(controlPlane, parsedCommandName(parsed.command)),
+      await runCommand(controlPlane, parsed.command),
     );
     return 0;
   } catch (error) {
@@ -102,11 +74,14 @@ export async function runControlPlaneCommand(
   }
 }
 
-function runCommand(
+async function runCommand(
   controlPlane: PersistentControlPlane,
-  command: CommandName,
+  command: string,
 ): Promise<ControlPlaneCommandStatus> {
-  return commandHandlers[command](controlPlane);
+  const operation = operationForCommand(command);
+  const status = await runControlPlaneOperation(controlPlane, operation);
+
+  return { ...status, command };
 }
 
 function parseArgs(argv: readonly string[]): {
@@ -128,7 +103,7 @@ function parseArgs(argv: readonly string[]): {
   });
 
   return {
-    command: command ?? "tracer-bullet",
+    command: command ?? "smoke-flow",
     store: parseStoreConfig(argv),
     json: argv.includes("--json"),
     mergeProvider: parseMergeProviderConfig(argv, process.env),
@@ -173,18 +148,6 @@ function repositoryConfig(
     repository: config.github.repo,
     defaultBranch: config.github.baseBranch,
   };
-}
-
-function parsedCommandName(command: string): CommandName {
-  if (isCommandName(command)) {
-    return command;
-  }
-
-  throw new Error(`Unknown command ${command}. Run tracer-bullet or summary.`);
-}
-
-function isCommandName(command: string): command is CommandName {
-  return Object.prototype.hasOwnProperty.call(commandHandlers, command);
 }
 
 type StoreBackend = "json" | "postgres" | "sqlite";
@@ -303,38 +266,4 @@ function isOptionValue(
   const previous = argv[index - 1];
 
   return previous !== undefined && valueFlags.includes(previous);
-}
-
-function writeStatus(
-  io: CommandIo,
-  json: boolean,
-  status: ControlPlaneCommandStatus,
-): void {
-  if (json) {
-    io.write(JSON.stringify(status));
-    return;
-  }
-
-  io.write(`${status.command}: ${status.id}${stateSuffix(status)}`);
-}
-
-function writeSummary(
-  io: CommandIo,
-  json: boolean,
-  summary: Parameters<typeof formatDirectTaskRunSummary>[0],
-): void {
-  if (json) {
-    io.write(JSON.stringify(summary));
-    return;
-  }
-
-  io.write(formatDirectTaskRunSummary(summary));
-}
-
-function stateSuffix(status: ControlPlaneCommandStatus): string {
-  if (status.state === undefined) {
-    return "";
-  }
-
-  return ` (${status.state})`;
 }
