@@ -23,6 +23,7 @@ Frozen in this doc:
 - one Assignment owns one dispatch; one or more Sessions may exist under that Assignment
 - role attachment happens at dispatch time
 - agent concurrency is enforced on the Agent, with additional capacity limits at Runtime and Host level
+- backend runtime, scheduler, adapter, persistence, and recovery internals use Effect with OpenTelemetry instrumentation as described in [effect-typescript.md](effect-typescript.md)
 
 Working assumptions:
 
@@ -65,6 +66,14 @@ The GitHub-backed MergeRequest tracer bullet uses the same snapshot boundary. Pr
 | Agent                | concrete harness/model capability bound to one Runtime plus concurrency limit                                                                   | planning, policy, or merge logic                                                 |
 | RoleDefinition       | what job the Session performs, with prompt, tools, skills, and hooks                                                                            | runtime capacity or provider placement                                           |
 | Claude/Codex Adapter | provider invocation, session identity, transcript/log capture, checkpoint extraction, resume/cancel hooks, final result reporting               | scheduling, policy evaluation, GitHub state, task status authority               |
+
+## Effect And Observability Boundary
+
+Backend implementation modules should model scheduler, adapter, persistence, recovery, and host-agent orchestration as internal Effect programs. Public control-plane APIs, provider-facing payloads, and frontend-facing clients must not expose Effect-specific types; they run Effect programs at app or package boundaries and translate results into ordinary domain responses.
+
+OpenTelemetry is part of the runtime contract from the first slice. Backend executables initialize tracing through the Effect runtime, while library packages emit spans without configuring global exporters. Required spans should cover readiness evaluation, dispatch intent persistence, lease acquisition, Assignment and Session lifecycle, provider adapter calls, persistence transactions, policy evaluation, Verification Run observation, retry, resume, escalation, and cancellation.
+
+Telemetry is diagnostic. It carries correlation identifiers for Execution Lineage and AuditEvents, but it does not replace durable workflow records, AuditEvents, policy decisions, or state-machine transitions.
 
 ## Architecture Overview
 

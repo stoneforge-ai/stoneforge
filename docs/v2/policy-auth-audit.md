@@ -236,6 +236,8 @@ First-slice isolation assumptions:
 
 Audit is not optional bookkeeping. It is part of the product contract.
 
+OpenTelemetry spans, logs, and metrics are required diagnostic signals for backend execution, but they are not audit records. Effect-based backend internals should attach trace context and Stoneforge correlation identifiers to policy-sensitive work so operators can move from telemetry to the corresponding AuditEvent and Execution Lineage record.
+
 Each required AuditEvent should capture enough information to answer:
 
 - who initiated the action
@@ -258,6 +260,7 @@ Recommended audit fields:
 - outcome and reason
 - policy snapshot or policy decision reference
 - correlation identifiers for dispatch intent, Assignment, Session, MergeRequest, Verification Run, Host connection, or webhook call
+- trace identifiers when an OpenTelemetry trace or span exists for the action
 - external provider identifiers when relevant
 
 ## Required Audit Families

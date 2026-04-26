@@ -6,6 +6,8 @@ Stoneforge TypeScript APIs should make user intent visible to the type system wi
 
 This applies most strongly to exported APIs, builders, registries, typed clients, config definitions, schemas, routing surfaces, workflow definitions, dispatch interfaces, and package boundaries.
 
+Backend and library implementation internals must also follow [Effect TypeScript Rules](effect-typescript.md). That document does not override the public API principle here: public APIs, provider-facing APIs, and private frontend APIs must not expose Effect-specific types. Use ordinary domain types, discriminated unions, and `Promise` at those boundaries, and run internal Effect programs behind them.
+
 ## Core Principle
 
 Great TypeScript APIs use one source of truth:

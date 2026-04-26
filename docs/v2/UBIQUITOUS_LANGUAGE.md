@@ -14,6 +14,8 @@ This glossary captures the canonical domain language for Stoneforge V2 work. It 
 | **Projection** | A derived read model built from canonical records or append-only events for querying, UI, automation decisions, or summaries. | Source of truth, cached state, denormalized table |
 | **Audit Trail** | The compliance-oriented subset of Execution Lineage made from required AuditEvents for sensitive actions. | Timeline, activity feed, full history |
 | **Human Intervention** | A normal operator action that inspects, steers, resumes, cancels, reviews, approves, or directly repairs work; the broad umbrella for human control inside automated flows. | Manual fallback, failure mode, escape hatch |
+| **Telemetry Signal** | A diagnostic OpenTelemetry span, log, or metric emitted by backend execution for observability and debugging. | AuditEvent, Workflow Event, source of truth |
+| **Trace Context** | The propagated OpenTelemetry correlation context that links related Telemetry Signals across backend, host-agent, adapter, and webhook boundaries. | Audit context, task context |
 
 ## People and actors
 
@@ -260,6 +262,8 @@ These state names are semantic product contracts, not required storage enum stri
 - Persisted **Workflow Events** are append-only; mutable views over them are projections, not event records.
 - A **Projection** may be rebuilt or updated from canonical records or append-only events; it is not a source of truth unless a future design explicitly promotes it.
 - An **Audit Trail** is a compliance-focused subset of **Execution Lineage**, not the full operator-visible history.
+- **Telemetry Signals** are diagnostic and may be sampled, dropped, or retained differently from product records; they never replace **AuditEvents**, **Workflow Events**, state-machine records, or provider facts.
+- **Trace Context** may correlate backend work with **Execution Lineage** and **AuditEvents**, but it is not task context, policy context, or durable workflow state.
 - **Human Intervention** is the broad operator-action umbrella; an **Approval Gate** is only the policy gate where an **Approver** satisfies required approval.
 - **Escalation** may create or require **Human Intervention**, but ordinary operator actions, automated **Retry**, automated **Resume**, and task **Repair** are not Escalation unless policy thresholds stop or downgrade autonomous progress.
 - **Escalation** is the transition or cause that stops or downgrades autonomous progress; **Task `human_review_required`** is the resulting task state.

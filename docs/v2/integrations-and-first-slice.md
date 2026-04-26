@@ -288,6 +288,7 @@ Touched subsystems:
 - Agent adapter launch path
 - host or managed-sandbox execution path
 - checkpoint and heartbeat capture
+- Effect runtime and OpenTelemetry spans for dispatch, lease, Assignment, Session, adapter, and recovery boundaries
 
 Dependencies:
 
@@ -301,6 +302,7 @@ Acceptance criteria:
 - a live Session starts and reports heartbeats
 - a recoverable Session failure can create a replacement Session under the same Assignment
 - placement failures remain queued or escalate according to policy
+- dispatch, lease, Assignment, Session, and provider-adapter work emits sanitized OpenTelemetry spans with Stoneforge correlation identifiers
 
 ### Slice 3: Task PR, Review, And Merge Loop
 

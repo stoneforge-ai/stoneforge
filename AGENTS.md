@@ -22,6 +22,7 @@ Read these first for V2 work:
 - `docs/v2/policy-auth-audit.md` — policy, auth, and audit
 - `docs/v2/integrations-and-first-slice.md` — first build slice
 - `docs/v2/typescript-type-driven-apis.md` — TypeScript interface typing principles
+- `docs/v2/effect-typescript.md` — backend/library Effect and OpenTelemetry rules
 
 For historical behavior, old UX patterns, or prior implementations, use `docs/v2/v1-reference.md`. Do not edit `reference/` unless the user explicitly asks for legacy or prototype work.
 
@@ -50,6 +51,16 @@ For TypeScript interfaces, read `docs/v2/typescript-type-driven-apis.md` before 
 - Hide advanced generic machinery behind named public helper types and simple exported interfaces.
 - Keep the common path inferred and ergonomic; reserve explicit generics for escape hatches.
 - Keep `any` and `unknown` out of public APIs; if an approved trust boundary needs `unknown`, narrow it immediately.
+
+### Effect rules
+
+When writing or modifying backend or library TypeScript code, read `docs/v2/effect-typescript.md` before implementation.
+
+- Use Effect internally for backend/library work that performs I/O, async orchestration, typed operational failure, dependency injection, retry, interruption, resource management, scheduling, or observability.
+- Keep pure domain functions as plain TypeScript when they do not need operational effects.
+- Do not expose Effect types in public APIs, provider-facing APIs, or private frontend APIs; run internal Effect programs behind ordinary Promise/domain boundaries.
+- Integrate OpenTelemetry through Effect from the start, with spans around scheduler, dispatch, assignment/session, adapter, persistence, policy, verification, recovery, and cancellation boundaries.
+- Treat OpenTelemetry as diagnostics only; AuditEvents remain the compliance and policy source of truth.
 
 ### V2 Design Discipline
 

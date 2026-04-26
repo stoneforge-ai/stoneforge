@@ -33,6 +33,7 @@ These docs are subordinate to this README. They translate the charter into first
 - [policy-auth-audit.md](policy-auth-audit.md)
 - [integrations-and-first-slice.md](integrations-and-first-slice.md)
 - [typescript-type-driven-apis.md](typescript-type-driven-apis.md)
+- [effect-typescript.md](effect-typescript.md)
 
 ## What Stoneforge V2 Is
 
