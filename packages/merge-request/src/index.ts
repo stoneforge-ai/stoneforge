@@ -1,7 +1,4 @@
-export {
-  evaluateMergePolicy,
-  type PolicyDecision,
-} from "./merge-policy.js";
+export { evaluateMergePolicy, type PolicyDecision } from "./merge-policy.js";
 export { MergeRequestService } from "./merge-request-service.js";
 export {
   assertMergeRequestReviewAssignment,
@@ -18,7 +15,9 @@ export type {
   MergeRequestState,
   OpenTaskMergeRequestInput,
   PolicyCheckState,
+  ProviderCheckObservation,
   ProviderPullRequest,
+  ProviderPullRequestObservation,
   RecordCIRunInput,
   RecordReviewOutcomeInput,
   RequestReviewInput,

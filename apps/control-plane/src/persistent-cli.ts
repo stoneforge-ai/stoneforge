@@ -9,6 +9,11 @@ import {
   type ControlPlaneStore,
 } from "./control-plane-store.js";
 import { FileControlPlaneStore } from "./json-control-plane-store.js";
+import {
+  githubValueFlags,
+  parseMergeProviderConfig,
+} from "./github-integration-config.js";
+import { createMergeRequestAdapter } from "./merge-request-provider.js";
 import { PersistentControlPlane } from "./persistent-control-plane.js";
 import { runPersistentTracerBullet } from "./persistent-tracer-bullet.js";
 import { PostgresControlPlaneStore } from "./postgres-control-plane-store.js";
@@ -35,6 +40,8 @@ const commandHandlers: Record<string, CommandHandler> = {
   "create-direct-task": (controlPlane) => controlPlane.createDirectTask(),
   "run-worker": (controlPlane) => controlPlane.runWorker(),
   "open-merge-request": (controlPlane) => controlPlane.openMergeRequest(),
+  "observe-provider-state": (controlPlane) =>
+    controlPlane.observeProviderState(),
   "record-ci-passed": (controlPlane) => controlPlane.recordCiPassed(),
   "request-review": (controlPlane) => controlPlane.requestReview(),
   "complete-review": (controlPlane) => controlPlane.completeReview(),
@@ -49,11 +56,19 @@ export async function runControlPlaneCommand(
   try {
     const parsed = parseArgs(argv);
     const store = createControlPlaneStore(parsed.store);
-    const controlPlane = new PersistentControlPlane(store);
+    const controlPlane = new PersistentControlPlane(
+      store,
+      controlPlaneOptions(parsed.mergeProvider),
+    );
 
     if (parsed.command === "tracer-bullet") {
-      const summary = await runPersistentTracerBullet(store);
-      expectDirectTaskRunComplete(summary);
+      const summary = await runPersistentTracerBullet(
+        store,
+        controlPlaneOptions(parsed.mergeProvider),
+      );
+      if (mergeExpected(parsed.mergeProvider)) {
+        expectDirectTaskRunComplete(summary);
+      }
       writeSummary(io, parsed.json, summary);
       return 0;
     }
@@ -63,7 +78,11 @@ export async function runControlPlaneCommand(
       return 0;
     }
 
-    writeStatus(io, parsed.json, await runCommand(controlPlane, parsed.command));
+    writeStatus(
+      io,
+      parsed.json,
+      await runCommand(controlPlane, parsed.command),
+    );
     return 0;
   } catch (error) {
     if (error instanceof Error) {
@@ -84,7 +103,9 @@ function runCommand(
   const handler = commandHandlers[command];
 
   if (handler === undefined) {
-    throw new Error(`Unknown command ${command}. Run tracer-bullet or summary.`);
+    throw new Error(
+      `Unknown command ${command}. Run tracer-bullet or summary.`,
+    );
   }
 
   return handler(controlPlane);
@@ -94,6 +115,7 @@ function parseArgs(argv: readonly string[]): {
   command: string;
   store: ControlPlaneStoreConfig;
   json: boolean;
+  mergeProvider: ReturnType<typeof parseMergeProviderConfig>;
 } {
   const valueFlags = [
     "--store",
@@ -101,6 +123,7 @@ function parseArgs(argv: readonly string[]): {
     "--sqlite-path",
     "--postgres-url",
     "--json-store",
+    ...githubValueFlags(),
   ];
   const command = argv.find((arg, index) => {
     return !arg.startsWith("--") && !isOptionValue(argv, index, valueFlags);
@@ -110,6 +133,41 @@ function parseArgs(argv: readonly string[]): {
     command: command ?? "tracer-bullet",
     store: parseStoreConfig(argv),
     json: argv.includes("--json"),
+    mergeProvider: parseMergeProviderConfig(argv, process.env),
+  };
+}
+
+function controlPlaneOptions(
+  config: ReturnType<typeof parseMergeProviderConfig>,
+) {
+  return {
+    mergeProvider: config.provider,
+    mergeRequestAdapter: createMergeRequestAdapter(config),
+    mergeEnabled: mergeExpected(config),
+    repository: repositoryConfig(config),
+    sourceBranchPrefix:
+      config.provider === "github"
+        ? config.github.sourceBranchPrefix
+        : undefined,
+  };
+}
+
+function mergeExpected(
+  config: ReturnType<typeof parseMergeProviderConfig>,
+): boolean {
+  return config.provider === "fake" || config.github.allowMerge;
+}
+
+function repositoryConfig(config: ReturnType<typeof parseMergeProviderConfig>) {
+  if (config.provider === "fake" || config.github === undefined) {
+    return undefined;
+  }
+
+  return {
+    installationId: String(config.github.installationId ?? "discovered"),
+    owner: config.github.owner,
+    repository: config.github.repo,
+    defaultBranch: config.github.baseBranch,
   };
 }
 
@@ -152,10 +210,13 @@ function parseStoreConfig(argv: readonly string[]): ControlPlaneStoreConfig {
   };
 }
 
-function createControlPlaneStore(config: ControlPlaneStoreConfig): ControlPlaneStore {
+function createControlPlaneStore(
+  config: ControlPlaneStoreConfig,
+): ControlPlaneStore {
   if (config.backend === "json") {
     return new FileControlPlaneStore(
-      config.jsonPath ?? join(process.cwd(), ".stoneforge", "control-plane.json"),
+      config.jsonPath ??
+        join(process.cwd(), ".stoneforge", "control-plane.json"),
     );
   }
 
@@ -164,7 +225,8 @@ function createControlPlaneStore(config: ControlPlaneStoreConfig): ControlPlaneS
   }
 
   return new SQLiteControlPlaneStore(
-    config.sqlitePath ?? join(process.cwd(), ".stoneforge", "control-plane.sqlite"),
+    config.sqlitePath ??
+      join(process.cwd(), ".stoneforge", "control-plane.sqlite"),
   );
 }
 
@@ -198,7 +260,10 @@ function storeBackend(value: string): StoreBackend {
   );
 }
 
-function optionValue(argv: readonly string[], option: string): string | undefined {
+function optionValue(
+  argv: readonly string[],
+  option: string,
+): string | undefined {
   const index = argv.indexOf(option);
 
   if (index < 0) {

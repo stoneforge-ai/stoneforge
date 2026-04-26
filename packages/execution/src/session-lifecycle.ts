@@ -68,7 +68,7 @@ export class SessionLifecycle {
 
     if (assignment.owner.type === "task") {
       const task = this.state.requireTask(assignment.owner.taskId);
-      task.continuity.push({
+      task.progressRecord.checkpoints.push({
         ...storedCheckpoint,
         assignmentId: assignment.id,
         sessionId: session.id,

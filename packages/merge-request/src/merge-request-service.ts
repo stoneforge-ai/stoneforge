@@ -1,5 +1,8 @@
 import { type CIRunId, type MergeRequestId } from "@stoneforge/core";
-import { type Assignment, type TaskDispatchService } from "@stoneforge/execution";
+import {
+  type Assignment,
+  type TaskDispatchService,
+} from "@stoneforge/execution";
 import type { Task } from "@stoneforge/execution";
 
 import type {
@@ -14,6 +17,7 @@ import type {
   RecordReviewOutcomeInput,
   RequestReviewInput,
 } from "./models.js";
+import { reconcileProviderPullRequestObservation } from "./provider-pull-request-observation.js";
 import { cloneCIRun, cloneMergeRequest } from "./cloning.js";
 import { rememberCIRun, upsertCIRunRecord } from "./ci-runs.js";
 import { MergeRequestPolicyFlow } from "./merge-request-policy-flow.js";
@@ -23,7 +27,10 @@ import {
   requireSucceededTaskAssignment,
   requireTaskAwaitingMergeRequest,
 } from "./merge-request-task-flow.js";
-import { rememberReviewAssignment, requireMergeRequestAssignmentId } from "./review-assignments.js";
+import {
+  rememberReviewAssignment,
+  requireMergeRequestAssignmentId,
+} from "./review-assignments.js";
 import { upsertTaskMergeRequest } from "./task-merge-requests.js";
 
 type CounterName = "mergeRequest" | "ciRun";
@@ -31,6 +38,7 @@ type CounterName = "mergeRequest" | "ciRun";
 const defaultOptions: MergeRequestServiceOptions = {
   policyPreset: "supervised",
   targetBranch: "main",
+  sourceBranchPrefix: "stoneforge/task",
 };
 
 export class MergeRequestService {
@@ -49,7 +57,12 @@ export class MergeRequestService {
     private readonly options: MergeRequestServiceOptions = defaultOptions,
     snapshot?: MergeRequestSnapshot,
   ) {
-    this.policyFlow = new MergeRequestPolicyFlow(execution, gitHubAdapter, options, this.ciRuns);
+    this.policyFlow = new MergeRequestPolicyFlow(
+      execution,
+      gitHubAdapter,
+      options,
+      this.ciRuns,
+    );
     if (snapshot) {
       this.restoreSnapshot(snapshot);
     }
@@ -112,6 +125,41 @@ export class MergeRequestService {
     mergeRequest.updatedAt = this.now();
 
     return cloneCIRun(ciRun);
+  }
+
+  async observeProviderPullRequest(
+    mergeRequestId: MergeRequestId,
+  ): Promise<CIRun[]> {
+    const mergeRequest = this.requireMergeRequest(mergeRequestId);
+    const observation = await this.gitHubAdapter.observePullRequest({
+      mergeRequestId,
+      providerPullRequest: mergeRequest.providerPullRequest,
+    });
+    const providerState = reconcileProviderPullRequestObservation({
+      execution: this.execution,
+      mergeRequest,
+      observation,
+      observedAt: this.now(),
+    });
+
+    if (providerState === "terminal") {
+      return [];
+    }
+
+    const ciRuns: CIRun[] = [];
+
+    for (const check of observation.checks) {
+      ciRuns.push(
+        await this.recordCIRun(mergeRequestId, {
+          providerCheckId: check.providerCheckId,
+          name: check.name,
+          state: check.state,
+          observedAt: check.observedAt,
+        }),
+      );
+    }
+
+    return ciRuns;
   }
 
   async recordReviewOutcome(
@@ -221,7 +269,11 @@ export class MergeRequestService {
     task: Task,
   ): Promise<ProviderPullRequest> {
     return this.gitHubAdapter.createOrUpdateTaskPullRequest(
-      createTaskPullRequestInput(task, this.options.targetBranch ?? "main"),
+      createTaskPullRequestInput(
+        task,
+        this.options.targetBranch ?? "main",
+        this.options.sourceBranchPrefix ?? "stoneforge/task",
+      ),
     );
   }
 
@@ -246,12 +298,8 @@ export class MergeRequestService {
     input: RecordCIRunInput,
     observedAt: string,
   ): CIRun {
-    return upsertCIRunRecord(
-      this.ciRuns,
-      mergeRequest,
-      input,
-      observedAt,
-      () => this.nextId("ciRun"),
+    return upsertCIRunRecord(this.ciRuns, mergeRequest, input, observedAt, () =>
+      this.nextId("ciRun"),
     );
   }
 
@@ -293,7 +341,9 @@ export class MergeRequestService {
 
 function maxNumericSuffix(values: readonly string[], prefix: string): number {
   return values.reduce((max, value) => {
-    const suffix = value.startsWith(prefix) ? Number(value.slice(prefix.length)) : 0;
+    const suffix = value.startsWith(prefix)
+      ? Number(value.slice(prefix.length))
+      : 0;
 
     if (Number.isInteger(suffix) && suffix > max) {
       return suffix;

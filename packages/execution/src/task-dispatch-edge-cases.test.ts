@@ -251,7 +251,9 @@ describe("TaskDispatchService edge cases", () => {
 
     expect(assignment.state).toBe("succeeded");
     expect(repairRequired.state).toBe("ready");
-    expect(repairRequired.repairContext).toContain("Review requested changes");
+    expect(repairRequired.progressRecord.repairContext).toContain(
+      "Review requested changes",
+    );
 
     const completed = service.completeTaskAfterMerge(task.id);
 

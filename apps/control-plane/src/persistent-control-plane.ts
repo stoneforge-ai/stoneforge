@@ -1,7 +1,4 @@
-import {
-  buildSummary,
-  type DirectTaskRunSummary,
-} from "./direct-task-summary.js";
+import type { DirectTaskRunSummary } from "./direct-task-summary.js";
 import {
   type ControlPlaneCommandStatus,
   type ControlPlaneStore,
@@ -22,12 +19,18 @@ import {
   requireValue,
   requireWorkspaceId,
   scheduler,
+  type LoadControlPlaneOptions,
   type LoadedControlPlane,
 } from "./persistent-control-plane-context.js";
+import { buildPersistentSummary } from "./persistent-summary.js";
 import { recordWorkerProgress } from "./persistent-worker.js";
+import { requireObservedProviderCiPassed } from "./provider-ci-gate.js";
 
 export class PersistentControlPlane {
-  constructor(private readonly store: ControlPlaneStore) {}
+  constructor(
+    private readonly store: ControlPlaneStore,
+    private readonly options: LoadControlPlaneOptions = {},
+  ) {}
 
   async reset(): Promise<ControlPlaneCommandStatus> {
     await this.store.reset();
@@ -52,14 +55,15 @@ export class PersistentControlPlane {
 
   async configureRepository(): Promise<ControlPlaneCommandStatus> {
     return this.mutate("configure-repo", (loaded) => {
+      const repository = this.options.repository ?? {
+        installationId: "github-installation-local",
+        owner: "toolco",
+        repository: "stoneforge",
+        defaultBranch: "main",
+      };
       const workspace = loaded.setup.connectGitHubRepository(
         requireWorkspaceId(loaded.snapshot.current),
-        {
-          installationId: "github-installation-local",
-          owner: "toolco",
-          repository: "stoneforge",
-          defaultBranch: "main",
-        },
+        repository,
         operator,
       );
 
@@ -164,11 +168,10 @@ export class PersistentControlPlane {
       const task = loaded.execution.createTask({
         workspaceId: requireWorkspaceId(loaded.snapshot.current),
         title: "Persistent direct task tracer bullet",
-        intent: "Prove the local control-plane command boundary and durable state.",
+        intent:
+          "Prove the local control-plane command boundary and durable state.",
         acceptanceCriteria: [
-          "The task dispatches through the public command surface.",
-          "The fake AgentAdapter records provider session ids.",
-          "The fake GitHub adapter drives review, approval, and merge.",
+          "The task dispatches, opens a MergeRequest, records gates, and merges.",
         ],
         priority: "normal",
         requiresMergeRequest: true,
@@ -202,12 +205,13 @@ export class PersistentControlPlane {
 
   async openMergeRequest(): Promise<ControlPlaneCommandStatus> {
     return this.mutateAsync("open-merge-request", async (loaded) => {
-      const mergeRequest = await loaded.mergeRequests.openOrUpdateTaskMergeRequest({
-        taskAssignmentId: requireValue(
-          loaded.snapshot.current.implementationAssignmentId,
-          "Run the implementation worker before opening a MergeRequest.",
-        ),
-      });
+      const mergeRequest =
+        await loaded.mergeRequests.openOrUpdateTaskMergeRequest({
+          taskAssignmentId: requireValue(
+            loaded.snapshot.current.implementationAssignmentId,
+            "Run the implementation worker before opening a MergeRequest.",
+          ),
+        });
 
       loaded.snapshot.current.mergeRequestId = mergeRequest.id;
 
@@ -230,6 +234,27 @@ export class PersistentControlPlane {
 
       return { id: ciRun.id, state: ciRun.state };
     });
+  }
+
+  async observeProviderState(): Promise<ControlPlaneCommandStatus> {
+    return this.mutateAsync("observe-provider-state", async (loaded) => {
+      const mergeRequestId = requireMergeRequestId(loaded.snapshot.current);
+      const ciRuns =
+        await loaded.mergeRequests.observeProviderPullRequest(mergeRequestId);
+      const latest = ciRuns.at(-1);
+
+      if (latest === undefined)
+        return { id: mergeRequestId, state: "observed" };
+      loaded.snapshot.current.ciRunId = latest.id;
+      return { id: latest.id, state: latest.state };
+    });
+  }
+
+  async requireObservedProviderCiPassed(): Promise<ControlPlaneCommandStatus> {
+    return this.mutate(
+      "require-provider-ci-passed",
+      requireObservedProviderCiPassed,
+    );
   }
 
   async requestReview(): Promise<ControlPlaneCommandStatus> {
@@ -288,55 +313,25 @@ export class PersistentControlPlane {
   }
 
   async readSummary(): Promise<DirectTaskRunSummary> {
-    const loaded = loadControlPlane(await this.store.load());
-    const current = loaded.snapshot.current;
-    const implementationAssignment = loaded.execution.getAssignment(
-      requireValue(
-        current.implementationAssignmentId,
-        "No implementation Assignment exists. Run the worker first.",
-      ),
-    );
-    const reviewAssignment = loaded.execution.getAssignment(
-      requireValue(
-        current.reviewAssignmentId,
-        "No review Assignment exists. Run the review worker first.",
-      ),
-    );
-
-    return buildSummary({
-      orgId: requireValue(current.orgId, "No Org exists. Initialize a workspace first."),
-      workspace: loaded.setup.getWorkspace(requireWorkspaceId(current)),
-      task: loaded.execution.getTask(requireTaskId(current)),
-      implementation: {
-        assignment: implementationAssignment,
-        session: loaded.execution.getSession(requireImplementationSessionId(current)),
-      },
-      review: {
-        assignment: reviewAssignment,
-        session: loaded.execution.getSession(requireReviewSessionId(current)),
-      },
-      mergeRequest: loaded.mergeRequests.getMergeRequest(requireMergeRequestId(current)),
-      ciRun: loaded.mergeRequests.getCIRun(
-        requireValue(current.ciRunId, "No CIRun exists. Record CI first."),
-      ),
-      providerSessionIds: loaded.execution.listSessions().map((session) => {
-        return session.providerSessionId;
-      }),
-    });
+    return buildPersistentSummary(this.store, this.options);
   }
 
   private async mutate(
     command: string,
-    action: (loaded: LoadedControlPlane) => Omit<ControlPlaneCommandStatus, "command">,
+    action: (
+      loaded: LoadedControlPlane,
+    ) => Omit<ControlPlaneCommandStatus, "command">,
   ): Promise<ControlPlaneCommandStatus> {
     return this.mutateAsync(command, async (loaded) => action(loaded));
   }
 
   private async mutateAsync(
     command: string,
-    action: (loaded: LoadedControlPlane) => Promise<Omit<ControlPlaneCommandStatus, "command">>,
+    action: (
+      loaded: LoadedControlPlane,
+    ) => Promise<Omit<ControlPlaneCommandStatus, "command">>,
   ): Promise<ControlPlaneCommandStatus> {
-    const loaded = loadControlPlane(await this.store.load());
+    const loaded = loadControlPlane(await this.store.load(), this.options);
     const result = await action(loaded);
 
     await this.store.save(exportSnapshot(loaded));

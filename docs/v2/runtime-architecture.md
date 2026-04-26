@@ -52,17 +52,19 @@ Persistence stays an app/infrastructure concern. Domain packages own their snaps
 
 SQL stores initialize themselves idempotently and record a schema migration marker. The first schema intentionally avoids table normalization beyond the metadata required by the current tracer bullet because no query or partial-update need has been proven yet.
 
+The GitHub-backed MergeRequest tracer bullet uses the same snapshot boundary. Provider PR identifiers are stored inside the MergeRequest snapshot as resume facts, so a recreated control-plane service can observe the existing PR, record provider checks/statuses, continue Stoneforge review/approval, and attempt merge only when the GitHub adapter is explicitly configured to allow it.
+
 ## Component Boundaries
 
-| Component | Owns | Does Not Own |
-| --- | --- | --- |
-| Automation | event, schedule, or webhook trigger handling; creation of dispatch, review, merge-evaluation, escalation, or outbound code-first intent | direct provider session launch, lease management, policy bypass, merge execution |
-| Scheduler | readiness evaluation, durable queueing, leasing, placement, retries, resume, escalation, and cancellation propagation | role prompt content, provider-specific agent protocol, GitHub review semantics |
-| Host Agent | outbound connectivity, capacity advertisement, launch/resume/cancel execution on customer-managed hosts, heartbeats, logs, result reporting | repository authorization policy, task lifecycle decisions, merge decisions |
-| Runtime | reusable execution environment contract describing where and how work runs | task routing logic, role semantics |
-| Agent | concrete harness/model capability bound to one Runtime plus concurrency limit | planning, policy, or merge logic |
-| RoleDefinition | what job the Session performs, with prompt, tools, skills, and hooks | runtime capacity or provider placement |
-| Claude/Codex Adapter | provider invocation, session identity, transcript/log capture, checkpoint extraction, resume/cancel hooks, final result reporting | scheduling, policy evaluation, GitHub state, task status authority |
+| Component            | Owns                                                                                                                                        | Does Not Own                                                                     |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Automation           | event, schedule, or webhook trigger handling; creation of dispatch, review, merge-evaluation, escalation, or outbound code-first intent     | direct provider session launch, lease management, policy bypass, merge execution |
+| Scheduler            | readiness evaluation, durable queueing, leasing, placement, retries, resume, escalation, and cancellation propagation                       | role prompt content, provider-specific agent protocol, GitHub review semantics   |
+| Host Agent           | outbound connectivity, capacity advertisement, launch/resume/cancel execution on customer-managed hosts, heartbeats, logs, result reporting | repository authorization policy, task lifecycle decisions, merge decisions       |
+| Runtime              | reusable execution environment contract describing where and how work runs                                                                  | task routing logic, role semantics                                               |
+| Agent                | concrete harness/model capability bound to one Runtime plus concurrency limit                                                               | planning, policy, or merge logic                                                 |
+| RoleDefinition       | what job the Session performs, with prompt, tools, skills, and hooks                                                                        | runtime capacity or provider placement                                           |
+| Claude/Codex Adapter | provider invocation, session identity, transcript/log capture, checkpoint extraction, resume/cancel hooks, final result reporting           | scheduling, policy evaluation, GitHub state, task status authority               |
 
 ## Architecture Overview
 
@@ -254,7 +256,10 @@ Intent example only. This is not final implementation code.
 ```ts
 interface AgentAdapter {
   start(assignmentContext: AssignmentContext): Promise<SessionHandle>;
-  resume(assignmentContext: AssignmentContext, checkpoint: Checkpoint): Promise<SessionHandle>;
+  resume(
+    assignmentContext: AssignmentContext,
+    checkpoint: Checkpoint,
+  ): Promise<SessionHandle>;
   cancel(session: SessionHandle): Promise<void>;
   collectOutcome(session: SessionHandle): Promise<AssignmentOutcome>;
 }

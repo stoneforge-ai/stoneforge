@@ -31,6 +31,7 @@ pnpm --dir apps/control-plane start -- validate-workspace
 pnpm --dir apps/control-plane start -- create-direct-task
 pnpm --dir apps/control-plane start -- run-worker
 pnpm --dir apps/control-plane start -- open-merge-request
+pnpm --dir apps/control-plane start -- observe-provider-state
 pnpm --dir apps/control-plane start -- record-ci-passed
 pnpm --dir apps/control-plane start -- request-review
 pnpm --dir apps/control-plane start -- run-worker
@@ -39,6 +40,39 @@ pnpm --dir apps/control-plane start -- approve
 pnpm --dir apps/control-plane start -- merge
 pnpm --dir apps/control-plane start -- summary
 ```
+
+## GitHub App MergeRequest Flow
+
+The fake GitHub adapter remains the default. A real GitHub-backed MergeRequest flow is opt-in:
+
+```sh
+STONEFORGE_MERGE_PROVIDER=github \
+STONEFORGE_GITHUB_APP_ID=12345 \
+STONEFORGE_GITHUB_PRIVATE_KEY_PATH=/path/to/app-private-key.pem \
+STONEFORGE_GITHUB_INSTALLATION_ID=67890 \
+STONEFORGE_GITHUB_OWNER=toolco \
+STONEFORGE_GITHUB_REPO=stoneforge-sandbox \
+STONEFORGE_GITHUB_BASE_BRANCH=main \
+pnpm --dir apps/control-plane start -- tracer-bullet --json
+```
+
+`STONEFORGE_GITHUB_PRIVATE_KEY` may be used instead of `STONEFORGE_GITHUB_PRIVATE_KEY_PATH`; escaped `\n` sequences are expanded. If `STONEFORGE_GITHUB_INSTALLATION_ID` is omitted, the control plane attempts installation discovery for the configured owner/repo.
+
+Optional config:
+
+- `STONEFORGE_GITHUB_SOURCE_BRANCH_PREFIX` sets the working branch prefix. Default: `stoneforge/task`.
+- `STONEFORGE_GITHUB_ALLOW_MERGE=true` enables the final GitHub merge call. Leave it unset unless the target is a sandbox repository/branch.
+- `STONEFORGE_GITHUB_API_BASE_URL` targets a non-default GitHub API URL for tests or GitHub Enterprise.
+
+Required GitHub App repository grants:
+
+- Metadata: read
+- Contents: read/write, for branch refs and the task change marker commit
+- Pull requests: read/write
+- Commit statuses: read/write, for `stoneforge/policy`
+- Checks: read, for check-run observation
+
+The GitHub mode creates or updates a branch, commits a small task change marker under `.stoneforge/tasks/`, opens or reuses a PR, persists the provider PR id/number/url/head SHA, recreates the control-plane service after PR creation, observes provider PR state and checks/statuses, and records Stoneforge review/approval/policy state. The `stoneforge/policy` status is published to the observed PR head SHA. The GitHub one-shot command does not inject local fake CI; if no passing provider check/status is observed, it stops with a human-readable pending/failing check message. If merge is not enabled, the one-shot command stops after approval with the MergeRequest `merge_ready`; the explicit `merge` command reports that GitHub merge is disabled.
 
 ### SQLite
 
@@ -115,3 +149,20 @@ Or run the test command inside Compose:
 ```sh
 docker compose --profile test up --abort-on-container-exit control-plane-postgres-tests
 ```
+
+### Live GitHub Tests
+
+Live GitHub tests are skipped unless `STONEFORGE_GITHUB_LIVE_TESTS=1` is set with the GitHub App config above. They create or reuse a sandbox PR and do not merge unless `STONEFORGE_GITHUB_ALLOW_MERGE=true` is also set.
+
+```sh
+STONEFORGE_GITHUB_LIVE_TESTS=1 \
+STONEFORGE_MERGE_PROVIDER=github \
+STONEFORGE_GITHUB_APP_ID=12345 \
+STONEFORGE_GITHUB_PRIVATE_KEY_PATH=/path/to/app-private-key.pem \
+STONEFORGE_GITHUB_OWNER=toolco \
+STONEFORGE_GITHUB_REPO=stoneforge-sandbox \
+STONEFORGE_GITHUB_BASE_BRANCH=main \
+pnpm --dir apps/control-plane test
+```
+
+Deferred behavior: webhook ingestion, provider comments, imported GitHub review identity mapping, generalized non-GitHub source control, and native CI execution remain outside this first GitHub flow.

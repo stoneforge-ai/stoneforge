@@ -19,6 +19,7 @@ import { MergeRequestService } from "./merge-request-service.js";
 import type {
   GitHubMergeRequestAdapter,
   PolicyCheckState,
+  ProviderPullRequestObservation,
   ProviderPullRequest,
 } from "./models.js";
 
@@ -73,6 +74,12 @@ class RecordingGitHubAdapter implements GitHubMergeRequestAdapter {
     reason: string;
   }> = [];
   readonly merges: string[] = [];
+  observation: ProviderPullRequestObservation = {
+    providerPullRequestId: "github_pr_1",
+    state: "open",
+    headSha: "provider-head-sha",
+    checks: [],
+  };
 
   async createOrUpdateTaskPullRequest(input: {
     title: string;
@@ -90,6 +97,7 @@ class RecordingGitHubAdapter implements GitHubMergeRequestAdapter {
       providerPullRequestId: "github_pr_1",
       number: 42,
       url: "https://github.example/pull/42",
+      headSha: "provider-head-sha",
       sourceBranch: input.sourceBranch,
       targetBranch: input.targetBranch,
     };
@@ -111,6 +119,10 @@ class RecordingGitHubAdapter implements GitHubMergeRequestAdapter {
     return {
       mergedAt: new Date().toISOString(),
     };
+  }
+
+  async observePullRequest(): Promise<ProviderPullRequestObservation> {
+    return this.observation;
   }
 }
 
@@ -155,6 +167,126 @@ describe("MergeRequestService", () => {
         state: "passed",
       }),
     ]);
+  });
+
+  it("observes provider pull request checks as CIRuns", async () => {
+    const { gitHub, mergeRequests, mergeRequest } = await createOpenMergeRequestFlow();
+
+    gitHub.observation = {
+      providerPullRequestId: "github_pr_1",
+      state: "open",
+      headSha: "observed-head-sha",
+      checks: [
+        {
+          providerCheckId: "provider_check_1",
+          name: "quality",
+          state: "passed",
+          observedAt: "2026-04-24T12:00:00.000Z",
+        },
+      ],
+    };
+
+    const ciRuns = await mergeRequests.observeProviderPullRequest(mergeRequest.id);
+
+    expect(ciRuns).toEqual([
+      expect.objectContaining({
+        providerCheckId: "provider_check_1",
+        name: "quality",
+        state: "passed",
+        observedAt: "2026-04-24T12:00:00.000Z",
+      }),
+    ]);
+    expect(mergeRequests.listCIRuns()).toHaveLength(1);
+    expect(
+      mergeRequests.getMergeRequest(mergeRequest.id).providerPullRequest
+        .headSha,
+    ).toBe("observed-head-sha");
+  });
+
+  it("reconciles provider closed and merged states during observation", async () => {
+    const closedFlow = await createOpenMergeRequestFlow();
+    closedFlow.gitHub.observation = {
+      providerPullRequestId: "github_pr_1",
+      state: "closed",
+      headSha: "closed-head-sha",
+      checks: [],
+    };
+
+    await closedFlow.mergeRequests.observeProviderPullRequest(
+      closedFlow.mergeRequest.id,
+    );
+
+    const closedMergeRequest = closedFlow.mergeRequests.getMergeRequest(
+      closedFlow.mergeRequest.id,
+    );
+
+    expect(closedMergeRequest.state).toBe("closed_unmerged");
+    expect(closedMergeRequest.providerPullRequest.headSha).toBe(
+      "closed-head-sha",
+    );
+
+    const mergedFlow = await createOpenMergeRequestFlow();
+    mergedFlow.gitHub.observation = {
+      providerPullRequestId: "github_pr_1",
+      state: "merged",
+      headSha: "merged-head-sha",
+      checks: [],
+    };
+
+    await mergedFlow.mergeRequests.observeProviderPullRequest(
+      mergedFlow.mergeRequest.id,
+    );
+
+    const mergedMergeRequest = mergedFlow.mergeRequests.getMergeRequest(
+      mergedFlow.mergeRequest.id,
+    );
+
+    expect(mergedMergeRequest.state).toBe("merged");
+    expect(mergedMergeRequest.providerPullRequest.headSha).toBe(
+      "merged-head-sha",
+    );
+    expect(
+      mergedFlow.execution.getTask(mergedFlow.mergeRequest.sourceOwner.taskId)
+        .state,
+    ).toBe("completed");
+  });
+
+  it("keeps policy pending when no provider check has passed", async () => {
+    const { execution, gitHub, mergeRequests, mergeRequest } =
+      await createOpenMergeRequestFlow();
+    const reviewAssignment = await startReviewAssignment(
+      execution,
+      mergeRequests,
+      mergeRequest.id,
+    );
+
+    gitHub.observation = {
+      providerPullRequestId: "github_pr_1",
+      state: "open",
+      headSha: "observed-head-sha",
+      checks: [],
+    };
+    execution.completeAssignment(reviewAssignment.id);
+    await mergeRequests.observeProviderPullRequest(mergeRequest.id);
+    await mergeRequests.recordReviewOutcome(mergeRequest.id, {
+      assignmentId: reviewAssignment.id,
+      outcome: "approved",
+    });
+    const approved = await mergeRequests.recordHumanApproval(
+      mergeRequest.id,
+      "user_approver",
+    );
+
+    expect(approved.state).toBe("open");
+    expect(approved.policyCheck).toEqual(
+      expect.objectContaining({
+        state: "pending",
+        reason: "CI and approved review are required.",
+      }),
+    );
+    await expect(mergeRequests.merge(mergeRequest.id)).rejects.toThrow(
+      /not merge_ready/i,
+    );
   });
 
   it("runs review through a MergeRequest-owned Assignment", async () => {
@@ -237,7 +369,9 @@ describe("MergeRequestService", () => {
 
     expect(repaired.state).toBe("repair_required");
     expect(repairTask.state).toBe("ready");
-    expect(repairTask.repairContext).toContain("Tighten the tests.");
+    expect(repairTask.progressRecord.repairContext).toContain(
+      "Tighten the tests.",
+    );
 
     await execution.runSchedulerOnce();
 

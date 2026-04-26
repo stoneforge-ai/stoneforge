@@ -102,7 +102,7 @@ The product is not just "how do we prompt a coding agent?"
 
 The real product problem is:
 
-How do we reliably run a multi-step engineering workflow where intent, task decomposition, execution, continuity, review, approval, CI, merge flow, and recovery all remain understandable and governable?
+How do we reliably run a multi-step engineering workflow where intent, task decomposition, execution, progress tracking, review, approval, CI, merge flow, and recovery all remain understandable and governable?
 
 ## The Primary Workflow We Are Building Around
 
@@ -215,7 +215,7 @@ Important terminology:
 
 We are intentionally preferring `scheduler` over `daemon` as the core internal concept. There may still be per-workspace orchestration processes, but the important internal responsibility is durable scheduling, not a vague daemon abstraction.
 
-### 7. Worker Agent sessions execute with checkpointed continuity
+### 7. Worker Agent sessions execute with checkpointed progress
 
 When a task is dispatched, Stoneforge creates an assignment for that work.
 
@@ -239,7 +239,7 @@ That resumed session should receive:
 - the relevant task context
 - any important prior review or failure feedback
 
-Stoneforge documents are the durable shared context layer for the workspace. Task-local continuity such as checkpoints, remaining work, and review-driven repair context should live on the task itself as structured state.
+Stoneforge documents are the durable shared context layer for the workspace. Task progress such as checkpoints, remaining work, and review-driven repair context should live on the task itself as structured state.
 
 Hidden prompt state is not the memory model.
 
@@ -432,7 +432,7 @@ A task is the planning unit.
 
 - it represents intended work
 - it is where prioritization, sequencing, acceptance criteria, and dependencies live
-- it should carry structured operational continuity such as checkpoints, remaining work, and repair context
+- it should carry structured operational progress such as checkpoints, remaining work, and repair context
 - it is not the same thing as execution history
 
 ### Plan
@@ -469,7 +469,7 @@ They hold things like:
 - cross-task reference material
 - review notes worth preserving beyond a single task loop
 
-Documents should not require a separate visible document per task just to track progress. Task-local continuity belongs on the task itself as structured state.
+Documents should not require a separate visible document per task just to track progress. The Task Progress Record belongs on the task itself as structured state.
 
 ### Host
 
@@ -703,7 +703,7 @@ The first slice should prove:
 4. a task can become a real execution chain: task -> assignment -> session -> PR -> CI
 5. the same control-plane model can drive at least Claude Code and OpenAI Codex
 6. policy and audit work on real actions, not only mocked flows
-7. task-native continuity and documents together improve resumability across sessions and assignments
+7. Task Progress Record and documents together improve resumability across sessions and assignments
 8. plans and automations add value without creating competing systems
 9. review, change-request, and retry loops remain coherent
 10. failure escalation works
@@ -727,7 +727,7 @@ Stoneforge should:
 - correlate tasks, sessions, PRs, and CI into one coherent operator view
 - enforce policy on sensitive actions
 - produce reliable audit trails
-- preserve durable shared context through documents and task-native continuity state
+- preserve durable shared context through documents and Task Progress Record state
 - support narrow but useful automations
 - support direct human intervention throughout the flow
 - make failures visible and recoverable
@@ -780,7 +780,7 @@ If you are working on Stoneforge V2, assume the following unless explicitly told
 - keep the model coherent: task is not execution history
 - keep the workspace boundary simple
 - keep execution auditable and recoverable
-- keep task-local continuity on the task; use documents for broader durable context
+- keep Task Progress Record on the task; use documents for broader durable context
 - treat documents as explicit durable context, not hidden memory
 - treat plans and automations as supporting orchestration layers, not replacements for the core task model
 - treat human intervention as core, not exceptional
@@ -799,7 +799,7 @@ In practical order, the next work should cluster around:
 2. execution capability model and scheduler path
 3. task and execution-record flow
 4. policy and audit enforcement
-5. task continuity and durable context
+5. task progress and durable context
 6. plan activation and aggregation behavior
 7. automation-triggered dispatch and review loops
 8. end-to-end proving scenario and recovery hardening

@@ -68,6 +68,7 @@ function summaryInputWithoutPolicyCheck(): DirectTaskRunSummaryInput {
         providerPullRequestId: "github-pr-task_1",
         number: 100,
         url: "https://github.example/toolco/stoneforge/pull/100",
+        headSha: "provider-head-sha",
         sourceBranch: "stoneforge/task_1",
         targetBranch: "main",
       },
@@ -120,8 +121,10 @@ function task(): DirectTaskRunSummaryInput["task"] {
       requiredAgentTags: [],
       requiredRuntimeTags: [],
     },
-    continuity: [],
-    repairContext: [],
+    progressRecord: {
+      checkpoints: [],
+      repairContext: [],
+    },
     createdAt: "2026-04-24T10:00:00.000Z",
     updatedAt: "2026-04-24T10:00:00.000Z",
   };

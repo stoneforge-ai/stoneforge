@@ -212,7 +212,7 @@ describe("TaskDispatchService", () => {
     expect(replacement.assignmentId).toBe(assignment.id);
     expect(updatedAssignment.sessionIds).toEqual([firstSession.id, replacement.id]);
     expect(updatedAssignment.state).toBe("running");
-    expect(service.getTask(task.id).continuity).toEqual([
+    expect(service.getTask(task.id).progressRecord.checkpoints).toEqual([
       expect.objectContaining({
         assignmentId: assignment.id,
         sessionId: firstSession.id,

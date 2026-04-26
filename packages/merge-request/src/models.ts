@@ -32,8 +32,25 @@ export interface ProviderPullRequest {
   providerPullRequestId: string;
   number: number;
   url: string;
+  headSha: string;
   sourceBranch: string;
   targetBranch: string;
+}
+
+export interface ProviderCheckObservation {
+  providerCheckId: string;
+  name: string;
+  state: CIRunState;
+  observedAt?: string;
+}
+
+export interface ProviderPullRequestObservation {
+  providerPullRequestId: string;
+  state: "open" | "closed" | "merged";
+  headSha: string;
+  checks: ProviderCheckObservation[];
+  reviewOutcome?: ReviewOutcome;
+  reviewReason?: string;
 }
 
 export interface MergeRequest {
@@ -117,11 +134,17 @@ export interface GitHubMergeRequestAdapter {
     mergeRequestId: MergeRequestId;
     providerPullRequest: ProviderPullRequest;
   }): Promise<{ mergedAt: string }>;
+
+  observePullRequest(input: {
+    mergeRequestId: MergeRequestId;
+    providerPullRequest: ProviderPullRequest;
+  }): Promise<ProviderPullRequestObservation>;
 }
 
 export interface MergeRequestServiceOptions {
   policyPreset: PolicyPreset;
   targetBranch?: string;
+  sourceBranchPrefix?: string;
 }
 
 export interface MergeRequestSnapshot {

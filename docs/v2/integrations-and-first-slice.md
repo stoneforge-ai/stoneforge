@@ -153,6 +153,44 @@ Shared adapter rule:
 
 - provider adapters report execution facts upward; they do not decide planning or merge outcomes
 
+### GitHub App MergeRequest Flow
+
+The control-plane flow now has two MergeRequest provider modes:
+
+- `fake`, the default local mode, keeps all provider behavior deterministic and network-free.
+- `github`, an opt-in GitHub App installation mode, exercises the first real provider boundary.
+
+The GitHub mode uses App ID plus private key material to mint a GitHub App JWT, discovers or accepts an installation ID, exchanges that identity for installation access tokens, and refreshes tokens behind a small token-provider boundary. The adapter creates or updates the configured working branch, commits a small task change marker, opens or reuses a PR, publishes the `stoneforge/policy` status to the current provider PR head SHA, observes provider PR state and checks/statuses, and merges only when explicitly enabled for a sandbox repository/branch.
+
+Required first-slice GitHub App repository grants:
+
+- Metadata read
+- Contents read/write
+- Pull requests read/write
+- Commit statuses read/write
+- Checks read
+
+Required control-plane config for the GitHub mode:
+
+- GitHub App ID
+- GitHub App private key or private key path
+- GitHub installation ID, or owner/repo for installation discovery
+- owner
+- repo
+- base branch
+- source branch prefix
+- explicit merge enablement when merge should be attempted
+
+The provider PR id, number, URL, head SHA, source branch, and target branch are persisted only as provider facts needed to resume and reconcile the MergeRequest flow. Stoneforge policy does not delegate approval, CI, review, or merge readiness decisions to the provider artifact. GitHub mode records CI only from observed provider checks/statuses; if no passing provider check/status is observed, the control-plane flow remains pending or fails with a clear provider-check message instead of injecting local CI.
+
+Deferred from this first GitHub flow:
+
+- webhook ingestion and replay
+- provider PR comments
+- imported GitHub review identity mapping
+- generalized non-GitHub source-control providers
+- native Stoneforge CI execution
+
 ### Daytona Runtime Adapter
 
 Owns:
@@ -310,7 +348,7 @@ Dependencies:
 
 Acceptance criteria:
 
-- Session crash or context exhaustion preserves usable checkpoint continuity
+- Session crash or context exhaustion preserves usable checkpoint progress
 - repeated no-eligible-agent or exhausted-concurrency loops escalate to human review
 - repeated review or CI loops escalate instead of continuing indefinitely
 - operators can cancel, resume, or reauthorize work through the documented state model

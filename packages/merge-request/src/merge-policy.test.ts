@@ -162,6 +162,7 @@ function mergeRequest(
       providerPullRequestId: "github_pr_1",
       number: 1,
       url: "https://github.example/pull/1",
+      headSha: "provider-head-sha",
       sourceBranch: "stoneforge/task/task_1",
       targetBranch: "main",
     },

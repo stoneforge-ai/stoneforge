@@ -20,6 +20,7 @@ Frozen in this doc:
 - Task is the planning unit
 - Assignment is the durable dispatch envelope
 - Session is the concrete provider execution thread/process under an Assignment
+- Session is not a human-visible work grouping
 - MergeRequest is the provider-neutral internal review and merge artifact
 - Host, Runtime, Agent, RoleDefinition, Automation, and Scheduler stay separate concerns
 
@@ -138,8 +139,8 @@ Key associations:
 
 Frozen semantics:
 
-- Tasks carry title, intent, acceptance criteria, priority, dependencies, and structured continuity state
-- task-local continuity lives on the Task, not in hidden prompt state and not in a required per-task Document
+- Tasks carry title, intent, acceptance criteria, priority, dependencies, and structured task progress state
+- Task Progress Record lives on the Task, not in hidden prompt state and not in a required per-task Document
 - a Task is not execution history
 
 ### Plan
@@ -181,7 +182,7 @@ Key associations:
 Frozen semantics:
 
 - Documents hold reusable context such as specs, runbooks, and review notes worth preserving beyond one assignment
-- Documents are not the hidden memory system for agent continuity
+- Documents are not the hidden memory system for agent progress handoff
 
 ### Automation
 
@@ -248,6 +249,7 @@ Key associations:
 Frozen semantics:
 
 - a Session is the concrete Claude Code or Codex execution instance
+- a Session is provider execution only; operator-visible grouping should use Assignment, Task activity, or Execution Lineage
 - Sessions may end and be resumed by creating a new Session under the same Assignment when checkpoint-based recovery is allowed
 
 ### MergeRequest
@@ -452,7 +454,7 @@ These are semantic event names for reasoning and docs. They are not frozen API o
 | `task.readiness_changed` | a task's dispatch eligibility changed due to dependency, plan, policy, or review state |
 | `dispatch.intent_created` | an automation or human action requested scheduler evaluation |
 | `assignment.started` | a durable dispatch envelope has entered live execution |
-| `session.checkpoint_created` | a session persisted resumable task-local continuity |
+| `session.checkpoint_created` | a Session persisted a resumable Checkpoint into the Task Progress Record |
 | `merge_request.opened` | a provider PR now exists for a task or plan |
 | `ci_run.observed` | new CI status/check information was recorded |
 | `repair.trigger_recorded` | review, CI, mergeability, policy, or branch health requires task or plan repair |
@@ -486,9 +488,12 @@ org:
       task:
         title: "Add retry visibility"
         plan: "scheduler-hardening"
-        continuity:
-          completedChecklist: ["added retry counters"]
-          remainingWork: ["wire PR review summary"]
+        progressRecord:
+          checkpoints:
+            - completedWork: ["added retry counters"]
+              remainingWork: ["wire PR review summary"]
+              importantContext: ["retry visibility spans scheduler and PR review summary"]
+          repairContext: []
         assignments:
           - role: "worker-default"
             agent: "codex-worker"

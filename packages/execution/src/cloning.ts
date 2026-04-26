@@ -31,13 +31,15 @@ export function cloneTask(task: Task): Task {
       requiredAgentTags: [...task.dispatchConstraints.requiredAgentTags],
       requiredRuntimeTags: [...task.dispatchConstraints.requiredRuntimeTags],
     },
-    continuity: task.continuity.map((checkpoint) => ({
-      ...checkpoint,
-      completedWork: [...checkpoint.completedWork],
-      remainingWork: [...checkpoint.remainingWork],
-      importantContext: [...checkpoint.importantContext],
-    })),
-    repairContext: [...task.repairContext],
+    progressRecord: {
+      checkpoints: task.progressRecord.checkpoints.map((checkpoint) => ({
+        ...checkpoint,
+        completedWork: [...checkpoint.completedWork],
+        remainingWork: [...checkpoint.remainingWork],
+        importantContext: [...checkpoint.importantContext],
+      })),
+      repairContext: [...task.progressRecord.repairContext],
+    },
   };
 }
 

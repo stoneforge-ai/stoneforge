@@ -193,8 +193,10 @@ function task(overrides: Partial<Task> = {}): Task {
       requiredAgentTags: [],
       requiredRuntimeTags: [],
     },
-    continuity: [],
-    repairContext: [],
+    progressRecord: {
+      checkpoints: [],
+      repairContext: [],
+    },
     createdAt: now,
     updatedAt: now,
     ...overrides,

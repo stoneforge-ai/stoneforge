@@ -199,7 +199,7 @@ Key transitions:
 Key transitions:
 
 - `launching -> active`: provider confirms live execution.
-- `active -> checkpointed`: periodic or explicit checkpoint capture succeeds.
+- `active -> checkpointed`: explicit checkpoint capture succeeds after meaningful task-resumption context changes.
 - `checkpointed -> active`: execution continues after a checkpoint.
 - `active` or `checkpointed -> ended`: session hands off cleanly.
 - `active` or `checkpointed -> crashed`: abnormal process or transport failure occurs.
@@ -209,7 +209,8 @@ Key transitions:
 ## Checkpoint And Resume Semantics
 
 - checkpoints summarize completed work, remaining work, and important context needed for continuation
-- checkpoint state is stored as task-local structured continuity, with links back to the relevant Assignment and Session
+- checkpoints are not heartbeats, logs, transcripts, or routine session status updates
+- checkpoint state is stored in the Task Progress Record, with links back to the relevant Assignment and Session
 - `crashed` or `expired` Sessions do not automatically create a new Task state
 - if the Assignment remains recoverable, Stoneforge moves the Assignment to `resume_pending`, creates a new Session, and returns the owning Task or MergeRequest workflow to its active state
 - if the recovery loop repeats beyond policy thresholds, the Assignment and owning workflow escalate to human review

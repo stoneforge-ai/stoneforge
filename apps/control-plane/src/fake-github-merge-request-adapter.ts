@@ -1,6 +1,7 @@
 import type {
   GitHubMergeRequestAdapter,
   PolicyCheckState,
+  ProviderPullRequestObservation,
   ProviderPullRequest,
 } from "@stoneforge/merge-request";
 
@@ -52,6 +53,7 @@ class LocalGitHubMergeRequestSink implements FakeGitHubFixture {
       providerPullRequestId: providerPullRequestIdFor(input),
       number: 100,
       url: "https://github.example/toolco/stoneforge/pull/100",
+      headSha: "local-head-sha",
       sourceBranch: input.sourceBranch,
       targetBranch: input.targetBranch,
     };
@@ -80,6 +82,23 @@ class LocalGitHubMergeRequestSink implements FakeGitHubFixture {
     });
 
     return { mergedAt };
+  }
+
+  async observePullRequest(input: {
+    providerPullRequest: ProviderPullRequest;
+  }): Promise<ProviderPullRequestObservation> {
+    return {
+      providerPullRequestId: input.providerPullRequest.providerPullRequestId,
+      state: "open",
+      headSha: input.providerPullRequest.headSha,
+      checks: [
+        {
+          providerCheckId: "local-check-1",
+          name: "local quality",
+          state: "passed",
+        },
+      ],
+    };
   }
 }
 

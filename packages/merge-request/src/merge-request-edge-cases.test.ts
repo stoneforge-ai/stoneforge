@@ -16,6 +16,7 @@ import { MergeRequestService } from "./merge-request-service.js";
 import type {
   GitHubMergeRequestAdapter,
   PolicyCheckState,
+  ProviderPullRequestObservation,
   ProviderPullRequest,
 } from "./models.js";
 
@@ -61,6 +62,7 @@ class RecordingGitHubAdapter implements GitHubMergeRequestAdapter {
       providerPullRequestId: "github_pr_1",
       number: 42,
       url: "https://github.example/pull/42",
+      headSha: "provider-head-sha",
       sourceBranch: input.sourceBranch,
       targetBranch: input.targetBranch,
     };
@@ -79,6 +81,15 @@ class RecordingGitHubAdapter implements GitHubMergeRequestAdapter {
   async mergePullRequest(): Promise<{ mergedAt: string }> {
     return {
       mergedAt: new Date().toISOString(),
+    };
+  }
+
+  async observePullRequest(): Promise<ProviderPullRequestObservation> {
+    return {
+      providerPullRequestId: "github_pr_1",
+      state: "open",
+      headSha: "provider-head-sha",
+      checks: [],
     };
   }
 }

@@ -15,6 +15,7 @@ Context and instructions for AI coding agents working on the Stoneforge reposito
 Read these first for V2 work:
 
 - `docs/v2/README.md` — charter
+- `docs/v2/UBIQUITOUS_LANGUAGE.md` — canonical domain language and naming rules
 - `docs/v2/system-model.md` — system model
 - `docs/v2/state-machines.md` — lifecycle/state transitions
 - `docs/v2/runtime-architecture.md` — runtime and dispatch
@@ -24,7 +25,7 @@ Read these first for V2 work:
 
 For historical behavior, old UX patterns, or prior implementations, use `docs/v2/v1-reference.md`. Do not edit `reference/` unless the user explicitly asks for legacy or prototype work.
 
-Use V2 docs as planning contracts: they should explain product intent, domain language, behavioral guarantees, and architectural constraints before code relies on them. Good doc updates are concise, durable, and decision-oriented; they name the behavior being promised, the boundary it affects, and any intentionally unresolved details. Update `docs/v2/` when implementation changes documented V2 behavior.
+Use V2 docs as planning contracts: they should explain product intent, domain language, behavioral guarantees, and architectural constraints before code relies on them. Treat `docs/v2/UBIQUITOUS_LANGUAGE.md` as the source of truth for canonical Stoneforge terms; update it when a change introduces, renames, or sharpens domain language. Good doc updates are concise, durable, and decision-oriented; they name the behavior being promised, the boundary it affects, and any intentionally unresolved details. Update `docs/v2/` when implementation changes documented V2 behavior.
 
 ## Implementation Guidelines
 

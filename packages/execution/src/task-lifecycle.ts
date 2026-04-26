@@ -113,7 +113,7 @@ export class TaskLifecycle {
       throw new Error(`Task ${taskId} cannot require repair from state ${task.state}.`);
     }
 
-    task.repairContext.push(reason);
+    task.progressRecord.repairContext.push(reason);
     task.state = "repair_required";
     task.updatedAt = this.state.now();
     this.evaluateTaskReadiness(task);

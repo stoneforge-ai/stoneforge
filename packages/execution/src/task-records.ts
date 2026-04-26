@@ -25,8 +25,10 @@ export function createTaskRecord(
     state: "planned",
     requiresMergeRequest: withDefault(input.requiresMergeRequest, false),
     dispatchConstraints: normalizeDispatchConstraints(input.dispatchConstraints),
-    continuity: [],
-    repairContext: [],
+    progressRecord: {
+      checkpoints: [],
+      repairContext: [],
+    },
     followUpSource: input.followUpSource,
     createdAt: now,
     updatedAt: now,

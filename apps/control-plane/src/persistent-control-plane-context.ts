@@ -1,9 +1,15 @@
 import type { MergeRequestId } from "@stoneforge/core";
-import type { Assignment, DispatchIntent, Session } from "@stoneforge/execution";
+import type {
+  Assignment,
+  DispatchIntent,
+  Session,
+} from "@stoneforge/execution";
 import { TaskDispatchService } from "@stoneforge/execution";
+import type { GitHubMergeRequestAdapter } from "@stoneforge/merge-request";
 import { MergeRequestService } from "@stoneforge/merge-request";
 import type {
   AuditActor,
+  ConnectGitHubRepositoryInput,
   PolicyPreset,
   RoleDefinition,
   Workspace,
@@ -17,6 +23,14 @@ import {
 } from "./control-plane-store.js";
 import { createFakeAgentFixture } from "./fake-agent-adapter.js";
 import { createFakeGitHubMergeRequestFixture } from "./fake-github-merge-request-adapter.js";
+
+export interface LoadControlPlaneOptions {
+  mergeEnabled?: boolean;
+  mergeProvider?: "fake" | "github";
+  mergeRequestAdapter?: GitHubMergeRequestAdapter;
+  repository?: ConnectGitHubRepositoryInput;
+  sourceBranchPrefix?: string;
+}
 
 export interface LoadedControlPlane {
   snapshot: ControlPlaneSnapshot;
@@ -39,6 +53,7 @@ export const scheduler: AuditActor = {
 
 export function loadControlPlane(
   snapshot: ControlPlaneSnapshot,
+  options: LoadControlPlaneOptions = {},
 ): LoadedControlPlane {
   const setup = new WorkspaceSetup(snapshot.workspace);
   const execution = new TaskDispatchService(
@@ -48,8 +63,8 @@ export function loadControlPlane(
   );
   const mergeRequests = new MergeRequestService(
     execution,
-    createFakeGitHubMergeRequestFixture(),
-    mergeRequestOptions(snapshot, setup),
+    options.mergeRequestAdapter ?? createFakeGitHubMergeRequestFixture(),
+    mergeRequestOptions(snapshot, setup, options),
     snapshot.mergeRequests,
   );
 
@@ -93,7 +108,9 @@ export function requireStartedAssignment(
   intent: DispatchIntent | null,
 ): Assignment {
   if (intent === null) {
-    throw new Error("No queued dispatch intent exists. Create or request work first.");
+    throw new Error(
+      "No queued dispatch intent exists. Create or request work first.",
+    );
   }
 
   if (intent.assignmentId === undefined) {
@@ -110,7 +127,10 @@ export function requireLatestSession(
   const sessionId = assignment.sessionIds.at(-1);
 
   return execution.getSession(
-    requireValue(sessionId, `Assignment ${assignment.id} did not start a Session.`),
+    requireValue(
+      sessionId,
+      `Assignment ${assignment.id} did not start a Session.`,
+    ),
   );
 }
 
@@ -129,7 +149,9 @@ export function rememberCompletedAssignment(
   current.reviewSessionId = session.id;
 }
 
-export function requireWorkspaceId(current: CurrentControlPlaneIds): Workspace["id"] {
+export function requireWorkspaceId(
+  current: CurrentControlPlaneIds,
+): Workspace["id"] {
   return requireValue(
     current.workspaceId,
     "No Workspace exists. Run initialize-workspace first.",
@@ -148,7 +170,10 @@ export function requireRuntimeId(
 export function requireTaskId(
   current: CurrentControlPlaneIds,
 ): ReturnType<TaskDispatchService["getTask"]>["id"] {
-  return requireValue(current.taskId, "No Task exists. Create a direct task first.");
+  return requireValue(
+    current.taskId,
+    "No Task exists. Create a direct task first.",
+  );
 }
 
 export function requireMergeRequestId(
@@ -192,11 +217,17 @@ export function requireValue<TValue>(
 function mergeRequestOptions(
   snapshot: ControlPlaneSnapshot,
   setup: WorkspaceSetupService,
-): { policyPreset: PolicyPreset; targetBranch: string } {
+  options: LoadControlPlaneOptions,
+): {
+  policyPreset: PolicyPreset;
+  sourceBranchPrefix?: string;
+  targetBranch: string;
+} {
   const workspace = findCurrentWorkspace(snapshot, setup);
 
   return {
     policyPreset: workspace?.policyPreset ?? "supervised",
+    sourceBranchPrefix: options.sourceBranchPrefix,
     targetBranch: workspace?.targetBranch ?? "main",
   };
 }

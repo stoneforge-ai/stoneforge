@@ -46,9 +46,7 @@ export function requireTaskAwaitingMergeRequest(
   const task = execution.getTask(assignment.owner.taskId);
 
   if (!task.requiresMergeRequest || task.state !== "awaiting_review") {
-    throw new Error(
-      `Task ${task.id} is not waiting for a task MergeRequest.`,
-    );
+    throw new Error(`Task ${task.id} is not waiting for a task MergeRequest.`);
   }
 
   return task;
@@ -57,13 +55,14 @@ export function requireTaskAwaitingMergeRequest(
 export function createTaskPullRequestInput(
   task: Task,
   targetBranch: string,
+  sourceBranchPrefix: string,
 ): TaskPullRequestInput {
   return {
     workspaceId: task.workspaceId,
     taskId: task.id,
     title: task.title,
     body: task.intent,
-    sourceBranch: `stoneforge/task/${task.id}`,
+    sourceBranch: `${sourceBranchPrefix}/${task.id}`,
     targetBranch,
   };
 }

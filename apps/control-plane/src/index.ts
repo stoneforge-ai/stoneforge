@@ -21,6 +21,30 @@ export {
   type ControlPlaneStore,
 } from "./control-plane-store.js";
 export { FileControlPlaneStore } from "./json-control-plane-store.js";
+export {
+  GitHubAppInstallationTokenProvider,
+  GitHubIntegrationError,
+  type GitHubAppAuthConfig,
+  type GitHubTokenProvider,
+} from "./github-app-token-provider.js";
+export {
+  FetchGitHubHttpClient,
+  GitHubHttpError,
+  type GitHubHttpClient,
+  type GitHubHttpRequest,
+  type GitHubHttpResponse,
+} from "./github-http-client.js";
+export {
+  githubValueFlags,
+  parseMergeProviderConfig,
+  type GitHubMergeRequestConfig,
+  type MergeProvider,
+  type MergeProviderConfig,
+} from "./github-integration-config.js";
+export { parseJsonObject } from "./github-json.js";
+export { GitHubAppMergeRequestClient } from "./github-merge-request-adapter.js";
+export { providerPullRequest } from "./github-merge-request-mapping.js";
+export { createMergeRequestAdapter } from "./merge-request-provider.js";
 export { PersistentControlPlane } from "./persistent-control-plane.js";
 export { PostgresControlPlaneStore } from "./postgres-control-plane-store.js";
 export { runControlPlaneCommand } from "./persistent-cli.js";

@@ -17,6 +17,7 @@ import { MergeRequestService } from "./merge-request-service.js";
 import type {
   GitHubMergeRequestAdapter,
   PolicyCheckState,
+  ProviderPullRequestObservation,
   ProviderPullRequest,
 } from "./models.js";
 
@@ -78,6 +79,7 @@ class SnapshotGitHubAdapter implements GitHubMergeRequestAdapter {
       providerPullRequestId: `provider-${input.taskId}`,
       number: 100,
       url: "https://github.example/toolco/stoneforge/pull/100",
+      headSha: "provider-head-sha",
       sourceBranch: input.sourceBranch,
       targetBranch: input.targetBranch,
     };
@@ -91,6 +93,15 @@ class SnapshotGitHubAdapter implements GitHubMergeRequestAdapter {
 
   async mergePullRequest(): Promise<{ mergedAt: string }> {
     return { mergedAt: "2026-04-24T12:00:00.000Z" };
+  }
+
+  async observePullRequest(): Promise<ProviderPullRequestObservation> {
+    return {
+      providerPullRequestId: "provider-task_1",
+      state: "open",
+      headSha: "provider-head-sha",
+      checks: [],
+    };
   }
 }
 

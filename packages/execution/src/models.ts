@@ -38,9 +38,14 @@ export interface Checkpoint {
   capturedAt: string;
 }
 
-export interface TaskContinuityCheckpoint extends Checkpoint {
+export interface TaskProgressCheckpoint extends Checkpoint {
   assignmentId: AssignmentId;
   sessionId: SessionId;
+}
+
+export interface TaskProgressRecord {
+  checkpoints: TaskProgressCheckpoint[];
+  repairContext: string[];
 }
 
 export interface TaskDispatchConstraints {
@@ -72,8 +77,7 @@ export interface Task {
   state: TaskState;
   requiresMergeRequest: boolean;
   dispatchConstraints: TaskDispatchConstraints;
-  continuity: TaskContinuityCheckpoint[];
-  repairContext: string[];
+  progressRecord: TaskProgressRecord;
   followUpSource?: FollowUpSource;
   createdAt: string;
   updatedAt: string;

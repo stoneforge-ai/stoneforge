@@ -98,13 +98,13 @@ Workspace-scoped concerns:
 
 The first slice should support these semantic subject classes even if the final RBAC schema differs:
 
-| Subject class | Typical responsibilities |
-| --- | --- |
-| Org admin | membership, org defaults, workspace creation, org-level policy |
+| Subject class   | Typical responsibilities                                                                      |
+| --------------- | --------------------------------------------------------------------------------------------- |
+| Org admin       | membership, org defaults, workspace creation, org-level policy                                |
 | Workspace admin | repository connection, hosts, runtimes, agents, roles, automations, workspace policy, secrets |
-| Operator | task and plan creation, dispatch, steering, resume, cancel, failure handling |
-| Reviewer | inspect execution, review MergeRequests, request changes |
-| Approver | satisfy human approval gates where policy requires it |
+| Operator        | task and plan creation, dispatch, steering, resume, cancel, failure handling                  |
+| Reviewer        | inspect execution, review MergeRequests, request changes                                      |
+| Approver        | satisfy human approval gates where policy requires it                                         |
 
 One human may belong to multiple subject classes.
 
@@ -142,6 +142,7 @@ The first-slice GitHub merge gate should work as follows:
 
 - GitHub remains the repository and PR substrate
 - Stoneforge publishes a required `stoneforge/policy` check or status to GitHub
+- the published provider status targets the current PR head SHA observed through the provider boundary
 - Stoneforge policy evaluation determines whether the policy check is passing
 - GitHub CI checks remain required according to workspace and repository rules
 - imported GitHub reviews may contribute signals, but Stoneforge policy is the canonical approval decision-maker
@@ -166,6 +167,14 @@ Rules:
 
 This keeps automation durable and auditable while preserving a clear boundary between provider operations and Stoneforge policy decisions.
 
+Tracer-bullet implementation notes:
+
+- GitHub App JWT creation and installation-token exchange live in the control-plane infrastructure layer.
+- App private keys are loaded from explicit config or environment values and are not part of domain snapshots.
+- Installation access tokens are short-lived and refreshed behind the token-provider boundary.
+- Missing App ID, private key, installation access, repository grants, branch update failures, PR failures, unavailable checks, disabled merge, and rejected merge are reported as human-readable control-plane errors.
+- PAT authentication is not the primary integration path; any future PAT use must be clearly marked dev-only.
+
 ## Sensitive Actions
 
 Sensitive actions must be policy-checked and auditable.
@@ -187,14 +196,19 @@ The exact approval chain for each sensitive action does not need to be frozen he
 
 Secrets must be treated as boundary-specific, not global ambient state.
 
-Control-plane secrets:
+Platform Secrets:
 
 - identity-provider credentials
 - GitHub App credentials
 - outbound webhook signing secrets
 - managed-provider integration credentials
 
-Workspace-runtime secrets:
+Org Secrets:
+
+- org-owned integration credentials available only through Org and Workspace policy
+- org-owned provider credentials shared with approved Workspaces
+
+Workspace Secrets:
 
 - repository access tokens issued for a specific assignment
 - runtime-scoped environment variables needed for execution
@@ -203,6 +217,7 @@ Boundary rules:
 
 - inject the minimum secret set needed for the current assignment
 - prefer short-lived credentials, especially for repository access
+- treat runtime injection as a permitted use of Platform Secrets, Org Secrets, or Workspace Secrets rather than a separate ownership scope
 - do not expose org-global secrets to arbitrary Workspaces or Hosts
 - do not require customer-managed Hosts to keep long-lived repo credentials by default
 - audit secret issuance and sensitive secret use without logging secret values
