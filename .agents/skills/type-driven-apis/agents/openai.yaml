@@ -1,0 +1,4 @@
+interface:
+  display_name: "Type-Driven APIs"
+  short_description: "Design inferred TypeScript APIs"
+  default_prompt: "Use $type-driven-apis to design a TypeScript interface that infers precise types from user-provided runtime definitions."
