@@ -10,7 +10,8 @@ This glossary captures the canonical domain language for Stoneforge V2 work. It 
 | **Control Plane** | The Stoneforge system of record for intent, planning, dispatch, policy, execution lineage, review, approval, and recovery. | Orchestrator app, daemon, editor |
 | **Engineering Intent** | A human's request, idea, or plan for changing or understanding a codebase. | Prompt, ticket text, vague ask |
 | **Execution Lineage** | The recorded chain of planning objects, dispatch attempts, Sessions, Review Outcomes, Verification Run observations, Approval Gate satisfaction, and merge actions for a piece of work. | Timeline, history, logs, transcript |
-| **Workflow Event** | A non-audit lineage event that records workflow progress, lifecycle changes, provider observations, or projection facts for reconstruction and operator visibility. | Audit event, log line, timeline item |
+| **Workflow Event** | An immutable non-audit lineage event that records workflow progress, lifecycle changes, provider observations, or projection facts for reconstruction and operator visibility. | Audit event, log line, timeline item |
+| **Projection** | A derived read model built from canonical records or append-only events for querying, UI, automation decisions, or summaries. | Source of truth, cached state, denormalized table |
 | **Audit Trail** | The compliance-oriented subset of Execution Lineage made from required AuditEvents for sensitive actions. | Timeline, activity feed, full history |
 | **Human Intervention** | A normal operator action that inspects, steers, resumes, cancels, reviews, approves, or directly repairs work; the broad umbrella for human control inside automated flows. | Manual fallback, failure mode, escape hatch |
 
@@ -33,6 +34,9 @@ This glossary captures the canonical domain language for Stoneforge V2 work. It 
 | **Org** | The top-level tenant, membership, identity, and administration boundary. | Organization account, company |
 | **Workspace** | The primary operational boundary for one repository, its policies, execution capabilities, tasks, plans, documents, and audit partition. | Project, repo, tenant |
 | **Repository** | The source-control repository linked to a Workspace, with GitHub as the first-slice provider. | Codebase, project |
+| **Provider** | A generic external service Stoneforge integrates with under policy, such as source control, CI, identity, runtime, notification, or automation services. | Integration, vendor, adapter |
+| **Source-Control Provider** | A Provider that owns repositories, branches, MergeRequests, source-control checks or statuses, and merge operations. | Provider, Git host, repository service |
+| **GitHub Provider** | The first-slice Source-Control Provider used for repository access, PRs, checks/statuses, and merge operations. | GitHub App, GitHub integration |
 | **Policy** | The system that determines what may happen automatically, what requires review, and what requires approval. | Permissions, settings, rules |
 | **Policy Preset** | A named bundle of workspace policy defaults that supplies a coherent automation and Approval Gate posture while still allowing specific policy values to be changed. | Mode, profile |
 | **Supervised Policy** | The default preset that allows automated dispatch and review while requiring an Approval Gate for code-changing merge unless exempted. | Manual mode, safe mode |
@@ -106,16 +110,17 @@ This glossary captures the canonical domain language for Stoneforge V2 work. It 
 | **Provider Check** | A raw external verification signal observed from a provider, such as a GitHub check/status or a Jenkins/Buildkite result; Stoneforge policy determines whether it is required for the Verification Run. | Verification Run, Stoneforge Policy Check |
 | **Mergeability** | The provider/source-control condition that a MergeRequest can be merged at this moment, including conflicts, stale branch state, branch protection, locks, and required provider permissions. | Verification Run, policy check, approval |
 | **Branch Health** | The broader condition of a task, plan, or integration branch over time, including drift, risky divergence, repeated rebase failures, branch deletion, or stale-base risk that may require repair before immediate Mergeability is evaluated. | Mergeability, CI, branch status |
+| **Branch Update** | The action of bringing a task, plan, or integration branch up to date with its configured target branch through merge, rebase, or provider-supported update. | Repair, merge attempt, sync |
 | **Review Outcome** | The recorded result of Human Reviewer or Review Agent evaluation, either Review Approved or a Change Request. | Review comment, PR state |
 | **Review Approved** | A Review Outcome meaning the reviewer found the work acceptable and supplying approval for any Approval Gate the reviewer is eligible to satisfy. | Review passed, approval |
 | **Repair Trigger** | Any review, verification, mergeability, policy, or branch-health condition that requires task repair before completion. | Failure, rejection, reopen |
 | **Change Request** | A repair trigger produced by a Human Reviewer or Review Agent. | Rejection, failure |
-| **Gate Failure** | A repair trigger produced by verification, mergeability, branch drift, or policy evaluation. | Change request, broken check |
+| **Merge Blocker** | A review, verification, mergeability, branch-health, Approval Gate, or policy condition that prevents a MergeRequest from becoming merge-ready until resolved. | Gate failure, broken check, merge failure |
 | **Approval Gate** | A narrow policy requirement that a qualified human or agent Approver approve before merge or another sensitive action. | Manual review, GitHub approval, human intervention |
 | **Human Approval Gate** | A qualified Approval Gate that specifically requires a human Approver. | Approval Gate, manual review |
 | **Agent Approval Gate** | A qualified Approval Gate that may be satisfied by an authorized agent Approver. | Approval Gate, automated approval |
-| **Stoneforge Policy Check** | The Stoneforge-owned GitHub status or check that represents the canonical policy decision for merge readiness. | CI check, approval check |
-| **Merge Evaluation** | The workflow action that determines whether a MergeRequest satisfies policy, verification, review, and mergeability requirements. | Merge check, final review |
+| **Stoneforge Policy Check** | The provider-facing check or status Stoneforge publishes to communicate the current relevant Policy Decision for a MergeRequest head SHA. | CI check, approval check, policy decision |
+| **Merge Evaluation** | The workflow action that refreshes Mergeability and runs Policy Evaluation for a MergeRequest. | Merge check, final review |
 
 ## Automation and workflow triggers
 
@@ -136,7 +141,8 @@ This glossary captures the canonical domain language for Stoneforge V2 work. It 
 | --- | --- | --- |
 | **Authentication** | The process that proves the identity of a human or service actor. | Login, authorization |
 | **Authorization** | The actor permission decision about what an authenticated human or service actor may do at all. | Auth, policy, workflow gate |
-| **Policy Evaluation** | The workflow decision about whether an authorized requested action may happen automatically, is blocked, requires review, or requires approval. | Authorization, permission check, validation |
+| **Policy Evaluation** | The workflow process that evaluates policy inputs to determine whether an authorized requested action may proceed, wait, fail, require review, or require approval. | Authorization, permission check, validation |
+| **Policy Decision** | The internal result of a Policy Evaluation, commonly `passed`, `pending`, or `failed`, with a reason such as waiting on verification, review, Approval Gates, Mergeability, repair, or intervention. | Policy check, permission result, status |
 | **AuditEvent** | An immutable record of actor, action, target, outcome, and policy context for compliance, lineage, and operator observability. | Log, event, transcript |
 | **Secret** | Boundary-specific sensitive material used by the platform, orgs, workspaces, integrations, or assignment-scoped runtime execution. | Credential, token |
 | **Platform Secret** | A secret owned by the Stoneforge platform operator and used to operate the control plane or platform-level integrations. | Control-plane secret, global secret, admin token |
@@ -232,18 +238,27 @@ These state names are semantic product contracts, not required storage enum stri
 - **Provider Checks** are observed from provider checks and statuses; Stoneforge does not author native CI in the first slice.
 - **Mergeability** is observed from provider/source-control state and feeds **Stoneforge Policy Check**; it is not part of **Verification Run**.
 - **Branch Health** is broader than **Mergeability**; it can trigger repair or escalation before the provider reports whether a specific MergeRequest is mergeable.
+- Poor **Branch Health** may require a **Branch Update**; a successful **Branch Update** normally makes prior **Verification Runs** stale, while a failed or conflicted **Branch Update** may produce a **Repair Trigger**.
 - Policy may require one or more **Approval Gates** for merge, including both **Human Approval Gates** and **Agent Approval Gates** on the same MergeRequest.
 - An **Approval Gate** is satisfied by qualifying **Review Approved** outcomes; there is no separate standalone Approval record in the current model.
 - A single **Review Approved** outcome may satisfy one or more **Approval Gates** if the reviewer is eligible for those gates.
+- A **Merge Blocker** may be pending, such as an unsatisfied **Approval Gate**, or repair-producing, such as a **Change Request**, failed **Verification Run**, failed **Mergeability**, poor **Branch Health**, or failed **Policy Decision**.
+- A **Merge Evaluation** is not a separate policy engine; policy determines required gates, while **Merge Evaluation** combines current **Mergeability** with **Policy Evaluation** for the MergeRequest.
 - **Policy** constrains actions by humans, agents, automations, adapters, and the scheduler.
 - **Authorization** decides whether an actor may request or perform an action at all; **Policy Evaluation** decides the workflow outcome for an authorized action in its Workspace context.
+- A **Policy Evaluation** produces a **Policy Decision**; a **Stoneforge Policy Check** publishes the relevant MergeRequest-facing decision to the provider.
+- A **Policy Decision** may be `pending` when policy is waiting on inputs such as Verification Runs, Review Approved outcomes, Approval Gates, or Mergeability.
+- A previously passing **Policy Decision** may become `pending` or `failed` without a task-branch commit change when inputs such as **Branch Health**, **Mergeability**, target-branch state, or Approval Gates change; the **Stoneforge Policy Check** should be republished to reflect the current decision.
 - A **Policy Preset** supplies defaults rather than locking a Workspace into an immutable mode; specific policy values may override preset defaults.
 - **Platform Secrets**, **Org Secrets**, and **Workspace Secrets** are ownership scopes; runtime injection is a use of an allowed secret, not a separate top-level ownership category.
+- A **Provider** is the broad external-service category; a **Source-Control Provider** is the repository/branch/MergeRequest subtype, with **GitHub Provider** as the first-slice implementation.
 - A **Provider Installation** is the umbrella integration grant; a **GitHub App Installation** is the GitHub-specific Provider Installation used in the first slice.
 - **Provider Identifier** is the umbrella for external provider IDs; use qualified phrases such as provider user ID, provider installation ID, provider session ID, or provider pull request ID when detail is needed.
 - Sensitive actions must emit **AuditEvents** with actor, target, outcome, and policy context.
 - **Execution Lineage** is the canonical domain term for operator-visible history; "timeline" is UI presentation language unless it gains separate ownership, persistence, and lifecycle.
 - **Workflow Events** may contribute to **Execution Lineage** for reconstruction, projections, and operator visibility, but they are not automatically part of the **Audit Trail**.
+- Persisted **Workflow Events** are append-only; mutable views over them are projections, not event records.
+- A **Projection** may be rebuilt or updated from canonical records or append-only events; it is not a source of truth unless a future design explicitly promotes it.
 - An **Audit Trail** is a compliance-focused subset of **Execution Lineage**, not the full operator-visible history.
 - **Human Intervention** is the broad operator-action umbrella; an **Approval Gate** is only the policy gate where an **Approver** satisfies required approval.
 - **Escalation** may create or require **Human Intervention**, but ordinary operator actions, automated **Retry**, automated **Resume**, and task **Repair** are not Escalation unless policy thresholds stop or downgrade autonomous progress.
@@ -279,6 +294,7 @@ These state names are semantic product contracts, not required storage enum stri
 - "Timeline" is not canonical domain language for now; use **Execution Lineage** for the model and timeline only for UI presentation.
 - "Audit Trail" should not replace **Execution Lineage**; it names the compliance slice backed by required **AuditEvents**.
 - "Workflow Event" should not replace **AuditEvent**; use **Workflow Event** for non-audit lineage facts and **AuditEvent** for compliance-grade sensitive actions and policy-relevant decisions.
+- "Projection" should not be confused with canonical state; use **Projection** only for derived read models, summaries, dashboard state, or UI timelines.
 - "Implementation Assignment", "repair Assignment", "review Assignment", and "merge-evaluation Assignment" are acceptable **Qualified Assignment Phrases** in prose, but **Assignment** remains the canonical object.
 - "Lease" must not be collapsed into **Assignment** capacity fields; use **Lease** for scheduler reservation and **Assignment** for durable execution history.
 - "Review Intent", "Repair Intent", "Merge Evaluation Intent", and "Escalation Intent" are not canonical object names; use **Dispatch Intent** with action/type qualifiers or **Qualified Dispatch Intent Phrases** in prose.
@@ -304,14 +320,18 @@ These state names are semantic product contracts, not required storage enum stri
 - "Review Approved" and "Approval Gate" are related but not separate approval records; **Review Approved** is the Review Outcome, while an **Approval Gate** is the policy requirement that qualifying Review Approved outcomes satisfy.
 - "Human intervention" and "approval" are distinct; use **Human Intervention** for broad operator steering or unblocking, and **Approval Gate** only for policy-required approval.
 - "Authorization" and "Policy Evaluation" are distinct; do not use actor permission checks as a substitute for workspace workflow policy, and do not use policy gates to imply the actor was authorized.
+- "Policy Check" should not be used as the decision-maker; use **Policy Evaluation** for the process, **Policy Decision** for the result, and **Stoneforge Policy Check** for the provider-facing publication.
+- "Merge Queue" is not canonical in the current model; use descriptive language such as pending merge or merge-ready MergeRequest until Stoneforge has explicit merge ordering semantics.
+- "Reverification" is descriptive only, not a canonical object; use **Verification Run** lifecycle language such as prior run became `stale` and a new **Verification Run** began for the updated head SHA.
 - "Policy mode" is acceptable casual UI language, but **Policy Preset** is canonical when discussing configuration because preset values can be overridden.
 - "Escalation" should not be used for every failure or manual action; reserve **Escalation** for policy-controlled cases where Stoneforge requires human attention because autonomous progress is no longer considered safe or productive.
 - "Escalated" should not replace the task state name; use **Task `human_review_required`** for task state and **Escalation** for the transition or cause.
 - "Stall" should not be used as the lifecycle response; use **Stall** for the observed lack of progress and **Escalation**, **Retry**, **Resume**, or **Repair** for the response selected by policy.
 - "Abort", "stop", and "close" are not canonical lifecycle terms unless a future workflow gives one distinct policy or state-machine meaning; use **Cancellation** and qualified cancellation phrases instead.
 - "Session cancellation" is not the preferred phrase; use **Session Stop** for intentionally stopping provider execution inside a **Session**.
-- "Changes requested" is broader than the noun **Change Request** in many workflow tools; use **Task `repair_required`** or **MergeRequest `repair_required`** for the state, **Repair Trigger** for the umbrella cause, **Change Request** for reviewer feedback, and **Gate Failure** for verification, mergeability, branch drift, or policy failures.
+- "Gate Failure" is not canonical; use **Merge Blocker** for conditions that prevent merge readiness, **Change Request** for reviewer feedback, and **Repair Trigger** when the condition requires repair work.
 - "Credentials" should be narrowed to **Secrets** and then to **Platform Secrets**, **Org Secrets**, or **Workspace Secrets** so boundary-specific ownership stays explicit.
 - "Workspace-Runtime Secret" is not canonical ownership language; describe runtime injection as a permitted use of a **Workspace Secret** or **Org Secret**.
 - "Provider Installation" should be used for the umbrella integration grant; use **GitHub App Installation** only for the GitHub-specific first-slice subtype.
+- "Provider" should not imply source control by default; use **Source-Control Provider** for repository, branch, MergeRequest, check/status, and merge operations.
 - "Provider User ID", "Provider Installation ID", "Provider Session ID", and similar phrases are qualified **Provider Identifier** phrases, not separate canonical concepts unless their lifecycle or policy semantics diverge.
