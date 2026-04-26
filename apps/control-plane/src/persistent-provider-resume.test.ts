@@ -12,7 +12,7 @@ import type {
 } from "@stoneforge/merge-request";
 
 import { PersistentControlPlane } from "./persistent-control-plane.js";
-import { runPersistentTracerBullet } from "./persistent-tracer-bullet.js";
+import { runControlPlaneSmokeFlow } from "./control-plane-smoke-flow.js";
 import { SQLiteControlPlaneStore } from "./sqlite-control-plane-store.js";
 
 class ResumeRecordingAdapter implements GitHubMergeRequestAdapter {
@@ -86,6 +86,7 @@ describe("persistent provider resume", () => {
         new SQLiteControlPlaneStore(sqlitePath),
         {
           mergeRequestAdapter: firstAdapter,
+          ...smokeOptions(),
         },
       );
 
@@ -95,6 +96,7 @@ describe("persistent provider resume", () => {
         new SQLiteControlPlaneStore(sqlitePath),
         {
           mergeRequestAdapter: secondAdapter,
+          ...smokeOptions(),
         },
       );
 
@@ -117,7 +119,7 @@ describe("persistent provider resume", () => {
     const store = new SQLiteControlPlaneStore(sqlitePath);
 
     try {
-      const summary = await runPersistentTracerBullet(store, {
+      const summary = await runControlPlaneSmokeFlow(store, {
         mergeProvider: "github",
         mergeEnabled: false,
         mergeRequestAdapter: adapter,
@@ -160,7 +162,7 @@ describe("persistent provider resume", () => {
     }
   });
 
-  it("stops the GitHub-mode tracer when no provider check has passed", async () => {
+  it("stops the GitHub-mode smoke flow when no provider check has passed", async () => {
     const tempDir = await mkdtemp(
       join(tmpdir(), "stoneforge-provider-verification-pending-"),
     );
@@ -168,7 +170,7 @@ describe("persistent provider resume", () => {
 
     try {
       await expect(
-        runPersistentTracerBullet(new SQLiteControlPlaneStore(sqlitePath), {
+        runControlPlaneSmokeFlow(new SQLiteControlPlaneStore(sqlitePath), {
           mergeProvider: "github",
           mergeEnabled: false,
           mergeRequestAdapter: new ResumeRecordingAdapter([]),
@@ -197,10 +199,73 @@ async function prepareOpenMergeRequest(
   await controlPlane.configureRepository();
   await controlPlane.configureRuntime();
   await controlPlane.configureAgent();
-  await controlPlane.configureRole();
+  await controlPlane.configureRoleDefinition();
   await controlPlane.configurePolicy();
-  await controlPlane.validateWorkspace();
+  await controlPlane.evaluateReadiness();
   await controlPlane.createDirectTask();
-  await controlPlane.runWorker();
+  await controlPlane.executeNextDispatch();
   await controlPlane.openMergeRequest();
+}
+
+function smokeOptions(): NonNullable<
+  ConstructorParameters<typeof PersistentControlPlane>[1]
+> {
+  return {
+    operationInputs: {
+      workspace: {
+        orgName: "Toolco",
+        workspaceName: "stoneforge",
+        targetBranch: "main",
+      },
+      repository: {
+        installationId: "github-installation-local",
+        owner: "toolco",
+        repository: "stoneforge",
+        defaultBranch: "main",
+      },
+      runtime: {
+        name: "local-worktree-runtime",
+        location: "customer_host",
+        mode: "local_worktree",
+        tags: ["local"],
+      },
+      agent: {
+        name: "local-codex-agent",
+        harness: "openai-codex",
+        model: "gpt-5-codex",
+        concurrencyLimit: 1,
+        launcher: "fake-local-agent-adapter",
+        tags: ["local"],
+      },
+      roleDefinition: {
+        name: "direct-task-worker",
+        category: "worker",
+        prompt: "Implement or review assigned control-plane work.",
+        toolAccess: ["git", "shell"],
+        tags: ["local"],
+      },
+      policyPreset: "supervised",
+      task: {
+        title: "Control-plane direct task smoke flow",
+        intent: "Prove the durable control-plane command boundary and state.",
+        acceptanceCriteria: [
+          "The task dispatches, opens a MergeRequest, records gates, and merges.",
+        ],
+        priority: "normal",
+        requiresMergeRequest: true,
+        requiredAgentTags: ["local"],
+        requiredRuntimeTags: ["local"],
+      },
+      localVerificationCheck: {
+        providerCheckId: "local-check-1",
+        name: "local quality",
+      },
+      review: {
+        agentApprovalReason:
+          "Local review approved the deterministic scenario change.",
+        humanReviewerId: "user_approver",
+        humanApprovalReason: "Human reviewer approved the MergeRequest.",
+      },
+    },
+  };
 }

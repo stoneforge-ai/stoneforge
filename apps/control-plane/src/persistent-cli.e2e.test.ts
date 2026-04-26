@@ -40,31 +40,12 @@ describe("persistent control-plane CLI", () => {
     "merge-when-ready",
   ] satisfies readonly ControlPlaneOperationName[];
 
-  const workflowCommands = [
-    "reset",
-    "initialize-workspace",
-    "configure-repo",
-    "configure-runtime",
-    "configure-agent",
-    "configure-role",
-    "configure-policy",
-    "validate-workspace",
-    "create-direct-task",
-    "run-worker",
-    "open-merge-request",
-    "record-verification-passed",
-    "request-review",
-    "run-worker",
-    "complete-review",
-    "approve",
-    "merge",
-  ];
-
   it("drives the smoke flow through durable control-plane operations", async () => {
     const tempDir = await mkdtemp(join(tmpdir(), "stoneforge-control-plane-"));
     const sqlitePath = join(tempDir, "control-plane.sqlite");
     const controlPlane = new PersistentControlPlane(
       new SQLiteControlPlaneStore(sqlitePath),
+      smokeOptions(),
     );
 
     try {
@@ -108,61 +89,6 @@ describe("persistent control-plane CLI", () => {
     }
   });
 
-  it("drives the local tracer bullet through the command boundary after restart", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "stoneforge-control-plane-"));
-    const storePath = join(tempDir, "control-plane.json");
-
-    try {
-      for (const command of workflowCommands) {
-        await expectCommandToPass(command, storePath);
-      }
-
-      const summary = await runSummaryCommand(storePath);
-
-      expect(summary.workspaceState).toBe("ready");
-      expect(summary.policyPreset).toBe("supervised");
-      expect(summary.taskState).toBe("completed");
-      expect(summary.implementationAssignmentState).toBe("succeeded");
-      expect(summary.implementationSessionState).toBe("ended");
-      expect(summary.reviewAssignmentState).toBe("succeeded");
-      expect(summary.reviewSessionState).toBe("ended");
-      expect(summary.mergeRequestState).toBe("merged");
-      expect(summary.verificationState).toBe("passed");
-      expect(summary.policyCheckState).toBe("passed");
-      expect(summary.approvalGateSatisfied).toBe(true);
-      expect(summary.pullRequestMerged).toBe(true);
-      expect(summary.providerSessionIds).toEqual([
-        "local-task-start-1",
-        "local-merge_request-start-1",
-      ]);
-    } finally {
-      await rm(tempDir, { recursive: true, force: true });
-    }
-  });
-
-  it("drives the local tracer bullet through the SQLite command boundary after restart", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "stoneforge-control-plane-"));
-    const sqlitePath = join(tempDir, "control-plane.sqlite");
-
-    try {
-      for (const command of workflowCommands) {
-        await expectCommandArgsToPass(command, sqliteArgs(sqlitePath));
-      }
-
-      const summary = await runSummaryCommandWithArgs(sqliteArgs(sqlitePath));
-
-      expect(summary.workspaceState).toBe("ready");
-      expect(summary.taskState).toBe("completed");
-      expect(summary.mergeRequestState).toBe("merged");
-      expect(summary.providerSessionIds).toEqual([
-        "local-task-start-1",
-        "local-merge_request-start-1",
-      ]);
-    } finally {
-      await rm(tempDir, { recursive: true, force: true });
-    }
-  });
-
   it("resumes a partially completed flow after recreating the SQLite service", async () => {
     const tempDir = await mkdtemp(join(tmpdir(), "stoneforge-control-plane-"));
     const sqlitePath = join(tempDir, "control-plane.sqlite");
@@ -170,6 +96,7 @@ describe("persistent control-plane CLI", () => {
     try {
       const firstProcess = new PersistentControlPlane(
         new SQLiteControlPlaneStore(sqlitePath),
+        smokeOptions(),
       );
 
       await firstProcess.reset();
@@ -177,65 +104,30 @@ describe("persistent control-plane CLI", () => {
       await firstProcess.configureRepository();
       await firstProcess.configureRuntime();
       await firstProcess.configureAgent();
-      await firstProcess.configureRole();
+      await firstProcess.configureRoleDefinition();
       await firstProcess.configurePolicy();
-      await firstProcess.validateWorkspace();
+      await firstProcess.evaluateReadiness();
       await firstProcess.createDirectTask();
-      await firstProcess.runWorker();
+      await firstProcess.executeNextDispatch();
 
       const resumedProcess = new PersistentControlPlane(
         new SQLiteControlPlaneStore(sqlitePath),
+        smokeOptions(),
       );
 
       await resumedProcess.openMergeRequest();
-      await resumedProcess.recordVerificationPassed();
+      await resumedProcess.recordLocalVerificationPassed();
       await resumedProcess.requestReview();
-      await resumedProcess.runWorker();
-      await resumedProcess.completeReview();
-      await resumedProcess.approve();
-      await resumedProcess.merge();
+      await resumedProcess.executeNextDispatch();
+      await resumedProcess.completeAgentReview();
+      await resumedProcess.recordHumanApproval();
+      await resumedProcess.mergeWhenReady();
 
       const summary = await resumedProcess.readSummary();
 
       expect(summary.taskState).toBe("completed");
       expect(summary.mergeRequestState).toBe("merged");
       expect(summary.pullRequestMerged).toBe(true);
-    } finally {
-      await rm(tempDir, { recursive: true, force: true });
-    }
-  });
-
-  it("runs the one-shot persistent tracer bullet with the default SQLite store", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "stoneforge-control-plane-"));
-
-    try {
-      const result = await runCommand(["tracer-bullet", "--json"], tempDir);
-      const summary = JSON.parse(result.stdout) as DirectTaskRunSummary;
-
-      expect(result.code).toBe(0);
-      expect(summary.taskState).toBe("completed");
-      expect(summary.mergeRequestState).toBe("merged");
-    } finally {
-      await rm(tempDir, { recursive: true, force: true });
-    }
-  });
-
-  it("runs the one-shot persistent tracer bullet command", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "stoneforge-control-plane-"));
-    const storePath = join(tempDir, "control-plane.json");
-
-    try {
-      const result = await runCommand([
-        "tracer-bullet",
-        "--store",
-        storePath,
-        "--json",
-      ]);
-      const summary = JSON.parse(result.stdout) as DirectTaskRunSummary;
-
-      expect(result.code).toBe(0);
-      expect(summary.taskState).toBe("completed");
-      expect(summary.mergeRequestState).toBe("merged");
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }
@@ -263,7 +155,7 @@ describe("persistent control-plane CLI", () => {
   });
 
   it.skipIf(isCoverageRun())(
-    "runs the full packaged CLI tracer bullet",
+    "runs the full packaged CLI smoke flow",
     async () => {
       const tempDir = await mkdtemp(
         join(tmpdir(), "stoneforge-control-plane-"),
@@ -272,7 +164,7 @@ describe("persistent control-plane CLI", () => {
 
       try {
         const result = await runPackagedCli([
-          "tracer-bullet",
+          "smoke-flow",
           "--store",
           storePath,
           "--json",
@@ -302,8 +194,8 @@ describe("persistent control-plane CLI", () => {
       const storePath = join(tempDir, "control-plane.json");
 
       try {
-        for (const command of workflowCommands) {
-          await expectPackagedCommandToPass(command, storePath);
+        for (const operation of durableWorkflowOperations) {
+          await expectPackagedCommandToPass(operation, storePath);
         }
 
         const summary = await runPackagedSummaryCommand(storePath);
@@ -365,15 +257,18 @@ describe("persistent control-plane CLI", () => {
     try {
       const reset = await runCommand(["reset", "--store", storePath]);
       const missingIntent = await runCommand([
-        "run-worker",
+        "execute-next-dispatch",
         "--store",
         storePath,
       ]);
 
-      await expectCommandToPass("initialize-workspace", storePath);
+      await expectCommandArgsToPass("initialize-workspace", [
+        "--store",
+        storePath,
+      ]);
 
       const notReady = await runCommand([
-        "validate-workspace",
+        "evaluate-readiness",
         "--store",
         storePath,
       ]);
@@ -422,7 +317,7 @@ describe("persistent control-plane CLI", () => {
   });
 
   it.skipIf(postgresTestUrl() === undefined)(
-    "runs the command-boundary tracer bullet against PostgreSQL",
+    "runs the command-boundary smoke flow against PostgreSQL",
     async () => {
       const postgresUrl = postgresTestUrl();
 
@@ -437,8 +332,8 @@ describe("persistent control-plane CLI", () => {
         postgresUrl,
       ];
 
-      for (const command of workflowCommands) {
-        await expectCommandArgsToPass(command, storeArgs);
+      for (const operation of durableWorkflowOperations) {
+        await expectCommandArgsToPass(operation, storeArgs);
       }
 
       const summary = await runSummaryCommandWithArgs(storeArgs);
@@ -450,12 +345,12 @@ describe("persistent control-plane CLI", () => {
     30_000,
   );
 
-  it("prints the one-shot tracer bullet summary for humans", async () => {
+  it("prints the one-shot smoke flow summary for humans", async () => {
     const tempDir = await mkdtemp(join(tmpdir(), "stoneforge-control-plane-"));
     const storePath = join(tempDir, "control-plane.json");
 
     try {
-      const result = await runCommand(["tracer-bullet", "--store", storePath]);
+      const result = await runCommand(["smoke-flow", "--store", storePath]);
 
       expect(result.code).toBe(0);
       expect(result.stdout).toContain(
@@ -469,16 +364,6 @@ describe("persistent control-plane CLI", () => {
   });
 });
 
-async function expectCommandToPass(
-  command: string,
-  storePath: string,
-): Promise<void> {
-  const result = await runCommand([command, "--store", storePath, "--json"]);
-
-  expect(result.code).toBe(0);
-  expect(result.stderr).toBe("");
-}
-
 async function expectCommandArgsToPass(
   command: string,
   storeArgs: readonly string[],
@@ -487,17 +372,6 @@ async function expectCommandArgsToPass(
 
   expect(result.code).toBe(0);
   expect(result.stderr).toBe("");
-}
-
-async function runSummaryCommand(
-  storePath: string,
-): Promise<DirectTaskRunSummary> {
-  const result = await runCommand(["summary", "--store", storePath, "--json"]);
-
-  expect(result.code).toBe(0);
-  expect(result.stderr).toBe("");
-
-  return JSON.parse(result.stdout) as DirectTaskRunSummary;
 }
 
 async function runSummaryCommandWithArgs(
@@ -574,6 +448,69 @@ async function runCommand(
 
 function sqliteArgs(sqlitePath: string): string[] {
   return ["--store-backend", "sqlite", "--sqlite-path", sqlitePath];
+}
+
+function smokeOptions(): NonNullable<
+  ConstructorParameters<typeof PersistentControlPlane>[1]
+> {
+  return {
+    operationInputs: {
+      workspace: {
+        orgName: "Toolco",
+        workspaceName: "stoneforge",
+        targetBranch: "main",
+      },
+      repository: {
+        installationId: "github-installation-local",
+        owner: "toolco",
+        repository: "stoneforge",
+        defaultBranch: "main",
+      },
+      runtime: {
+        name: "local-worktree-runtime",
+        location: "customer_host",
+        mode: "local_worktree",
+        tags: ["local"],
+      },
+      agent: {
+        name: "local-codex-agent",
+        harness: "openai-codex",
+        model: "gpt-5-codex",
+        concurrencyLimit: 1,
+        launcher: "fake-local-agent-adapter",
+        tags: ["local"],
+      },
+      roleDefinition: {
+        name: "direct-task-worker",
+        category: "worker",
+        prompt: "Implement or review assigned control-plane work.",
+        toolAccess: ["git", "shell"],
+        tags: ["local"],
+      },
+      policyPreset: "supervised",
+      task: {
+        title: "Control-plane direct task smoke flow",
+        intent: "Prove the durable control-plane command boundary and state.",
+        acceptanceCriteria: [
+          "The task dispatches, opens a MergeRequest, records gates, and merges.",
+        ],
+        priority: "normal",
+        requiresMergeRequest: true,
+        requiredAgentTags: ["local"],
+        requiredRuntimeTags: ["local"],
+      },
+      localVerificationCheck: {
+        providerCheckId: "local-check-1",
+        name: "local quality",
+      },
+      review: {
+        agentApprovalReason:
+          "Local review approved the deterministic scenario change.",
+        humanReviewerId: "user_approver",
+        humanApprovalReason: "Human reviewer approved the MergeRequest.",
+      },
+    },
+  };
 }
 
 function postgresTestUrl(): string | undefined {

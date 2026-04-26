@@ -1,4 +1,5 @@
 import type { ControlPlaneCommandStatus } from "./control-plane-store.js";
+import type { ControlPlaneOperationInputs } from "./control-plane-operation-inputs.js";
 import {
   rememberCompletedAssignment,
   requireLatestSession,
@@ -20,10 +21,14 @@ type LoadedOperationResult = Omit<ControlPlaneCommandStatus, "command">;
 export function initializeWorkspace(
   loaded: LoadedControlPlane,
 ): LoadedOperationResult {
-  const org = loaded.setup.createOrg({ name: "Toolco" });
+  const inputs = operationInputs(loaded);
+  const org = loaded.setup.createOrg({ name: inputs.workspace.orgName });
   const workspace = loaded.setup.createWorkspace(
     org.id,
-    { name: "stoneforge", targetBranch: "main" },
+    {
+      name: inputs.workspace.workspaceName,
+      targetBranch: inputs.workspace.targetBranch,
+    },
     operator,
   );
 
@@ -36,15 +41,10 @@ export function initializeWorkspace(
 export function configureRepository(
   loaded: LoadedControlPlane,
 ): LoadedOperationResult {
-  const repository = loaded.options.repository ?? {
-    installationId: "github-installation-local",
-    owner: "toolco",
-    repository: "stoneforge",
-    defaultBranch: "main",
-  };
+  const inputs = operationInputs(loaded);
   const workspace = loaded.setup.connectGitHubRepository(
     requireWorkspaceId(loaded.snapshot.current),
-    repository,
+    inputs.repository,
     operator,
   );
 
@@ -54,14 +54,10 @@ export function configureRepository(
 export function configureRuntime(
   loaded: LoadedControlPlane,
 ): LoadedOperationResult {
+  const inputs = operationInputs(loaded);
   const runtime = loaded.setup.registerRuntime(
     requireWorkspaceId(loaded.snapshot.current),
-    {
-      name: "local-worktree-runtime",
-      location: "customer_host",
-      mode: "local_worktree",
-      tags: ["local"],
-    },
+    inputs.runtime,
     operator,
   );
 
@@ -73,16 +69,12 @@ export function configureRuntime(
 export function configureAgent(
   loaded: LoadedControlPlane,
 ): LoadedOperationResult {
+  const inputs = operationInputs(loaded);
   const agent = loaded.setup.registerAgent(
     requireWorkspaceId(loaded.snapshot.current),
     {
-      name: "local-codex-agent",
+      ...inputs.agent,
       runtimeId: requireRuntimeId(loaded.snapshot.current),
-      harness: "openai-codex",
-      model: "gpt-5-codex",
-      concurrencyLimit: 1,
-      launcher: "fake-local-agent-adapter",
-      tags: ["local"],
     },
     operator,
   );
@@ -95,15 +87,10 @@ export function configureAgent(
 export function configureRole(
   loaded: LoadedControlPlane,
 ): LoadedOperationResult {
+  const inputs = operationInputs(loaded);
   const roleDefinition = loaded.setup.registerRoleDefinition(
     requireWorkspaceId(loaded.snapshot.current),
-    {
-      name: "direct-task-worker",
-      category: "worker",
-      prompt: "Implement or review assigned control-plane work.",
-      toolAccess: ["git", "shell"],
-      tags: ["local"],
-    },
+    inputs.roleDefinition,
     operator,
   );
 
@@ -115,9 +102,10 @@ export function configureRole(
 export function configurePolicy(
   loaded: LoadedControlPlane,
 ): LoadedOperationResult {
+  const inputs = operationInputs(loaded);
   const workspace = loaded.setup.selectPolicyPreset(
     requireWorkspaceId(loaded.snapshot.current),
-    "supervised",
+    inputs.policyPreset,
     operator,
   );
 
@@ -145,20 +133,19 @@ export function evaluateReadiness(
 export function createDirectTask(
   loaded: LoadedControlPlane,
 ): LoadedOperationResult {
+  const inputs = operationInputs(loaded);
   const roleDefinition = requireRoleDefinition(loaded);
   const task = loaded.execution.createTask({
     workspaceId: requireWorkspaceId(loaded.snapshot.current),
-    title: "Control-plane direct task smoke flow",
-    intent: "Prove the durable control-plane command boundary and state.",
-    acceptanceCriteria: [
-      "The task dispatches, opens a MergeRequest, records gates, and merges.",
-    ],
-    priority: "normal",
-    requiresMergeRequest: true,
+    title: inputs.task.title,
+    intent: inputs.task.intent,
+    acceptanceCriteria: inputs.task.acceptanceCriteria,
+    priority: inputs.task.priority,
+    requiresMergeRequest: inputs.task.requiresMergeRequest,
     dispatchConstraints: {
       roleDefinitionId: roleDefinition.id,
-      requiredAgentTags: ["local"],
-      requiredRuntimeTags: ["local"],
+      requiredAgentTags: inputs.task.requiredAgentTags,
+      requiredRuntimeTags: inputs.task.requiredRuntimeTags,
     },
   });
 
@@ -200,11 +187,12 @@ export async function openMergeRequest(
 export async function recordLocalVerificationPassed(
   loaded: LoadedControlPlane,
 ): Promise<LoadedOperationResult> {
+  const inputs = operationInputs(loaded);
   const verificationRun = await loaded.mergeRequests.recordProviderCheck(
     requireMergeRequestId(loaded.snapshot.current),
     {
-      providerCheckId: "local-check-1",
-      name: "local quality",
+      providerCheckId: inputs.localVerificationCheck.providerCheckId,
+      name: inputs.localVerificationCheck.name,
       state: "passed",
     },
   );
@@ -249,13 +237,14 @@ export async function publishPolicyStatus(
 export function requestReview(
   loaded: LoadedControlPlane,
 ): LoadedOperationResult {
+  const inputs = operationInputs(loaded);
   const roleDefinition = requireRoleDefinition(loaded);
   const intent = loaded.mergeRequests.requestReview(
     requireMergeRequestId(loaded.snapshot.current),
     {
       roleDefinitionId: roleDefinition.id,
-      requiredAgentTags: ["local"],
-      requiredRuntimeTags: ["local"],
+      requiredAgentTags: inputs.task.requiredAgentTags,
+      requiredRuntimeTags: inputs.task.requiredRuntimeTags,
     },
   );
 
@@ -265,6 +254,7 @@ export function requestReview(
 export async function completeAgentReview(
   loaded: LoadedControlPlane,
 ): Promise<LoadedOperationResult> {
+  const inputs = operationInputs(loaded);
   const mergeRequest = await loaded.mergeRequests.recordReviewOutcome(
     requireMergeRequestId(loaded.snapshot.current),
     {
@@ -278,7 +268,7 @@ export async function completeAgentReview(
         "Configure an agent before completing review.",
       ),
       outcome: "approved",
-      reason: "Local review approved the deterministic scenario change.",
+      reason: inputs.review.agentApprovalReason,
     },
   );
 
@@ -288,13 +278,14 @@ export async function completeAgentReview(
 export async function recordHumanApproval(
   loaded: LoadedControlPlane,
 ): Promise<LoadedOperationResult> {
+  const inputs = operationInputs(loaded);
   const mergeRequest = await loaded.mergeRequests.recordReviewOutcome(
     requireMergeRequestId(loaded.snapshot.current),
     {
       reviewerKind: "human",
-      reviewerId: "user_approver",
+      reviewerId: inputs.review.humanReviewerId,
       outcome: "approved",
-      reason: "Human reviewer approved the MergeRequest.",
+      reason: inputs.review.humanApprovalReason,
     },
   );
 
@@ -309,4 +300,13 @@ export async function mergeWhenReady(
   );
 
   return { id: mergeRequest.id, state: mergeRequest.state };
+}
+
+function operationInputs(
+  loaded: LoadedControlPlane,
+): ControlPlaneOperationInputs {
+  return requireValue(
+    loaded.options.operationInputs,
+    "Control-plane operation inputs are required for workspace setup and smoke/e2e commands.",
+  );
 }

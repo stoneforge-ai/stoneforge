@@ -56,8 +56,5 @@ export {
 } from "./persistent-control-plane.js";
 export { PostgresControlPlaneStore } from "./postgres-control-plane-store.js";
 export { runControlPlaneCommand } from "./persistent-cli.js";
-export {
-  runControlPlaneSmokeFlow,
-  runPersistentTracerBullet,
-} from "./persistent-tracer-bullet.js";
+export { runControlPlaneSmokeFlow } from "./control-plane-smoke-flow.js";
 export { SQLiteControlPlaneStore } from "./sqlite-control-plane-store.js";

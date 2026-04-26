@@ -58,7 +58,7 @@ export class ControlPlaneApplication {
     return this.mutate("configure-agent", configureAgent);
   }
 
-  async configureRole(): Promise<ControlPlaneCommandStatus> {
+  async configureRoleDefinition(): Promise<ControlPlaneCommandStatus> {
     return this.mutate("configure-role-definition", configureRole);
   }
 
@@ -66,7 +66,7 @@ export class ControlPlaneApplication {
     return this.mutate("configure-policy", configurePolicy);
   }
 
-  async validateWorkspace(): Promise<ControlPlaneCommandStatus> {
+  async evaluateReadiness(): Promise<ControlPlaneCommandStatus> {
     return this.mutate("evaluate-readiness", evaluateReadiness);
   }
 
@@ -74,7 +74,7 @@ export class ControlPlaneApplication {
     return this.mutate("create-direct-task", createDirectTask);
   }
 
-  async runWorker(): Promise<ControlPlaneCommandStatus> {
+  async executeNextDispatch(): Promise<ControlPlaneCommandStatus> {
     return this.mutateAsync("execute-next-dispatch", executeNextDispatch);
   }
 
@@ -82,7 +82,7 @@ export class ControlPlaneApplication {
     return this.mutateAsync("open-merge-request", openMergeRequest);
   }
 
-  async recordVerificationPassed(): Promise<ControlPlaneCommandStatus> {
+  async recordLocalVerificationPassed(): Promise<ControlPlaneCommandStatus> {
     return this.mutateAsync(
       "record-local-verification-passed",
       recordLocalVerificationPassed,
@@ -108,15 +108,15 @@ export class ControlPlaneApplication {
     return this.mutate("request-review", requestReview);
   }
 
-  async completeReview(): Promise<ControlPlaneCommandStatus> {
+  async completeAgentReview(): Promise<ControlPlaneCommandStatus> {
     return this.mutateAsync("complete-agent-review", completeAgentReview);
   }
 
-  async approve(): Promise<ControlPlaneCommandStatus> {
+  async recordHumanApproval(): Promise<ControlPlaneCommandStatus> {
     return this.mutateAsync("record-human-approval", recordHumanApproval);
   }
 
-  async merge(): Promise<ControlPlaneCommandStatus> {
+  async mergeWhenReady(): Promise<ControlPlaneCommandStatus> {
     return this.mutateAsync("merge-when-ready", mergeWhenReady);
   }
 

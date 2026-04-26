@@ -56,7 +56,10 @@ The control-plane persistence path is SQL-backed for active V2 work:
 
 Persistence stays an app/infrastructure concern. Domain packages own their snapshot export and restore shapes, and the control-plane store persists those cohesive snapshots as JSON payloads while keeping only useful operational metadata, such as current Org and Workspace identifiers, relational. Domain packages must not depend on SQL drivers, filesystem APIs, process environment, CLI parsing, or app framework details.
 
-SQL stores initialize themselves idempotently and record a schema migration marker. The first schema intentionally avoids table normalization beyond the metadata required by the current tracer bullet because no query or partial-update need has been proven yet.
+SQL stores initialize themselves idempotently and record a schema migration
+marker. The first schema intentionally avoids table normalization beyond the
+metadata required by the current smoke flow because no query or partial-update
+need has been proven yet.
 
 The GitHub-backed MergeRequest smoke flow uses the same snapshot boundary.
 Provider PR identifiers are stored inside the MergeRequest snapshot as resume

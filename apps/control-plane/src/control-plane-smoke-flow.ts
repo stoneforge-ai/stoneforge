@@ -4,6 +4,7 @@ import {
   type ControlPlaneOperationName,
   runControlPlaneOperation,
 } from "./control-plane-operations.js";
+import { localSmokeOperationInputs } from "./control-plane-smoke-inputs.js";
 import { PersistentControlPlane } from "./persistent-control-plane.js";
 import type { LoadControlPlaneOptions } from "./persistent-control-plane-context.js";
 
@@ -11,7 +12,8 @@ export async function runControlPlaneSmokeFlow(
   store: ControlPlaneStore,
   options: LoadControlPlaneOptions = {},
 ): Promise<DirectTaskRunSummary> {
-  const firstProcess = new PersistentControlPlane(store, options);
+  const smokeOptions = withSmokeInputs(options);
+  const firstProcess = new PersistentControlPlane(store, smokeOptions);
 
   await runOperations(firstProcess, [
     "reset",
@@ -26,14 +28,14 @@ export async function runControlPlaneSmokeFlow(
     "execute-next-dispatch",
   ]);
 
-  const resumedProcess = new PersistentControlPlane(store, options);
+  const resumedProcess = new PersistentControlPlane(store, smokeOptions);
 
   await runControlPlaneOperation(resumedProcess, "open-merge-request");
 
-  const gatesProcess = new PersistentControlPlane(store, options);
+  const gatesProcess = new PersistentControlPlane(store, smokeOptions);
 
   await runControlPlaneOperation(gatesProcess, "observe-provider-state");
-  if (options.mergeProvider === "github") {
+  if (smokeOptions.mergeProvider === "github") {
     await runControlPlaneOperation(
       gatesProcess,
       "require-provider-verification-passed",
@@ -54,18 +56,11 @@ export async function runControlPlaneSmokeFlow(
     "publish-policy-status",
   ]);
 
-  if (options.mergeEnabled !== false) {
+  if (smokeOptions.mergeEnabled !== false) {
     await runControlPlaneOperation(gatesProcess, "merge-when-ready");
   }
 
   return gatesProcess.readSummary();
-}
-
-export function runPersistentTracerBullet(
-  store: ControlPlaneStore,
-  options: LoadControlPlaneOptions = {},
-): Promise<DirectTaskRunSummary> {
-  return runControlPlaneSmokeFlow(store, options);
 }
 
 async function runOperations(
@@ -75,4 +70,17 @@ async function runOperations(
   for (const operation of operations) {
     await runControlPlaneOperation(controlPlane, operation);
   }
+}
+
+function withSmokeInputs(
+  options: LoadControlPlaneOptions,
+): LoadControlPlaneOptions {
+  if (options.operationInputs !== undefined) {
+    return options;
+  }
+
+  return {
+    ...options,
+    operationInputs: localSmokeOperationInputs(options.repository),
+  };
 }

@@ -28,7 +28,7 @@ describe("live GitHub App MergeRequest flow", () => {
         }
 
         if (mergeEnabled()) {
-          await expectCommand(["merge", ...baseArgs]);
+          await expectCommand(["merge-when-ready", ...baseArgs]);
         }
 
         const summary = await commandSummary(["summary", ...baseArgs]);
@@ -64,20 +64,25 @@ function setupCommands(): string[] {
   return [
     "reset",
     "initialize-workspace",
-    "configure-repo",
+    "configure-repository",
     "configure-runtime",
     "configure-agent",
-    "configure-role",
+    "configure-role-definition",
     "configure-policy",
-    "validate-workspace",
+    "evaluate-readiness",
     "create-direct-task",
-    "run-worker",
+    "execute-next-dispatch",
     "open-merge-request",
   ];
 }
 
 function reviewCommands(): string[] {
-  return ["request-review", "run-worker", "complete-review", "approve"];
+  return [
+    "request-review",
+    "execute-next-dispatch",
+    "complete-agent-review",
+    "record-human-approval",
+  ];
 }
 
 async function waitForPassingProviderVerification(

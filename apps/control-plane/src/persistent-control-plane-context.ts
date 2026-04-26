@@ -21,6 +21,7 @@ import {
   type ControlPlaneSnapshot,
   type CurrentControlPlaneIds,
 } from "./control-plane-store.js";
+import type { ControlPlaneOperationInputs } from "./control-plane-operation-inputs.js";
 import { createFakeAgentFixture } from "./fake-agent-adapter.js";
 import { createFakeGitHubMergeRequestFixture } from "./fake-github-merge-request-adapter.js";
 
@@ -28,6 +29,7 @@ interface FakeLoadControlPlaneOptions {
   mergeEnabled?: boolean;
   mergeProvider?: "fake";
   mergeRequestAdapter?: GitHubMergeRequestAdapter;
+  operationInputs?: ControlPlaneOperationInputs;
   repository?: ConnectGitHubRepositoryInput;
   sourceBranchPrefix?: string;
 }
@@ -36,6 +38,7 @@ interface GitHubLoadControlPlaneOptions {
   mergeEnabled: boolean;
   mergeProvider: "github";
   mergeRequestAdapter: GitHubMergeRequestAdapter;
+  operationInputs?: ControlPlaneOperationInputs;
   repository: ConnectGitHubRepositoryInput;
   sourceBranchPrefix: string;
 }

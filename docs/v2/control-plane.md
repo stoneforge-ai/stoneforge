@@ -24,8 +24,8 @@ Frozen in this doc:
 - the control plane owns orchestration, I/O, provider wiring, diagnostics, and
   command/API boundaries
 - domain rules remain in `packages/*`
-- smoke and tracer-bullet flows must not bypass the public control-plane
-  operation surface
+- smoke and e2e flows must not bypass the public control-plane operation
+  surface
 - provider observations and policy status publication are real control-plane
   operations, not test-only shortcuts
 
@@ -78,16 +78,16 @@ Durable operation categories:
 - record human approval
 - merge only when the MergeRequest is `merge_ready`
 
-Command aliases may exist for compatibility, but durable code and docs should
-prefer operation names that describe production control-plane behavior.
+Durable code and docs should use operation names that describe production
+control-plane behavior.
 
 ## Smoke And E2E Rule
 
-Tracer bullets are retained as smoke/e2e scenarios. A smoke flow may encode a
-specific scenario sequence, but each step must call the public control-plane
-operation surface. It must not directly manipulate package services, provider
-fixtures, persisted snapshots, or current IDs in ways that future operator,
-webhook, CI, or local self-hosted flows could not use.
+Smoke/e2e scenarios may encode a specific scenario sequence, but each step must
+call the public control-plane operation surface. They must not directly
+manipulate package services, provider fixtures, persisted snapshots, or current
+IDs in ways that future operator, webhook, CI, or local self-hosted flows could
+not use.
 
 The GitHub App smoke flow is required to observe real provider checks/statuses
 before proceeding. It must not inject local fake verification in GitHub mode.

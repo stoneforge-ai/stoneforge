@@ -23,7 +23,8 @@ import {
 import { createMergeRequestAdapter } from "./merge-request-provider.js";
 import type { LoadControlPlaneOptions } from "./persistent-control-plane-context.js";
 import { PersistentControlPlane } from "./persistent-control-plane.js";
-import { runControlPlaneSmokeFlow } from "./persistent-tracer-bullet.js";
+import { localSmokeOperationInputs } from "./control-plane-smoke-inputs.js";
+import { runControlPlaneSmokeFlow } from "./control-plane-smoke-flow.js";
 import { PostgresControlPlaneStore } from "./postgres-control-plane-store.js";
 import { SQLiteControlPlaneStore } from "./sqlite-control-plane-store.js";
 
@@ -114,11 +115,14 @@ function controlPlaneOptions(
   config: ReturnType<typeof parseMergeProviderConfig>,
 ): LoadControlPlaneOptions {
   if (config.provider === "github") {
+    const repository = repositoryConfig(config);
+
     return {
       mergeProvider: "github",
       mergeRequestAdapter: createMergeRequestAdapter(config),
       mergeEnabled: mergeExpected(config),
-      repository: repositoryConfig(config),
+      operationInputs: localSmokeOperationInputs(repository),
+      repository,
       sourceBranchPrefix: config.github.sourceBranchPrefix,
     };
   }
@@ -127,6 +131,7 @@ function controlPlaneOptions(
     mergeProvider: "fake",
     mergeRequestAdapter: createMergeRequestAdapter(config),
     mergeEnabled: mergeExpected(config),
+    operationInputs: localSmokeOperationInputs(),
   };
 }
 

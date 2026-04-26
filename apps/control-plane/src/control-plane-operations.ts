@@ -36,23 +36,24 @@ const controlPlaneOperationHandlers = {
   "configure-repository": (controlPlane) => controlPlane.configureRepository(),
   "configure-runtime": (controlPlane) => controlPlane.configureRuntime(),
   "configure-agent": (controlPlane) => controlPlane.configureAgent(),
-  "configure-role-definition": (controlPlane) => controlPlane.configureRole(),
+  "configure-role-definition": (controlPlane) =>
+    controlPlane.configureRoleDefinition(),
   "configure-policy": (controlPlane) => controlPlane.configurePolicy(),
-  "evaluate-readiness": (controlPlane) => controlPlane.validateWorkspace(),
+  "evaluate-readiness": (controlPlane) => controlPlane.evaluateReadiness(),
   "create-direct-task": (controlPlane) => controlPlane.createDirectTask(),
-  "execute-next-dispatch": (controlPlane) => controlPlane.runWorker(),
+  "execute-next-dispatch": (controlPlane) => controlPlane.executeNextDispatch(),
   "open-merge-request": (controlPlane) => controlPlane.openMergeRequest(),
   "observe-provider-state": (controlPlane) =>
     controlPlane.observeProviderState(),
   "require-provider-verification-passed": (controlPlane) =>
     controlPlane.requireObservedProviderVerificationPassed(),
   "record-local-verification-passed": (controlPlane) =>
-    controlPlane.recordVerificationPassed(),
+    controlPlane.recordLocalVerificationPassed(),
   "publish-policy-status": (controlPlane) => controlPlane.publishPolicyStatus(),
   "request-review": (controlPlane) => controlPlane.requestReview(),
-  "complete-agent-review": (controlPlane) => controlPlane.completeReview(),
-  "record-human-approval": (controlPlane) => controlPlane.approve(),
-  "merge-when-ready": (controlPlane) => controlPlane.merge(),
+  "complete-agent-review": (controlPlane) => controlPlane.completeAgentReview(),
+  "record-human-approval": (controlPlane) => controlPlane.recordHumanApproval(),
+  "merge-when-ready": (controlPlane) => controlPlane.mergeWhenReady(),
 } satisfies Record<ControlPlaneOperationName, ControlPlaneOperationHandler>;
 
 export function runControlPlaneOperation(

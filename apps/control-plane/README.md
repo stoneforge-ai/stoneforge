@@ -58,9 +58,6 @@ pnpm --dir apps/control-plane start -- merge-when-ready
 pnpm --dir apps/control-plane start -- summary
 ```
 
-Legacy spellings such as `tracer-bullet`, `configure-repo`, `run-worker`,
-`approve`, and `merge` remain as compatibility aliases.
-
 ## Smoke And E2E Flows
 
 Tracer bullets still exist, but only as smoke/e2e scenarios that compose the
@@ -76,8 +73,6 @@ Workspace, evaluates readiness, creates a direct Task, executes the next
 dispatch, recreates the control-plane service from the persisted store, opens a
 MergeRequest, observes provider state, publishes policy status, records review
 and human approval, merges when ready, and prints the final summary.
-
-`tracer-bullet` is an alias for the same smoke flow.
 
 ## GitHub App MergeRequest Flow
 
