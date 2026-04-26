@@ -20,7 +20,7 @@ Pure domain functions may stay plain TypeScript when they do not perform I/O, al
 
 ## API Boundary Rule
 
-Effect must stay behind Stoneforge implementation boundaries.
+Effect must stay behind Stoneforge public, provider-facing, and frontend-facing boundaries.
 
 Do not expose these in public APIs, provider-facing APIs, or private frontend APIs:
 
@@ -32,6 +32,8 @@ Do not expose these in public APIs, provider-facing APIs, or private frontend AP
 - Effect-specific service or runtime types
 
 Public package APIs, HTTP handlers, CLI command boundaries, SDK clients, and frontend-facing request/response shapes should expose ordinary domain types, discriminated unions, `Promise` where async is required, and human-readable errors. They may run internal Effect programs behind the boundary.
+
+Cross-package and package-to-app implementation APIs may require or return Effect types when both sides are backend/library internals. This is permitted and encouraged when it makes dependencies, typed failures, resource lifetime, concurrency, or observability simpler and more explicit. For example, `packages/core` may export an internal function used by another package that accepts Effect service requirements and returns an `Effect.Effect` result, so long as that function is not part of a public user-facing contract and is not consumed by a frontend app.
 
 Acceptable boundary pattern:
 
@@ -45,7 +47,7 @@ export async function createTask(
 }
 ```
 
-Internal modules may return `Effect.Effect<A, E, R>` when the caller is also inside the backend/library implementation boundary. Keep those modules clearly internal through package exports and file organization.
+Internal modules may return `Effect.Effect<A, E, R>` when the caller is also inside the backend/library implementation boundary, even across package or package-to-app boundaries. Keep those modules clearly internal through package exports and file organization.
 
 ## Core Rules
 
