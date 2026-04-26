@@ -5,6 +5,18 @@ export interface JsonObject {
   readonly [key: string]: JsonValue;
 }
 
+export type JsonFieldValue = JsonValue | undefined;
+export type JsonFieldReader<TValue> = (
+  object: JsonObject,
+  context: string,
+) => TValue;
+type JsonFieldReaders = {
+  readonly [key: string]: JsonFieldReader<JsonFieldValue>;
+};
+export type JsonObjectMapperOutput<TReaders extends JsonFieldReaders> = {
+  [TKey in keyof TReaders]: ReturnType<TReaders[TKey]>;
+};
+
 export function parseJsonValue(text: string): JsonValue {
   return JSON.parse(text) as JsonValue;
 }
@@ -98,4 +110,24 @@ export function requiredString(
   }
 
   throw new Error(`${context} did not include string ${key}.`);
+}
+
+export function defineJsonObjectMapper<const TReaders extends JsonFieldReaders>(
+  readers: TReaders,
+): JsonFieldReader<JsonObjectMapperOutput<TReaders>> {
+  return (object, context) => {
+    const entries = Object.entries(readers).map(([key, read]) => {
+      return [key, read(object, context)];
+    });
+
+    return Object.fromEntries(entries) as JsonObjectMapperOutput<TReaders>;
+  };
+}
+
+export function requiredJsonNumber(key: string): JsonFieldReader<number> {
+  return (object, context) => requiredNumber(object, key, context);
+}
+
+export function requiredJsonString(key: string): JsonFieldReader<string> {
+  return (object, context) => requiredString(object, key, context);
 }

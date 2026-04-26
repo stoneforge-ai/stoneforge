@@ -4,13 +4,22 @@ import type { GitHubHttpClient } from "./github-http-client.js";
 import { GitHubHttpError } from "./github-http-client.js";
 import { jsonObject, requiredNumber, requiredString } from "./github-json.js";
 
-export interface GitHubAppAuthConfig {
+interface GitHubAppAuthConfigBase {
   appId: string;
   privateKey: string;
-  installationId?: number;
-  owner?: string;
-  repo?: string;
 }
+
+export type GitHubAppAuthConfig =
+  | (GitHubAppAuthConfigBase & {
+      installationId: number;
+      owner?: string;
+      repo?: string;
+    })
+  | (GitHubAppAuthConfigBase & {
+      installationId?: never;
+      owner: string;
+      repo: string;
+    });
 
 export interface GitHubTokenProvider {
   installationToken(): Promise<string>;

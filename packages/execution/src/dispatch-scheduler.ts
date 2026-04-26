@@ -75,7 +75,9 @@ export class DispatchScheduler {
 
   completeAssignment(assignmentId: Assignment["id"]): Assignment {
     const assignment = this.state.requireAssignment(assignmentId);
-    const intent = this.state.requireDispatchIntent(assignment.dispatchIntentId);
+    const intent = this.state.requireDispatchIntent(
+      assignment.dispatchIntentId,
+    );
     const now = this.state.now();
 
     for (const sessionId of assignment.sessionIds) {
@@ -140,9 +142,18 @@ export class DispatchScheduler {
   private async startAssignment(
     intent: DispatchIntent,
     task: Task | undefined,
-    placement: { agent: Agent; runtime: Runtime; roleDefinition: RoleDefinition },
+    placement: {
+      agent: Agent;
+      runtime: Runtime;
+      roleDefinition: RoleDefinition;
+    },
   ): Promise<DispatchIntent> {
-    const lease = createLease(this.state, intent, placement.agent, placement.runtime);
+    const lease = createLease(
+      this.state,
+      intent,
+      placement.agent,
+      placement.runtime,
+    );
     const assignment = createAssignment(this.state, intent, lease, placement);
 
     try {
@@ -168,7 +179,7 @@ export class DispatchScheduler {
   }
 
   private readyTaskForIntent(intent: DispatchIntent): Task | undefined {
-    if (intent.targetType !== "task" || !intent.taskId) {
+    if (intent.targetType !== "task") {
       return undefined;
     }
 
@@ -216,7 +227,7 @@ export class DispatchScheduler {
   private escalatePlacementFailure(intent: DispatchIntent): void {
     intent.state = "escalated";
 
-    if (intent.targetType === "task" && intent.taskId) {
+    if (intent.targetType === "task") {
       const task = this.state.requireTask(intent.taskId);
       task.state = "human_review_required";
       task.updatedAt = intent.updatedAt;
@@ -224,7 +235,7 @@ export class DispatchScheduler {
   }
 
   private markTaskReadyForRetry(intent: DispatchIntent): void {
-    if (intent.targetType !== "task" || !intent.taskId) {
+    if (intent.targetType !== "task") {
       return;
     }
 

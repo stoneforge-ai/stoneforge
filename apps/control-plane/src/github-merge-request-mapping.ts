@@ -1,5 +1,5 @@
 import type {
-  CIRunState,
+  VerificationRunState,
   PolicyCheckState,
   ProviderCheckObservation,
   ProviderPullRequest,
@@ -11,10 +11,13 @@ import { GitHubHttpError } from "./github-http-client.js";
 import {
   type JsonObject,
   type JsonValue,
+  defineJsonObjectMapper,
   jsonBoolean,
   jsonObject,
   jsonString,
   requiredNumber,
+  requiredJsonNumber,
+  requiredJsonString,
   requiredString,
 } from "./github-json.js";
 
@@ -24,29 +27,23 @@ export interface GitHubTaskPullRequestInput {
   body: string;
 }
 
+const pullRequestFields = defineJsonObjectMapper({
+  providerPullRequestId: (json, context) =>
+    String(requiredNumber(json, "id", context)),
+  number: requiredJsonNumber("number"),
+  url: requiredJsonString("html_url"),
+  headSha: (json, context) =>
+    requiredString(jsonObject(json.head) ?? {}, "sha", `${context} head`),
+  sourceBranch: (json, context) =>
+    requiredString(jsonObject(json.head) ?? {}, "ref", `${context} head`),
+  targetBranch: (json, context) =>
+    requiredString(jsonObject(json.base) ?? {}, "ref", `${context} base`),
+});
+
 export function providerPullRequest(json: JsonObject): ProviderPullRequest {
   return {
     provider: "github",
-    providerPullRequestId: String(
-      requiredNumber(json, "id", "GitHub pull request"),
-    ),
-    number: requiredNumber(json, "number", "GitHub pull request"),
-    url: requiredString(json, "html_url", "GitHub pull request"),
-    headSha: requiredString(
-      jsonObject(json.head) ?? {},
-      "sha",
-      "GitHub pull request head",
-    ),
-    sourceBranch: requiredString(
-      jsonObject(json.head) ?? {},
-      "ref",
-      "GitHub pull request head",
-    ),
-    targetBranch: requiredString(
-      jsonObject(json.base) ?? {},
-      "ref",
-      "GitHub pull request base",
-    ),
+    ...pullRequestFields(json, "GitHub pull request"),
   };
 }
 
@@ -166,7 +163,7 @@ export function githubActionError(
 function checkRunState(
   status: string | undefined,
   conclusion: string | undefined,
-): CIRunState {
+): VerificationRunState {
   switch (status) {
     case "queued":
       return "queued";
@@ -178,7 +175,9 @@ function checkRunState(
   }
 }
 
-function checkConclusionState(conclusion: string | undefined): CIRunState {
+function checkConclusionState(
+  conclusion: string | undefined,
+): VerificationRunState {
   switch (conclusion) {
     case "success":
     case "neutral":
@@ -192,7 +191,7 @@ function checkConclusionState(conclusion: string | undefined): CIRunState {
   }
 }
 
-function statusRunState(state: string): CIRunState {
+function statusRunState(state: string): VerificationRunState {
   switch (state) {
     case "success":
       return "passed";

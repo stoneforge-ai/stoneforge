@@ -1,17 +1,35 @@
 import { generateKeyPairSync } from "node:crypto";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {
   GitHubAppInstallationTokenProvider,
   GitHubHttpError,
   GitHubIntegrationError,
+  type GitHubAppAuthConfig,
   type GitHubHttpClient,
   type GitHubHttpRequest,
   type GitHubHttpResponse,
 } from "./index.js";
 
 describe("GitHubAppInstallationTokenProvider", () => {
+  it("requires either an installation id or repository discovery coordinates", () => {
+    const explicitInstallation = {
+      appId: "123",
+      privateKey: testPrivateKey(),
+      installationId: 1,
+    } satisfies GitHubAppAuthConfig;
+    expectTypeOf(explicitInstallation.installationId).toEqualTypeOf<number>();
+
+    const discoverableInstallation = {
+      appId: "123",
+      privateKey: testPrivateKey(),
+      owner: "toolco",
+      repo: "stoneforge",
+    } satisfies GitHubAppAuthConfig;
+    expectTypeOf(discoverableInstallation.owner).toEqualTypeOf<string>();
+  });
+
   it("creates and caches installation tokens for explicit installations", async () => {
     const http = new RecordingGitHubHttpClient([
       {
@@ -85,6 +103,7 @@ describe("GitHubAppInstallationTokenProvider", () => {
     }).toThrow("Invalid GitHub App private key.");
 
     const missingRepository = new GitHubAppInstallationTokenProvider(
+      // @ts-expect-error Runtime validation still catches callers that bypass the public config union.
       { appId: "123", privateKey: testPrivateKey() },
       new RecordingGitHubHttpClient([]),
     );

@@ -20,6 +20,19 @@ export type MergeProviderConfig =
   | { provider: "fake" }
   | { provider: "github"; github: GitHubMergeRequestConfig };
 
+const githubValueFlagList = [
+  "--merge-provider",
+  "--github-app-id",
+  "--github-private-key",
+  "--github-private-key-path",
+  "--github-installation-id",
+  "--github-owner",
+  "--github-repo",
+  "--github-base-branch",
+  "--github-source-branch-prefix",
+  "--github-api-base-url",
+] as const;
+
 export function parseMergeProviderConfig(
   argv: readonly string[],
   env: NodeJS.ProcessEnv,
@@ -37,19 +50,8 @@ export function parseMergeProviderConfig(
   return { provider, github: parseGitHubConfig(argv, env) };
 }
 
-export function githubValueFlags(): string[] {
-  return [
-    "--merge-provider",
-    "--github-app-id",
-    "--github-private-key",
-    "--github-private-key-path",
-    "--github-installation-id",
-    "--github-owner",
-    "--github-repo",
-    "--github-base-branch",
-    "--github-source-branch-prefix",
-    "--github-api-base-url",
-  ];
+export function githubValueFlags(): typeof githubValueFlagList {
+  return githubValueFlagList;
 }
 
 function parseGitHubConfig(

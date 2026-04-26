@@ -9,7 +9,9 @@ import type {
 import type {
   Agent,
   AgentHarness,
+  CustomerHostRuntime,
   HealthStatus,
+  ManagedRuntime,
   RoleDefinition,
   RoleCategory,
   Runtime,
@@ -36,7 +38,9 @@ export type RepositoryConnectionStatus = "connected" | "disconnected";
 export type {
   Agent,
   AgentHarness,
+  CustomerHostRuntime,
   HealthStatus,
+  ManagedRuntime,
   RoleDefinition,
   RoleCategory,
   Runtime,
@@ -174,15 +178,29 @@ export interface ConnectGitHubRepositoryInput {
   connectionStatus?: RepositoryConnectionStatus;
 }
 
-export interface RegisterRuntimeInput {
+interface RegisterRuntimeInputBase {
   name: string;
-  location: RuntimeLocation;
-  mode: RuntimeMode;
   tags?: string[];
-  hostId?: string;
-  managedProvider?: "daytona";
   healthStatus?: HealthStatus;
 }
+
+export interface RegisterCustomerHostRuntimeInput extends RegisterRuntimeInputBase {
+  location: "customer_host";
+  mode: Extract<RuntimeMode, "local_worktree" | "container">;
+  hostId?: string;
+  managedProvider?: never;
+}
+
+export interface RegisterManagedRuntimeInput extends RegisterRuntimeInputBase {
+  location: "managed";
+  mode: Extract<RuntimeMode, "managed_sandbox">;
+  hostId?: never;
+  managedProvider: "daytona";
+}
+
+export type RegisterRuntimeInput =
+  | RegisterCustomerHostRuntimeInput
+  | RegisterManagedRuntimeInput;
 
 export interface RegisterAgentInput {
   name: string;

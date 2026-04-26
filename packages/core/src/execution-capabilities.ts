@@ -11,17 +11,29 @@ export type HealthStatus = "healthy" | "unhealthy";
 export type AgentHarness = "claude-code" | "openai-codex";
 export type RoleCategory = "director" | "worker" | "reviewer" | "custom";
 
-export interface Runtime {
+interface RuntimeBase {
   id: RuntimeId;
   workspaceId: WorkspaceId;
   name: string;
-  location: RuntimeLocation;
-  mode: RuntimeMode;
   healthStatus: HealthStatus;
   tags: string[];
-  hostId?: string;
-  managedProvider?: "daytona";
 }
+
+export interface CustomerHostRuntime extends RuntimeBase {
+  location: "customer_host";
+  mode: "local_worktree" | "container";
+  hostId?: string;
+  managedProvider?: never;
+}
+
+export interface ManagedRuntime extends RuntimeBase {
+  location: "managed";
+  mode: "managed_sandbox";
+  hostId?: never;
+  managedProvider: "daytona";
+}
+
+export type Runtime = CustomerHostRuntime | ManagedRuntime;
 
 export interface Agent {
   id: AgentId;
@@ -63,7 +75,9 @@ export function cloneAgent(agent: Agent): Agent {
   };
 }
 
-export function cloneRoleDefinition(roleDefinition: RoleDefinition): RoleDefinition {
+export function cloneRoleDefinition(
+  roleDefinition: RoleDefinition,
+): RoleDefinition {
   return {
     ...roleDefinition,
     toolAccess: [...roleDefinition.toolAccess],

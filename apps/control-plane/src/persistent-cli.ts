@@ -14,6 +14,7 @@ import {
   parseMergeProviderConfig,
 } from "./github-integration-config.js";
 import { createMergeRequestAdapter } from "./merge-request-provider.js";
+import type { LoadControlPlaneOptions } from "./persistent-control-plane-context.js";
 import { PersistentControlPlane } from "./persistent-control-plane.js";
 import { runPersistentTracerBullet } from "./persistent-tracer-bullet.js";
 import { PostgresControlPlaneStore } from "./postgres-control-plane-store.js";
@@ -28,7 +29,7 @@ type CommandHandler = (
   controlPlane: PersistentControlPlane,
 ) => Promise<ControlPlaneCommandStatus>;
 
-const commandHandlers: Record<string, CommandHandler> = {
+const commandHandlers = {
   reset: (controlPlane) => controlPlane.reset(),
   "initialize-workspace": (controlPlane) => controlPlane.initializeWorkspace(),
   "configure-repo": (controlPlane) => controlPlane.configureRepository(),
@@ -42,12 +43,15 @@ const commandHandlers: Record<string, CommandHandler> = {
   "open-merge-request": (controlPlane) => controlPlane.openMergeRequest(),
   "observe-provider-state": (controlPlane) =>
     controlPlane.observeProviderState(),
-  "record-ci-passed": (controlPlane) => controlPlane.recordCiPassed(),
+  "record-verification-passed": (controlPlane) =>
+    controlPlane.recordVerificationPassed(),
   "request-review": (controlPlane) => controlPlane.requestReview(),
   "complete-review": (controlPlane) => controlPlane.completeReview(),
   approve: (controlPlane) => controlPlane.approve(),
   merge: (controlPlane) => controlPlane.merge(),
-};
+} satisfies Record<string, CommandHandler>;
+
+type CommandName = keyof typeof commandHandlers;
 
 export async function runControlPlaneCommand(
   argv: readonly string[],
@@ -81,7 +85,7 @@ export async function runControlPlaneCommand(
     writeStatus(
       io,
       parsed.json,
-      await runCommand(controlPlane, parsed.command),
+      await runCommand(controlPlane, parsedCommandName(parsed.command)),
     );
     return 0;
   } catch (error) {
@@ -98,17 +102,9 @@ export async function runControlPlaneCommand(
 
 function runCommand(
   controlPlane: PersistentControlPlane,
-  command: string,
+  command: CommandName,
 ): Promise<ControlPlaneCommandStatus> {
-  const handler = commandHandlers[command];
-
-  if (handler === undefined) {
-    throw new Error(
-      `Unknown command ${command}. Run tracer-bullet or summary.`,
-    );
-  }
-
-  return handler(controlPlane);
+  return commandHandlers[command](controlPlane);
 }
 
 function parseArgs(argv: readonly string[]): {
@@ -124,7 +120,7 @@ function parseArgs(argv: readonly string[]): {
     "--postgres-url",
     "--json-store",
     ...githubValueFlags(),
-  ];
+  ] as const;
   const command = argv.find((arg, index) => {
     return !arg.startsWith("--") && !isOptionValue(argv, index, valueFlags);
   });
@@ -139,16 +135,21 @@ function parseArgs(argv: readonly string[]): {
 
 function controlPlaneOptions(
   config: ReturnType<typeof parseMergeProviderConfig>,
-) {
+): LoadControlPlaneOptions {
+  if (config.provider === "github") {
+    return {
+      mergeProvider: "github",
+      mergeRequestAdapter: createMergeRequestAdapter(config),
+      mergeEnabled: mergeExpected(config),
+      repository: repositoryConfig(config),
+      sourceBranchPrefix: config.github.sourceBranchPrefix,
+    };
+  }
+
   return {
-    mergeProvider: config.provider,
+    mergeProvider: "fake",
     mergeRequestAdapter: createMergeRequestAdapter(config),
     mergeEnabled: mergeExpected(config),
-    repository: repositoryConfig(config),
-    sourceBranchPrefix:
-      config.provider === "github"
-        ? config.github.sourceBranchPrefix
-        : undefined,
   };
 }
 
@@ -158,17 +159,30 @@ function mergeExpected(
   return config.provider === "fake" || config.github.allowMerge;
 }
 
-function repositoryConfig(config: ReturnType<typeof parseMergeProviderConfig>) {
-  if (config.provider === "fake" || config.github === undefined) {
-    return undefined;
-  }
-
+function repositoryConfig(
+  config: Extract<
+    ReturnType<typeof parseMergeProviderConfig>,
+    { provider: "github" }
+  >,
+) {
   return {
     installationId: String(config.github.installationId ?? "discovered"),
     owner: config.github.owner,
     repository: config.github.repo,
     defaultBranch: config.github.baseBranch,
   };
+}
+
+function parsedCommandName(command: string): CommandName {
+  if (isCommandName(command)) {
+    return command;
+  }
+
+  throw new Error(`Unknown command ${command}. Run tracer-bullet or summary.`);
+}
+
+function isCommandName(command: string): command is CommandName {
+  return Object.prototype.hasOwnProperty.call(commandHandlers, command);
 }
 
 type StoreBackend = "json" | "postgres" | "sqlite";

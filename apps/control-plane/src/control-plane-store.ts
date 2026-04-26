@@ -33,6 +33,25 @@ export interface ControlPlaneCommandStatus {
 
 export class ControlPlanePersistenceError extends Error {}
 
+type WorkspaceCollections = Pick<
+  WorkspaceSetupSnapshot,
+  "auditEvents" | "orgs" | "workspaces"
+>;
+type ExecutionCollections = Pick<
+  ExecutionSnapshot,
+  | "assignments"
+  | "dispatchIntents"
+  | "leases"
+  | "mergeRequestContexts"
+  | "sessions"
+  | "tasks"
+  | "workspaces"
+>;
+type MergeRequestCollections = Pick<
+  MergeRequestSnapshot,
+  "mergeRequests" | "verificationRuns"
+>;
+
 export function createEmptyControlPlaneSnapshot(): ControlPlaneSnapshot {
   return {
     version: controlPlaneSnapshotVersion,
@@ -52,7 +71,7 @@ export function createEmptyControlPlaneSnapshot(): ControlPlaneSnapshot {
     },
     mergeRequests: {
       mergeRequests: [],
-      ciRuns: [],
+      verificationRuns: [],
     },
     current: {},
   };
@@ -90,66 +109,73 @@ export function validateControlPlaneSnapshot(
     );
   }
 
-  if (!hasRequiredCollections(snapshot)) {
+  if (
+    !hasWorkspaceCollections(snapshot.workspace) ||
+    !hasExecutionCollections(snapshot.execution) ||
+    !hasMergeRequestCollections(snapshot.mergeRequests) ||
+    snapshot.current === undefined
+  ) {
     throw new ControlPlanePersistenceError(
       `Persisted control-plane snapshot in ${source} is missing required domain snapshot collections. Reset the store or restore a compatible snapshot.`,
     );
   }
 
-  const validSnapshot = snapshot as ControlPlaneSnapshot;
-
   return {
-    ...validSnapshot,
+    version: controlPlaneSnapshotVersion,
+    workspace: {
+      orgs: snapshot.workspace.orgs,
+      workspaces: snapshot.workspace.workspaces,
+      auditEvents: snapshot.workspace.auditEvents,
+    },
+    execution: {
+      workspaces: snapshot.execution.workspaces,
+      tasks: snapshot.execution.tasks,
+      dispatchIntents: snapshot.execution.dispatchIntents,
+      assignments: snapshot.execution.assignments,
+      sessions: snapshot.execution.sessions,
+      leases: snapshot.execution.leases,
+      mergeRequestContexts: snapshot.execution.mergeRequestContexts,
+    },
+    mergeRequests: {
+      mergeRequests: snapshot.mergeRequests.mergeRequests,
+      verificationRuns: snapshot.mergeRequests.verificationRuns,
+    },
     current: parseCurrentControlPlaneIds(
-      validSnapshot.current,
+      snapshot.current,
       source,
       invalidCurrentIdError,
     ),
   };
 }
 
-function hasRequiredCollections(
-  snapshot: Partial<ControlPlaneSnapshot>,
-): boolean {
-  return (
-    hasWorkspaceCollections(snapshot) &&
-    hasExecutionCollections(snapshot) &&
-    hasMergeRequestCollections(snapshot) &&
-    snapshot.current !== undefined
+function hasWorkspaceCollections(
+  snapshot: Partial<WorkspaceSetupSnapshot> | undefined,
+): snapshot is WorkspaceCollections {
+  return [snapshot?.orgs, snapshot?.workspaces, snapshot?.auditEvents].every(
+    Array.isArray,
   );
 }
 
-function hasWorkspaceCollections(
-  snapshot: Partial<ControlPlaneSnapshot>,
-): boolean {
-  return [
-    snapshot.workspace?.orgs,
-    snapshot.workspace?.workspaces,
-    snapshot.workspace?.auditEvents,
-  ].every(Array.isArray);
-}
-
 function hasExecutionCollections(
-  snapshot: Partial<ControlPlaneSnapshot>,
-): boolean {
+  snapshot: Partial<ExecutionSnapshot> | undefined,
+): snapshot is ExecutionCollections {
   return [
-    snapshot.execution?.workspaces,
-    snapshot.execution?.tasks,
-    snapshot.execution?.dispatchIntents,
-    snapshot.execution?.assignments,
-    snapshot.execution?.sessions,
-    snapshot.execution?.leases,
-    snapshot.execution?.mergeRequestContexts,
+    snapshot?.workspaces,
+    snapshot?.tasks,
+    snapshot?.dispatchIntents,
+    snapshot?.assignments,
+    snapshot?.sessions,
+    snapshot?.leases,
+    snapshot?.mergeRequestContexts,
   ].every(Array.isArray);
 }
 
 function hasMergeRequestCollections(
-  snapshot: Partial<ControlPlaneSnapshot>,
-): boolean {
-  return [
-    snapshot.mergeRequests?.mergeRequests,
-    snapshot.mergeRequests?.ciRuns,
-  ].every(Array.isArray);
+  snapshot: Partial<MergeRequestSnapshot> | undefined,
+): snapshot is MergeRequestCollections {
+  return [snapshot?.mergeRequests, snapshot?.verificationRuns].every(
+    Array.isArray,
+  );
 }
 
 function snapshotVersionText(snapshot: Partial<ControlPlaneSnapshot>): string {

@@ -24,13 +24,25 @@ import {
 import { createFakeAgentFixture } from "./fake-agent-adapter.js";
 import { createFakeGitHubMergeRequestFixture } from "./fake-github-merge-request-adapter.js";
 
-export interface LoadControlPlaneOptions {
+interface FakeLoadControlPlaneOptions {
   mergeEnabled?: boolean;
-  mergeProvider?: "fake" | "github";
+  mergeProvider?: "fake";
   mergeRequestAdapter?: GitHubMergeRequestAdapter;
   repository?: ConnectGitHubRepositoryInput;
   sourceBranchPrefix?: string;
 }
+
+interface GitHubLoadControlPlaneOptions {
+  mergeEnabled: boolean;
+  mergeProvider: "github";
+  mergeRequestAdapter: GitHubMergeRequestAdapter;
+  repository: ConnectGitHubRepositoryInput;
+  sourceBranchPrefix: string;
+}
+
+export type LoadControlPlaneOptions =
+  | FakeLoadControlPlaneOptions
+  | GitHubLoadControlPlaneOptions;
 
 export interface LoadedControlPlane {
   snapshot: ControlPlaneSnapshot;

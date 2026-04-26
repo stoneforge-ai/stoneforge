@@ -1,20 +1,17 @@
 import type { Agent, RoleDefinition, Runtime } from "@stoneforge/core";
 
-import {
-  asAssignmentId,
-  asLeaseId,
-  asSessionId,
-} from "./ids.js";
+import { asAssignmentId, asLeaseId, asSessionId } from "./ids.js";
 import { cloneTask } from "./cloning.js";
 import type { ExecutionState } from "./execution-state.js";
 import type {
   AgentAdapterStartContext,
   Assignment,
-  AssignmentOwner,
   DispatchIntent,
   Lease,
+  MergeRequestAssignment,
   Session,
   Task,
+  TaskAssignment,
 } from "./models.js";
 
 export interface PlacementRecordInput {
@@ -55,14 +52,41 @@ export function createAssignment(
   placement: PlacementRecordInput,
 ): Assignment {
   const now = state.now();
-  const owner = buildAssignmentOwner(intent);
-  const assignment: Assignment = {
+  const assignment =
+    intent.targetType === "task"
+      ? createTaskAssignmentRecord(state, intent, lease, placement, now)
+      : createMergeRequestAssignmentRecord(
+          state,
+          intent,
+          lease,
+          placement,
+          now,
+        );
+
+  state.assignments.set(assignment.id, assignment);
+  lease.assignmentId = assignment.id;
+  intent.assignmentId = assignment.id;
+  intent.updatedAt = now;
+  markTaskLeased(state, assignment, now);
+
+  return assignment;
+}
+
+function createTaskAssignmentRecord(
+  state: ExecutionState,
+  intent: Extract<DispatchIntent, { targetType: "task" }>,
+  lease: Lease,
+  placement: PlacementRecordInput,
+  now: string,
+): TaskAssignment {
+  return {
     id: asAssignmentId(state.nextId("assignment")),
     workspaceId: intent.workspaceId,
-    owner,
-    taskId: owner.type === "task" ? owner.taskId : undefined,
-    mergeRequestId:
-      owner.type === "merge_request" ? owner.mergeRequestId : undefined,
+    owner: {
+      type: "task",
+      taskId: intent.taskId,
+    },
+    taskId: intent.taskId,
     dispatchIntentId: intent.id,
     roleDefinitionId: placement.roleDefinition.id,
     agentId: placement.agent.id,
@@ -74,14 +98,34 @@ export function createAssignment(
     createdAt: now,
     updatedAt: now,
   };
+}
 
-  state.assignments.set(assignment.id, assignment);
-  lease.assignmentId = assignment.id;
-  intent.assignmentId = assignment.id;
-  intent.updatedAt = now;
-  markTaskLeased(state, owner, now);
-
-  return assignment;
+function createMergeRequestAssignmentRecord(
+  state: ExecutionState,
+  intent: Extract<DispatchIntent, { targetType: "merge_request" }>,
+  lease: Lease,
+  placement: PlacementRecordInput,
+  now: string,
+): MergeRequestAssignment {
+  return {
+    id: asAssignmentId(state.nextId("assignment")),
+    workspaceId: intent.workspaceId,
+    owner: {
+      type: "merge_request",
+      mergeRequestId: intent.mergeRequestId,
+    },
+    mergeRequestId: intent.mergeRequestId,
+    dispatchIntentId: intent.id,
+    roleDefinitionId: placement.roleDefinition.id,
+    agentId: placement.agent.id,
+    runtimeId: placement.runtime.id,
+    leaseId: lease.id,
+    state: "created",
+    sessionIds: [],
+    recoveryFailureCount: 0,
+    createdAt: now,
+    updatedAt: now,
+  };
 }
 
 export function createSession(
@@ -130,56 +174,16 @@ export function endActiveSession(session: Session, endedAt: string): void {
   session.updatedAt = endedAt;
 }
 
-function buildAssignmentOwner(intent: DispatchIntent): AssignmentOwner {
-  if (hasTaskOwner(intent)) {
-    return {
-      type: "task",
-      taskId: intent.taskId,
-    };
-  }
-
-  if (hasMergeRequestOwner(intent)) {
-    return {
-      type: "merge_request",
-      mergeRequestId: intent.mergeRequestId,
-    };
-  }
-
-  throw new Error(`Dispatch intent ${intent.id} does not have a valid owner.`);
-}
-
-function hasTaskOwner(
-  intent: DispatchIntent,
-): intent is DispatchIntent & { taskId: NonNullable<DispatchIntent["taskId"]> } {
-  if (intent.targetType !== "task") {
-    return false;
-  }
-
-  return intent.taskId !== undefined;
-}
-
-function hasMergeRequestOwner(
-  intent: DispatchIntent,
-): intent is DispatchIntent & {
-  mergeRequestId: NonNullable<DispatchIntent["mergeRequestId"]>;
-} {
-  if (intent.targetType !== "merge_request") {
-    return false;
-  }
-
-  return intent.mergeRequestId !== undefined;
-}
-
 function markTaskLeased(
   state: ExecutionState,
-  owner: AssignmentOwner,
+  assignment: Assignment,
   now: string,
 ): void {
-  if (owner.type !== "task") {
+  if (assignment.owner.type !== "task") {
     return;
   }
 
-  const task = state.requireTask(owner.taskId);
+  const task = state.requireTask(assignment.owner.taskId);
   task.state = "leased";
   task.updatedAt = now;
 }
@@ -200,12 +204,8 @@ function buildTaskAdapterTarget(
 
 function buildMergeRequestAdapterTarget(
   state: ExecutionState,
-  intent: DispatchIntent,
+  intent: Extract<DispatchIntent, { targetType: "merge_request" }>,
 ): AgentAdapterStartContext["target"] {
-  if (!intent.mergeRequestId) {
-    throw new Error(`MergeRequest dispatch intent ${intent.id} has no target.`);
-  }
-
   const mergeRequest = state.mergeRequestContexts.get(intent.mergeRequestId);
 
   if (!mergeRequest) {

@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {
+  defineJsonObjectMapper,
   isJsonObject,
   jsonArray,
   jsonBoolean,
@@ -9,6 +10,8 @@ import {
   jsonString,
   parseJsonObject,
   parseJsonValue,
+  requiredJsonNumber,
+  requiredJsonString,
   requiredNumber,
   requiredString,
   type JsonObject,
@@ -65,5 +68,20 @@ describe("GitHub JSON helpers", () => {
     expect(() => requiredString(object, "number", "GitHub issue")).toThrow(
       "GitHub issue did not include string number.",
     );
+  });
+
+  it("infers mapper output from field readers", () => {
+    const mapper = defineJsonObjectMapper({
+      id: requiredJsonNumber("id"),
+      name: requiredJsonString("name"),
+    });
+
+    const mapped = mapper({ id: 1, name: "stoneforge" }, "GitHub response");
+
+    expect(mapped).toEqual({ id: 1, name: "stoneforge" });
+    expectTypeOf(mapped).toEqualTypeOf<{
+      readonly id: number;
+      readonly name: string;
+    }>();
   });
 });

@@ -12,7 +12,11 @@ import type {
 } from "./models.js";
 import type { OrgId, WorkspaceId } from "./ids.js";
 
-export function createOrgRecord(id: OrgId, name: string, createdAt: string): Org {
+export function createOrgRecord(
+  id: OrgId,
+  name: string,
+  createdAt: string,
+): Org {
   return {
     id,
     name,
@@ -59,16 +63,28 @@ export function createRuntimeRecord(
   workspaceId: WorkspaceId,
   input: RegisterRuntimeInput,
 ): Runtime {
-  return {
+  const base = {
     id,
     workspaceId,
     name: input.name,
-    location: input.location,
-    mode: input.mode,
     healthStatus: withDefault(input.healthStatus, "healthy"),
     tags: cloneArray(input.tags),
+  };
+
+  if (input.location === "managed") {
+    return {
+      ...base,
+      location: input.location,
+      mode: input.mode,
+      managedProvider: input.managedProvider,
+    };
+  }
+
+  return {
+    ...base,
+    location: input.location,
+    mode: input.mode,
     hostId: input.hostId,
-    managedProvider: input.managedProvider,
   };
 }
 

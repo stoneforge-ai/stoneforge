@@ -56,15 +56,15 @@ The GitHub-backed MergeRequest tracer bullet uses the same snapshot boundary. Pr
 
 ## Component Boundaries
 
-| Component            | Owns                                                                                                                                        | Does Not Own                                                                     |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Automation           | event, schedule, or webhook trigger handling; creation of dispatch, review, merge-evaluation, escalation, or outbound code-first intent     | direct provider session launch, lease management, policy bypass, merge execution |
-| Scheduler            | readiness evaluation, durable queueing, leasing, placement, retries, resume, escalation, and cancellation propagation                       | role prompt content, provider-specific agent protocol, GitHub review semantics   |
-| Host Agent           | outbound connectivity, capacity advertisement, launch/resume/cancel execution on customer-managed hosts, heartbeats, logs, result reporting | repository authorization policy, task lifecycle decisions, merge decisions       |
-| Runtime              | reusable execution environment contract describing where and how work runs                                                                  | task routing logic, role semantics                                               |
-| Agent                | concrete harness/model capability bound to one Runtime plus concurrency limit                                                               | planning, policy, or merge logic                                                 |
-| RoleDefinition       | what job the Session performs, with prompt, tools, skills, and hooks                                                                        | runtime capacity or provider placement                                           |
-| Claude/Codex Adapter | provider invocation, session identity, transcript/log capture, checkpoint extraction, resume/cancel hooks, final result reporting           | scheduling, policy evaluation, GitHub state, task status authority               |
+| Component            | Owns                                                                                                                                            | Does Not Own                                                                     |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Automation           | event, schedule, or webhook trigger handling; creation of dispatch, review, merge-evaluation, escalation, or outbound automation webhook intent | direct provider session launch, lease management, policy bypass, merge execution |
+| Scheduler            | readiness evaluation, durable queueing, leasing, placement, retries, resume, escalation, and cancellation propagation                           | role prompt content, provider-specific agent protocol, GitHub review semantics   |
+| Host Agent           | outbound connectivity, capacity advertisement, launch/resume/cancel execution on customer-managed hosts, heartbeats, logs, result reporting     | repository authorization policy, task lifecycle decisions, merge decisions       |
+| Runtime              | reusable execution environment contract describing where and how work runs                                                                      | task routing logic, role semantics                                               |
+| Agent                | concrete harness/model capability bound to one Runtime plus concurrency limit                                                                   | planning, policy, or merge logic                                                 |
+| RoleDefinition       | what job the Session performs, with prompt, tools, skills, and hooks                                                                            | runtime capacity or provider placement                                           |
+| Claude/Codex Adapter | provider invocation, session identity, transcript/log capture, checkpoint extraction, resume/cancel hooks, final result reporting               | scheduling, policy evaluation, GitHub state, task status authority               |
 
 ## Architecture Overview
 
@@ -85,13 +85,13 @@ Automations are user-facing durable triggers.
 
 First-slice trigger types:
 
-- product events such as task readiness, MergeRequest creation, CI changes, or review changes
+- product events such as task readiness, MergeRequest creation, verification changes, or review changes
 - time-based schedules
 - inbound workspace-scoped signed webhooks
 
 First-slice action shapes:
 
-- pure-agent: create intent to run a concrete RoleDefinition with optional required agent or runtime constraints
+- Agent Automation: create intent to run a concrete RoleDefinition with optional required agent or runtime constraints
 - workflow-evaluation: request review, merge evaluation, or escalation handling through the normal control plane
 - code-first: issue a signed outbound webhook to an external user-hosted handler
 
@@ -157,6 +157,12 @@ What the Runtime contract should not freeze yet:
 - VM lifecycle API shapes
 - exact sandbox network or resource classes
 
+Current V2 package types preserve the known first-slice Runtime combinations:
+customer-host Runtimes may use `local_worktree` or `container`, while managed
+Runtimes currently use `managed_sandbox` with provider `daytona`. New Runtime
+locations, modes, or managed providers require a docs update before being added
+to the public type surface.
+
 ## Customer-Managed Host Path
 
 The first customer-managed path is a host agent with outbound connectivity.
@@ -196,7 +202,7 @@ Daytona-specific notes for the first slice:
 
 ## Runtime, Agent, And Role Resolution
 
-Resolution order for a pure-agent workflow action:
+Resolution order for an Agent Automation workflow action:
 
 1. determine the workflow action type, such as implementation, review, or director planning
 2. resolve one concrete RoleDefinition
@@ -248,7 +254,7 @@ The adapter contract does not own:
 
 - Task or Plan lifecycle decisions
 - policy evaluation
-- GitHub branch, PR, CI, or merge state
+- GitHub branch, PR, verification, or merge state
 - queueing, retries, or escalation policy
 
 Intent example only. This is not final implementation code.
@@ -298,14 +304,14 @@ Default recovery behavior:
 - create a new Assignment for new dispatches such as repair after review feedback or review after PR updates
 - escalate to human review when repeated loops indicate the system is no longer progressing safely
 
-## Code-First Automation Webhooks
+## Code-First Automation Webhook Transport
 
 User-defined code-first automations are external in the first slice.
 
 Required first-slice behavior:
 
 - Stoneforge hosts inbound signed webhook triggers that may create automation intent
-- Stoneforge may also invoke user-hosted outbound webhook handlers when a configured code-first automation fires
+- Stoneforge may also invoke user-hosted outbound automation webhook handlers when a configured code-first automation fires
 - outbound webhook requests should include an idempotency key and a signed authenticity mechanism
 - external handlers should acknowledge quickly and perform long-running work asynchronously
 - follow-up actions should return through Stoneforge APIs or inbound webhooks

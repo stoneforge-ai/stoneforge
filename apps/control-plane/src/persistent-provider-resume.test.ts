@@ -108,9 +108,9 @@ describe("persistent provider resume", () => {
     }
   });
 
-  it("uses observed GitHub checks instead of injecting local fake CI", async () => {
+  it("uses observed GitHub checks instead of injecting local fake verification", async () => {
     const tempDir = await mkdtemp(
-      join(tmpdir(), "stoneforge-provider-ci-"),
+      join(tmpdir(), "stoneforge-provider-verification-"),
     );
     const sqlitePath = join(tempDir, "control-plane.sqlite");
     const adapter = new ResumeRecordingAdapter();
@@ -121,11 +121,18 @@ describe("persistent provider resume", () => {
         mergeProvider: "github",
         mergeEnabled: false,
         mergeRequestAdapter: adapter,
+        repository: {
+          installationId: "discovered",
+          owner: "toolco",
+          repository: "stoneforge",
+          defaultBranch: "main",
+        },
+        sourceBranchPrefix: "stoneforge/task",
       });
       const snapshot = await store.load();
 
       expect(summary.mergeRequestState).toBe("merge_ready");
-      expect(snapshot.mergeRequests.ciRuns).toEqual([
+      expect(snapshot.mergeRequests.verificationRuns).toEqual([
         expect.objectContaining({
           providerCheckId: "provider-check-1",
           name: "provider quality",
@@ -133,8 +140,8 @@ describe("persistent provider resume", () => {
         }),
       ]);
       expect(
-        snapshot.mergeRequests.ciRuns.some((ciRun) => {
-          return ciRun.providerCheckId === "local-check-1";
+        snapshot.mergeRequests.verificationRuns.some((verificationRun) => {
+          return verificationRun.providerCheckId === "local-check-1";
         }),
       ).toBe(false);
       expect(adapter.policyCheckProviderHeadShas).toContain(
@@ -147,7 +154,7 @@ describe("persistent provider resume", () => {
 
   it("stops the GitHub-mode tracer when no provider check has passed", async () => {
     const tempDir = await mkdtemp(
-      join(tmpdir(), "stoneforge-provider-ci-pending-"),
+      join(tmpdir(), "stoneforge-provider-verification-pending-"),
     );
     const sqlitePath = join(tempDir, "control-plane.sqlite");
 
@@ -157,6 +164,13 @@ describe("persistent provider resume", () => {
           mergeProvider: "github",
           mergeEnabled: false,
           mergeRequestAdapter: new ResumeRecordingAdapter([]),
+          repository: {
+            installationId: "discovered",
+            owner: "toolco",
+            repository: "stoneforge",
+            defaultBranch: "main",
+          },
+          sourceBranchPrefix: "stoneforge/task",
         }),
       ).rejects.toThrow(
         "No provider check/status was observed for MergeRequest",

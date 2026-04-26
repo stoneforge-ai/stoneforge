@@ -2,6 +2,8 @@ import {
   asMergeRequestId,
   asRoleDefinitionId,
   asRuntimeId,
+  asWorkspaceId,
+  asAgentId,
 } from "@stoneforge/core";
 import {
   asAssignmentId,
@@ -18,6 +20,12 @@ import {
   requireMergeRequestAssignmentId,
   type MergeRequest,
 } from "./index.js";
+
+type MergeRequestAssignment = Extract<
+  Assignment,
+  { owner: { type: "merge_request" } }
+>;
+type TaskAssignment = Extract<Assignment, { owner: { type: "task" } }>;
 
 describe("review assignment guards", () => {
   it("accepts assignments owned by the expected MergeRequest", () => {
@@ -69,38 +77,40 @@ describe("review assignment guards", () => {
   });
 });
 
-function assignmentForMergeRequest(mergeRequestId: string): Assignment {
-  return assignment({
+function assignmentForMergeRequest(
+  mergeRequestId: string,
+): MergeRequestAssignment {
+  return {
+    ...baseAssignment(),
     owner: {
       type: "merge_request",
       mergeRequestId: asMergeRequestId(mergeRequestId),
     },
     mergeRequestId: asMergeRequestId(mergeRequestId),
-  });
+  };
 }
 
-function assignmentForTask(): Assignment {
-  return assignment({
+function assignmentForTask(): TaskAssignment {
+  return {
+    ...baseAssignment(),
     owner: {
       type: "task",
       taskId: asTaskId("task_1"),
     },
     taskId: asTaskId("task_1"),
-  });
+  };
 }
 
-function assignment(overrides: Partial<Assignment>): Assignment {
+function baseAssignment(): Omit<
+  Assignment,
+  "mergeRequestId" | "owner" | "taskId"
+> {
   return {
     id: asAssignmentId("assignment_1"),
-    workspaceId: "workspace_1" as never,
-    owner: {
-      type: "merge_request",
-      mergeRequestId: asMergeRequestId("merge_request_1"),
-    },
-    mergeRequestId: asMergeRequestId("merge_request_1"),
+    workspaceId: asWorkspaceId("workspace_1"),
     dispatchIntentId: asDispatchIntentId("dispatch_intent_1"),
     roleDefinitionId: asRoleDefinitionId("role_definition_1"),
-    agentId: "agent_1" as never,
+    agentId: asAgentId("agent_1"),
     runtimeId: asRuntimeId("runtime_1"),
     leaseId: asLeaseId("lease_1"),
     state: "running",
@@ -108,14 +118,13 @@ function assignment(overrides: Partial<Assignment>): Assignment {
     recoveryFailureCount: 0,
     createdAt: "2026-04-24T00:00:00.000Z",
     updatedAt: "2026-04-24T00:00:00.000Z",
-    ...overrides,
   };
 }
 
 function mergeRequestRecord(): MergeRequest {
   return {
     id: asMergeRequestId("merge_request_1"),
-    workspaceId: "workspace_1" as never,
+    workspaceId: asWorkspaceId("workspace_1"),
     sourceOwner: {
       type: "task",
       taskId: asTaskId("task_1"),
@@ -130,7 +139,7 @@ function mergeRequestRecord(): MergeRequest {
       sourceBranch: "stoneforge/task/task_1",
       targetBranch: "main",
     },
-    ciRunIds: [],
+    verificationRunIds: [],
     reviewAssignmentIds: [],
     createdAt: "2026-04-24T00:00:00.000Z",
     updatedAt: "2026-04-24T00:00:00.000Z",

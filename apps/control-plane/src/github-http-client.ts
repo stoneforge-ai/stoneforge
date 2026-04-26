@@ -4,12 +4,20 @@ import {
   parseJsonValue,
 } from "./github-json.js";
 
-export interface GitHubHttpRequest {
-  method: "DELETE" | "GET" | "PATCH" | "POST" | "PUT";
+interface GitHubHttpRequestBase {
   path: string;
   token?: string;
-  body?: JsonObject;
 }
+
+export type GitHubHttpRequest =
+  | (GitHubHttpRequestBase & {
+      method: "DELETE" | "GET";
+      body?: never;
+    })
+  | (GitHubHttpRequestBase & {
+      method: "PATCH" | "POST" | "PUT";
+      body?: JsonObject;
+    });
 
 export interface GitHubHttpResponse {
   status: number;

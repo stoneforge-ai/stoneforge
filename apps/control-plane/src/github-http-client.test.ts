@@ -1,6 +1,10 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 
-import { FetchGitHubHttpClient, GitHubHttpError } from "./index.js";
+import {
+  FetchGitHubHttpClient,
+  GitHubHttpError,
+  type GitHubHttpRequest,
+} from "./index.js";
 
 describe("FetchGitHubHttpClient", () => {
   afterEach(() => {
@@ -82,6 +86,29 @@ describe("FetchGitHubHttpClient", () => {
       status: 403,
       json: { message: "nope" },
     });
+  });
+
+  it("disallows request bodies for read-only methods", () => {
+    const postRequest = {
+      method: "POST",
+      path: "/repos/toolco/stoneforge/issues",
+      body: { title: "Build it" },
+    } satisfies GitHubHttpRequest;
+    expectTypeOf(postRequest.body).toEqualTypeOf<{ title: string }>();
+
+    const readRequest = {
+      method: "GET",
+      path: "/repos/toolco/stoneforge",
+    } satisfies GitHubHttpRequest;
+    expectTypeOf(readRequest.method).toEqualTypeOf<"GET">();
+
+    // @ts-expect-error GET requests cannot carry JSON bodies.
+    const invalidReadRequest: GitHubHttpRequest = {
+      method: "GET",
+      path: "/repos/toolco/stoneforge",
+      body: { title: "nope" },
+    };
+    expectTypeOf(invalidReadRequest).toEqualTypeOf<GitHubHttpRequest>();
   });
 });
 

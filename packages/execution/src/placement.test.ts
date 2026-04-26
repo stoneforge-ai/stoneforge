@@ -4,18 +4,19 @@ import {
   asRuntimeId,
   asWorkspaceId,
   type Agent,
+  type CustomerHostRuntime,
   type RoleDefinition,
-  type Runtime,
 } from "@stoneforge/core";
 import fc, { type Arbitrary } from "fast-check";
 import { describe, expect, it } from "vitest";
 
 import {
   asDispatchIntentId,
+  asTaskId,
   resolvePlacement,
-  type DispatchIntent,
   type WorkspaceExecutionCapabilities,
 } from "./index.js";
+import type { TaskDispatchIntent } from "./models.js";
 
 const workspaceId = asWorkspaceId("workspace_1");
 const runtimeId = asRuntimeId("runtime_1");
@@ -23,11 +24,7 @@ const roleDefinitionId = asRoleDefinitionId("role_1");
 
 describe("resolvePlacement", () => {
   it("selects the first healthy Agent with available capacity", () => {
-    const placement = resolvePlacement(
-      capabilities(),
-      intent(),
-      () => 0,
-    );
+    const placement = resolvePlacement(capabilities(), intent(), () => 0);
 
     if ("reason" in placement) {
       throw new Error(`Expected placement but received ${placement.reason}.`);
@@ -99,9 +96,7 @@ describe("resolvePlacement", () => {
   });
 
   it("places work exactly when role, tags, health, runtime, and capacity are eligible", () => {
-    fc.assert(
-      fc.property(placementCaseArbitrary, assertPlacementInvariant),
-    );
+    fc.assert(fc.property(placementCaseArbitrary, assertPlacementInvariant));
   });
 });
 
@@ -141,7 +136,11 @@ function assertPlacementInvariant(placementCase: PlacementCase): void {
     "required-runtime",
   );
   const result = resolvePlacement(
-    placementCapabilities(placementCase, requiredAgentTags, requiredRuntimeTags),
+    placementCapabilities(
+      placementCase,
+      requiredAgentTags,
+      requiredRuntimeTags,
+    ),
     intent({ requiredAgentTags, requiredRuntimeTags }),
     () => placementCase.activeLeaseCount,
   );
@@ -204,7 +203,9 @@ function hasRequiredAgentTag(placementCase: PlacementCase): boolean {
 }
 
 function hasRequiredRuntimeTag(placementCase: PlacementCase): boolean {
-  return !placementCase.requiredRuntimeTag || placementCase.runtimeHasRequiredTag;
+  return (
+    !placementCase.requiredRuntimeTag || placementCase.runtimeHasRequiredTag
+  );
 }
 
 function capabilities(
@@ -219,14 +220,16 @@ function capabilities(
   };
 }
 
-function intent(overrides: Partial<DispatchIntent> = {}): DispatchIntent {
+function intent(
+  overrides: Partial<TaskDispatchIntent> = {},
+): TaskDispatchIntent {
   const now = new Date().toISOString();
 
   return {
     id: asDispatchIntentId("intent_1"),
     workspaceId,
     targetType: "task",
-    taskId: undefined,
+    taskId: asTaskId("task_1"),
     action: "implement",
     state: "queued",
     requiredAgentTags: [],
@@ -238,7 +241,9 @@ function intent(overrides: Partial<DispatchIntent> = {}): DispatchIntent {
   };
 }
 
-function runtime(overrides: Partial<Runtime> = {}): Runtime {
+function runtime(
+  overrides: Partial<CustomerHostRuntime> = {},
+): CustomerHostRuntime {
   return {
     id: runtimeId,
     workspaceId,

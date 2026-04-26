@@ -179,9 +179,7 @@ export class GitHubAppMergeRequestClient implements GitHubMergeRequestAdapter {
       "reuse GitHub pull request",
     );
 
-    return jsonArray(response)
-      .map(jsonObject)
-      .find(isPresent);
+    return jsonArray(response).map(jsonObject).find(isPresent);
   }
 
   private async createPullRequest(
@@ -264,7 +262,10 @@ export class GitHubAppMergeRequestClient implements GitHubMergeRequestAdapter {
     action: string,
   ): Promise<JsonValue | undefined> {
     try {
-      const response = await this.http.request({ method, path, token, body });
+      const response =
+        method === "GET"
+          ? await this.http.request({ method, path, token })
+          : await this.http.request({ method, path, token, body });
 
       return response.json;
     } catch (error) {

@@ -120,13 +120,9 @@ export type DispatchIntentState =
   | "escalated"
   | "canceled";
 
-export interface DispatchIntent {
+interface DispatchIntentBase {
   id: DispatchIntentId;
   workspaceId: WorkspaceId;
-  targetType: DispatchTargetType;
-  taskId?: TaskId;
-  mergeRequestId?: MergeRequestId;
-  action: DispatchAction | MergeRequestDispatchAction;
   state: DispatchIntentState;
   roleDefinitionId?: RoleDefinitionId;
   requiredAgentTags: string[];
@@ -138,6 +134,22 @@ export interface DispatchIntent {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface TaskDispatchIntent extends DispatchIntentBase {
+  targetType: "task";
+  taskId: TaskId;
+  mergeRequestId?: never;
+  action: DispatchAction;
+}
+
+export interface MergeRequestDispatchIntent extends DispatchIntentBase {
+  targetType: "merge_request";
+  taskId?: never;
+  mergeRequestId: MergeRequestId;
+  action: MergeRequestDispatchAction;
+}
+
+export type DispatchIntent = TaskDispatchIntent | MergeRequestDispatchIntent;
 
 export type PlacementFailureReason =
   | "task_not_ready"
@@ -183,12 +195,9 @@ export interface MergeRequestAssignmentContext {
   providerPullRequestUrl: string;
 }
 
-export interface Assignment {
+interface AssignmentBase {
   id: AssignmentId;
   workspaceId: WorkspaceId;
-  owner: AssignmentOwner;
-  taskId?: TaskId;
-  mergeRequestId?: MergeRequestId;
   dispatchIntentId: DispatchIntentId;
   roleDefinitionId: RoleDefinitionId;
   agentId: AgentId;
@@ -200,6 +209,20 @@ export interface Assignment {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface TaskAssignment extends AssignmentBase {
+  owner: TaskAssignmentOwner;
+  taskId: TaskId;
+  mergeRequestId?: never;
+}
+
+export interface MergeRequestAssignment extends AssignmentBase {
+  owner: MergeRequestAssignmentOwner;
+  taskId?: never;
+  mergeRequestId: MergeRequestId;
+}
+
+export type Assignment = TaskAssignment | MergeRequestAssignment;
 
 export type SessionState =
   | "launching"

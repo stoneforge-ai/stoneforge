@@ -1,9 +1,4 @@
-export {
-  asOrgId,
-  asWorkspaceId,
-  type OrgId,
-  type WorkspaceId,
-} from "./ids.js";
+export { asOrgId, asWorkspaceId, type OrgId, type WorkspaceId } from "./ids.js";
 export {
   assertRepositoryLinkCompatible,
   repositoryAuditOutcome,
@@ -25,11 +20,15 @@ export type {
   ConnectGitHubRepositoryInput,
   CreateOrgInput,
   CreateWorkspaceInput,
+  CustomerHostRuntime,
   GitHubRepositoryLink,
   HealthStatus,
+  ManagedRuntime,
   Org,
   PolicyPreset,
   RegisterAgentInput,
+  RegisterCustomerHostRuntimeInput,
+  RegisterManagedRuntimeInput,
   RegisterRoleDefinitionInput,
   RegisterRuntimeInput,
   RepositoryConnectionStatus,

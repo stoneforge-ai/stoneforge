@@ -70,7 +70,8 @@ function resumeContext(): AgentAdapterResumeContext {
       mergeRequest: {
         id: asMergeRequestId("mr_1"),
         title: "Review direct-task scenario",
-        providerPullRequestUrl: "https://github.example/toolco/stoneforge/pull/100",
+        providerPullRequestUrl:
+          "https://github.example/toolco/stoneforge/pull/100",
       },
     },
     assignment: assignment("assign_review"),
@@ -114,6 +115,7 @@ function assignment(id: string): Assignment {
       type: "task",
       taskId: asTaskId("task_1"),
     },
+    taskId: asTaskId("task_1"),
     dispatchIntentId: asDispatchIntentId("intent_1"),
     roleDefinitionId: asRoleDefinitionId("role_1"),
     agentId: asAgentId("agent_1"),
