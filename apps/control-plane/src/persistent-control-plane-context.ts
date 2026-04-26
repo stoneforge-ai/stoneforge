@@ -46,6 +46,7 @@ export type LoadControlPlaneOptions =
 
 export interface LoadedControlPlane {
   snapshot: ControlPlaneSnapshot;
+  options: LoadControlPlaneOptions;
   setup: WorkspaceSetupService;
   execution: TaskDispatchService;
   mergeRequests: MergeRequestService;
@@ -80,7 +81,7 @@ export function loadControlPlane(
     snapshot.mergeRequests,
   );
 
-  return { snapshot, setup, execution, mergeRequests };
+  return { snapshot, options, setup, execution, mergeRequests };
 }
 
 export function exportSnapshot(

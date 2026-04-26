@@ -43,7 +43,12 @@ Intentionally not specified yet:
 
 ## Control-Plane Persistence Boundary
 
-The control-plane persistence tracer bullet is SQL-backed for active V2 work:
+The control-plane application role is defined in
+[control-plane.md](control-plane.md). Runtime and persistence implementation must
+preserve that boundary: the app wires I/O, storage, providers, diagnostics, and
+operation handlers while package code owns domain behavior.
+
+The control-plane persistence path is SQL-backed for active V2 work:
 
 - SQLite is the default local development store
 - PostgreSQL is the deployment-oriented store for cloud and self-hosted control planes
@@ -53,7 +58,11 @@ Persistence stays an app/infrastructure concern. Domain packages own their snaps
 
 SQL stores initialize themselves idempotently and record a schema migration marker. The first schema intentionally avoids table normalization beyond the metadata required by the current tracer bullet because no query or partial-update need has been proven yet.
 
-The GitHub-backed MergeRequest tracer bullet uses the same snapshot boundary. Provider PR identifiers are stored inside the MergeRequest snapshot as resume facts, so a recreated control-plane service can observe the existing PR, record provider checks/statuses, continue Stoneforge review/approval, and attempt merge only when the GitHub adapter is explicitly configured to allow it.
+The GitHub-backed MergeRequest smoke flow uses the same snapshot boundary.
+Provider PR identifiers are stored inside the MergeRequest snapshot as resume
+facts, so a recreated control-plane service can observe the existing PR, record
+provider checks/statuses, continue Stoneforge review/approval, and attempt merge
+only when the GitHub adapter is explicitly configured to allow it.
 
 ## Component Boundaries
 

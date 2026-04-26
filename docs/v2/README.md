@@ -28,6 +28,7 @@ This brief is organized in a simple order:
 These docs are subordinate to this README. They translate the charter into first-slice implementation guidance and should not be treated as replacement planning docs.
 
 - [system-model.md](system-model.md)
+- [control-plane.md](control-plane.md)
 - [state-machines.md](state-machines.md)
 - [runtime-architecture.md](runtime-architecture.md)
 - [policy-auth-audit.md](policy-auth-audit.md)

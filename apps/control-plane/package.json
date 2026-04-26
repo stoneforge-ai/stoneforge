@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Stoneforge V2 control-plane executable scenarios",
+  "description": "Stoneforge V2 control-plane application",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {

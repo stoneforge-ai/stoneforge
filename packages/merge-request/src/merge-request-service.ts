@@ -182,6 +182,17 @@ export class MergeRequestService {
     return cloneMergeRequest(mergeRequest);
   }
 
+  async publishPolicyStatus(
+    mergeRequestId: MergeRequestId,
+  ): Promise<MergeRequest> {
+    const mergeRequest = this.records.requireMergeRequest(mergeRequestId);
+
+    await this.policyFlow.evaluatePolicy(mergeRequest);
+    mergeRequest.updatedAt = this.now();
+
+    return cloneMergeRequest(mergeRequest);
+  }
+
   async merge(mergeRequestId: MergeRequestId): Promise<MergeRequest> {
     const mergeRequest = this.records.requireMergeRequest(mergeRequestId);
 
