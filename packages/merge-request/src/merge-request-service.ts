@@ -1,4 +1,4 @@
-import { type CIRunId, type MergeRequestId } from "@stoneforge/core";
+import { type VerificationRunId, type MergeRequestId } from "@stoneforge/core";
 import {
   type Assignment,
   type TaskDispatchService,
@@ -6,20 +6,21 @@ import {
 import type { Task } from "@stoneforge/execution";
 
 import type {
-  CIRun,
+  VerificationRun,
   GitHubMergeRequestAdapter,
   MergeRequest,
   MergeRequestSnapshot,
   MergeRequestServiceOptions,
   OpenTaskMergeRequestInput,
   ProviderPullRequest,
-  RecordCIRunInput,
+  RecordProviderCheckInput,
   RecordReviewOutcomeInput,
   RequestReviewInput,
 } from "./models.js";
 import { reconcileProviderPullRequestObservation } from "./provider-pull-request-observation.js";
-import { cloneCIRun, cloneMergeRequest } from "./cloning.js";
-import { rememberCIRun, upsertCIRunRecord } from "./ci-runs.js";
+import { cloneMergeRequest, cloneVerificationRun } from "./cloning.js";
+import { MergeRequestRecordStore } from "./merge-request-record-store.js";
+import { rememberVerificationRun } from "./verification-runs.js";
 import { MergeRequestPolicyFlow } from "./merge-request-policy-flow.js";
 import { recordReviewOutcomeOnMergeRequest } from "./merge-request-review-flow.js";
 import {
@@ -31,9 +32,6 @@ import {
   rememberReviewAssignment,
   requireMergeRequestAssignmentId,
 } from "./review-assignments.js";
-import { upsertTaskMergeRequest } from "./task-merge-requests.js";
-
-type CounterName = "mergeRequest" | "ciRun";
 
 const defaultOptions: MergeRequestServiceOptions = {
   policyPreset: "supervised",
@@ -42,14 +40,8 @@ const defaultOptions: MergeRequestServiceOptions = {
 };
 
 export class MergeRequestService {
-  private readonly mergeRequests = new Map<MergeRequestId, MergeRequest>();
-  private readonly mergeRequestIdsByTaskId = new Map<string, MergeRequestId>();
-  private readonly ciRuns = new Map<CIRunId, CIRun>();
+  private readonly records: MergeRequestRecordStore;
   private readonly policyFlow: MergeRequestPolicyFlow;
-  private readonly counters: Record<CounterName, number> = {
-    mergeRequest: 0,
-    ciRun: 0,
-  };
 
   constructor(
     private readonly execution: TaskDispatchService,
@@ -57,15 +49,13 @@ export class MergeRequestService {
     private readonly options: MergeRequestServiceOptions = defaultOptions,
     snapshot?: MergeRequestSnapshot,
   ) {
+    this.records = new MergeRequestRecordStore(snapshot);
     this.policyFlow = new MergeRequestPolicyFlow(
       execution,
       gitHubAdapter,
       options,
-      this.ciRuns,
+      this.records.verificationRuns,
     );
-    if (snapshot) {
-      this.restoreSnapshot(snapshot);
-    }
   }
 
   async openOrUpdateTaskMergeRequest(
@@ -82,7 +72,7 @@ export class MergeRequestService {
     mergeRequestId: MergeRequestId,
     input: RequestReviewInput = {},
   ) {
-    const mergeRequest = this.requireMergeRequest(mergeRequestId);
+    const mergeRequest = this.records.requireMergeRequest(mergeRequestId);
     const intent = this.execution.createMergeRequestDispatchIntent({
       workspaceId: mergeRequest.workspaceId,
       mergeRequest: {
@@ -106,31 +96,37 @@ export class MergeRequestService {
 
   recordReviewAssignment(assignment: Assignment): MergeRequest {
     const mergeRequestId = requireMergeRequestAssignmentId(assignment);
-    const mergeRequest = this.requireMergeRequest(mergeRequestId);
+    const mergeRequest = this.records.requireMergeRequest(mergeRequestId);
     rememberReviewAssignment(mergeRequest, assignment.id, this.now());
 
     return cloneMergeRequest(mergeRequest);
   }
 
-  async recordCIRun(
+  async recordProviderCheck(
     mergeRequestId: MergeRequestId,
-    input: RecordCIRunInput,
-  ): Promise<CIRun> {
-    const mergeRequest = this.requireMergeRequest(mergeRequestId);
+    input: RecordProviderCheckInput,
+  ): Promise<VerificationRun> {
+    const mergeRequest = this.records.requireMergeRequest(mergeRequestId);
     const observedAt = input.observedAt ?? this.now();
-    const ciRun = this.upsertCIRun(mergeRequest, input, observedAt);
+    const verificationRun = this.records.upsertVerificationRun(
+      mergeRequest,
+      input,
+      observedAt,
+    );
 
-    rememberCIRun(mergeRequest, ciRun.id);
-    await this.applyCIRunPolicy(mergeRequest, ciRun);
+    rememberVerificationRun(mergeRequest, verificationRun.id);
+    await this.applyVerificationRunPolicy(mergeRequest, verificationRun);
     mergeRequest.updatedAt = this.now();
 
-    return cloneCIRun(ciRun);
+    return cloneVerificationRun(verificationRun);
   }
 
   async observeProviderPullRequest(
     mergeRequestId: MergeRequestId,
-  ): Promise<CIRun[]> {
-    const mergeRequest = this.requireMergeRequest(mergeRequestId);
+  ): Promise<VerificationRun[]> {
+    const mergeRequest = this.records.requireMergeRequest(mergeRequestId);
+    const previousHeadSha = mergeRequest.providerPullRequest.headSha;
+    const observedAt = this.now();
     const observation = await this.gitHubAdapter.observePullRequest({
       mergeRequestId,
       providerPullRequest: mergeRequest.providerPullRequest,
@@ -139,34 +135,39 @@ export class MergeRequestService {
       execution: this.execution,
       mergeRequest,
       observation,
-      observedAt: this.now(),
+      observedAt,
     });
 
     if (providerState === "terminal") {
       return [];
     }
 
-    const ciRuns: CIRun[] = [];
+    this.records.markStaleVerificationRuns(
+      mergeRequest,
+      previousHeadSha,
+      observedAt,
+    );
+
+    const verificationRuns = new Map<VerificationRunId, VerificationRun>();
 
     for (const check of observation.checks) {
-      ciRuns.push(
-        await this.recordCIRun(mergeRequestId, {
-          providerCheckId: check.providerCheckId,
-          name: check.name,
-          state: check.state,
-          observedAt: check.observedAt,
-        }),
-      );
+      const verificationRun = await this.recordProviderCheck(mergeRequestId, {
+        providerCheckId: check.providerCheckId,
+        name: check.name,
+        state: check.state,
+        observedAt: check.observedAt,
+      });
+      verificationRuns.set(verificationRun.id, verificationRun);
     }
 
-    return ciRuns;
+    return Array.from(verificationRuns.values()).map(cloneVerificationRun);
   }
 
   async recordReviewOutcome(
     mergeRequestId: MergeRequestId,
     input: RecordReviewOutcomeInput,
   ): Promise<MergeRequest> {
-    const mergeRequest = this.requireMergeRequest(mergeRequestId);
+    const mergeRequest = this.records.requireMergeRequest(mergeRequestId);
     await recordReviewOutcomeOnMergeRequest(
       this.execution,
       this.policyFlow,
@@ -181,24 +182,8 @@ export class MergeRequestService {
     return cloneMergeRequest(mergeRequest);
   }
 
-  async recordHumanApproval(
-    mergeRequestId: MergeRequestId,
-    approvedBy: string,
-  ): Promise<MergeRequest> {
-    const mergeRequest = this.requireMergeRequest(mergeRequestId);
-
-    mergeRequest.humanApproval = {
-      approvedBy,
-      approvedAt: this.now(),
-    };
-    await this.policyFlow.evaluatePolicy(mergeRequest);
-    mergeRequest.updatedAt = this.now();
-
-    return cloneMergeRequest(mergeRequest);
-  }
-
   async merge(mergeRequestId: MergeRequestId): Promise<MergeRequest> {
-    const mergeRequest = this.requireMergeRequest(mergeRequestId);
+    const mergeRequest = this.records.requireMergeRequest(mergeRequestId);
 
     if (mergeRequest.state !== "merge_ready") {
       throw new Error(`MergeRequest ${mergeRequestId} is not merge_ready.`);
@@ -218,47 +203,23 @@ export class MergeRequestService {
   }
 
   getMergeRequest(mergeRequestId: MergeRequestId): MergeRequest {
-    return cloneMergeRequest(this.requireMergeRequest(mergeRequestId));
+    return this.records.getMergeRequest(mergeRequestId);
   }
 
-  getCIRun(ciRunId: CIRunId): CIRun {
-    const ciRun = this.ciRuns.get(ciRunId);
-
-    if (!ciRun) {
-      throw new Error(`CIRun ${ciRunId} does not exist.`);
-    }
-
-    return cloneCIRun(ciRun);
+  getVerificationRun(verificationRunId: VerificationRunId): VerificationRun {
+    return this.records.getVerificationRun(verificationRunId);
   }
 
   listMergeRequests(): MergeRequest[] {
-    return Array.from(this.mergeRequests.values()).map(cloneMergeRequest);
+    return this.records.listMergeRequests();
   }
 
-  listCIRuns(): CIRun[] {
-    return Array.from(this.ciRuns.values()).map(cloneCIRun);
+  listVerificationRuns(): VerificationRun[] {
+    return this.records.listVerificationRuns();
   }
 
   exportSnapshot(): MergeRequestSnapshot {
-    return {
-      mergeRequests: this.listMergeRequests(),
-      ciRuns: this.listCIRuns(),
-    };
-  }
-
-  private requireMergeRequest(mergeRequestId: MergeRequestId): MergeRequest {
-    const mergeRequest = this.mergeRequests.get(mergeRequestId);
-
-    if (!mergeRequest) {
-      throw new Error(`MergeRequest ${mergeRequestId} does not exist.`);
-    }
-
-    return mergeRequest;
-  }
-
-  private nextId(counterName: CounterName): string {
-    this.counters[counterName] += 1;
-    return `${counterName}_${this.counters[counterName]}`;
+    return this.records.exportSnapshot();
   }
 
   private now(): string {
@@ -281,74 +242,25 @@ export class MergeRequestService {
     task: Task,
     providerPullRequest: ProviderPullRequest,
   ): MergeRequest {
-    return upsertTaskMergeRequest(
-      {
-        mergeRequests: this.mergeRequests,
-        mergeRequestIdsByTaskId: this.mergeRequestIdsByTaskId,
-        nextId: () => this.nextId("mergeRequest"),
-        now: () => this.now(),
-      },
+    return this.records.upsertMergeRequest(
       task,
       providerPullRequest,
+      this.now(),
     );
   }
 
-  private upsertCIRun(
+  private async applyVerificationRunPolicy(
     mergeRequest: MergeRequest,
-    input: RecordCIRunInput,
-    observedAt: string,
-  ): CIRun {
-    return upsertCIRunRecord(this.ciRuns, mergeRequest, input, observedAt, () =>
-      this.nextId("ciRun"),
-    );
-  }
-
-  private async applyCIRunPolicy(
-    mergeRequest: MergeRequest,
-    ciRun: CIRun,
+    verificationRun: VerificationRun,
   ): Promise<void> {
-    if (ciRun.state === "failed") {
-      await this.policyFlow.requestRepair(mergeRequest, "CI failed");
+    if (verificationRun.state === "failed") {
+      await this.policyFlow.requestRepair(
+        mergeRequest,
+        "Verification Run failed",
+      );
       return;
     }
 
     await this.policyFlow.evaluatePolicy(mergeRequest);
   }
-
-  private restoreSnapshot(snapshot: MergeRequestSnapshot): void {
-    for (const mergeRequest of snapshot.mergeRequests) {
-      this.mergeRequests.set(mergeRequest.id, cloneMergeRequest(mergeRequest));
-      this.mergeRequestIdsByTaskId.set(
-        mergeRequest.sourceOwner.taskId,
-        mergeRequest.id,
-      );
-    }
-
-    for (const ciRun of snapshot.ciRuns) {
-      this.ciRuns.set(ciRun.id, cloneCIRun(ciRun));
-    }
-
-    this.counters.mergeRequest = maxNumericSuffix(
-      snapshot.mergeRequests.map((mergeRequest) => mergeRequest.id),
-      "mergeRequest_",
-    );
-    this.counters.ciRun = maxNumericSuffix(
-      snapshot.ciRuns.map((ciRun) => ciRun.id),
-      "ciRun_",
-    );
-  }
-}
-
-function maxNumericSuffix(values: readonly string[], prefix: string): number {
-  return values.reduce((max, value) => {
-    const suffix = value.startsWith(prefix)
-      ? Number(value.slice(prefix.length))
-      : 0;
-
-    if (Number.isInteger(suffix) && suffix > max) {
-      return suffix;
-    }
-
-    return max;
-  }, 0);
 }

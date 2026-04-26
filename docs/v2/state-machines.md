@@ -24,8 +24,8 @@ Frozen in this doc:
 
 Working assumptions:
 
-- tasks summarize workflow position while Assignments, Sessions, MergeRequests, and CIRuns record execution facts
-- MergeRequest and CIRun states may be driven by GitHub observations in the first slice
+- tasks summarize workflow position while Assignments, Sessions, MergeRequests, and Verification Runs record execution facts
+- MergeRequest and Verification Run states may be driven by GitHub observations in the first slice
 - failure thresholds are policy-configurable with conservative defaults
 
 Intentionally not specified yet:
@@ -69,9 +69,9 @@ Key transitions:
 | `ready` | task is eligible for dispatch |
 | `leased` | scheduler reserved capacity for an assignment but execution has not fully started yet |
 | `in_progress` | at least one live Assignment/Session is executing task work |
-| `awaiting_review` | implementation or repair work is complete and review/CI gates are pending |
+| `awaiting_review` | implementation or repair work is complete and review or verification gates are pending |
 | `repair_required` | a repair trigger requires repair work |
-| `awaiting_human_review` | automated gates passed but policy requires human review or approval |
+| `approval_pending` | automated gates passed but one or more Approval Gates remain |
 | `merge_ready` | the task-level MergeRequest satisfies required checks and approval conditions |
 | `completed` | task work is finished, including merge when code changes were required |
 | `human_review_required` | automated flow stopped and human intervention is required |
@@ -86,13 +86,13 @@ Key transitions:
 - `leased -> ready`: the lease expires or launch fails before execution starts.
 - `in_progress -> awaiting_review`: work completes and a task MergeRequest is opened or updated for review.
 - `in_progress -> completed`: non-code task finishes without needing MergeRequest flow.
-- `awaiting_review -> repair_required`: agent review, human review, CI, mergeability checks, policy evaluation, or branch health requires repair.
+- `awaiting_review -> repair_required`: agent review, human review, verification, mergeability checks, policy evaluation, or branch health requires repair.
 - `repair_required -> ready`: repair context is attached and the task becomes dispatchable again.
-- `awaiting_review -> awaiting_human_review`: automated review passes but a human approval gate remains.
-- `awaiting_review -> merge_ready`: all required automated gates pass and no human review is required.
-- `awaiting_human_review -> merge_ready`: required human approvals are recorded.
+- `awaiting_review -> approval_pending`: automated review passes but an Approval Gate remains.
+- `awaiting_review -> merge_ready`: all required automated gates pass and no Approval Gate is required.
+- `approval_pending -> merge_ready`: required Approval Gates are satisfied by qualifying Review Approved outcomes.
 - `merge_ready -> completed`: merge succeeds or equivalent completion action is recorded.
-- `planned`, `ready`, `leased`, `in_progress`, `awaiting_review`, `repair_required`, `awaiting_human_review`, or `merge_ready -> human_review_required`: repeated failure, stall, no-placement loop, or other escalation threshold is reached.
+- `planned`, `ready`, `leased`, `in_progress`, `awaiting_review`, `repair_required`, `approval_pending`, or `merge_ready -> human_review_required`: repeated failure, stall, no-placement loop, or other escalation threshold is reached.
 - `human_review_required -> ready`: a human explicitly reauthorizes continued automated work.
 - `human_review_required -> canceled`: a human stops the task.
 - `any nonterminal -> canceled`: an authorized human cancels the task.
@@ -125,7 +125,7 @@ Key transitions:
 
 - `draft -> active`: the plan graph is coherent and an authorized human or director activates it.
 - `active -> integration_in_review`: all required planned task work is complete and the plan PR is opened.
-- `integration_in_review -> integration_repair_required`: plan-level review, CI, mergeability checks, policy evaluation, or branch health requires more work.
+- `integration_in_review -> integration_repair_required`: plan-level review, verification, mergeability checks, policy evaluation, or branch health requires more work.
 - `integration_repair_required -> active`: the plan returns to active so underlying tasks or integration work can continue.
 - `integration_in_review -> completed`: the plan PR merges to the workspace target branch.
 - `any nonterminal -> canceled`: an authorized human stops the plan.
@@ -220,41 +220,41 @@ Key transitions:
 | State | Meaning |
 | --- | --- |
 | `draft` | internal MergeRequest exists but the provider PR is not yet open for normal review |
-| `open` | provider PR is open and collecting CI or review signals |
+| `open` | provider PR is open and collecting verification or review signals |
 | `repair_required` | a repair trigger requires more work |
 | `policy_pending` | technical checks passed but Stoneforge policy approval is still outstanding |
-| `merge_ready` | all required checks and approvals are satisfied |
+| `merge_ready` | all required checks, Approval Gates, and mergeability conditions are satisfied |
 | `merged` | provider PR merged successfully |
 | `closed_unmerged` | provider PR closed without merge |
 
 Key transitions:
 
 - `draft -> open`: provider PR is created and visible for review.
-- `open -> repair_required`: CI fails, reviewer requests changes, branch drift cannot be resolved safely, policy evaluation fails, or mergeability fails.
+- `open -> repair_required`: verification fails, reviewer requests changes, Branch Health fails, policy evaluation fails, or Mergeability fails.
 - `repair_required -> open`: repair work updates the PR and review restarts.
-- `open -> policy_pending`: technical checks pass and only human approval policy remains.
-- `open -> merge_ready`: all required checks pass and no human approval is required.
-- `policy_pending -> merge_ready`: required human approvals are recorded.
+- `open -> policy_pending`: technical checks and mergeability pass and only an Approval Gate remains.
+- `open -> merge_ready`: all required checks and mergeability pass and no approval is required.
+- `policy_pending -> merge_ready`: required Approval Gates are satisfied by qualifying Review Approved outcomes.
 - `merge_ready -> merged`: merge succeeds.
 - `any nonterminal -> closed_unmerged`: PR is abandoned or replaced without merge.
 
-## CIRun Lifecycle
+## Verification Run Lifecycle
 
 | State | Meaning |
 | --- | --- |
-| `queued` | provider reported that CI work is waiting to start |
-| `running` | provider reported active CI execution |
-| `passed` | required observed checks succeeded |
-| `failed` | one or more required observed checks failed |
-| `canceled` | CI execution was canceled |
-| `stale` | prior CI result no longer applies to the current PR head |
+| `queued` | at least one Provider Check is waiting to start |
+| `running` | at least one Provider Check is actively running |
+| `passed` | all required Provider Checks succeeded |
+| `failed` | one or more required Provider Checks failed |
+| `canceled` | verification was canceled by the provider |
+| `stale` | prior Verification Run no longer applies to the current PR head |
 
 Key transitions:
 
-- `queued -> running`: provider starts the check suite or job.
-- `running -> passed`: required observed checks finish successfully.
-- `running -> failed`: one or more observed checks fail.
-- `queued` or `running -> canceled`: provider cancels the CI execution.
+- `queued -> running`: provider starts one or more checks.
+- `running -> passed`: required Provider Checks finish successfully.
+- `running -> failed`: one or more required Provider Checks fail.
+- `queued` or `running -> canceled`: provider cancels verification.
 - `passed` or `failed -> stale`: a new commit makes the old result obsolete.
 
 ## Failure Escalation
@@ -264,7 +264,7 @@ Failure escalation is a product requirement, not an implementation detail.
 Conditions that should route work into `human_review_required` or `escalated` paths:
 
 - repeated `repair_required` loops with the same reason
-- repeated CI failure without meaningful progress
+- repeated verification failure without meaningful progress
 - repeated Session crashes or expirations
 - no eligible Agent or exhausted concurrency beyond policy thresholds
 - host disconnect or provider instability that repeatedly prevents execution
@@ -295,7 +295,7 @@ Task planned
   -> leased
   -> in_progress
   -> awaiting_review
-  -> awaiting_human_review
+  -> approval_pending
   -> merge_ready
   -> completed
 

@@ -20,6 +20,8 @@ describe("GitHub integration config", () => {
   });
 
   it("parses GitHub provider config from CLI flags", () => {
+    const privateKey =
+      "-----BEGIN RSA PRIVATE KEY-----\\nline\\n-----END RSA PRIVATE KEY-----";
     const config = parseMergeProviderConfig(
       [
         "--merge-provider",
@@ -27,7 +29,7 @@ describe("GitHub integration config", () => {
         "--github-app-id",
         "123",
         "--github-private-key",
-        "line1\\nline2",
+        privateKey,
         "--github-installation-id",
         "456",
         "--github-owner",
@@ -50,7 +52,7 @@ describe("GitHub integration config", () => {
       provider: "github",
       github: {
         appId: "123",
-        privateKey: "line1\nline2",
+        privateKey: privateKey.replaceAll("\\n", "\n"),
         installationId: 456,
         owner: "toolco",
         repo: "stoneforge",

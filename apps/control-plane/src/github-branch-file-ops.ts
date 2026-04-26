@@ -43,6 +43,11 @@ async function upsertBranch(
   branch: string,
   sha: string,
 ): Promise<void> {
+  if (!(await branchExists(request, repoPath, branch))) {
+    await createBranch(request, repoPath, branch, sha);
+    return;
+  }
+
   try {
     await request(
       "PATCH",
@@ -51,9 +56,27 @@ async function upsertBranch(
       "update GitHub working branch",
     );
   } catch (error) {
+    throw branchError(error instanceof Error ? error : undefined, branch);
+  }
+}
+
+async function branchExists(
+  request: GitHubRequest,
+  repoPath: string,
+  branch: string,
+): Promise<boolean> {
+  try {
+    await request(
+      "GET",
+      `/repos/${repoPath}/git/ref/heads/${branchPath(branch)}`,
+      undefined,
+      "read GitHub working branch",
+    );
+
+    return true;
+  } catch (error) {
     if (error instanceof GitHubHttpError && error.status === 404) {
-      await createBranch(request, repoPath, branch, sha);
-      return;
+      return false;
     }
 
     throw branchError(error instanceof Error ? error : undefined, branch);
@@ -120,9 +143,7 @@ async function existingFileSha(
 
     throw error instanceof Error
       ? error
-      : new GitHubIntegrationError(
-          "Could not read GitHub task change marker.",
-        );
+      : new GitHubIntegrationError("Could not read GitHub task change marker.");
   }
 }
 

@@ -14,11 +14,11 @@ describe("direct task scenario", () => {
     expect(summary.implementationAssignmentState).toBe("succeeded");
     expect(summary.implementationSessionState).toBe("ended");
     expect(summary.mergeRequestState).toBe("merged");
-    expect(summary.ciState).toBe("passed");
+    expect(summary.verificationState).toBe("passed");
     expect(summary.reviewAssignmentState).toBe("succeeded");
     expect(summary.reviewSessionState).toBe("ended");
     expect(summary.policyCheckState).toBe("passed");
-    expect(summary.humanApprovalRecorded).toBe(true);
+    expect(summary.approvalGateSatisfied).toBe(true);
     expect(summary.pullRequestMerged).toBe(true);
     expect(summary.providerSessionIds).toEqual([
       "local-task-start-1",
@@ -34,7 +34,7 @@ describe("direct task scenario", () => {
     expect(output).toContain(`Workspace ${summary.workspaceId}: ready`);
     expect(output).toContain(`Task ${summary.taskId}: completed`);
     expect(output).toContain(`MergeRequest ${summary.mergeRequestId}: merged`);
-    expect(output).toContain(`CI ${summary.ciRunId}: passed`);
+    expect(output).toContain(`Verification Run ${summary.verificationRunId}: passed`);
     expect(output).toContain("PR merged: true");
   });
 });

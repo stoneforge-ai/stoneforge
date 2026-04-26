@@ -1,5 +1,5 @@
 import type {
-  CIRun,
+  VerificationRun,
   MergeRequest,
   MergeRequestServiceOptions,
   MergeRequestState,
@@ -14,17 +14,17 @@ export interface PolicyDecision {
 
 export function evaluateMergePolicy(
   mergeRequest: MergeRequest,
-  ciRuns: CIRun[],
+  verificationRuns: VerificationRun[],
   options: MergeRequestServiceOptions,
 ): PolicyDecision | null {
   if (isTerminalMergeRequest(mergeRequest)) {
     return null;
   }
 
-  if (!hasRequiredMergeSignals(mergeRequest, ciRuns)) {
+  if (!hasRequiredMergeSignals(mergeRequest, verificationRuns)) {
     return {
       checkState: "pending",
-      reason: "CI and approved review are required.",
+      reason: "A passing Verification Run and Review Approved are required.",
     };
   }
 
@@ -32,7 +32,7 @@ export function evaluateMergePolicy(
     return {
       nextState: "policy_pending",
       checkState: "pending",
-      reason: "Human approval is required by supervised policy.",
+      reason: "A Human Approval Gate is required by supervised policy.",
     };
   }
 
@@ -49,13 +49,13 @@ function isTerminalMergeRequest(mergeRequest: MergeRequest): boolean {
 
 function hasRequiredMergeSignals(
   mergeRequest: MergeRequest,
-  ciRuns: CIRun[],
+  verificationRuns: VerificationRun[],
 ): boolean {
-  if (!hasPassingCI(ciRuns)) {
+  if (!hasPassingVerificationRun(verificationRuns)) {
     return false;
   }
 
-  return mergeRequest.reviewOutcome === "approved";
+  return hasReviewApproved(mergeRequest);
 }
 
 function requiresHumanApproval(
@@ -66,9 +66,22 @@ function requiresHumanApproval(
     return false;
   }
 
-  return mergeRequest.humanApproval === undefined;
+  return !hasReviewApproved(mergeRequest, "human");
 }
 
-function hasPassingCI(ciRuns: CIRun[]): boolean {
-  return ciRuns.some((ciRun) => ciRun.state === "passed");
+function hasPassingVerificationRun(verificationRuns: VerificationRun[]): boolean {
+  return verificationRuns.some((verificationRun) => verificationRun.state === "passed");
+}
+
+function hasReviewApproved(
+  mergeRequest: MergeRequest,
+  reviewerKind?: "human" | "agent",
+): boolean {
+  return mergeRequest.reviewOutcomes.some((reviewOutcome) => {
+    if (reviewOutcome.outcome !== "approved") {
+      return false;
+    }
+
+    return reviewerKind === undefined || reviewOutcome.reviewerKind === reviewerKind;
+  });
 }

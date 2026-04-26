@@ -1,11 +1,10 @@
-import type { CIRunId, MergeRequestId } from "@stoneforge/core";
+import type { VerificationRunId, MergeRequestId } from "@stoneforge/core";
 import type { Task } from "@stoneforge/execution";
 
 import type {
-  CIRun,
+  VerificationRun,
   MergeRequest,
   ProviderPullRequest,
-  RecordCIRunInput,
 } from "./models.js";
 
 export function applyProviderPullRequestUpdate(
@@ -36,26 +35,26 @@ export function createTaskMergeRequestRecord(
     },
     state: "open",
     providerPullRequest,
-    ciRunIds: [],
+    verificationRunIds: [],
     reviewAssignmentIds: [],
+    reviewOutcomes: [],
     createdAt: now,
     updatedAt: now,
   };
 }
 
-export function createCIRunRecord(
-  id: CIRunId,
+export function createVerificationRunRecord(
+  id: VerificationRunId,
   mergeRequest: MergeRequest,
-  input: RecordCIRunInput,
   observedAt: string,
-): CIRun {
+): VerificationRun {
   return {
     id,
     workspaceId: mergeRequest.workspaceId,
     mergeRequestId: mergeRequest.id,
-    providerCheckId: input.providerCheckId,
-    name: input.name,
-    state: input.state,
+    headSha: mergeRequest.providerPullRequest.headSha,
+    state: "queued",
+    providerChecks: [],
     observedAt,
   };
 }

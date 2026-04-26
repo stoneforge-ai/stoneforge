@@ -102,7 +102,7 @@ The product is not just "how do we prompt a coding agent?"
 
 The real product problem is:
 
-How do we reliably run a multi-step engineering workflow where intent, task decomposition, execution, progress tracking, review, approval, CI, merge flow, and recovery all remain understandable and governable?
+How do we reliably run a multi-step engineering workflow where intent, task decomposition, execution, progress tracking, review, approval, verification, merge flow, and recovery all remain understandable and governable?
 
 ## The Primary Workflow We Are Building Around
 
@@ -249,7 +249,7 @@ Hidden prompt state is not the memory model.
 
 When a code-changing task is completed, Stoneforge automatically creates a PR for that task branch.
 
-This PR is where CI and review usually begin.
+This PR is where Verification Run observation and review usually begin.
 
 ### 9. A Review Agent evaluates the PR
 
@@ -264,13 +264,13 @@ The Review Agent may:
 
 Reasons to request changes include:
 
-- failing CI or tests
+- failing Verification Runs or tests
 - unmet acceptance criteria
 - merge conflicts
 - branch drift that cannot be fast-forwarded cleanly
 - obvious correctness or quality problems
 
-Workspaces may disable agent review. In those workspaces, review outcomes may depend only on CI and/or humans.
+Workspaces may disable agent review. In those workspaces, review outcomes may depend only on Verification Runs and/or humans.
 
 ### 10. Repair triggers require task repair
 
@@ -282,15 +282,15 @@ If a change request or other repair trigger occurs before task completion:
 
 This creates a repair loop that stays attached to the same planning and execution history.
 
-### 11. Optional human review and QA happens after agent review
+### 11. Optional approval and QA happens after agent review
 
-Some workspaces require one or more humans to provide final approval.
+Some workspaces require one or more humans or agents to provide final approval.
 
-Others may skip human review entirely depending on policy.
+Others may skip Approval Gates entirely depending on policy.
 
-When human approval is required:
+When approval is required:
 
-- the relevant humans should be notified
+- the relevant Approvers should be notified
 - they can review the PR
 - they may manually QA the branch using the preview experience if one exists
 - they may approve or request changes
@@ -402,7 +402,7 @@ Failure handling is part of the operating model, not a later implementation deta
 The platform must detect and escalate failure conditions such as:
 
 - repeated repair loops with the same reason
-- repeated CI failure without meaningful progress
+- repeated verification failure without meaningful progress
 - session crashes or repeated restarts
 - stalled work
 - scheduler inability to place work
@@ -453,7 +453,7 @@ Core execution records include:
 - assignment
 - session
 - PR
-- CI run
+- Verification Run
 
 This separation matters because planning intent and execution reality are different things.
 
@@ -546,7 +546,7 @@ They may respond to:
 
 - task changes
 - PR changes
-- CI changes
+- verification changes
 - time-based schedules
 - other product events
 
@@ -554,7 +554,7 @@ Automations should reinforce the core model rather than bypass it.
 
 ### Policy
 
-Policy determines what is allowed to happen automatically, what requires review, and what requires human approval.
+Policy determines what is allowed to happen automatically, what requires review, and what requires approval.
 
 There is one policy system with multiple workspace presets layered on top of it.
 
@@ -579,7 +579,7 @@ Why:
 Decision:
 
 - tasks remain the planning unit
-- assignments, sessions, PRs, and CI runs are first-class execution records
+- assignments, sessions, PRs, and Verification Runs are first-class execution records
 
 Why:
 
@@ -700,7 +700,7 @@ The first slice should prove:
 1. one team can onboard one real repository into Stoneforge
 2. workspace agents, role definitions, and runtimes can be configured clearly
 3. customer-managed hosts and at least one managed sandbox path can execute real work
-4. a task can become a real execution chain: task -> assignment -> session -> PR -> CI
+4. a task can become a real execution chain: task -> assignment -> session -> PR -> Verification Run
 5. the same control-plane model can drive at least Claude Code and OpenAI Codex
 6. policy and audit work on real actions, not only mocked flows
 7. Task Progress Record and documents together improve resumability across sessions and assignments
@@ -724,7 +724,7 @@ Stoneforge should:
 - dispatch and supervise real agent work by matching tasks to eligible roles, agents, runtimes, and capacity
 - support Claude Code and OpenAI Codex as first-class Worker Agent backends
 - checkpoint and resume sessions cleanly
-- correlate tasks, sessions, PRs, and CI into one coherent operator view
+- correlate tasks, sessions, PRs, and Verification Runs into one coherent operator view
 - enforce policy on sensitive actions
 - produce reliable audit trails
 - preserve durable shared context through documents and Task Progress Record state

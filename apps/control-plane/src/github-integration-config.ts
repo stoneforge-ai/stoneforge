@@ -181,7 +181,10 @@ function optionValue(
 
   const value = argv[index + 1];
 
-  if (value === undefined || value.startsWith("--")) {
+  if (
+    value === undefined ||
+    (value.startsWith("--") && option !== "--github-private-key")
+  ) {
     throw new GitHubIntegrationError(`Missing value for ${option}.`);
   }
 

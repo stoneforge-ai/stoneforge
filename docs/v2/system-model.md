@@ -12,7 +12,7 @@ First-slice scope:
 - one GitHub repository per Workspace
 - Claude Code and OpenAI Codex as first-class agent backends
 - customer-managed hosts plus one managed sandbox path
-- Task, Plan, Assignment, Session, MergeRequest, and CIRun modeled separately
+- Task, Plan, Assignment, Session, MergeRequest, and Verification Run modeled separately
 
 Frozen in this doc:
 
@@ -46,9 +46,9 @@ Stoneforge V2 has three main model layers:
 
 - tenant and operational boundaries: Org, Workspace, Policy
 - planning and context objects: Task, Plan, Document, Automation
-- execution and capacity objects: Assignment, Session, MergeRequest, CIRun, Host, Runtime, Agent, RoleDefinition, AuditEvent
+- execution and capacity objects: Assignment, Session, MergeRequest, Verification Run, Host, Runtime, Agent, RoleDefinition, AuditEvent
 
-The important separation is between planning intent and execution history. Tasks and Plans describe intended work. Assignments, Sessions, MergeRequests, and CIRuns describe what actually happened while the system tried to perform that work.
+The important separation is between planning intent and execution history. Tasks and Plans describe intended work. Assignments, Sessions, MergeRequests, and Verification Runs describe what actually happened while the system tried to perform that work.
 
 ## Tenant And Operational Boundaries
 
@@ -88,7 +88,7 @@ Owned by:
 Key associations:
 
 - maps to one GitHub repository in the first slice
-- owns Tasks, Plans, Documents, Assignments, Sessions, MergeRequests, CIRuns, Hosts, Runtimes, Agents, RoleDefinitions, Automations, and workspace Policy
+- owns Tasks, Plans, Documents, Assignments, Sessions, MergeRequests, Verification Runs, Hosts, Runtimes, Agents, RoleDefinitions, Automations, and workspace Policy
 
 Frozen semantics:
 
@@ -99,7 +99,7 @@ Frozen semantics:
 
 Purpose:
 
-- describes what may happen automatically, what requires review, and what requires human approval
+- describes what may happen automatically, what requires review, and what requires approval
 
 Owned by:
 
@@ -196,13 +196,13 @@ Owned by:
 
 Key associations:
 
-- may listen to task, plan, MergeRequest, CIRun, schedule, or inbound webhook events
-- may create Dispatch Intent for implementation, review, repair, merge evaluation, or escalation, or may create an outbound code-first webhook call
+- may listen to task, plan, MergeRequest, Verification Run, schedule, or inbound webhook events
+- may create Dispatch Intent for implementation, review, repair, merge evaluation, or escalation, or may create an outbound automation webhook call
 
 Frozen semantics:
 
 - Automations do not own scheduling, leasing, or direct provider execution
-- pure-agent automations dispatch a concrete RoleDefinition plus optional runtime and agent constraints
+- Agent Automations create Dispatch Intent for a concrete RoleDefinition plus optional runtime and agent constraints
 - code-first automations call external user-hosted handlers through signed outbound webhooks with idempotency keys and async acknowledgement
 
 ## Execution Records
@@ -266,18 +266,22 @@ Key associations:
 
 - belongs to exactly one source owner: one Task or one Plan
 - maps to a provider PR in GitHub for the first slice
-- may contain many CIRuns and review outcomes over time
+- may contain many Verification Runs and review outcomes over time
+- has observed Mergeability from provider/source-control state
+- may be affected by Branch Health signals from its source branch, target branch, or integration branch
 
 Frozen semantics:
 
 - `MergeRequest` is the canonical product term
 - `PR` is the GitHub-facing and user-facing term in the first slice
+- Mergeability feeds Stoneforge policy evaluation but is separate from Verification Run
+- Branch Health is broader than Mergeability and may require repair before immediate merge evaluation
 
-### CIRun
+### Verification Run
 
 Purpose:
 
-- execution record for observed CI state associated with a MergeRequest
+- aggregate verification record for one MergeRequest head SHA
 
 Owned by:
 
@@ -285,11 +289,15 @@ Owned by:
 
 Key associations:
 
-- maps to GitHub checks and status observations in the first slice
+- scoped to one MergeRequest head SHA
+- contains one or more Provider Checks observed from GitHub checks and statuses in the first slice
+- records whether each Provider Check is required by Stoneforge policy
 
 Frozen semantics:
 
-- Stoneforge records CI state and uses it for review and merge decisions
+- Stoneforge derives Verification Run state from required Provider Checks and uses it for review and merge decisions
+- provider required-check settings may seed defaults or observations, but Stoneforge policy remains canonical
+- when the MergeRequest head SHA changes, prior Verification Runs become `stale`
 - Stoneforge does not become a native CI authoring or execution platform in the first slice
 
 ### AuditEvent
@@ -304,7 +312,7 @@ Owned by:
 
 Key associations:
 
-- may reference Task, Plan, Assignment, Session, MergeRequest, CIRun, Host, Runtime, Agent, RoleDefinition, Automation, Policy, secret references, and external provider identifiers
+- may reference Task, Plan, Assignment, Session, MergeRequest, Verification Run, Host, Runtime, Agent, RoleDefinition, Automation, Policy, secret references, and external provider identifiers
 
 Frozen semantics:
 
@@ -419,7 +427,7 @@ First-slice rules:
 | MergeRequest -> Assignment | A MergeRequest may have many Assignments. A MergeRequest-owned Assignment belongs to one MergeRequest. |
 | Assignment -> Session | An Assignment may contain many Sessions. A Session belongs to one Assignment. |
 | Task/Plan -> MergeRequest | A MergeRequest belongs to exactly one Task or exactly one Plan. |
-| MergeRequest -> CIRun | A MergeRequest may have many CIRuns. A CIRun belongs to one MergeRequest. |
+| MergeRequest -> Verification Run | A MergeRequest may have many Verification Runs. A Verification Run belongs to one MergeRequest. |
 | Host -> Runtime | A Host may expose many Runtimes. A customer-managed Runtime belongs to one Host. |
 | Runtime -> Agent | A Runtime may be reused by many Agents. An Agent is bound to one Runtime. |
 | RoleDefinition -> Assignment | A RoleDefinition may be reused by many Assignments. Each Assignment resolves exactly one RoleDefinition. |
@@ -428,7 +436,7 @@ First-slice rules:
 ## Invariants
 
 - planning intent and execution history are separate model layers
-- a Task never substitutes for an Assignment, Session, MergeRequest, or CIRun
+- a Task never substitutes for an Assignment, Session, MergeRequest, or Verification Run
 - a Plan does not replace the Task model
 - a Task inside an inactive Plan is not dispatchable
 - dispatch must resolve one concrete RoleDefinition, one Agent, and one Runtime before execution starts
@@ -456,8 +464,8 @@ These are semantic event names for reasoning and docs. They are not frozen API o
 | `assignment.started` | a durable dispatch envelope has entered live execution |
 | `session.checkpoint_created` | a Session persisted a resumable Checkpoint into the Task Progress Record |
 | `merge_request.opened` | a provider PR now exists for a task or plan |
-| `ci_run.observed` | new CI status/check information was recorded |
-| `repair.trigger_recorded` | review, CI, mergeability, policy, or branch health requires task or plan repair |
+| `verification_run.observed` | new verification status/check information was recorded |
+| `repair.trigger_recorded` | review, verification, mergeability, policy, or branch health requires task or plan repair |
 | `policy.decision_recorded` | a policy-sensitive action was evaluated and its decision stored |
 | `audit.event_emitted` | a required audit record was persisted |
 

@@ -116,10 +116,10 @@ describe("GitHub merge request mapping", () => {
     ]);
     expect(statusObservation("not object")).toEqual([]);
     expect(
-      statusObservation({ id: "s1", context: "ci", state: "success" }),
+      statusObservation({ id: 1, context: "ci", state: "success" }),
     ).toEqual([
       {
-        providerCheckId: "s1",
+        providerCheckId: "1",
         name: "ci",
         state: "passed",
         observedAt: undefined,

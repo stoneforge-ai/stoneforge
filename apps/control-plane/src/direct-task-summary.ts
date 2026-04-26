@@ -4,7 +4,7 @@ import type {
   Task,
 } from "@stoneforge/execution";
 import type {
-  CIRun,
+  VerificationRun,
   MergeRequest,
 } from "@stoneforge/merge-request";
 import type { Workspace } from "@stoneforge/workspace";
@@ -18,7 +18,7 @@ export interface DirectTaskRunSummary {
   reviewAssignmentId: string;
   reviewSessionId: string;
   mergeRequestId: string;
-  ciRunId: string;
+  verificationRunId: string;
   providerSessionIds: string[];
   providerPullRequestUrl: string;
   workspaceState: Workspace["state"];
@@ -29,9 +29,9 @@ export interface DirectTaskRunSummary {
   reviewAssignmentState: Assignment["state"];
   reviewSessionState: Session["state"];
   mergeRequestState: MergeRequest["state"];
-  ciState: CIRun["state"];
+  verificationState: VerificationRun["state"];
   policyCheckState: NonNullable<MergeRequest["policyCheck"]>["state"];
-  humanApprovalRecorded: boolean;
+  approvalGateSatisfied: boolean;
   pullRequestMerged: boolean;
 }
 
@@ -46,7 +46,7 @@ export interface DirectTaskRunSummaryInput {
   implementation: { assignment: Assignment; session: Session };
   review: { assignment: Assignment; session: Session };
   mergeRequest: MergeRequest;
-  ciRun: CIRun;
+  verificationRun: VerificationRun;
   providerSessionIds: string[];
 }
 
@@ -62,7 +62,7 @@ export function buildSummary(
     reviewAssignmentId: input.review.assignment.id,
     reviewSessionId: input.review.session.id,
     mergeRequestId: input.mergeRequest.id,
-    ciRunId: input.ciRun.id,
+    verificationRunId: input.verificationRun.id,
     providerSessionIds: input.providerSessionIds,
     providerPullRequestUrl: input.mergeRequest.providerPullRequest.url,
     workspaceState: input.workspace.state,
@@ -73,9 +73,11 @@ export function buildSummary(
     reviewAssignmentState: input.review.assignment.state,
     reviewSessionState: input.review.session.state,
     mergeRequestState: input.mergeRequest.state,
-    ciState: input.ciRun.state,
+    verificationState: input.verificationRun.state,
     policyCheckState: input.mergeRequest.policyCheck?.state ?? "pending",
-    humanApprovalRecorded: input.mergeRequest.humanApproval !== undefined,
+    approvalGateSatisfied: input.mergeRequest.reviewOutcomes.some((reviewOutcome) => {
+      return reviewOutcome.outcome === "approved" && reviewOutcome.reviewerKind === "human";
+    }),
     pullRequestMerged: input.mergeRequest.state === "merged",
   };
 }
@@ -91,11 +93,11 @@ export function formatDirectTaskRunSummary(
     `Implementation Assignment ${summary.implementationAssignmentId}: ${summary.implementationAssignmentState}`,
     `Implementation Session ${summary.implementationSessionId}: ${summary.implementationSessionState}`,
     `MergeRequest ${summary.mergeRequestId}: ${summary.mergeRequestState}`,
-    `CI ${summary.ciRunId}: ${summary.ciState}`,
+    `Verification Run ${summary.verificationRunId}: ${summary.verificationState}`,
     `Review Assignment ${summary.reviewAssignmentId}: ${summary.reviewAssignmentState}`,
     `Review Session ${summary.reviewSessionId}: ${summary.reviewSessionState}`,
     `Policy check: ${summary.policyCheckState}`,
-    `Human approval recorded: ${String(summary.humanApprovalRecorded)}`,
+    `Approval Gate satisfied: ${String(summary.approvalGateSatisfied)}`,
     `PR merged: ${String(summary.pullRequestMerged)}`,
     `Provider PR: ${summary.providerPullRequestUrl}`,
     `Provider Sessions: ${summary.providerSessionIds.join(", ")}`,
@@ -110,9 +112,9 @@ export function expectDirectTaskRunComplete(summary: DirectTaskRunSummary): void
   expectState(summary.reviewAssignmentState, "succeeded", "Review Assignment");
   expectState(summary.reviewSessionState, "ended", "Review Session");
   expectState(summary.mergeRequestState, "merged", "MergeRequest");
-  expectState(summary.ciState, "passed", "CI");
+  expectState(summary.verificationState, "passed", "Verification Run");
   expectState(summary.policyCheckState, "passed", "Policy check");
-  expectState(summary.humanApprovalRecorded, true, "Human approval");
+  expectState(summary.approvalGateSatisfied, true, "Approval Gate");
   expectState(summary.pullRequestMerged, true, "Pull request merge");
 }
 

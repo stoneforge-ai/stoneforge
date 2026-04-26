@@ -7,7 +7,7 @@ export type AgentId = Brand<string, "AgentId">;
 export type RoleDefinitionId = Brand<string, "RoleDefinitionId">;
 export type AuditEventId = Brand<string, "AuditEventId">;
 export type MergeRequestId = Brand<string, "MergeRequestId">;
-export type CIRunId = Brand<string, "CIRunId">;
+export type VerificationRunId = Brand<string, "VerificationRunId">;
 
 export function asOrgId(value: string): OrgId {
   return brand<"OrgId">(value);
@@ -37,8 +37,8 @@ export function asMergeRequestId(value: string): MergeRequestId {
   return brand<"MergeRequestId">(value);
 }
 
-export function asCIRunId(value: string): CIRunId {
-  return brand<"CIRunId">(value);
+export function asVerificationRunId(value: string): VerificationRunId {
+  return brand<"VerificationRunId">(value);
 }
 
 export function parseOrgId(value: string): OrgId {
@@ -69,8 +69,8 @@ export function parseMergeRequestId(value: string): MergeRequestId {
   return asMergeRequestId(validIdValue(value, "MergeRequestId"));
 }
 
-export function parseCIRunId(value: string): CIRunId {
-  return asCIRunId(validIdValue(value, "CIRunId"));
+export function parseVerificationRunId(value: string): VerificationRunId {
+  return asVerificationRunId(validIdValue(value, "VerificationRunId"));
 }
 
 const idPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;

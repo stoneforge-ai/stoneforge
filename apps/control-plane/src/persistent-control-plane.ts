@@ -24,7 +24,7 @@ import {
 } from "./persistent-control-plane-context.js";
 import { buildPersistentSummary } from "./persistent-summary.js";
 import { recordWorkerProgress } from "./persistent-worker.js";
-import { requireObservedProviderCiPassed } from "./provider-ci-gate.js";
+import { requireObservedProviderVerificationPassed } from "./provider-verification-gate.js";
 
 export class PersistentControlPlane {
   constructor(
@@ -219,9 +219,9 @@ export class PersistentControlPlane {
     });
   }
 
-  async recordCiPassed(): Promise<ControlPlaneCommandStatus> {
-    return this.mutateAsync("record-ci-passed", async (loaded) => {
-      const ciRun = await loaded.mergeRequests.recordCIRun(
+  async recordVerificationPassed(): Promise<ControlPlaneCommandStatus> {
+    return this.mutateAsync("record-verification-passed", async (loaded) => {
+      const verificationRun = await loaded.mergeRequests.recordProviderCheck(
         requireMergeRequestId(loaded.snapshot.current),
         {
           providerCheckId: "local-check-1",
@@ -230,30 +230,30 @@ export class PersistentControlPlane {
         },
       );
 
-      loaded.snapshot.current.ciRunId = ciRun.id;
+      loaded.snapshot.current.verificationRunId = verificationRun.id;
 
-      return { id: ciRun.id, state: ciRun.state };
+      return { id: verificationRun.id, state: verificationRun.state };
     });
   }
 
   async observeProviderState(): Promise<ControlPlaneCommandStatus> {
     return this.mutateAsync("observe-provider-state", async (loaded) => {
       const mergeRequestId = requireMergeRequestId(loaded.snapshot.current);
-      const ciRuns =
+      const verificationRuns =
         await loaded.mergeRequests.observeProviderPullRequest(mergeRequestId);
-      const latest = ciRuns.at(-1);
+      const latest = verificationRuns.at(-1);
 
       if (latest === undefined)
         return { id: mergeRequestId, state: "observed" };
-      loaded.snapshot.current.ciRunId = latest.id;
+      loaded.snapshot.current.verificationRunId = latest.id;
       return { id: latest.id, state: latest.state };
     });
   }
 
-  async requireObservedProviderCiPassed(): Promise<ControlPlaneCommandStatus> {
+  async requireObservedProviderVerificationPassed(): Promise<ControlPlaneCommandStatus> {
     return this.mutate(
-      "require-provider-ci-passed",
-      requireObservedProviderCiPassed,
+      "require-provider-verification-passed",
+      requireObservedProviderVerificationPassed,
     );
   }
 
@@ -282,6 +282,11 @@ export class PersistentControlPlane {
             loaded.snapshot.current.reviewAssignmentId,
             "Run the review worker before completing review.",
           ),
+          reviewerKind: "agent",
+          reviewerId: requireValue(
+            loaded.snapshot.current.agentId,
+            "Configure an agent before completing review.",
+          ),
           outcome: "approved",
           reason: "Local review approved the deterministic scenario change.",
         },
@@ -293,9 +298,14 @@ export class PersistentControlPlane {
 
   async approve(): Promise<ControlPlaneCommandStatus> {
     return this.mutateAsync("approve", async (loaded) => {
-      const mergeRequest = await loaded.mergeRequests.recordHumanApproval(
+      const mergeRequest = await loaded.mergeRequests.recordReviewOutcome(
         requireMergeRequestId(loaded.snapshot.current),
-        "user_approver",
+        {
+          reviewerKind: "human",
+          reviewerId: "user_approver",
+          outcome: "approved",
+          reason: "Human reviewer approved the MergeRequest.",
+        },
       );
 
       return { id: mergeRequest.id, state: mergeRequest.state };

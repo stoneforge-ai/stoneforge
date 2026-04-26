@@ -72,7 +72,10 @@ describe("GitHubAppMergeRequestClient", () => {
           },
         ],
       }),
-      ok([{ id: "status-1", context: "deploy", state: "pending" }]),
+      ok([
+        { id: "status-1", context: "deploy", state: "pending" },
+        { id: 2, context: "stoneforge/policy", state: "pending" },
+      ]),
     ]);
     const client = githubClient(http);
 
@@ -107,7 +110,7 @@ describe("GitHubAppMergeRequestClient", () => {
     ]);
     expect(http.requests.map((request) => request.method)).toEqual([
       "GET",
-      "PATCH",
+      "GET",
       "POST",
       "GET",
       "PUT",
@@ -123,34 +126,35 @@ describe("GitHubAppMergeRequestClient", () => {
     const http = new RecordingGitHubHttpClient([
       ok({ object: { sha: "base-sha" } }),
       ok({ ref: "refs/heads/stoneforge/task/task_1" }),
+      ok({ ref: "refs/heads/stoneforge/task/task_1" }),
       ok({ sha: "existing-file-sha" }),
       ok({ content: { sha: "new-file-sha" } }),
       ok([providerPullRequest()]),
     ]);
     const client = githubClient(http);
 
-    const pullRequest = await client.createOrUpdateTaskPullRequest(
-      pullRequestInput(),
-    );
+    const pullRequest =
+      await client.createOrUpdateTaskPullRequest(pullRequestInput());
 
     expect(pullRequest.providerPullRequestId).toBe("101");
     expect(http.requests.map((request) => request.method)).toEqual([
+      "GET",
       "GET",
       "PATCH",
       "GET",
       "PUT",
       "GET",
     ]);
-    expect(http.requests[3]?.path).toBe(
+    expect(http.requests[4]?.path).toBe(
       "/repos/toolco/stoneforge/contents/.stoneforge/tasks/task_1.md",
     );
-    expect(http.requests[3]?.body).toEqual(
+    expect(http.requests[4]?.body).toEqual(
       expect.objectContaining({
         branch: "stoneforge/task/task_1",
         sha: "existing-file-sha",
       }),
     );
-    expect(markerContent(http.requests[3]?.body)).toContain(
+    expect(markerContent(http.requests[4]?.body)).toContain(
       "# Stoneforge task change task_1",
     );
   });
@@ -160,6 +164,7 @@ describe("GitHubAppMergeRequestClient", () => {
       githubClient(
         new RecordingGitHubHttpClient([
           ok({ object: { sha: "base-sha" } }),
+          ok({ ref: "refs/heads/stoneforge/task/task_1" }),
           new Error("branch denied"),
         ]),
       ).createOrUpdateTaskPullRequest(pullRequestInput()),

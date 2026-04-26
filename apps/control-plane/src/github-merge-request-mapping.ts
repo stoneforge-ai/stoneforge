@@ -1,7 +1,7 @@
 import type {
-  VerificationRunState,
   PolicyCheckState,
   ProviderCheckObservation,
+  ProviderCheckState,
   ProviderPullRequest,
   ProviderPullRequestObservation,
 } from "@stoneforge/merge-request";
@@ -122,7 +122,7 @@ export function statusObservation(
 
   return [
     {
-      providerCheckId: requiredString(object, "id", "GitHub status"),
+      providerCheckId: requiredIdentifier(object, "id", "GitHub status"),
       name: requiredString(object, "context", "GitHub status"),
       state: statusRunState(requiredString(object, "state", "GitHub status")),
       observedAt: jsonString(object.updated_at) ?? undefined,
@@ -163,7 +163,7 @@ export function githubActionError(
 function checkRunState(
   status: string | undefined,
   conclusion: string | undefined,
-): VerificationRunState {
+): ProviderCheckState {
   switch (status) {
     case "queued":
       return "queued";
@@ -177,7 +177,7 @@ function checkRunState(
 
 function checkConclusionState(
   conclusion: string | undefined,
-): VerificationRunState {
+): ProviderCheckState {
   switch (conclusion) {
     case "success":
     case "neutral":
@@ -191,7 +191,7 @@ function checkConclusionState(
   }
 }
 
-function statusRunState(state: string): VerificationRunState {
+function statusRunState(state: string): ProviderCheckState {
   switch (state) {
     case "success":
       return "passed";
@@ -200,6 +200,14 @@ function statusRunState(state: string): VerificationRunState {
     default:
       return "failed";
   }
+}
+
+function requiredIdentifier(
+  json: JsonObject,
+  key: string,
+  context: string,
+): string {
+  return jsonString(json[key]) ?? String(requiredNumber(json, key, context));
 }
 
 function errorMessage(error: Error | undefined): string {

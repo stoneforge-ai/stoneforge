@@ -1,4 +1,4 @@
-import { asCIRunId } from "@stoneforge/core";
+import { asVerificationRunId } from "@stoneforge/core";
 import type {
   AgentAdapter,
   AgentAdapterResumeContext,
@@ -129,6 +129,8 @@ describe("MergeRequestService edge cases", () => {
     await expect(
       flow.mergeRequests.recordReviewOutcome(mergeRequest.id, {
         assignmentId: taskAssignment.id,
+        reviewerKind: "agent",
+        reviewerId: taskAssignment.agentId,
         outcome: "approved",
       }),
     ).rejects.toThrow(/does not belong/i);
@@ -155,12 +157,14 @@ describe("MergeRequestService edge cases", () => {
     await expect(
       flow.mergeRequests.recordReviewOutcome(mergeRequest.id, {
         assignmentId: reviewAssignment.id,
+        reviewerKind: "agent",
+        reviewerId: reviewAssignment.agentId,
         outcome: "approved",
       }),
     ).rejects.toThrow(/must succeed/i);
   });
 
-  it("allows autonomous policy to reach merge_ready without human approval", async () => {
+  it("allows autonomous policy to reach merge_ready without approval", async () => {
     const flow = createConfiguredExecution("autonomous");
     const taskAssignment = await startTaskAssignment(flow, true);
 
@@ -171,7 +175,7 @@ describe("MergeRequestService edge cases", () => {
     const reviewAssignment = await startReviewAssignment(flow, mergeRequest.id);
 
     flow.execution.completeAssignment(reviewAssignment.id);
-    await flow.mergeRequests.recordCIRun(mergeRequest.id, {
+    await flow.mergeRequests.recordProviderCheck(mergeRequest.id, {
       providerCheckId: "check_1",
       name: "test",
       state: "passed",
@@ -179,20 +183,22 @@ describe("MergeRequestService edge cases", () => {
 
     const reviewed = await flow.mergeRequests.recordReviewOutcome(mergeRequest.id, {
       assignmentId: reviewAssignment.id,
+      reviewerKind: "agent",
+      reviewerId: reviewAssignment.agentId,
       outcome: "approved",
     });
 
     expect(reviewed.state).toBe("merge_ready");
   });
 
-  it("throws for missing MergeRequest and CIRun records", () => {
+  it("throws for missing MergeRequest and VerificationRun records", () => {
     const flow = createConfiguredExecution();
 
     expect(() => flow.mergeRequests.getMergeRequest("missing" as never)).toThrow(
       /does not exist/i,
     );
     expect(() =>
-      flow.mergeRequests.getCIRun(asCIRunId("missing_ci")),
+      flow.mergeRequests.getVerificationRun(asVerificationRunId("missing_verification_run")),
     ).toThrow(/does not exist/i);
   });
 });

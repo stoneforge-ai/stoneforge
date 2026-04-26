@@ -251,7 +251,9 @@ export class GitHubAppMergeRequestClient implements GitHubMergeRequestAdapter {
       "observe GitHub statuses",
     );
 
-    return jsonArray(response).flatMap(statusObservation);
+    return jsonArray(response)
+      .flatMap(statusObservation)
+      .filter(isProviderCheck);
   }
 
   private async request(
@@ -297,4 +299,8 @@ function headSha(pullRequest: JsonObject): string {
 
 function isPresent<T>(value: T | undefined): value is T {
   return value !== undefined;
+}
+
+function isProviderCheck(observation: ProviderCheckObservation): boolean {
+  return observation.name !== "stoneforge/policy";
 }

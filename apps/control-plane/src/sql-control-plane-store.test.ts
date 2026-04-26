@@ -200,7 +200,7 @@ insert into control_plane_snapshots (
           leases: [],
           mergeRequestContexts: [],
         }),
-        JSON.stringify({ mergeRequests: [], ciRuns: [] }),
+        JSON.stringify({ mergeRequests: [], verificationRuns: [] }),
         "{not json",
       );
   } finally {

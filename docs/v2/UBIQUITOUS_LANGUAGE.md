@@ -9,7 +9,8 @@ This glossary captures the canonical domain language for Stoneforge V2 work. It 
 | **Stoneforge V2** | A control plane for supervised, agent-driven software-engineering execution. | Chat app, project tracker, code editor |
 | **Control Plane** | The Stoneforge system of record for intent, planning, dispatch, policy, execution lineage, review, approval, and recovery. | Orchestrator app, daemon, editor |
 | **Engineering Intent** | A human's request, idea, or plan for changing or understanding a codebase. | Prompt, ticket text, vague ask |
-| **Execution Lineage** | The recorded chain of planning objects, dispatch attempts, Sessions, review outcomes, CI observations, approvals, and merge actions for a piece of work. | Timeline, history, logs, transcript |
+| **Execution Lineage** | The recorded chain of planning objects, dispatch attempts, Sessions, Review Outcomes, Verification Run observations, Approval Gate satisfaction, and merge actions for a piece of work. | Timeline, history, logs, transcript |
+| **Workflow Event** | A non-audit lineage event that records workflow progress, lifecycle changes, provider observations, or projection facts for reconstruction and operator visibility. | Audit event, log line, timeline item |
 | **Audit Trail** | The compliance-oriented subset of Execution Lineage made from required AuditEvents for sensitive actions. | Timeline, activity feed, full history |
 | **Human Intervention** | A normal operator action that inspects, steers, resumes, cancels, reviews, approves, or directly repairs work; the broad umbrella for human control inside automated flows. | Manual fallback, failure mode, escape hatch |
 
@@ -21,8 +22,8 @@ This glossary captures the canonical domain language for Stoneforge V2 work. It 
 | **Engineering Lead** | A primary user who supervises engineering work across tasks, plans, agents, and reviews. | Manager, project owner |
 | **Platform Lead** | A primary user who owns execution capabilities, integrations, policy, and operational reliability. | Infra owner, admin |
 | **Operator** | A human who creates, dispatches, steers, resumes, cancels, or escalates work inside a Workspace. | Dispatcher, controller |
-| **Human Reviewer** | A human authorized to inspect a MergeRequest and record approval or a Change Request. | QA, approver, reviewer role |
-| **Approver** | A human authorized by policy to satisfy a human approval gate. | Reviewer, GitHub reviewer |
+| **Human Reviewer** | A human authorized to inspect a MergeRequest and record Review Approved or a Change Request. | QA, approver, reviewer role |
+| **Approver** | A human or agent whose Review Approved outcome is authorized by policy to satisfy an Approval Gate. | Reviewer, GitHub reviewer |
 | **Service Actor** | A non-human actor such as the scheduler, GitHub App, host agent, provider adapter, or webhook handler acting within Stoneforge policy. | Bot, system user |
 
 ## Tenant and operational boundaries
@@ -32,10 +33,10 @@ This glossary captures the canonical domain language for Stoneforge V2 work. It 
 | **Org** | The top-level tenant, membership, identity, and administration boundary. | Organization account, company |
 | **Workspace** | The primary operational boundary for one repository, its policies, execution capabilities, tasks, plans, documents, and audit partition. | Project, repo, tenant |
 | **Repository** | The source-control repository linked to a Workspace, with GitHub as the first-slice provider. | Codebase, project |
-| **Policy** | The system that determines what may happen automatically, what requires review, and what requires human approval. | Permissions, settings, rules |
-| **Policy Preset** | A named bundle of workspace policy defaults that supplies a coherent automation and approval posture while still allowing specific policy values to be changed. | Mode, profile |
-| **Supervised Policy** | The default preset that allows automated dispatch and review while requiring human approval for code-changing merge unless exempted. | Manual mode, safe mode |
-| **Autonomous Policy** | A preset that allows automatic merge when policy, CI, and review conditions are satisfied. | Full auto, hands-off mode |
+| **Policy** | The system that determines what may happen automatically, what requires review, and what requires approval. | Permissions, settings, rules |
+| **Policy Preset** | A named bundle of workspace policy defaults that supplies a coherent automation and Approval Gate posture while still allowing specific policy values to be changed. | Mode, profile |
+| **Supervised Policy** | The default preset that allows automated dispatch and review while requiring an Approval Gate for code-changing merge unless exempted. | Manual mode, safe mode |
+| **Autonomous Policy** | A preset that allows automatic merge when policy, verification, and review conditions are satisfied. | Full auto, hands-off mode |
 
 ## Planning and context
 
@@ -101,27 +102,33 @@ This glossary captures the canonical domain language for Stoneforge V2 work. It 
 | **Staging Branch** | A future first-class branch concept for requiring task and plan work to merge into a staging integration branch before policy-gated promotion to the Workspace Target Branch. In the current MVP, teams can approximate this by configuring the staging branch as the Workspace Target Branch. | Parent branch, plan branch |
 | **Unplanned Task Flow** | The Merge Topology where a task branch opens a PR directly to the Workspace Target Branch. | Direct PR flow |
 | **Planned Task Flow** | A Merge Topology where planned task branches either merge directly to the Workspace Target Branch or aggregate through an optional Plan Branch before merging onward. | Aggregation flow |
-| **CIRun** | An execution record for observed CI state associated with a MergeRequest. | Build, check run, status |
-| **Review Outcome** | The recorded result of Human Reviewer or Review Agent evaluation, usually approval or a Change Request. | Review comment, PR state |
-| **Repair Trigger** | Any review, CI, mergeability, policy, or branch-health condition that requires task repair before completion. | Failure, rejection, reopen |
+| **Verification Run** | A Stoneforge-owned aggregate verification record for one MergeRequest head SHA, derived from one or more Provider Checks and used as a merge-policy input. | CIRun, CI run, build, check run, status |
+| **Provider Check** | A raw external verification signal observed from a provider, such as a GitHub check/status or a Jenkins/Buildkite result; Stoneforge policy determines whether it is required for the Verification Run. | Verification Run, Stoneforge Policy Check |
+| **Mergeability** | The provider/source-control condition that a MergeRequest can be merged at this moment, including conflicts, stale branch state, branch protection, locks, and required provider permissions. | Verification Run, policy check, approval |
+| **Branch Health** | The broader condition of a task, plan, or integration branch over time, including drift, risky divergence, repeated rebase failures, branch deletion, or stale-base risk that may require repair before immediate Mergeability is evaluated. | Mergeability, CI, branch status |
+| **Review Outcome** | The recorded result of Human Reviewer or Review Agent evaluation, either Review Approved or a Change Request. | Review comment, PR state |
+| **Review Approved** | A Review Outcome meaning the reviewer found the work acceptable and supplying approval for any Approval Gate the reviewer is eligible to satisfy. | Review passed, approval |
+| **Repair Trigger** | Any review, verification, mergeability, policy, or branch-health condition that requires task repair before completion. | Failure, rejection, reopen |
 | **Change Request** | A repair trigger produced by a Human Reviewer or Review Agent. | Rejection, failure |
-| **Gate Failure** | A repair trigger produced by CI, mergeability, branch drift, or policy evaluation. | Change request, broken check |
-| **Human Approval Gate** | A narrow policy requirement that a qualified human approve before merge or another sensitive action. | Manual review, GitHub approval, human intervention |
+| **Gate Failure** | A repair trigger produced by verification, mergeability, branch drift, or policy evaluation. | Change request, broken check |
+| **Approval Gate** | A narrow policy requirement that a qualified human or agent Approver approve before merge or another sensitive action. | Manual review, GitHub approval, human intervention |
+| **Human Approval Gate** | A qualified Approval Gate that specifically requires a human Approver. | Approval Gate, manual review |
+| **Agent Approval Gate** | A qualified Approval Gate that may be satisfied by an authorized agent Approver. | Approval Gate, automated approval |
 | **Stoneforge Policy Check** | The Stoneforge-owned GitHub status or check that represents the canonical policy decision for merge readiness. | CI check, approval check |
-| **Merge Evaluation** | The workflow action that determines whether a MergeRequest satisfies policy, CI, review, and mergeability requirements. | Merge check, final review |
+| **Merge Evaluation** | The workflow action that determines whether a MergeRequest satisfies policy, verification, review, and mergeability requirements. | Merge check, final review |
 
 ## Automation and workflow triggers
 
 | Term | Definition | Aliases to avoid |
 | --- | --- | --- |
 | **Automation** | A durable user-facing workflow trigger that creates controlled Stoneforge workflow intent. | Scheduler, bot, daemon |
-| **Platform Automation** | A Stoneforge-provided automation for core flows such as ready-task dispatch, PR review, repair dispatch, merge evaluation, or failure escalation. | Built-in job, system rule |
-| **User-Defined Automation** | A workspace automation configured by users through product events, schedules, inbound webhooks, pure-agent actions, or outbound code-first webhooks. | Custom daemon, plugin |
-| **Pure-Agent Automation** | An automation action that requests execution through a Default RoleDefinition and optional agent or runtime constraints. | Agent script, prompt automation |
-| **Code-First Automation** | An automation action that calls a user-hosted outbound webhook handler through a signed request. | In-process workflow code, custom code host |
+| **Platform Automation** | A Stoneforge-defined workflow rule for core flows such as ready-task dispatch, PR review, repair dispatch, merge evaluation, or failure escalation that creates Dispatch Intent but does not lease capacity or start execution. | Built-in job, system rule |
+| **User-Defined Automation** | A workspace automation configured by users through product events, schedules, inbound webhooks, Agent Automation actions, or Outbound Automation Webhooks. | Custom daemon, plugin |
+| **Agent Automation** | An automation action that requests agent execution through a Default RoleDefinition and optional agent or runtime constraints. | Pure-agent automation, agent script, prompt automation |
+| **Code-First Automation** | An automation action where external user-hosted code handles the action through a signed outbound webhook request. | Webhook automation, in-process workflow code, custom code host |
 | **Inbound Webhook Trigger** | A signed workspace-scoped external request that may create automation intent. | Webhook endpoint, callback |
-| **Outbound Code-First Webhook** | A signed Stoneforge request to an external user-hosted handler for code-first automation. | Webhook callback, plugin call |
-| **Idempotency Key** | A correlation key used to make repeated webhook deliveries safe to process once. | Request ID, dedupe token |
+| **Outbound Automation Webhook** | A signed Stoneforge request to external user-hosted automation code. | Outbound Code-First Webhook, webhook callback, plugin call |
+| **Idempotency Key** | A correlation key used to make repeated external action deliveries safe to process once, including inbound triggers and outbound automation webhooks. | Request ID, dedupe token |
 
 ## Policy, auth, secrets, and audit
 
@@ -129,7 +136,7 @@ This glossary captures the canonical domain language for Stoneforge V2 work. It 
 | --- | --- | --- |
 | **Authentication** | The process that proves the identity of a human or service actor. | Login, authorization |
 | **Authorization** | The actor permission decision about what an authenticated human or service actor may do at all. | Auth, policy, workflow gate |
-| **Policy Evaluation** | The workflow decision about whether an authorized requested action may happen automatically, is blocked, requires review, or requires human approval. | Authorization, permission check, validation |
+| **Policy Evaluation** | The workflow decision about whether an authorized requested action may happen automatically, is blocked, requires review, or requires approval. | Authorization, permission check, validation |
 | **AuditEvent** | An immutable record of actor, action, target, outcome, and policy context for compliance, lineage, and operator observability. | Log, event, transcript |
 | **Secret** | Boundary-specific sensitive material used by the platform, orgs, workspaces, integrations, or assignment-scoped runtime execution. | Credential, token |
 | **Platform Secret** | A secret owned by the Stoneforge platform operator and used to operate the control plane or platform-level integrations. | Control-plane secret, global secret, admin token |
@@ -137,7 +144,7 @@ This glossary captures the canonical domain language for Stoneforge V2 work. It 
 | **Workspace Secret** | A secret owned by one Workspace and usable only within that Workspace boundary, including runtime injection when policy permits it. | Workspace-runtime secret, host credential, repo PAT |
 | **Provider Installation** | An installed or configured external provider identity or integration grant that Stoneforge can use under policy. | Integration account, provider config |
 | **GitHub App Installation** | The GitHub-specific Provider Installation used for repository access and PR operations in the first slice. | OAuth app, bot account, PAT |
-| **Provider Identifier** | An external ID from GitHub, Claude Code, Codex, Daytona, or another provider that is correlated with Stoneforge records. | Foreign key, external ref |
+| **Provider Identifier** | An external ID from GitHub, Claude Code, Codex, Daytona, or another provider that is correlated with Stoneforge records; use qualified phrases for specific external IDs. | Foreign key, external ref |
 
 ## Recovery and escalation
 
@@ -165,8 +172,9 @@ These state names are semantic product contracts, not required storage enum stri
 | **Task `planned`** | The task definition is accepted but not yet dispatchable. | Backlog, queued |
 | **Task `ready`** | The task is eligible for scheduler dispatch. | Selected, assigned |
 | **Task `in_progress`** | At least one live assignment or session is executing task work. | Running, active |
-| **Task `awaiting_review`** | Implementation or repair work is complete and review or CI gates are pending. | Done, review |
+| **Task `awaiting_review`** | Implementation or repair work is complete and review or verification gates are pending. | Done, review |
 | **Task `repair_required`** | A Repair Trigger requires task repair work. | Changes requested, failed, rejected |
+| **Task `approval_pending`** | Automated gates passed but one or more Approval Gates remain before completion. | Awaiting human review, waiting for approval |
 | **Task `human_review_required`** | Escalation has stopped autonomous task progress and a human must reauthorize, cancel, or otherwise resolve the task. | Escalated, stuck, failed |
 | **Task `merge_ready`** | The task-level MergeRequest satisfies required checks and approval conditions. | Approved, shippable |
 | **Plan `active`** | The plan graph is coherent and its tasks may dispatch when individually ready. | Started, open |
@@ -174,13 +182,13 @@ These state names are semantic product contracts, not required storage enum stri
 | **Session `checkpointed`** | A resumable handoff snapshot has been persisted and execution may continue. | Saved, paused |
 | **MergeRequest `policy_pending`** | Technical checks passed but Stoneforge policy approval is still outstanding. | Waiting for approval |
 | **MergeRequest `repair_required`** | A Repair Trigger requires MergeRequest repair work. | Changes requested, failed, rejected |
-| **CIRun `stale`** | A previous CI result no longer applies to the current MergeRequest head. | Old, obsolete |
+| **Verification Run `stale`** | A previous Verification Run no longer applies to the current MergeRequest head. | Old, obsolete |
 
 ## Relationships
 
 - An **Org** owns one or more **Workspaces**; a **Workspace** belongs to exactly one **Org**.
 - A **Workspace** maps to exactly one **Repository** in the first slice.
-- A **Workspace** owns its **Tasks**, **Plans**, **Documents**, **Hosts**, **Runtimes**, **Agents**, **RoleDefinitions**, **Automations**, **Assignments**, **Sessions**, **MergeRequests**, **CIRuns**, **Policy**, and **AuditEvents**.
+- A **Workspace** owns its **Tasks**, **Plans**, **Documents**, **Hosts**, **Runtimes**, **Agents**, **RoleDefinitions**, **Automations**, **Assignments**, **Sessions**, **MergeRequests**, **Verification Runs**, **Policy**, and **AuditEvents**.
 - A **Task** belongs to zero or one **Plan**; a **Plan** contains many **Tasks**.
 - A **Task** may depend on many other **Tasks**; unresolved **Dependencies** block **Readiness**.
 - A **Plan** must be **active** before its **Tasks** may become dispatchable.
@@ -188,7 +196,10 @@ These state names are semantic product contracts, not required storage enum stri
 - **Task Progress Record** belongs on the **Task** and may reference the relevant **Assignment** and checkpoint event.
 - A **Task Progress Summary** is an on-demand projection of the **Task Progress Record**, not a second source of truth; it should cite or point to the relevant Checkpoints, repair context, remaining work, and other structured details.
 - The MVP **Task Progress Record** stores only **Checkpoints** and **Repair Context**; **Task Progress Summary** is generated outside the persisted record on demand.
-- An **Automation** creates **Dispatch Intent** or outbound code-first webhook calls; it does not directly start **Sessions**.
+- An **Automation** creates **Dispatch Intent** or **Outbound Automation Webhook** calls; it does not directly create **Leases**, **Assignments**, or **Sessions**.
+- A **Platform Automation** is the built-in rule that requests a core workflow action; the **Scheduler** owns readiness checks, capacity leasing, Assignment creation, and Session launch.
+- **Code-First Automation** names the user-hosted-code model; **Outbound Automation Webhook** is the signed transport boundary for that model.
+- An **Idempotency Key** may apply to inbound triggers, outbound automation webhooks, or future external action deliveries; it is not webhook-only language.
 - A **Dispatch Intent** may request implementation, review, repair, merge evaluation, or escalation through its action/type and target; those are not separate canonical intent objects unless their ownership, lifecycle, or scheduler behavior diverge later.
 - The **Scheduler** resolves exactly one **RoleDefinition**, one **Agent**, and one **Runtime** before execution starts.
 - A **RoleDefinition** has exactly one **Role Category**; **Tags** further constrain capability inside that category.
@@ -214,17 +225,27 @@ These state names are semantic product contracts, not required storage enum stri
 - A **Follow-Up Source** references exactly one prior terminal source **Task**, records one source outcome such as `completed`, `canceled`, or `closed_unmerged`, and may reference one source **MergeRequest**.
 - **Follow-Up Source** is provenance and lineage; **Follow-Up Context** is steering context for the new **Follow-Up Task**.
 - A **MergeRequest** belongs to exactly one **Task** or exactly one **Plan**.
-- A **MergeRequest** may contain many **CIRuns** and many review outcomes over time.
-- **CIRuns** are observed from GitHub checks and statuses; Stoneforge does not author native CI in the first slice.
+- A **MergeRequest** may contain many **Verification Runs** and many review outcomes over time.
+- A **Verification Run** is scoped to exactly one **MergeRequest** head SHA; when the head SHA changes, the prior **Verification Run** becomes `stale` and a new **Verification Run** begins.
+- A **Verification Run** contains one or more **Provider Checks**; the **Verification Run** state is derived from required **Provider Checks** and is the policy input.
+- Stoneforge policy is canonical for whether a **Provider Check** is required; provider required-check settings may seed defaults or observations but do not own Stoneforge merge policy.
+- **Provider Checks** are observed from provider checks and statuses; Stoneforge does not author native CI in the first slice.
+- **Mergeability** is observed from provider/source-control state and feeds **Stoneforge Policy Check**; it is not part of **Verification Run**.
+- **Branch Health** is broader than **Mergeability**; it can trigger repair or escalation before the provider reports whether a specific MergeRequest is mergeable.
+- Policy may require one or more **Approval Gates** for merge, including both **Human Approval Gates** and **Agent Approval Gates** on the same MergeRequest.
+- An **Approval Gate** is satisfied by qualifying **Review Approved** outcomes; there is no separate standalone Approval record in the current model.
+- A single **Review Approved** outcome may satisfy one or more **Approval Gates** if the reviewer is eligible for those gates.
 - **Policy** constrains actions by humans, agents, automations, adapters, and the scheduler.
 - **Authorization** decides whether an actor may request or perform an action at all; **Policy Evaluation** decides the workflow outcome for an authorized action in its Workspace context.
 - A **Policy Preset** supplies defaults rather than locking a Workspace into an immutable mode; specific policy values may override preset defaults.
 - **Platform Secrets**, **Org Secrets**, and **Workspace Secrets** are ownership scopes; runtime injection is a use of an allowed secret, not a separate top-level ownership category.
 - A **Provider Installation** is the umbrella integration grant; a **GitHub App Installation** is the GitHub-specific Provider Installation used in the first slice.
+- **Provider Identifier** is the umbrella for external provider IDs; use qualified phrases such as provider user ID, provider installation ID, provider session ID, or provider pull request ID when detail is needed.
 - Sensitive actions must emit **AuditEvents** with actor, target, outcome, and policy context.
 - **Execution Lineage** is the canonical domain term for operator-visible history; "timeline" is UI presentation language unless it gains separate ownership, persistence, and lifecycle.
+- **Workflow Events** may contribute to **Execution Lineage** for reconstruction, projections, and operator visibility, but they are not automatically part of the **Audit Trail**.
 - An **Audit Trail** is a compliance-focused subset of **Execution Lineage**, not the full operator-visible history.
-- **Human Intervention** is the broad operator-action umbrella; a **Human Approval Gate** is only the policy gate where an **Approver** satisfies required approval.
+- **Human Intervention** is the broad operator-action umbrella; an **Approval Gate** is only the policy gate where an **Approver** satisfies required approval.
 - **Escalation** may create or require **Human Intervention**, but ordinary operator actions, automated **Retry**, automated **Resume**, and task **Repair** are not Escalation unless policy thresholds stop or downgrade autonomous progress.
 - **Escalation** is the transition or cause that stops or downgrades autonomous progress; **Task `human_review_required`** is the resulting task state.
 - **Cancellation** is the umbrella term across Task, Plan, Dispatch Intent, Assignment, Session, and MergeRequest flows; use qualified phrases such as task cancellation, plan cancellation, or **Session Stop** when layer-specific clarity is needed.
@@ -242,7 +263,7 @@ These state names are semantic product contracts, not required storage enum stri
 >
 > **Dev:** "If that **Session** runs out of context, do we require task repair?"
 >
-> **Domain expert:** "No. A recoverable context limit starts a new **Session** under the same **Assignment** from a **Checkpoint**; the **Task** requires repair only when review, CI, mergeability, policy, or branch health creates a **Repair Trigger**."
+> **Domain expert:** "No. A recoverable context limit starts a new **Session** under the same **Assignment** from a **Checkpoint**; the **Task** requires repair only when review, verification, mergeability, policy, or branch health creates a **Repair Trigger**."
 >
 > **Dev:** "And in GitHub we call the review artifact a PR?"
 >
@@ -253,16 +274,19 @@ These state names are semantic product contracts, not required storage enum stri
 - "Agent" can mean **Agent**, **Host Agent**, **Director Agent**, **Worker Agent**, **Review Agent**, a role category, or **Session**; use **Agent** only for the dispatchable harness/model/runtime capability, use **Director Agent**, **Worker Agent**, or **Review Agent** for product actor phrases, use **RoleDefinition** or **Role Category** for configuration, and use **Session** for concrete provider execution.
 - **Director Agent**, **Worker Agent**, and **Review Agent** should not become duplicated persisted types; persist **Agent**, **RoleDefinition**, **Role Category**, **Assignment**, and **Session**, then derive the product actor phrase from that combination.
 - "Custom Agent" is not canonical language; use **Custom Role Category** for configuration and wait for a real product workflow before naming a custom actor phrase.
-- "Run" is too overloaded; use **Assignment** for the durable dispatch envelope, **Session** for the concrete provider execution, and **CIRun** for observed CI state.
+- "Run" is too overloaded; use **Assignment** for the durable dispatch envelope, **Session** for the concrete provider execution, and **Verification Run** for observed verification state.
 - "Session" must not describe a human-visible work period, supervision period, or UI grouping; use **Session** only for concrete provider execution, and use **Assignment**, **Task** activity, or **Execution Lineage** for operator-visible grouping.
 - "Timeline" is not canonical domain language for now; use **Execution Lineage** for the model and timeline only for UI presentation.
 - "Audit Trail" should not replace **Execution Lineage**; it names the compliance slice backed by required **AuditEvents**.
+- "Workflow Event" should not replace **AuditEvent**; use **Workflow Event** for non-audit lineage facts and **AuditEvent** for compliance-grade sensitive actions and policy-relevant decisions.
 - "Implementation Assignment", "repair Assignment", "review Assignment", and "merge-evaluation Assignment" are acceptable **Qualified Assignment Phrases** in prose, but **Assignment** remains the canonical object.
 - "Lease" must not be collapsed into **Assignment** capacity fields; use **Lease** for scheduler reservation and **Assignment** for durable execution history.
 - "Review Intent", "Repair Intent", "Merge Evaluation Intent", and "Escalation Intent" are not canonical object names; use **Dispatch Intent** with action/type qualifiers or **Qualified Dispatch Intent Phrases** in prose.
 - "PR" is acceptable in GitHub-facing UI and prose, but internal model discussions and code should use **MergeRequest** unless they are inside a GitHub adapter boundary.
 - "Parent branch" should not be used as canonical language; use **Workspace Target Branch** for the configured workspace merge target and **Merge Topology** for intermediate branch shapes.
-- "Automation" and "Scheduler" must stay separate; **Automation** creates **Dispatch Intent** or outbound code-first webhook calls, while the **Scheduler** owns readiness evaluation, queueing, leasing, placement, retry, resume, and escalation.
+- "Automation" and "Scheduler" must stay separate; **Automation** creates **Dispatch Intent** or **Outbound Automation Webhook** calls, while the **Scheduler** owns readiness evaluation, queueing, leasing, placement, retry, resume, and escalation.
+- "Platform Automation" should not be used to describe the resulting Agent execution; it names the built-in rule that creates **Dispatch Intent** for the **Scheduler**.
+- "Webhook Automation" is not canonical; use **Code-First Automation** for the automation model and **Outbound Automation Webhook** for the transport.
 - "Runtime", "Host", and "Agent" must stay separate; a **Host** supplies capacity, a **Runtime** defines the execution environment contract, and an **Agent** binds a harness/model pair to a runtime.
 - "Role" should not replace **RoleDefinition** or **Role Category**; a **RoleDefinition** is the concrete prompt, tools, skills, hooks, category, and behavioral contract attached at dispatch time, while **Role Category** is only the required broad classification.
 - "Ready" must not be treated as a manual flag; **Readiness** is computed from dependencies, plan activation, policy, active execution, and evaluable capability constraints.
@@ -277,8 +301,8 @@ These state names are semantic product contracts, not required storage enum stri
 - "Follow-Up Context" should not be stored as source-task progress; use it to create and steer the new **Follow-Up Task**.
 - "Follow-Up Source" should not be buried in prose; store lineage as **Follow-Up Source** and guidance as **Follow-Up Context**.
 - "Reviewer" can mean a person, product actor, or configuration category; use **Human Reviewer** for people, **Review Agent** for the agent actor, and **Reviewer Role Category** for RoleDefinition classification.
-- "Review" and "approval" are distinct; **Review Outcome** evaluates work quality or correctness, while a **Human Approval Gate** satisfies policy.
-- "Human intervention" and "human approval" are distinct; use **Human Intervention** for broad operator steering or unblocking, and **Human Approval Gate** only for policy-required approval.
+- "Review Approved" and "Approval Gate" are related but not separate approval records; **Review Approved** is the Review Outcome, while an **Approval Gate** is the policy requirement that qualifying Review Approved outcomes satisfy.
+- "Human intervention" and "approval" are distinct; use **Human Intervention** for broad operator steering or unblocking, and **Approval Gate** only for policy-required approval.
 - "Authorization" and "Policy Evaluation" are distinct; do not use actor permission checks as a substitute for workspace workflow policy, and do not use policy gates to imply the actor was authorized.
 - "Policy mode" is acceptable casual UI language, but **Policy Preset** is canonical when discussing configuration because preset values can be overridden.
 - "Escalation" should not be used for every failure or manual action; reserve **Escalation** for policy-controlled cases where Stoneforge requires human attention because autonomous progress is no longer considered safe or productive.
@@ -286,7 +310,8 @@ These state names are semantic product contracts, not required storage enum stri
 - "Stall" should not be used as the lifecycle response; use **Stall** for the observed lack of progress and **Escalation**, **Retry**, **Resume**, or **Repair** for the response selected by policy.
 - "Abort", "stop", and "close" are not canonical lifecycle terms unless a future workflow gives one distinct policy or state-machine meaning; use **Cancellation** and qualified cancellation phrases instead.
 - "Session cancellation" is not the preferred phrase; use **Session Stop** for intentionally stopping provider execution inside a **Session**.
-- "Changes requested" is broader than the noun **Change Request** in many workflow tools; use **Task `repair_required`** or **MergeRequest `repair_required`** for the state, **Repair Trigger** for the umbrella cause, **Change Request** for reviewer feedback, and **Gate Failure** for CI, mergeability, branch drift, or policy failures.
+- "Changes requested" is broader than the noun **Change Request** in many workflow tools; use **Task `repair_required`** or **MergeRequest `repair_required`** for the state, **Repair Trigger** for the umbrella cause, **Change Request** for reviewer feedback, and **Gate Failure** for verification, mergeability, branch drift, or policy failures.
 - "Credentials" should be narrowed to **Secrets** and then to **Platform Secrets**, **Org Secrets**, or **Workspace Secrets** so boundary-specific ownership stays explicit.
 - "Workspace-Runtime Secret" is not canonical ownership language; describe runtime injection as a permitted use of a **Workspace Secret** or **Org Secret**.
 - "Provider Installation" should be used for the umbrella integration grant; use **GitHub App Installation** only for the GitHub-specific first-slice subtype.
+- "Provider User ID", "Provider Installation ID", "Provider Session ID", and similar phrases are qualified **Provider Identifier** phrases, not separate canonical concepts unless their lifecycle or policy semantics diverge.

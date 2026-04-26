@@ -146,30 +146,42 @@ describe("MergeRequestService", () => {
     );
   });
 
-  it("records GitHub check observations as CIRuns", async () => {
+  it("aggregates provider checks into one Verification Run per head SHA", async () => {
     const { mergeRequests, mergeRequest } = await createOpenMergeRequestFlow();
 
-    const queued = await mergeRequests.recordCIRun(mergeRequest.id, {
+    const queued = await mergeRequests.recordProviderCheck(mergeRequest.id, {
       providerCheckId: "check_1",
       name: "test",
       state: "queued",
     });
-    const passed = await mergeRequests.recordCIRun(mergeRequest.id, {
+    const stillQueued = await mergeRequests.recordProviderCheck(mergeRequest.id, {
+      providerCheckId: "check_2",
+      name: "lint",
+      state: "passed",
+    });
+    const passed = await mergeRequests.recordProviderCheck(mergeRequest.id, {
       providerCheckId: "check_1",
       name: "test",
       state: "passed",
     });
 
+    expect(queued.id).toBe(stillQueued.id);
     expect(queued.id).toBe(passed.id);
-    expect(mergeRequests.listCIRuns()).toEqual([
+    expect(stillQueued.state).toBe("queued");
+    expect(passed.state).toBe("passed");
+    expect(mergeRequests.listVerificationRuns()).toEqual([
       expect.objectContaining({
-        providerCheckId: "check_1",
+        headSha: mergeRequest.providerPullRequest.headSha,
         state: "passed",
+        providerChecks: [
+          expect.objectContaining({ providerCheckId: "check_1", state: "passed" }),
+          expect.objectContaining({ providerCheckId: "check_2", state: "passed" }),
+        ],
       }),
     ]);
   });
 
-  it("observes provider pull request checks as CIRuns", async () => {
+  it("observes provider pull request checks as Verification Runs", async () => {
     const { gitHub, mergeRequests, mergeRequest } = await createOpenMergeRequestFlow();
 
     gitHub.observation = {
@@ -186,21 +198,84 @@ describe("MergeRequestService", () => {
       ],
     };
 
-    const ciRuns = await mergeRequests.observeProviderPullRequest(mergeRequest.id);
+    const verificationRuns = await mergeRequests.observeProviderPullRequest(mergeRequest.id);
 
-    expect(ciRuns).toEqual([
+    expect(verificationRuns).toEqual([
       expect.objectContaining({
-        providerCheckId: "provider_check_1",
-        name: "quality",
+        headSha: "observed-head-sha",
         state: "passed",
-        observedAt: "2026-04-24T12:00:00.000Z",
+        providerChecks: [
+          expect.objectContaining({
+            providerCheckId: "provider_check_1",
+            name: "quality",
+            state: "passed",
+            observedAt: "2026-04-24T12:00:00.000Z",
+          }),
+        ],
       }),
     ]);
-    expect(mergeRequests.listCIRuns()).toHaveLength(1);
+    expect(mergeRequests.listVerificationRuns()).toHaveLength(1);
     expect(
       mergeRequests.getMergeRequest(mergeRequest.id).providerPullRequest
         .headSha,
     ).toBe("observed-head-sha");
+  });
+
+  it("starts a new Verification Run and stales the prior run when the head SHA changes", async () => {
+    const { gitHub, mergeRequests, mergeRequest } = await createOpenMergeRequestFlow();
+    const firstRun = await mergeRequests.recordProviderCheck(mergeRequest.id, {
+      providerCheckId: "provider_check_1",
+      name: "quality",
+      state: "passed",
+    });
+
+    gitHub.observation = {
+      providerPullRequestId: "github_pr_1",
+      state: "open",
+      headSha: "new-head-sha",
+      checks: [
+        {
+          providerCheckId: "provider_check_2",
+          name: "quality",
+          state: "passed",
+          observedAt: "2026-04-24T12:00:00.000Z",
+        },
+      ],
+    };
+
+    const [secondRun] = await mergeRequests.observeProviderPullRequest(mergeRequest.id);
+
+    expect(secondRun?.id).not.toBe(firstRun.id);
+    expect(mergeRequests.getVerificationRun(firstRun.id).state).toBe("stale");
+    expect(secondRun).toEqual(
+      expect.objectContaining({
+        headSha: "new-head-sha",
+        state: "passed",
+      }),
+    );
+  });
+
+  it("allows optional Provider Checks to fail without failing the Verification Run", async () => {
+    const { mergeRequests, mergeRequest } = await createOpenMergeRequestFlow();
+    const verificationRun = await mergeRequests.recordProviderCheck(mergeRequest.id, {
+      providerCheckId: "optional_check_1",
+      name: "coverage report",
+      required: false,
+      state: "failed",
+    });
+
+    expect(verificationRun).toEqual(
+      expect.objectContaining({
+        state: "passed",
+        providerChecks: [
+          expect.objectContaining({
+            providerCheckId: "optional_check_1",
+            required: false,
+            state: "failed",
+          }),
+        ],
+      }),
+    );
   });
 
   it("reconciles provider closed and merged states during observation", async () => {
@@ -270,18 +345,21 @@ describe("MergeRequestService", () => {
     await mergeRequests.observeProviderPullRequest(mergeRequest.id);
     await mergeRequests.recordReviewOutcome(mergeRequest.id, {
       assignmentId: reviewAssignment.id,
+      reviewerKind: "agent",
+      reviewerId: reviewAssignment.agentId,
       outcome: "approved",
     });
-    const approved = await mergeRequests.recordHumanApproval(
-      mergeRequest.id,
-      "user_approver",
-    );
+    const approved = await mergeRequests.recordReviewOutcome(mergeRequest.id, {
+      reviewerKind: "human",
+      reviewerId: "user_approver",
+      outcome: "approved",
+    });
 
     expect(approved.state).toBe("open");
     expect(approved.policyCheck).toEqual(
       expect.objectContaining({
         state: "pending",
-        reason: "CI and approved review are required.",
+        reason: "A passing Verification Run and Review Approved are required.",
       }),
     );
     await expect(mergeRequests.merge(mergeRequest.id)).rejects.toThrow(
@@ -315,13 +393,15 @@ describe("MergeRequestService", () => {
     const reviewAssignment = await startReviewAssignment(execution, mergeRequests, mergeRequest.id);
 
     execution.completeAssignment(reviewAssignment.id);
-    await mergeRequests.recordCIRun(mergeRequest.id, {
+    await mergeRequests.recordProviderCheck(mergeRequest.id, {
       providerCheckId: "check_1",
       name: "test",
       state: "passed",
     });
     const reviewed = await mergeRequests.recordReviewOutcome(mergeRequest.id, {
       assignmentId: reviewAssignment.id,
+      reviewerKind: "agent",
+      reviewerId: reviewAssignment.agentId,
       outcome: "approved",
     });
 
@@ -335,10 +415,11 @@ describe("MergeRequestService", () => {
       /not merge_ready/i,
     );
 
-    const approved = await mergeRequests.recordHumanApproval(
-      mergeRequest.id,
-      "user_approver",
-    );
+    const approved = await mergeRequests.recordReviewOutcome(mergeRequest.id, {
+      reviewerKind: "human",
+      reviewerId: "user_approver",
+      outcome: "approved",
+    });
     const merged = await mergeRequests.merge(mergeRequest.id);
 
     expect(approved.state).toBe("merge_ready");
@@ -361,6 +442,8 @@ describe("MergeRequestService", () => {
     execution.completeAssignment(reviewAssignment.id);
     const repaired = await mergeRequests.recordReviewOutcome(mergeRequest.id, {
       assignmentId: reviewAssignment.id,
+      reviewerKind: "agent",
+      reviewerId: reviewAssignment.agentId,
       outcome: "changes_requested",
       reason: "Tighten the tests.",
     });
@@ -383,11 +466,11 @@ describe("MergeRequestService", () => {
     });
   });
 
-  it("marks the MergeRequest repair_required after CI failure and redispatches repair work", async () => {
+  it("marks the MergeRequest repair_required after verification failure and redispatches repair work", async () => {
     const { execution, mergeRequests, mergeRequest } =
       await createOpenMergeRequestFlow();
 
-    await mergeRequests.recordCIRun(mergeRequest.id, {
+    await mergeRequests.recordProviderCheck(mergeRequest.id, {
       providerCheckId: "check_1",
       name: "test",
       state: "failed",

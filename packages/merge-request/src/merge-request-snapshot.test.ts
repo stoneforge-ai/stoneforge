@@ -34,7 +34,7 @@ const scheduler: AuditActor = {
 };
 
 describe("MergeRequestService snapshots", () => {
-  it("restores merge requests and CI runs", async () => {
+  it("restores merge requests and Verification Runs", async () => {
     const { execution, task, assignment } = await createCompletedTaskFlow();
     const service = new MergeRequestService(
       execution,
@@ -45,7 +45,7 @@ describe("MergeRequestService snapshots", () => {
       taskAssignmentId: assignment.id,
     });
 
-    await service.recordCIRun(mergeRequest.id, {
+    await service.recordProviderCheck(mergeRequest.id, {
       providerCheckId: "check-1",
       name: "quality",
       state: "passed",
@@ -61,7 +61,7 @@ describe("MergeRequestService snapshots", () => {
     expect(restored.getMergeRequest(mergeRequest.id).sourceOwner.taskId).toBe(
       task.id,
     );
-    expect(restored.listCIRuns()).toHaveLength(1);
+    expect(restored.listVerificationRuns()).toHaveLength(1);
   });
 });
 

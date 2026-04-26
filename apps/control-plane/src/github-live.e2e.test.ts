@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 
 import { describe, expect, it } from "vitest";
 
@@ -13,34 +14,114 @@ describe("live GitHub App MergeRequest flow", () => {
     async () => {
       const tempDir = await mkdtemp(join(tmpdir(), "stoneforge-github-live-"));
       const sqlitePath = join(tempDir, "control-plane.sqlite");
+      const baseArgs = liveCommandArgs(sqlitePath);
 
       try {
-        const result = await runCommand([
-          "tracer-bullet",
-          "--store-backend",
-          "sqlite",
-          "--sqlite-path",
-          sqlitePath,
-          "--merge-provider",
-          "github",
-          ...liveGitHubArgs(),
-          "--json",
-        ]);
-        const summary = JSON.parse(result.stdout) as DirectTaskRunSummary;
+        for (const command of setupCommands()) {
+          await expectCommand([command, ...baseArgs]);
+        }
 
-        expect(result.code).toBe(0);
+        await waitForPassingProviderVerification(baseArgs);
+
+        for (const command of reviewCommands()) {
+          await expectCommand([command, ...baseArgs]);
+        }
+
+        if (mergeEnabled()) {
+          await expectCommand(["merge", ...baseArgs]);
+        }
+
+        const summary = await commandSummary(["summary", ...baseArgs]);
         expect(summary.providerPullRequestUrl).toContain("github");
-        expect(
-          summary.mergeRequestState === "merge_ready" ||
-            summary.pullRequestMerged,
-        ).toBe(true);
+
+        if (mergeEnabled()) {
+          expect(summary.pullRequestMerged).toBe(true);
+        } else {
+          expect(summary.mergeRequestState).toBe("merge_ready");
+        }
       } finally {
         await rm(tempDir, { recursive: true, force: true });
       }
     },
-    60_000,
+    180_000,
   );
 });
+
+function liveCommandArgs(sqlitePath: string): string[] {
+  return [
+    "--store-backend",
+    "sqlite",
+    "--sqlite-path",
+    sqlitePath,
+    "--merge-provider",
+    "github",
+    ...liveGitHubArgs(),
+    "--json",
+  ];
+}
+
+function setupCommands(): string[] {
+  return [
+    "reset",
+    "initialize-workspace",
+    "configure-repo",
+    "configure-runtime",
+    "configure-agent",
+    "configure-role",
+    "configure-policy",
+    "validate-workspace",
+    "create-direct-task",
+    "run-worker",
+    "open-merge-request",
+  ];
+}
+
+function reviewCommands(): string[] {
+  return ["request-review", "run-worker", "complete-review", "approve"];
+}
+
+async function waitForPassingProviderVerification(
+  baseArgs: readonly string[],
+): Promise<void> {
+  let latestError = "GitHub checks/statuses did not report before timeout.";
+
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    await expectCommand(["observe-provider-state", ...baseArgs]);
+    const gate = await runCommand([
+      "require-provider-verification-passed",
+      ...baseArgs,
+    ]);
+
+    if (gate.code === 0) {
+      return;
+    }
+
+    latestError = gate.stderr;
+    await delay(2_000);
+  }
+
+  throw new Error(latestError);
+}
+
+async function expectCommand(argv: readonly string[]): Promise<void> {
+  const result = await runCommand(argv);
+
+  if (result.code !== 0) {
+    throw new Error(result.stderr);
+  }
+}
+
+async function commandSummary(
+  argv: readonly string[],
+): Promise<DirectTaskRunSummary> {
+  const result = await runCommand(argv);
+
+  if (result.code !== 0) {
+    throw new Error(result.stderr);
+  }
+
+  return JSON.parse(result.stdout) as DirectTaskRunSummary;
+}
 
 async function runCommand(argv: readonly string[]): Promise<{
   code: number;
@@ -111,14 +192,18 @@ function liveGitHubArgs(): string[] {
 }
 
 function privateKeyArgs(env: NodeJS.ProcessEnv): string[] {
+  if (env.STONEFORGE_GITHUB_PRIVATE_KEY_PATH !== undefined) {
+    return [
+      "--github-private-key-path",
+      env.STONEFORGE_GITHUB_PRIVATE_KEY_PATH,
+    ];
+  }
+
   if (env.STONEFORGE_GITHUB_PRIVATE_KEY !== undefined) {
     return ["--github-private-key", env.STONEFORGE_GITHUB_PRIVATE_KEY];
   }
 
-  return optionalArg(
-    "--github-private-key-path",
-    env.STONEFORGE_GITHUB_PRIVATE_KEY_PATH,
-  );
+  return [];
 }
 
 function optionalArg(flag: string, value: string | undefined): string[] {
@@ -129,4 +214,8 @@ function optionalMergeArg(value: string | undefined): string[] {
   return value === "1" || value === "true"
     ? ["--github-allow-merge", "true"]
     : [];
+}
+
+function mergeEnabled(): boolean {
+  return optionalMergeArg(process.env.STONEFORGE_GITHUB_ALLOW_MERGE).length > 0;
 }

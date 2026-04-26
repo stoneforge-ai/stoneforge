@@ -20,7 +20,7 @@ Frozen in this doc:
 - `MergeRequest` is the internal term and `PR` is the GitHub-facing term
 - planned code-changing tasks follow the workspace Merge Topology, which may aggregate through a plan branch and plan PR or merge directly to the workspace target branch
 - unplanned code-changing tasks use direct task PRs to the workspace target branch
-- CI is observed from GitHub checks and statuses, not run natively by Stoneforge
+- Provider Checks are observed from GitHub checks and statuses, then aggregated into Verification Runs; they are not run natively by Stoneforge
 
 Working assumptions:
 
@@ -42,13 +42,13 @@ The first slice is GitHub-first in three concrete ways:
 
 - repository onboarding happens through a GitHub App installation
 - provider review and merge artifacts are GitHub PRs
-- CI and mergeability are observed from GitHub checks, statuses, and PR state
+- Provider Checks and mergeability are observed from GitHub checks, statuses, and PR state
 
 What GitHub does in the first slice:
 
 - hosts the source repository
 - hosts the provider PR artifact
-- runs or reports CI checks
+- runs or reports verification checks
 - enforces branch protections and required checks
 
 What Stoneforge does in the first slice:
@@ -98,15 +98,18 @@ Out of scope for the first slice:
 - native staging-branch orchestration as a separate supported topology
 - multi-stage promotion owned by Stoneforge
 
-## CI And Status Actions
+## Verification And Status Actions
 
-Stoneforge is CI-aware in the first slice, not CI-native.
+Stoneforge is verification-aware in the first slice, not CI-native.
 
 Supported behavior:
 
 - observe GitHub checks and statuses for task and plan PRs
-- record those observations as CIRuns
-- use observed CI state in review, approval, merge, repair, and escalation logic
+- record those observations as Provider Checks inside Verification Runs scoped to each MergeRequest head SHA
+- observe Mergeability separately from Verification Runs using provider/source-control PR state
+- observe Branch Health separately from Mergeability when branch drift, stale base, or unsafe integration risk appears before immediate merge evaluation
+- determine required versus optional Provider Checks from Stoneforge policy, optionally seeded from provider required-check settings
+- use observed verification state in review, approval, merge, repair, and escalation logic
 - publish a required `stoneforge/policy` status or check to GitHub
 
 Not a first-slice goal:
@@ -181,7 +184,7 @@ Required control-plane config for the GitHub mode:
 - source branch prefix
 - explicit merge enablement when merge should be attempted
 
-The provider PR id, number, URL, head SHA, source branch, and target branch are persisted only as provider facts needed to resume and reconcile the MergeRequest flow. Stoneforge policy does not delegate approval, CI, review, or merge readiness decisions to the provider artifact. GitHub mode records CI only from observed provider checks/statuses; if no passing provider check/status is observed, the control-plane flow remains pending or fails with a clear provider-check message instead of injecting local CI.
+The provider PR id, number, URL, head SHA, source branch, and target branch are persisted only as provider facts needed to resume and reconcile the MergeRequest flow. Stoneforge policy does not delegate approval, verification, review, or merge readiness decisions to the provider artifact. GitHub mode records Provider Checks only from observed provider checks/statuses and aggregates them into Verification Runs; if no passing provider check/status is observed, the control-plane flow remains pending or fails with a clear provider-check message instead of injecting local verification.
 
 Deferred from this first GitHub flow:
 
@@ -189,7 +192,7 @@ Deferred from this first GitHub flow:
 - provider PR comments
 - imported GitHub review identity mapping
 - generalized non-GitHub source-control providers
-- native Stoneforge CI execution
+- native Stoneforge verification execution
 
 ### Daytona Runtime Adapter
 
@@ -218,8 +221,8 @@ The platform should ship with a narrow but useful automation set:
 User-defined automations are also part of the first slice, but within controlled boundaries:
 
 - event, time-based, and inbound webhook triggers
-- pure-agent actions using explicit RoleDefinitions
-- outbound signed code-first webhooks to user-hosted handlers
+- agent automation actions using explicit RoleDefinitions
+- outbound signed automation webhooks to user-hosted handlers
 
 ## First Build Entrypoint
 
@@ -233,14 +236,14 @@ The first vertical proving scenario should use the simplest full path that exerc
 6. dispatch the Task through the Scheduler
 7. run one worker Session on a real execution path
 8. open one task PR in GitHub
-9. observe CI and run review
+9. observe verification and run review
 10. either merge successfully or require Task repair and redispatch
 
 Why this is the build entrypoint:
 
 - it proves the repo-scoped Workspace boundary
 - it proves the Runtime, Agent, and RoleDefinition separation
-- it proves dispatch, Assignment, Session, PR, CI, review, approval, merge, and repair on one narrow path
+- it proves dispatch, Assignment, Session, PR, Verification Run, review, approval, merge, and repair on one narrow path
 - it avoids plan aggregation complexity until the direct task path is stable
 
 ## Implementation Slices
@@ -303,12 +306,12 @@ Acceptance criteria:
 
 Exact outcome:
 
-- a completed code-changing Task Assignment opens a task PR, and subsequent MergeRequest-owned Assignments observe CI, record review outcomes, and either merge or require Task repair
+- a completed code-changing Task Assignment opens a task PR, and subsequent MergeRequest-owned Assignments observe verification, record review outcomes, and either merge or require Task repair
 
 Touched subsystems:
 
 - GitHub branch and PR integration
-- MergeRequest and CIRun records
+- MergeRequest and Verification Run records
 - MergeRequest-owned review Assignments
 - review automation
 - approval and policy evaluation
@@ -322,11 +325,11 @@ Dependencies:
 Acceptance criteria:
 
 - a completed Task Assignment can create or update a GitHub PR
-- GitHub checks and statuses are recorded as CIRuns
+- GitHub checks and statuses are recorded as Provider Checks inside Verification Runs
 - review can run through a MergeRequest-owned Assignment and record approve or changes-requested outcomes
 - `stoneforge/policy` is published and gates merge correctly
-- successful approval and CI allow merge
-- change request or CI failure requires Task repair and creates a new repair Assignment on redispatch
+- successful approval and verification allow merge
+- change request or verification failure requires Task repair and creates a new repair Assignment on redispatch
 
 ### Slice 4: Failure And Recovery Hardening
 
@@ -350,7 +353,7 @@ Acceptance criteria:
 
 - Session crash or context exhaustion preserves usable checkpoint progress
 - repeated no-eligible-agent or exhausted-concurrency loops escalate to human review
-- repeated review or CI loops escalate instead of continuing indefinitely
+- repeated review or verification loops escalate instead of continuing indefinitely
 - operators can cancel, resume, or reauthorize work through the documented state model
 - all sensitive recovery and override actions emit audit records
 
@@ -375,7 +378,7 @@ Acceptance criteria:
 
 - tasks inside an inactive Plan do not dispatch
 - active planned tasks use the workspace Merge Topology, either merging into a plan branch or directly to the workspace target branch
-- the plan PR can observe CI and review state
+- the plan PR can observe verification and review state
 - plan-level repair triggers update or create Tasks rather than dispatching coding directly on the Plan
 - plan PR merge completes the Plan cleanly
 
@@ -399,7 +402,7 @@ The first slice is successful only if a new engineer or agent can map these scen
 
 - configure Daytona as a managed sandbox Runtime
 - dispatch a ready task through that Runtime
-- create a PR and observe CI
+- create a PR and observe verification
 
 ### Repair And Recovery
 
@@ -409,7 +412,7 @@ The first slice is successful only if a new engineer or agent can map these scen
 
 ### Review, Approval, And Merge
 
-- move task work through PR, CI observation, automated review, human approval when required, Stoneforge policy check, and merge
+- move task work through PR, Verification Run observation, automated review, approval when required, Stoneforge policy check, and merge
 
 ### Plan Aggregation
 
@@ -444,7 +447,7 @@ Implementation should cluster in this order:
 1. Org and Workspace foundation with GitHub App onboarding
 2. Runtime, Host, Agent, and RoleDefinition configuration
 3. Scheduler queueing, leasing, Assignment, Session, and checkpoint flow
-4. Task PR, CI observation, review, approval, and merge path
+4. Task PR, Verification Run observation, review, approval, and merge path
 5. Plan activation, plan-branch aggregation, and plan PR review flow
 6. Failure escalation, policy hardening, and audit completeness
 7. User-defined automations within the bounded first-slice trigger and action model
@@ -460,9 +463,9 @@ Workspace onboarded to GitHub
   -> scheduler dispatches Worker Agent
   -> Codex Session runs in Daytona
   -> task PR opens in GitHub
-  -> CI passes
+  -> Verification Run passes
   -> Review Agent approves
-  -> Stoneforge human approval recorded
+  -> Stoneforge approval recorded
   -> stoneforge/policy check passes
   -> GitHub PR merges
 ```

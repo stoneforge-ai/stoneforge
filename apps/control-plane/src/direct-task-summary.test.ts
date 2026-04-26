@@ -1,5 +1,5 @@
 import {
-  asCIRunId,
+  asVerificationRunId,
   asAgentId,
   asMergeRequestId,
   asRoleDefinitionId,
@@ -37,7 +37,7 @@ describe("direct-task scenario summary assertions", () => {
     const summary = buildSummary(summaryInputWithoutPolicyCheck());
 
     expect(summary.policyCheckState).toBe("pending");
-    expect(summary.humanApprovalRecorded).toBe(false);
+    expect(summary.approvalGateSatisfied).toBe(false);
     expect(summary.pullRequestMerged).toBe(false);
   });
 });
@@ -72,18 +72,27 @@ function summaryInputWithoutPolicyCheck(): DirectTaskRunSummaryInput {
         sourceBranch: "stoneforge/task_1",
         targetBranch: "main",
       },
-      ciRunIds: [asCIRunId("ci_1")],
+      verificationRunIds: [asVerificationRunId("verification_run_1")],
       reviewAssignmentIds: [asAssignmentId("assign_review")],
+      reviewOutcomes: [],
       createdAt: "2026-04-24T10:00:00.000Z",
       updatedAt: "2026-04-24T10:00:00.000Z",
     },
-    ciRun: {
-      id: asCIRunId("ci_1"),
+    verificationRun: {
+      id: asVerificationRunId("verification_run_1"),
       workspaceId: asWorkspaceId("workspace_1"),
       mergeRequestId: asMergeRequestId("mr_1"),
-      providerCheckId: "local-check-1",
-      name: "local quality",
+      headSha: "provider-head-sha",
       state: "passed",
+      providerChecks: [
+        {
+          providerCheckId: "local-check-1",
+          name: "local quality",
+          state: "passed",
+          required: true,
+          observedAt: "2026-04-24T10:00:00.000Z",
+        },
+      ],
       observedAt: "2026-04-24T10:00:00.000Z",
     },
     providerSessionIds: [],

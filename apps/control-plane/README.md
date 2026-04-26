@@ -16,7 +16,7 @@ Run the persistent control-plane tracer bullet with fake Agent and GitHub adapte
 pnpm --dir apps/control-plane start -- tracer-bullet
 ```
 
-The command uses SQLite by default at `.stoneforge/control-plane.sqlite`, resets the local store, creates and configures a Workspace, creates a direct Task, runs the fake worker, recreates the control-plane service from the persisted store, then opens the MergeRequest, records CI, review, approval, merge, and prints the final summary.
+The command uses SQLite by default at `.stoneforge/control-plane.sqlite`, resets the local store, creates and configures a Workspace, creates a direct Task, runs the fake worker, recreates the control-plane service from the persisted store, then opens the MergeRequest, records verification, review, approval, merge, and prints the final summary.
 
 The same flow can also be driven one public command at a time:
 
@@ -32,7 +32,7 @@ pnpm --dir apps/control-plane start -- create-direct-task
 pnpm --dir apps/control-plane start -- run-worker
 pnpm --dir apps/control-plane start -- open-merge-request
 pnpm --dir apps/control-plane start -- observe-provider-state
-pnpm --dir apps/control-plane start -- record-ci-passed
+pnpm --dir apps/control-plane start -- record-verification-passed
 pnpm --dir apps/control-plane start -- request-review
 pnpm --dir apps/control-plane start -- run-worker
 pnpm --dir apps/control-plane start -- complete-review
@@ -72,7 +72,7 @@ Required GitHub App repository grants:
 - Commit statuses: read/write, for `stoneforge/policy`
 - Checks: read, for check-run observation
 
-The GitHub mode creates or updates a branch, commits a small task change marker under `.stoneforge/tasks/`, opens or reuses a PR, persists the provider PR id/number/url/head SHA, recreates the control-plane service after PR creation, observes provider PR state and checks/statuses, and records Stoneforge review/approval/policy state. The `stoneforge/policy` status is published to the observed PR head SHA. The GitHub one-shot command does not inject local fake CI; if no passing provider check/status is observed, it stops with a human-readable pending/failing check message. If merge is not enabled, the one-shot command stops after approval with the MergeRequest `merge_ready`; the explicit `merge` command reports that GitHub merge is disabled.
+The GitHub mode creates or updates a branch, commits a small task change marker under `.stoneforge/tasks/`, opens or reuses a PR, persists the provider PR id/number/url/head SHA, recreates the control-plane service after PR creation, observes provider PR state and checks/statuses, and records Stoneforge review/approval/policy state. The `stoneforge/policy` status is published to the observed PR head SHA. The GitHub one-shot command does not inject local fake verification; if no passing provider check/status is observed, it stops with a human-readable pending/failing check message. If merge is not enabled, the one-shot command stops after approval with the MergeRequest `merge_ready`; the explicit `merge` command reports that GitHub merge is disabled.
 
 ### SQLite
 

@@ -6,8 +6,8 @@ export {
   requireMergeRequestAssignmentId,
 } from "./review-assignments.js";
 export type {
-  CIRun,
-  CIRunState,
+  VerificationRun,
+  VerificationRunState,
   GitHubMergeRequestAdapter,
   MergeRequest,
   MergeRequestSnapshot,
@@ -15,11 +15,15 @@ export type {
   MergeRequestState,
   OpenTaskMergeRequestInput,
   PolicyCheckState,
+  ProviderCheck,
   ProviderCheckObservation,
+  ProviderCheckState,
   ProviderPullRequest,
   ProviderPullRequestObservation,
-  RecordCIRunInput,
+  RecordProviderCheckInput,
   RecordReviewOutcomeInput,
   RequestReviewInput,
   ReviewOutcome,
+  ReviewOutcomeRecord,
+  ReviewerKind,
 } from "./models.js";

@@ -46,7 +46,7 @@ There are four distinct trust subjects in the first slice:
 - human users authenticated into Stoneforge through an upstream identity system
 - Stoneforge service actors, including the GitHub App and scheduler-owned control-plane actions
 - Host Agents and managed-provider adapters acting on behalf of a Workspace
-- external automation webhooks, both inbound triggers and outbound code-first handlers
+- external automation webhooks, both inbound triggers and outbound automation webhook handlers
 
 The important product rule is that authentication, authorization, policy evaluation, and audit are separate responsibilities:
 
@@ -104,7 +104,7 @@ The first slice should support these semantic subject classes even if the final 
 | Workspace admin | repository connection, hosts, runtimes, agents, roles, automations, workspace policy, secrets |
 | Operator        | task and plan creation, dispatch, steering, resume, cancel, failure handling                  |
 | Reviewer        | inspect execution, review MergeRequests, request changes                                      |
-| Approver        | satisfy human approval gates where policy requires it                                         |
+| Approver        | satisfy Approval Gates where policy allows that actor                                  |
 
 One human may belong to multiple subject classes.
 
@@ -117,7 +117,7 @@ The first slice should define policy decisions for:
 - whether a Task or Plan may dispatch automatically
 - which RoleDefinitions or Agent pools may be used
 - whether automated review is allowed
-- whether human approval is required before merge
+- whether approval is required before merge
 - which humans or groups may approve specific categories of work
 - whether sensitive administrative actions require elevated authorization
 - what failure loops trigger automatic escalation
@@ -130,11 +130,12 @@ First-slice preset expectations:
 `supervised` means:
 
 - automated dispatch and review are allowed
-- code-changing merge requires human approval unless explicitly exempted by policy
+- code-changing merge requires an Approval Gate unless explicitly exempted by policy
+- policy may require both human and agent Approval Gates before merge
 
 `autonomous` means:
 
-- the system may merge automatically when policy, CI, and review conditions are satisfied
+- the system may merge automatically when policy, verification, and review conditions are satisfied
 
 ## Merge And Approval Boundary
 
@@ -144,14 +145,14 @@ The first-slice GitHub merge gate should work as follows:
 - Stoneforge publishes a required `stoneforge/policy` check or status to GitHub
 - the published provider status targets the current PR head SHA observed through the provider boundary
 - Stoneforge policy evaluation determines whether the policy check is passing
-- GitHub CI checks remain required according to workspace and repository rules
+- GitHub verification checks remain required according to workspace and repository rules
 - imported GitHub reviews may contribute signals, but Stoneforge policy is the canonical approval decision-maker
 
-Human approval model:
+Review approval model:
 
-- approvals are granted to Stoneforge by authenticated Stoneforge users
-- those approvals are checked against Org and Workspace policy
-- approval attribution is recorded in Stoneforge audit
+- Review Approved outcomes are recorded by authenticated human users or authorized Review Agents
+- those Review Approved outcomes are checked against Org and Workspace policy to satisfy eligible Approval Gates
+- review and Approval Gate attribution is recorded in Stoneforge audit
 - Stoneforge may mirror or annotate provider review state, but the required merge gate is the Stoneforge policy check
 
 ## GitHub App Service Actor
@@ -163,7 +164,7 @@ Rules:
 - repository access is granted through a GitHub App installation
 - Stoneforge performs repo operations through that app identity
 - branch creation, PR creation, status publication, comments, and merge actions run through the service actor
-- human approval attribution is recorded separately in Stoneforge rather than being reduced to provider bot behavior
+- approval attribution is recorded separately in Stoneforge rather than being reduced to provider bot behavior
 
 This keeps automation durable and auditable while preserving a clear boundary between provider operations and Stoneforge policy decisions.
 
@@ -187,7 +188,7 @@ First-slice sensitive actions include:
 - creating or editing Runtime, Agent, RoleDefinition, Automation, or Policy objects
 - dispatching, resuming, canceling, or force-stopping execution
 - approving, merging, closing, or overriding MergeRequest flow
-- configuring inbound webhook triggers or outbound code-first webhook destinations
+- configuring inbound webhook triggers or outbound automation webhook destinations
 - changing failure thresholds or escalation behavior
 
 The exact approval chain for each sensitive action does not need to be frozen here, but the requirement that these actions flow through authorization, policy, and audit is frozen.
@@ -256,7 +257,7 @@ Recommended audit fields:
 - target type and target identifier
 - outcome and reason
 - policy snapshot or policy decision reference
-- correlation identifiers for dispatch intent, Assignment, Session, MergeRequest, CI, Host connection, or webhook call
+- correlation identifiers for dispatch intent, Assignment, Session, MergeRequest, Verification Run, Host connection, or webhook call
 - external provider identifiers when relevant
 
 ## Required Audit Families

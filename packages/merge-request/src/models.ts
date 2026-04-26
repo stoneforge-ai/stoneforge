@@ -1,5 +1,5 @@
 import type {
-  CIRunId,
+  VerificationRunId,
   MergeRequestId,
   RoleDefinitionId,
   WorkspaceId,
@@ -16,7 +16,7 @@ export type MergeRequestState =
   | "merged"
   | "closed_unmerged";
 
-export type CIRunState =
+export type VerificationRunState =
   | "queued"
   | "running"
   | "passed"
@@ -24,8 +24,10 @@ export type CIRunState =
   | "canceled"
   | "stale";
 
+export type ProviderCheckState = Exclude<VerificationRunState, "stale">;
 export type ReviewOutcome = "approved" | "changes_requested";
 export type PolicyCheckState = "pending" | "passed" | "failed";
+export type ReviewerKind = "human" | "agent";
 
 export interface ProviderPullRequest {
   provider: "github";
@@ -40,7 +42,7 @@ export interface ProviderPullRequest {
 export interface ProviderCheckObservation {
   providerCheckId: string;
   name: string;
-  state: CIRunState;
+  state: ProviderCheckState;
   observedAt?: string;
 }
 
@@ -62,14 +64,9 @@ export interface MergeRequest {
   };
   state: MergeRequestState;
   providerPullRequest: ProviderPullRequest;
-  ciRunIds: CIRunId[];
+  verificationRunIds: VerificationRunId[];
   reviewAssignmentIds: AssignmentId[];
-  reviewOutcome?: ReviewOutcome;
-  reviewReason?: string;
-  humanApproval?: {
-    approvedBy: string;
-    approvedAt: string;
-  };
+  reviewOutcomes: ReviewOutcomeRecord[];
   policyCheck?: {
     state: PolicyCheckState;
     publishedAt: string;
@@ -80,29 +77,49 @@ export interface MergeRequest {
   updatedAt: string;
 }
 
-export interface CIRun {
-  id: CIRunId;
+export interface VerificationRun {
+  id: VerificationRunId;
   workspaceId: WorkspaceId;
   mergeRequestId: MergeRequestId;
+  headSha: string;
+  state: VerificationRunState;
+  providerChecks: ProviderCheck[];
+  observedAt: string;
+}
+
+export interface ProviderCheck {
   providerCheckId: string;
   name: string;
-  state: CIRunState;
+  state: ProviderCheckState;
+  required: boolean;
   observedAt: string;
+}
+
+export interface ReviewOutcomeRecord {
+  reviewerKind: ReviewerKind;
+  reviewerId: string;
+  outcome: ReviewOutcome;
+  reason?: string;
+  assignmentId?: AssignmentId;
+  recordedAt: string;
 }
 
 export interface OpenTaskMergeRequestInput {
   taskAssignmentId: AssignmentId;
 }
 
-export interface RecordCIRunInput {
+export interface RecordProviderCheckInput {
   providerCheckId: string;
   name: string;
-  state: CIRunState;
+  state: ProviderCheckState;
+  required?: boolean;
   observedAt?: string;
 }
 
 export interface RecordReviewOutcomeInput {
-  assignmentId: AssignmentId;
+  assignmentId?: AssignmentId;
+  reviewerKind: ReviewerKind;
+  reviewerId: string;
   outcome: ReviewOutcome;
   reason?: string;
 }
@@ -149,5 +166,5 @@ export interface MergeRequestServiceOptions {
 
 export interface MergeRequestSnapshot {
   mergeRequests: MergeRequest[];
-  ciRuns: CIRun[];
+  verificationRuns: VerificationRun[];
 }

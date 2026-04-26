@@ -3,7 +3,7 @@ import { asTaskId } from "@stoneforge/execution";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 
-import { evaluateMergePolicy, type CIRun, type MergeRequest } from "./index.js";
+import { evaluateMergePolicy, type VerificationRun, type MergeRequest } from "./index.js";
 
 describe("evaluateMergePolicy", () => {
   it("ignores terminal MergeRequests", () => {
@@ -13,50 +13,49 @@ describe("evaluateMergePolicy", () => {
     ).toBeNull();
   });
 
-  it("requires passing CI and approved review before policy can pass", () => {
+  it("requires a passing Verification Run and Review Approved before policy can pass", () => {
     expect(evaluateMergePolicy(mergeRequest(), [], supervised)).toEqual({
       checkState: "pending",
-      reason: "CI and approved review are required.",
+      reason: "A passing Verification Run and Review Approved are required.",
     });
     expect(
       evaluateMergePolicy(
-        mergeRequest({ reviewOutcome: "approved" }),
-        [ciRun("failed")],
+        mergeRequest({ reviewOutcomes: [approvedReview("agent", "agent_1")] }),
+        [verificationRun("failed")],
         supervised,
       ),
     ).toEqual({
       checkState: "pending",
-      reason: "CI and approved review are required.",
+      reason: "A passing Verification Run and Review Approved are required.",
     });
   });
 
-  it("requires human approval only for supervised policy", () => {
-    const reviewed = mergeRequest({ reviewOutcome: "approved" });
-    const passedCI = [ciRun("passed")];
+  it("requires a human Approval Gate only for supervised policy", () => {
+    const reviewed = mergeRequest({ reviewOutcomes: [approvedReview("agent", "agent_1")] });
+    const passedVerificationRun = [verificationRun("passed")];
 
-    expect(evaluateMergePolicy(reviewed, passedCI, supervised)).toEqual({
+    expect(evaluateMergePolicy(reviewed, passedVerificationRun, supervised)).toEqual({
       nextState: "policy_pending",
       checkState: "pending",
-      reason: "Human approval is required by supervised policy.",
+      reason: "A Human Approval Gate is required by supervised policy.",
     });
-    expect(evaluateMergePolicy(reviewed, passedCI, autonomous)).toEqual({
+    expect(evaluateMergePolicy(reviewed, passedVerificationRun, autonomous)).toEqual({
       nextState: "merge_ready",
       checkState: "passed",
       reason: "Stoneforge policy gates are satisfied.",
     });
   });
 
-  it("passes supervised policy after human approval", () => {
+  it("passes supervised policy after a human Review Approved satisfies the Approval Gate", () => {
     expect(
       evaluateMergePolicy(
         mergeRequest({
-          reviewOutcome: "approved",
-          humanApproval: {
-            approvedBy: "user_1",
-            approvedAt: "2026-04-24T00:00:00.000Z",
-          },
+          reviewOutcomes: [
+            approvedReview("agent", "agent_1"),
+            approvedReview("human", "user_1"),
+          ],
         }),
-        [ciRun("passed")],
+        [verificationRun("passed")],
         supervised,
       ),
     ).toEqual({
@@ -66,23 +65,15 @@ describe("evaluateMergePolicy", () => {
     });
   });
 
-  it("returns the policy state implied by terminal, CI, review, preset, and approval signals", () => {
+  it("returns the policy state implied by terminal, verification, review, preset, and approval signals", () => {
     fc.assert(
       fc.property(policyCaseArbitrary, (policyCase) => {
         const result = evaluateMergePolicy(
           mergeRequest({
             state: policyCase.state,
-            reviewOutcome: policyCase.reviewApproved
-              ? "approved"
-              : "changes_requested",
-            humanApproval: policyCase.humanApproved
-              ? {
-                  approvedBy: "user_1",
-                  approvedAt: "2026-04-24T00:00:00.000Z",
-                }
-              : undefined,
+            reviewOutcomes: reviewOutcomesFor(policyCase.reviewApproved, policyCase.humanApprovalGateSatisfied),
           }),
-          policyCase.ciPassed ? [ciRun("passed")] : [ciRun("failed")],
+          policyCase.verificationPassed ? [verificationRun("passed")] : [verificationRun("failed")],
           {
             policyPreset: policyCase.supervised ? "supervised" : "autonomous",
             targetBranch: "main",
@@ -94,12 +85,12 @@ describe("evaluateMergePolicy", () => {
           return;
         }
 
-        if (!policyCase.ciPassed || !policyCase.reviewApproved) {
+        if (!policyCase.verificationPassed || !policyCase.reviewApproved) {
           expect(result).toEqual(expect.objectContaining({ checkState: "pending" }));
           return;
         }
 
-        if (policyCase.supervised && !policyCase.humanApproved) {
+        if (policyCase.supervised && !policyCase.humanApprovalGateSatisfied) {
           expect(result).toEqual(
             expect.objectContaining({
               checkState: "pending",
@@ -130,10 +121,10 @@ const policyCaseArbitrary = fc.record({
     "merged" as const,
     "closed_unmerged" as const,
   ),
-  ciPassed: fc.boolean(),
+  verificationPassed: fc.boolean(),
   reviewApproved: fc.boolean(),
   supervised: fc.boolean(),
-  humanApproved: fc.boolean(),
+  humanApprovalGateSatisfied: fc.boolean(),
 });
 
 const supervised = {
@@ -166,22 +157,64 @@ function mergeRequest(
       sourceBranch: "stoneforge/task/task_1",
       targetBranch: "main",
     },
-    ciRunIds: [],
+    verificationRunIds: [],
     reviewAssignmentIds: [],
+    reviewOutcomes: [],
     createdAt: "2026-04-24T00:00:00.000Z",
     updatedAt: "2026-04-24T00:00:00.000Z",
     ...overrides,
   };
 }
 
-function ciRun(state: CIRun["state"]): CIRun {
+function reviewOutcomesFor(
+  hasApprovedReview: boolean,
+  hasHumanApprovalGateSatisfied: boolean,
+): MergeRequest["reviewOutcomes"] {
+  if (!hasApprovedReview) {
+    return [
+      {
+        reviewerKind: "agent",
+        reviewerId: "agent_1",
+        outcome: "changes_requested",
+        recordedAt: "2026-04-24T00:00:00.000Z",
+      },
+    ];
+  }
+
+  return [
+    approvedReview("agent", "agent_1"),
+    ...(hasHumanApprovalGateSatisfied ? [approvedReview("human", "user_1")] : []),
+  ];
+}
+
+function approvedReview(
+  reviewerKind: "human" | "agent",
+  reviewerId: string,
+): MergeRequest["reviewOutcomes"][number] {
   return {
-    id: "ci_run_1" as never,
+    reviewerKind,
+    reviewerId,
+    outcome: "approved",
+    recordedAt: "2026-04-24T00:00:00.000Z",
+  };
+}
+
+function verificationRun(state: VerificationRun["state"]): VerificationRun {
+  return {
+    id: "verification_run_1" as never,
     workspaceId: "workspace_1" as never,
     mergeRequestId: asMergeRequestId("merge_request_1"),
-    providerCheckId: "check_1",
-    name: "test",
+    headSha: "head-sha",
     state,
+    providerChecks: [
+      {
+        providerCheckId: "check_1",
+        name: "test",
+        state: state === "stale" ? "passed" : state,
+        required: true,
+        observedAt: "2026-04-24T00:00:00.000Z",
+      },
+    ],
     observedAt: "2026-04-24T00:00:00.000Z",
   };
 }

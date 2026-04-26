@@ -6,7 +6,7 @@ import type {
 } from "@stoneforge/execution";
 import { TaskDispatchService } from "@stoneforge/execution";
 import type {
-  CIRun,
+  VerificationRun,
   MergeRequest,
 } from "@stoneforge/merge-request";
 import { MergeRequestService } from "@stoneforge/merge-request";
@@ -69,7 +69,7 @@ export async function runDirectTaskScenario(): Promise<DirectTaskRunResult> {
   const mergeRequest = await mergeRequests.openOrUpdateTaskMergeRequest({
     taskAssignmentId: implementation.assignment.id,
   });
-  const ciRun = await mergeRequests.recordCIRun(mergeRequest.id, {
+  const verificationRun = await mergeRequests.recordProviderCheck(mergeRequest.id, {
     providerCheckId: "local-check-1",
     name: "local quality",
     state: "passed",
@@ -82,15 +82,22 @@ export async function runDirectTaskScenario(): Promise<DirectTaskRunResult> {
   );
   const reviewed = await mergeRequests.recordReviewOutcome(mergeRequest.id, {
     assignmentId: review.assignment.id,
+    reviewerKind: "agent",
+    reviewerId: review.assignment.agentId,
     outcome: "approved",
     reason: "Local review approved the deterministic scenario change.",
   });
 
   expectState(reviewed.state, "policy_pending", "MergeRequest");
 
-  const approved = await mergeRequests.recordHumanApproval(
+  const approved = await mergeRequests.recordReviewOutcome(
     mergeRequest.id,
-    "user_approver",
+    {
+      reviewerKind: "human",
+      reviewerId: "user_approver",
+      outcome: "approved",
+      reason: "Human reviewer approved the MergeRequest.",
+    },
   );
   const merged = await mergeRequests.merge(approved.id);
   const summary = buildSummary({
@@ -100,7 +107,7 @@ export async function runDirectTaskScenario(): Promise<DirectTaskRunResult> {
     implementation,
     review,
     mergeRequest: merged,
-    ciRun: mergeRequests.getCIRun(ciRun.id),
+    verificationRun: mergeRequests.getVerificationRun(verificationRun.id),
     providerSessionIds: agentAdapter.starts.map((start) => {
       return start.providerSessionId;
     }),
@@ -192,7 +199,7 @@ function createDirectTask(
     acceptanceCriteria: [
       "The task dispatches to a local fake AgentAdapter.",
       "The task opens a local fake GitHub MergeRequest.",
-      "CI, review, supervised approval, and merge complete.",
+      "verification, review, supervised approval, and merge complete.",
     ],
     priority: "normal",
     requiresMergeRequest: true,

@@ -1,13 +1,13 @@
 import {
   asAgentId,
-  asCIRunId,
+  asVerificationRunId,
   asMergeRequestId,
   asOrgId,
   asRoleDefinitionId,
   asRuntimeId,
   asWorkspaceId,
   type AgentId,
-  type CIRunId,
+  type VerificationRunId,
   type MergeRequestId,
   type OrgId,
   type RoleDefinitionId,
@@ -41,7 +41,7 @@ export interface CurrentControlPlaneIds {
   implementationAssignmentId?: AssignmentId;
   implementationSessionId?: SessionId;
   mergeRequestId?: MergeRequestId;
-  ciRunId?: CIRunId;
+  verificationRunId?: VerificationRunId;
   reviewAssignmentId?: AssignmentId;
   reviewSessionId?: SessionId;
 }
@@ -147,11 +147,11 @@ function parseMergeCurrentIds(
       asMergeRequestId,
       onInvalidId,
     ),
-    ciRunId: parseOptionalId(
-      current.ciRunId,
-      "current.ciRunId",
+    verificationRunId: parseOptionalId(
+      current.verificationRunId,
+      "current.verificationRunId",
       source,
-      asCIRunId,
+      asVerificationRunId,
       onInvalidId,
     ),
     reviewAssignmentId: parseOptionalId(

@@ -151,17 +151,4 @@ export default tseslint.config(
       ],
     },
   },
-  {
-    files: testFiles,
-    rules: {
-      "max-lines": [
-        "error",
-        {
-          max: 500,
-          skipBlankLines: true,
-          skipComments: true,
-        },
-      ],
-    },
-  },
 );

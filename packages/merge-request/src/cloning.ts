@@ -1,23 +1,24 @@
-import type { CIRun, MergeRequest } from "./models.js";
+import type { VerificationRun, MergeRequest } from "./models.js";
 
 export function cloneMergeRequest(mergeRequest: MergeRequest): MergeRequest {
   return {
     ...mergeRequest,
     sourceOwner: { ...mergeRequest.sourceOwner },
     providerPullRequest: { ...mergeRequest.providerPullRequest },
-    ciRunIds: [...mergeRequest.ciRunIds],
+    verificationRunIds: [...mergeRequest.verificationRunIds],
     reviewAssignmentIds: [...mergeRequest.reviewAssignmentIds],
-    humanApproval: mergeRequest.humanApproval
-      ? { ...mergeRequest.humanApproval }
-      : undefined,
+    reviewOutcomes: mergeRequest.reviewOutcomes.map((outcome) => ({ ...outcome })),
     policyCheck: mergeRequest.policyCheck
       ? { ...mergeRequest.policyCheck }
       : undefined,
   };
 }
 
-export function cloneCIRun(ciRun: CIRun): CIRun {
+export function cloneVerificationRun(verificationRun: VerificationRun): VerificationRun {
   return {
-    ...ciRun,
+    ...verificationRun,
+    providerChecks: verificationRun.providerChecks.map((providerCheck) => ({
+      ...providerCheck,
+    })),
   };
 }

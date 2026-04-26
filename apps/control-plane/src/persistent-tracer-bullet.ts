@@ -28,9 +28,9 @@ export async function runPersistentTracerBullet(
 
   await gatesProcess.observeProviderState();
   if (options.mergeProvider === "github") {
-    await gatesProcess.requireObservedProviderCiPassed();
+    await gatesProcess.requireObservedProviderVerificationPassed();
   } else {
-    await gatesProcess.recordCiPassed();
+    await gatesProcess.recordVerificationPassed();
   }
   await gatesProcess.requestReview();
   await gatesProcess.runWorker();

@@ -1,9 +1,9 @@
-import { type CIRunId } from "@stoneforge/core";
+import { type VerificationRunId } from "@stoneforge/core";
 import { type TaskDispatchService } from "@stoneforge/execution";
 
 import { evaluateMergePolicy } from "./merge-policy.js";
 import type {
-  CIRun,
+  VerificationRun,
   GitHubMergeRequestAdapter,
   MergeRequest,
   MergeRequestServiceOptions,
@@ -15,7 +15,7 @@ export class MergeRequestPolicyFlow {
     private readonly execution: TaskDispatchService,
     private readonly gitHubAdapter: GitHubMergeRequestAdapter,
     private readonly options: MergeRequestServiceOptions,
-    private readonly ciRuns: Map<CIRunId, CIRun>,
+    private readonly verificationRuns: Map<VerificationRunId, VerificationRun>,
   ) {}
 
   async requestRepair(
@@ -31,7 +31,7 @@ export class MergeRequestPolicyFlow {
   async evaluatePolicy(mergeRequest: MergeRequest): Promise<void> {
     const decision = evaluateMergePolicy(
       mergeRequest,
-      this.ciRunsForMergeRequest(mergeRequest),
+      this.verificationRunsForMergeRequest(mergeRequest),
       this.options,
     );
 
@@ -50,11 +50,11 @@ export class MergeRequestPolicyFlow {
     );
   }
 
-  private ciRunsForMergeRequest(mergeRequest: MergeRequest): CIRun[] {
-    return mergeRequest.ciRunIds.flatMap((ciRunId) => {
-      const ciRun = this.ciRuns.get(ciRunId);
+  private verificationRunsForMergeRequest(mergeRequest: MergeRequest): VerificationRun[] {
+    return mergeRequest.verificationRunIds.flatMap((verificationRunId) => {
+      const verificationRun = this.verificationRuns.get(verificationRunId);
 
-      return ciRun ? [ciRun] : [];
+      return verificationRun ? [verificationRun] : [];
     });
   }
 

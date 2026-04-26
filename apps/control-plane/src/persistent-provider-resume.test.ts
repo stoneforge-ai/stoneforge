@@ -134,14 +134,22 @@ describe("persistent provider resume", () => {
       expect(summary.mergeRequestState).toBe("merge_ready");
       expect(snapshot.mergeRequests.verificationRuns).toEqual([
         expect.objectContaining({
-          providerCheckId: "provider-check-1",
-          name: "provider quality",
+          headSha: "observed-head-sha",
           state: "passed",
+          providerChecks: [
+            expect.objectContaining({
+              providerCheckId: "provider-check-1",
+              name: "provider quality",
+              state: "passed",
+            }),
+          ],
         }),
       ]);
       expect(
         snapshot.mergeRequests.verificationRuns.some((verificationRun) => {
-          return verificationRun.providerCheckId === "local-check-1";
+          return verificationRun.providerChecks.some((providerCheck) => {
+            return providerCheck.providerCheckId === "local-check-1";
+          });
         }),
       ).toBe(false);
       expect(adapter.policyCheckProviderHeadShas).toContain(

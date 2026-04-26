@@ -24,7 +24,7 @@ describe("persistent control-plane CLI", () => {
     "create-direct-task",
     "run-worker",
     "open-merge-request",
-    "record-ci-passed",
+    "record-verification-passed",
     "request-review",
     "run-worker",
     "complete-review",
@@ -51,9 +51,9 @@ describe("persistent control-plane CLI", () => {
       expect(summary.reviewAssignmentState).toBe("succeeded");
       expect(summary.reviewSessionState).toBe("ended");
       expect(summary.mergeRequestState).toBe("merged");
-      expect(summary.ciState).toBe("passed");
+      expect(summary.verificationState).toBe("passed");
       expect(summary.policyCheckState).toBe("passed");
-      expect(summary.humanApprovalRecorded).toBe(true);
+      expect(summary.approvalGateSatisfied).toBe(true);
       expect(summary.pullRequestMerged).toBe(true);
       expect(summary.providerSessionIds).toEqual([
         "local-task-start-1",
@@ -112,7 +112,7 @@ describe("persistent control-plane CLI", () => {
       );
 
       await resumedProcess.openMergeRequest();
-      await resumedProcess.recordCiPassed();
+      await resumedProcess.recordVerificationPassed();
       await resumedProcess.requestReview();
       await resumedProcess.runWorker();
       await resumedProcess.completeReview();
@@ -207,9 +207,9 @@ describe("persistent control-plane CLI", () => {
       expect(summary.implementationAssignmentState).toBe("succeeded");
       expect(summary.reviewAssignmentState).toBe("succeeded");
       expect(summary.mergeRequestState).toBe("merged");
-      expect(summary.ciState).toBe("passed");
+      expect(summary.verificationState).toBe("passed");
       expect(summary.policyCheckState).toBe("passed");
-      expect(summary.humanApprovalRecorded).toBe(true);
+      expect(summary.approvalGateSatisfied).toBe(true);
       expect(summary.providerSessionIds).toEqual([
         "local-task-start-1",
         "local-merge_request-start-1",

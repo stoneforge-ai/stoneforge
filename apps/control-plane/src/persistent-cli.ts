@@ -43,6 +43,8 @@ const commandHandlers = {
   "open-merge-request": (controlPlane) => controlPlane.openMergeRequest(),
   "observe-provider-state": (controlPlane) =>
     controlPlane.observeProviderState(),
+  "require-provider-verification-passed": (controlPlane) =>
+    controlPlane.requireObservedProviderVerificationPassed(),
   "record-verification-passed": (controlPlane) =>
     controlPlane.recordVerificationPassed(),
   "request-review": (controlPlane) => controlPlane.requestReview(),

@@ -53,8 +53,8 @@ export async function buildPersistentSummary(
     mergeRequest: loaded.mergeRequests.getMergeRequest(
       requireMergeRequestId(current),
     ),
-    ciRun: loaded.mergeRequests.getCIRun(
-      requireValue(current.ciRunId, "No CIRun exists. Record CI first."),
+    verificationRun: loaded.mergeRequests.getVerificationRun(
+      requireValue(current.verificationRunId, "No Verification Run exists. Record verification first."),
     ),
     providerSessionIds: loaded.execution.listSessions().map((session) => {
       return session.providerSessionId;

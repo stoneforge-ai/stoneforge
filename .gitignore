@@ -24,6 +24,10 @@ bun.lockb
 
 # Local development files
 prompt.md
+.env
+.env.*
+.stoneforge/*.env
+.stoneforge/*.pem
 
 # IDE
 .idea/

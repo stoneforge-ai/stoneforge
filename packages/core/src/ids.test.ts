@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   asAgentId,
   asAuditEventId,
-  asCIRunId,
+  asVerificationRunId,
   asMergeRequestId,
   asOrgId,
   asRoleDefinitionId,
@@ -11,7 +11,7 @@ import {
   asWorkspaceId,
   parseAgentId,
   parseAuditEventId,
-  parseCIRunId,
+  parseVerificationRunId,
   parseMergeRequestId,
   parseOrgId,
   parseRoleDefinitionId,
@@ -28,7 +28,7 @@ describe("branded id constructors", () => {
     expect(asRoleDefinitionId("role_1")).toBe("role_1");
     expect(asAuditEventId("audit_1")).toBe("audit_1");
     expect(asMergeRequestId("mr_1")).toBe("mr_1");
-    expect(asCIRunId("ci_1")).toBe("ci_1");
+    expect(asVerificationRunId("verification_run_1")).toBe("verification_run_1");
   });
 
   it("validates external id values before branding", () => {
@@ -39,7 +39,7 @@ describe("branded id constructors", () => {
     expect(parseRoleDefinitionId("role_1")).toBe("role_1");
     expect(parseAuditEventId("audit_1")).toBe("audit_1");
     expect(parseMergeRequestId("merge_request_1")).toBe("merge_request_1");
-    expect(parseCIRunId("ci_1")).toBe("ci_1");
+    expect(parseVerificationRunId("verification_run_1")).toBe("verification_run_1");
   });
 
   it("rejects empty, whitespace, and unsafe external id values", () => {
