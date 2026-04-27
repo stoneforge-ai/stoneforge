@@ -35,6 +35,7 @@ Stoneforge orchestrates multiple AI coding agents working in parallel on your co
 - **Category:** AI Coding Agents (https://www.producthunt.com/categories/ai-coding-agents)
 
 **Steps for human:**
+
 1. Log in with a Product Hunt account (must be at least 1 week old)
 2. Click "Submit" → "New Product" → enter `https://stoneforge.ai`
 3. Fill in:
@@ -50,6 +51,7 @@ Stoneforge orchestrates multiple AI coding agents working in parallel on your co
 6. Pre-launch: share the upcoming page link to build followers before launch day
 
 **Launch day tips:**
+
 - Share on LinkedIn, Twitter/X, relevant Slack/Discord communities
 - Engage with every comment on the Product Hunt page
 - Avoid asking for upvotes directly (against PH guidelines)
@@ -62,6 +64,7 @@ Stoneforge orchestrates multiple AI coding agents working in parallel on your co
 - **Submission URL:** Click user icon → "Suggest new application"
 
 **Steps for human:**
+
 1. Create an AlternativeTo account (or log in)
 2. Click user icon → "Suggest new application"
 3. Fill in:
@@ -87,6 +90,7 @@ Stoneforge orchestrates multiple AI coding agents working in parallel on your co
 - **Vendor page:** https://stackshare.io/vendors
 
 **Steps for human:**
+
 1. Search for "Stoneforge" on StackShare
 2. If not listed, submit the tool via the "Add a tool" flow
 3. Fill in:
@@ -107,6 +111,7 @@ Stoneforge orchestrates multiple AI coding agents working in parallel on your co
 - **Submission URL:** https://www.libhunt.com/repo/submit
 
 **Steps for human:**
+
 1. Go to https://www.libhunt.com/repo/submit (or click "Add a project" in nav)
 2. Submit the GitHub repository URL: `https://github.com/stoneforge-ai/stoneforge`
 3. Fill in any required fields:
@@ -123,6 +128,7 @@ Stoneforge orchestrates multiple AI coding agents working in parallel on your co
 - **Submission URL:** https://openalternative.co/submit
 
 **Important prerequisites:**
+
 - Must have a public GitHub repo ✅ (github.com/stoneforge-ai/stoneforge)
 - Must have a custom domain ✅ (stoneforge.ai)
 - Must be a real application (not a CLI/library) — Stoneforge includes a web dashboard, so it qualifies
@@ -130,6 +136,7 @@ Stoneforge orchestrates multiple AI coding agents working in parallel on your co
 - Must be an alternative to proprietary software ✅
 
 **Steps for human:**
+
 1. Go to https://openalternative.co/submit
 2. Fill in:
    - **Project Name:** Stoneforge
@@ -155,6 +162,7 @@ Stoneforge is **not currently listed** on Product Hunt. Completing submission #1
 - **Submission URL:** https://www.futuretools.io/submit-a-tool
 
 **Steps for human:**
+
 1. Go to https://www.futuretools.io/submit-a-tool
 2. Fill in the submission form:
    - **Tool Name:** Stoneforge
@@ -173,6 +181,7 @@ Stoneforge is **not currently listed** on Product Hunt. Completing submission #1
 - **Submission URL:** https://www.toolpilot.ai/pages/submit-your-ai-tool
 
 **Steps for human:**
+
 1. Go to https://www.toolpilot.ai/pages/submit-your-ai-tool
 2. Fill in:
    - **Tool Name:** Stoneforge
@@ -193,6 +202,7 @@ Stoneforge is **not currently listed** on Product Hunt. Completing submission #1
 **Draft article prepared below** (see "dev.to Cross-Post Draft" section).
 
 **Steps for human:**
+
 1. Log in to dev.to (create an org account for Stoneforge if desired)
 2. Go to https://dev.to/new
 3. Paste the prepared markdown (see below)
@@ -202,6 +212,7 @@ Stoneforge is **not currently listed** on Product Hunt. Completing submission #1
 7. Publish
 
 **Alternative — via API:**
+
 ```bash
 curl -X POST https://dev.to/api/articles \
   -H "Content-Type: application/json" \
@@ -225,6 +236,7 @@ curl -X POST https://dev.to/api/articles \
 - **Submit URL:** https://news.ycombinator.com/submit
 
 **Steps for human:**
+
 1. Log in to Hacker News
 2. Go to https://news.ycombinator.com/submit
 3. Fill in:
@@ -234,6 +246,7 @@ curl -X POST https://dev.to/api/articles \
 4. Submit
 
 **Tips for HN:**
+
 - "Show HN" prefix is appropriate since it's a launchable open-source project
 - Best times to post: weekday mornings US time (9-11am ET / 6-8am PT)
 - Be ready to answer questions in the comments — HN values founder engagement
@@ -244,7 +257,7 @@ curl -X POST https://dev.to/api/articles \
 
 ## dev.to Cross-Post Draft
 
-```markdown
+````markdown
 ---
 title: "Introducing Stoneforge: Open-Source Orchestration for AI Coding Agents"
 published: true
@@ -279,6 +292,7 @@ npm install -g @stoneforge/smithy
 sf init
 sf serve
 ```
+````
 
 Open `http://localhost:3457` and you're running.
 
@@ -287,6 +301,7 @@ Open `http://localhost:3457` and you're running.
 Stoneforge is Apache 2.0 licensed. Star us on [GitHub](https://github.com/stoneforge-ai/stoneforge) and join the community.
 
 → [Read more at stoneforge.ai](https://stoneforge.ai)
+
 ```
 
 ---
@@ -316,3 +331,4 @@ Stoneforge is Apache 2.0 licensed. Star us on [GitHub](https://github.com/stonef
 - **dev.to** cross-post uses `canonical_url` to avoid duplicate content penalty — the original at stoneforge.ai/blog/introducing-stoneforge gets the SEO credit.
 - **OpenAlternative** requires that Stoneforge be positioned as a full application (not just a CLI/library). The web dashboard qualifies it.
 - **Priority order for submissions:** AlternativeTo, StackShare, OpenAlternative, LibHunt, FutureTools, ToolPilot (quick form submissions first), then dev.to cross-post, then Hacker News (timing matters), then Product Hunt (needs most preparation).
+```

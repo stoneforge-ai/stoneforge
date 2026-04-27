@@ -14,17 +14,17 @@ export {
   type LeaseId,
   type SessionId,
   type TaskId,
-} from "./ids.js";
+} from "./ids.js"
 export {
   resolvePlacement,
   type Placement,
   type PlacementResult,
-} from "./placement.js";
+} from "./placement.js"
 export {
   isTaskDispatchable,
   type TaskReadinessContext,
-} from "./task-readiness.js";
-export { TaskDispatchService } from "./task-dispatch-service.js";
+} from "./task-readiness.js"
+export { TaskDispatchService } from "./task-dispatch-service.js"
 export type {
   AgentAdapter,
   AgentAdapterResumeContext,
@@ -47,4 +47,4 @@ export type {
   TaskDispatchConstraints,
   UpdateTaskInput,
   WorkspaceExecutionCapabilities,
-} from "./models.js";
+} from "./models.js"

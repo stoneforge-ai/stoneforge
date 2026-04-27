@@ -45,4 +45,4 @@ export default {
   typescriptChecker: {
     prioritizePerformanceOverAccuracy: false,
   },
-};
+}

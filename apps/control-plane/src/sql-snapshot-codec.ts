@@ -1,26 +1,26 @@
-import type { ExecutionSnapshot } from "@stoneforge/execution";
-import type { MergeRequestSnapshot } from "@stoneforge/merge-request";
-import type { WorkspaceSetupSnapshot } from "@stoneforge/workspace";
+import type { ExecutionSnapshot } from "@stoneforge/execution"
+import type { MergeRequestSnapshot } from "@stoneforge/merge-request"
+import type { WorkspaceSetupSnapshot } from "@stoneforge/workspace"
 
 import {
   ControlPlanePersistenceError,
   type ControlPlaneSnapshot,
   validateControlPlaneSnapshot,
-} from "./control-plane-store.js";
+} from "./control-plane-store.js"
 
-export const singletonSnapshotId = "default";
-export const currentSchemaVersion = 1;
+export const singletonSnapshotId = "default"
+export const currentSchemaVersion = 1
 
-export type JsonColumn<TValue> = TValue | string;
+export type JsonColumn<TValue> = TValue | string
 
 export interface SerializedSnapshot {
-  snapshotVersion: number;
-  currentOrgId: string | null;
-  currentWorkspaceId: string | null;
-  workspaceSnapshot: JsonColumn<WorkspaceSetupSnapshot>;
-  executionSnapshot: JsonColumn<ExecutionSnapshot>;
-  mergeRequestSnapshot: JsonColumn<MergeRequestSnapshot>;
-  currentSnapshot: JsonColumn<ControlPlaneSnapshot["current"]>;
+  snapshotVersion: number
+  currentOrgId: string | null
+  currentWorkspaceId: string | null
+  workspaceSnapshot: JsonColumn<WorkspaceSetupSnapshot>
+  executionSnapshot: JsonColumn<ExecutionSnapshot>
+  mergeRequestSnapshot: JsonColumn<MergeRequestSnapshot>
+  currentSnapshot: JsonColumn<ControlPlaneSnapshot["current"]>
 }
 
 type SnapshotColumns = Pick<
@@ -30,10 +30,10 @@ type SnapshotColumns = Pick<
   | "mergeRequestSnapshot"
   | "snapshotVersion"
   | "workspaceSnapshot"
->;
+>
 
 export function serializeSnapshot(
-  snapshot: ControlPlaneSnapshot,
+  snapshot: ControlPlaneSnapshot
 ): SerializedSnapshot {
   return {
     snapshotVersion: snapshot.version,
@@ -43,12 +43,12 @@ export function serializeSnapshot(
     executionSnapshot: JSON.stringify(snapshot.execution),
     mergeRequestSnapshot: JSON.stringify(snapshot.mergeRequests),
     currentSnapshot: JSON.stringify(snapshot.current),
-  };
+  }
 }
 
 export function deserializeSnapshot(
   row: SnapshotColumns,
-  source: string,
+  source: string
 ): ControlPlaneSnapshot {
   return validateControlPlaneSnapshot(
     {
@@ -56,54 +56,54 @@ export function deserializeSnapshot(
       workspace: parseJsonColumn<WorkspaceSetupSnapshot>(
         row.workspaceSnapshot,
         "workspace",
-        source,
+        source
       ),
       execution: parseJsonColumn<ExecutionSnapshot>(
         row.executionSnapshot,
         "execution",
-        source,
+        source
       ),
       mergeRequests: parseJsonColumn<MergeRequestSnapshot>(
         row.mergeRequestSnapshot,
         "merge request",
-        source,
+        source
       ),
       current: parseJsonColumn<ControlPlaneSnapshot["current"]>(
         row.currentSnapshot,
         "current ids",
-        source,
+        source
       ),
     },
-    source,
-  );
+    source
+  )
 }
 
 export function jsonColumnText<TValue>(value: JsonColumn<TValue>): string {
   if (typeof value === "string") {
-    return value;
+    return value
   }
 
-  return JSON.stringify(value);
+  return JSON.stringify(value)
 }
 
 export function errorMessage(error: Error): string {
-  return error.message.length === 0 ? "" : `Cause: ${error.message}`;
+  return error.message.length === 0 ? "" : `Cause: ${error.message}`
 }
 
 function parseJsonColumn<TValue>(
   value: JsonColumn<TValue>,
   label: string,
-  source: string,
+  source: string
 ): TValue {
   if (typeof value !== "string") {
-    return value;
+    return value
   }
 
   try {
-    return JSON.parse(value) as TValue;
+    return JSON.parse(value) as TValue
   } catch {
     throw new ControlPlanePersistenceError(
-      `Could not read ${label} snapshot from ${source}. The persisted snapshot is corrupt or incompatible.`,
-    );
+      `Could not read ${label} snapshot from ${source}. The persisted snapshot is corrupt or incompatible.`
+    )
   }
 }

@@ -1,23 +1,23 @@
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { mkdtemp, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest"
 
 import type {
   GitHubMergeRequestAdapter,
   PolicyCheckState,
   ProviderPullRequest,
   ProviderPullRequestObservation,
-} from "@stoneforge/merge-request";
+} from "@stoneforge/merge-request"
 
-import { PersistentControlPlane } from "./persistent-control-plane.js";
-import { runControlPlaneSmokeFlow } from "./control-plane-smoke-flow.js";
-import { SQLiteControlPlaneStore } from "./sqlite-control-plane-store.js";
+import { PersistentControlPlane } from "./persistent-control-plane.js"
+import { runControlPlaneSmokeFlow } from "./control-plane-smoke-flow.js"
+import { SQLiteControlPlaneStore } from "./sqlite-control-plane-store.js"
 
 class ResumeRecordingAdapter implements GitHubMergeRequestAdapter {
-  readonly observedProviderPullRequestIds: string[] = [];
-  readonly policyCheckProviderHeadShas: string[] = [];
+  readonly observedProviderPullRequestIds: string[] = []
+  readonly policyCheckProviderHeadShas: string[] = []
 
   constructor(
     private readonly checks: ProviderPullRequestObservation["checks"] = [
@@ -26,12 +26,12 @@ class ResumeRecordingAdapter implements GitHubMergeRequestAdapter {
         name: "provider quality",
         state: "passed",
       },
-    ],
+    ]
   ) {}
 
   async createOrUpdateTaskPullRequest(input: {
-    sourceBranch: string;
-    targetBranch: string;
+    sourceBranch: string
+    targetBranch: string
   }): Promise<ProviderPullRequest> {
     return {
       provider: "github",
@@ -41,45 +41,43 @@ class ResumeRecordingAdapter implements GitHubMergeRequestAdapter {
       headSha: "created-head-sha",
       sourceBranch: input.sourceBranch,
       targetBranch: input.targetBranch,
-    };
+    }
   }
 
   async publishPolicyCheck(input: {
-    providerPullRequest: ProviderPullRequest;
-    state: PolicyCheckState;
-    reason: string;
+    providerPullRequest: ProviderPullRequest
+    state: PolicyCheckState
+    reason: string
   }): Promise<void> {
-    this.policyCheckProviderHeadShas.push(input.providerPullRequest.headSha);
+    this.policyCheckProviderHeadShas.push(input.providerPullRequest.headSha)
   }
 
   async mergePullRequest(): Promise<{ mergedAt: string }> {
-    return { mergedAt: "2026-04-24T12:00:00.000Z" };
+    return { mergedAt: "2026-04-24T12:00:00.000Z" }
   }
 
   async observePullRequest(input: {
-    providerPullRequest: ProviderPullRequest;
+    providerPullRequest: ProviderPullRequest
   }): Promise<ProviderPullRequestObservation> {
     this.observedProviderPullRequestIds.push(
-      input.providerPullRequest.providerPullRequestId,
-    );
+      input.providerPullRequest.providerPullRequestId
+    )
 
     return {
       providerPullRequestId: input.providerPullRequest.providerPullRequestId,
       state: "open",
       headSha: "observed-head-sha",
       checks: this.checks,
-    };
+    }
   }
 }
 
 describe("persistent provider resume", () => {
   it("uses persisted provider PR identifiers after recreating the service", async () => {
-    const tempDir = await mkdtemp(
-      join(tmpdir(), "stoneforge-provider-resume-"),
-    );
-    const sqlitePath = join(tempDir, "control-plane.sqlite");
-    const firstAdapter = new ResumeRecordingAdapter();
-    const secondAdapter = new ResumeRecordingAdapter();
+    const tempDir = await mkdtemp(join(tmpdir(), "stoneforge-provider-resume-"))
+    const sqlitePath = join(tempDir, "control-plane.sqlite")
+    const firstAdapter = new ResumeRecordingAdapter()
+    const secondAdapter = new ResumeRecordingAdapter()
 
     try {
       const first = new PersistentControlPlane(
@@ -87,36 +85,36 @@ describe("persistent provider resume", () => {
         {
           mergeRequestAdapter: firstAdapter,
           ...smokeOptions(),
-        },
-      );
+        }
+      )
 
-      await prepareOpenMergeRequest(first);
+      await prepareOpenMergeRequest(first)
 
       const resumed = new PersistentControlPlane(
         new SQLiteControlPlaneStore(sqlitePath),
         {
           mergeRequestAdapter: secondAdapter,
           ...smokeOptions(),
-        },
-      );
+        }
+      )
 
-      await resumed.observeProviderState();
+      await resumed.observeProviderState()
 
       expect(secondAdapter.observedProviderPullRequestIds).toEqual([
         "provider-pr-900",
-      ]);
+      ])
     } finally {
-      await rm(tempDir, { recursive: true, force: true });
+      await rm(tempDir, { recursive: true, force: true })
     }
-  });
+  })
 
   it("uses observed GitHub checks instead of injecting local fake verification", async () => {
     const tempDir = await mkdtemp(
-      join(tmpdir(), "stoneforge-provider-verification-"),
-    );
-    const sqlitePath = join(tempDir, "control-plane.sqlite");
-    const adapter = new ResumeRecordingAdapter();
-    const store = new SQLiteControlPlaneStore(sqlitePath);
+      join(tmpdir(), "stoneforge-provider-verification-")
+    )
+    const sqlitePath = join(tempDir, "control-plane.sqlite")
+    const adapter = new ResumeRecordingAdapter()
+    const store = new SQLiteControlPlaneStore(sqlitePath)
 
     try {
       const summary = await runControlPlaneSmokeFlow(store, {
@@ -130,10 +128,10 @@ describe("persistent provider resume", () => {
           defaultBranch: "main",
         },
         sourceBranchPrefix: "stoneforge/task",
-      });
-      const snapshot = await store.load();
+      })
+      const snapshot = await store.load()
 
-      expect(summary.mergeRequestState).toBe("merge_ready");
+      expect(summary.mergeRequestState).toBe("merge_ready")
       expect(snapshot.mergeRequests.verificationRuns).toEqual([
         expect.objectContaining({
           headSha: "observed-head-sha",
@@ -146,27 +144,25 @@ describe("persistent provider resume", () => {
             }),
           ],
         }),
-      ]);
+      ])
       expect(
         snapshot.mergeRequests.verificationRuns.some((verificationRun) => {
           return verificationRun.providerChecks.some((providerCheck) => {
-            return providerCheck.providerCheckId === "local-check-1";
-          });
-        }),
-      ).toBe(false);
-      expect(adapter.policyCheckProviderHeadShas).toContain(
-        "observed-head-sha",
-      );
+            return providerCheck.providerCheckId === "local-check-1"
+          })
+        })
+      ).toBe(false)
+      expect(adapter.policyCheckProviderHeadShas).toContain("observed-head-sha")
     } finally {
-      await rm(tempDir, { recursive: true, force: true });
+      await rm(tempDir, { recursive: true, force: true })
     }
-  });
+  })
 
   it("stops the GitHub-mode smoke flow when no provider check has passed", async () => {
     const tempDir = await mkdtemp(
-      join(tmpdir(), "stoneforge-provider-verification-pending-"),
-    );
-    const sqlitePath = join(tempDir, "control-plane.sqlite");
+      join(tmpdir(), "stoneforge-provider-verification-pending-")
+    )
+    const sqlitePath = join(tempDir, "control-plane.sqlite")
 
     try {
       await expect(
@@ -181,30 +177,30 @@ describe("persistent provider resume", () => {
             defaultBranch: "main",
           },
           sourceBranchPrefix: "stoneforge/task",
-        }),
+        })
       ).rejects.toThrow(
-        "No provider check/status was observed for MergeRequest",
-      );
+        "No provider check/status was observed for MergeRequest"
+      )
     } finally {
-      await rm(tempDir, { recursive: true, force: true });
+      await rm(tempDir, { recursive: true, force: true })
     }
-  });
-});
+  })
+})
 
 async function prepareOpenMergeRequest(
-  controlPlane: PersistentControlPlane,
+  controlPlane: PersistentControlPlane
 ): Promise<void> {
-  await controlPlane.reset();
-  await controlPlane.initializeWorkspace();
-  await controlPlane.configureRepository();
-  await controlPlane.configureRuntime();
-  await controlPlane.configureAgent();
-  await controlPlane.configureRoleDefinition();
-  await controlPlane.configurePolicy();
-  await controlPlane.evaluateReadiness();
-  await controlPlane.createDirectTask();
-  await controlPlane.executeNextDispatch();
-  await controlPlane.openMergeRequest();
+  await controlPlane.reset()
+  await controlPlane.initializeWorkspace()
+  await controlPlane.configureRepository()
+  await controlPlane.configureRuntime()
+  await controlPlane.configureAgent()
+  await controlPlane.configureRoleDefinition()
+  await controlPlane.configurePolicy()
+  await controlPlane.evaluateReadiness()
+  await controlPlane.createDirectTask()
+  await controlPlane.executeNextDispatch()
+  await controlPlane.openMergeRequest()
 }
 
 function smokeOptions(): NonNullable<
@@ -267,5 +263,5 @@ function smokeOptions(): NonNullable<
         humanApprovalReason: "Human reviewer approved the MergeRequest.",
       },
     },
-  };
+  }
 }

@@ -11,68 +11,68 @@
  *   bun run tools/seo/content-calendar.ts --help
  */
 
-import { config, getTimestamp, writeOutput, parseArgs } from "./config";
-import { resolve } from "path";
-import type { GSCInsights } from "./search-console";
+import { config, getTimestamp, writeOutput, parseArgs } from "./config"
+import { resolve } from "path"
+import type { GSCInsights } from "./search-console"
 
 interface KeywordInput {
-  keyword: string;
-  searchVolume: number;
-  cpc: number;
-  competition: number;
-  source?: string[];
+  keyword: string
+  searchVolume: number
+  cpc: number
+  competition: number
+  source?: string[]
 }
 
 interface SerpInput {
-  keyword: string;
-  difficulty: number;
-  serpFeatures: Array<{ type: string }>;
+  keyword: string
+  difficulty: number
+  serpFeatures: Array<{ type: string }>
 }
 
 interface TopicCluster {
-  topic: string;
-  keywords: string[];
-  totalSearchVolume: number;
-  avgDifficulty: number;
-  avgCpc: number;
-  score: number;
-  suggestedContentType: string;
-  suggestedTitle: string;
-  priority: "high" | "medium" | "low";
-  serpFeatures: string[];
+  topic: string
+  keywords: string[]
+  totalSearchVolume: number
+  avgDifficulty: number
+  avgCpc: number
+  score: number
+  suggestedContentType: string
+  suggestedTitle: string
+  priority: "high" | "medium" | "low"
+  serpFeatures: string[]
 }
 
 interface GSCOpportunity {
-  type: "high-impression-low-ctr" | "low-hanging-fruit" | "declining-page";
-  query?: string;
-  page?: string;
-  impressions: number;
-  clicks: number;
-  ctr: number;
-  position: number;
-  suggestedAction: string;
+  type: "high-impression-low-ctr" | "low-hanging-fruit" | "declining-page"
+  query?: string
+  page?: string
+  impressions: number
+  clicks: number
+  ctr: number
+  position: number
+  suggestedAction: string
 }
 
 interface ContentCalendarOutput {
-  timestamp: string;
-  clusters: TopicCluster[];
+  timestamp: string
+  clusters: TopicCluster[]
   summary: {
-    totalClusters: number;
-    highPriority: number;
-    mediumPriority: number;
-    lowPriority: number;
-    totalSearchVolume: number;
-  };
+    totalClusters: number
+    highPriority: number
+    mediumPriority: number
+    lowPriority: number
+    totalSearchVolume: number
+  }
   contentPlan: Array<{
-    week: number;
-    topic: string;
-    contentType: string;
-    suggestedTitle: string;
-    targetKeywords: string[];
-    priority: string;
-    estimatedSearchVolume: number;
-  }>;
-  gscOpportunities?: GSCOpportunity[];
+    week: number
+    topic: string
+    contentType: string
+    suggestedTitle: string
+    targetKeywords: string[]
+    priority: string
+    estimatedSearchVolume: number
+  }>
+  gscOpportunities?: GSCOpportunity[]
 }
 
 const HELP_TEXT = `
@@ -97,106 +97,175 @@ Examples:
 
 Output:
   tools/seo/output/calendar-{timestamp}.json
-`.trim();
+`.trim()
 
 // Topic clustering based on keyword similarity
-const TOPIC_PATTERNS: Array<{ pattern: RegExp; topic: string; contentType: string }> = [
-  { pattern: /\bvs\b|versus|comparison|compare|alternative/i, topic: "comparison", contentType: "comparison-page" },
-  { pattern: /\bhow to\b|guide|tutorial|step/i, topic: "how-to", contentType: "blog-post" },
-  { pattern: /\bwhat is\b|definition|meaning|explain/i, topic: "educational", contentType: "blog-post" },
-  { pattern: /\bbest\b|top\s+\d|review/i, topic: "listicle", contentType: "blog-post" },
-  { pattern: /\buse case|example|demo/i, topic: "use-case", contentType: "use-case-page" },
-  { pattern: /\bpricing|cost|free|plan/i, topic: "pricing", contentType: "landing-page" },
-  { pattern: /\bagent|multi.?agent|orchestrat/i, topic: "multi-agent", contentType: "blog-post" },
-  { pattern: /\bcode review|review\s+ai|automat/i, topic: "automation", contentType: "use-case-page" },
-  { pattern: /\bpair program|copilot|coding assist/i, topic: "ai-coding", contentType: "comparison-page" },
-  { pattern: /\bteam|collaborat|parallel/i, topic: "team-productivity", contentType: "use-case-page" },
-];
+const TOPIC_PATTERNS: Array<{
+  pattern: RegExp
+  topic: string
+  contentType: string
+}> = [
+  {
+    pattern: /\bvs\b|versus|comparison|compare|alternative/i,
+    topic: "comparison",
+    contentType: "comparison-page",
+  },
+  {
+    pattern: /\bhow to\b|guide|tutorial|step/i,
+    topic: "how-to",
+    contentType: "blog-post",
+  },
+  {
+    pattern: /\bwhat is\b|definition|meaning|explain/i,
+    topic: "educational",
+    contentType: "blog-post",
+  },
+  {
+    pattern: /\bbest\b|top\s+\d|review/i,
+    topic: "listicle",
+    contentType: "blog-post",
+  },
+  {
+    pattern: /\buse case|example|demo/i,
+    topic: "use-case",
+    contentType: "use-case-page",
+  },
+  {
+    pattern: /\bpricing|cost|free|plan/i,
+    topic: "pricing",
+    contentType: "landing-page",
+  },
+  {
+    pattern: /\bagent|multi.?agent|orchestrat/i,
+    topic: "multi-agent",
+    contentType: "blog-post",
+  },
+  {
+    pattern: /\bcode review|review\s+ai|automat/i,
+    topic: "automation",
+    contentType: "use-case-page",
+  },
+  {
+    pattern: /\bpair program|copilot|coding assist/i,
+    topic: "ai-coding",
+    contentType: "comparison-page",
+  },
+  {
+    pattern: /\bteam|collaborat|parallel/i,
+    topic: "team-productivity",
+    contentType: "use-case-page",
+  },
+]
 
 function clusterKeywords(
   keywords: KeywordInput[],
   serpData: Map<string, SerpInput>
 ): TopicCluster[] {
-  const clusters = new Map<string, {
-    keywords: KeywordInput[];
-    serpFeatures: Set<string>;
-    difficulties: number[];
-  }>();
+  const clusters = new Map<
+    string,
+    {
+      keywords: KeywordInput[]
+      serpFeatures: Set<string>
+      difficulties: number[]
+    }
+  >()
 
   for (const kw of keywords) {
-    let matched = false;
+    let matched = false
     for (const { pattern, topic } of TOPIC_PATTERNS) {
       if (pattern.test(kw.keyword)) {
         if (!clusters.has(topic)) {
-          clusters.set(topic, { keywords: [], serpFeatures: new Set(), difficulties: [] });
+          clusters.set(topic, {
+            keywords: [],
+            serpFeatures: new Set(),
+            difficulties: [],
+          })
         }
-        const cluster = clusters.get(topic)!;
-        cluster.keywords.push(kw);
+        const cluster = clusters.get(topic)!
+        cluster.keywords.push(kw)
 
         // Add SERP data if available
-        const serp = serpData.get(kw.keyword.toLowerCase());
+        const serp = serpData.get(kw.keyword.toLowerCase())
         if (serp) {
-          cluster.difficulties.push(serp.difficulty);
+          cluster.difficulties.push(serp.difficulty)
           for (const feature of serp.serpFeatures) {
-            cluster.serpFeatures.add(feature.type);
+            cluster.serpFeatures.add(feature.type)
           }
         }
 
-        matched = true;
-        break;
+        matched = true
+        break
       }
     }
 
     if (!matched) {
       // Assign to a general topic based on keyword words
-      const words = kw.keyword.toLowerCase().split(/\s+/);
-      const topic = words.length > 1 ? words.slice(0, 2).join("-") : words[0];
+      const words = kw.keyword.toLowerCase().split(/\s+/)
+      const topic = words.length > 1 ? words.slice(0, 2).join("-") : words[0]
       if (!clusters.has(topic)) {
-        clusters.set(topic, { keywords: [], serpFeatures: new Set(), difficulties: [] });
+        clusters.set(topic, {
+          keywords: [],
+          serpFeatures: new Set(),
+          difficulties: [],
+        })
       }
-      const cluster = clusters.get(topic)!;
-      cluster.keywords.push(kw);
+      const cluster = clusters.get(topic)!
+      cluster.keywords.push(kw)
 
-      const serp = serpData.get(kw.keyword.toLowerCase());
+      const serp = serpData.get(kw.keyword.toLowerCase())
       if (serp) {
-        cluster.difficulties.push(serp.difficulty);
+        cluster.difficulties.push(serp.difficulty)
         for (const feature of serp.serpFeatures) {
-          cluster.serpFeatures.add(feature.type);
+          cluster.serpFeatures.add(feature.type)
         }
       }
     }
   }
 
   // Build topic clusters with scoring
-  const result: TopicCluster[] = [];
+  const result: TopicCluster[] = []
 
   for (const [topic, data] of clusters) {
-    const totalSearchVolume = data.keywords.reduce((sum, kw) => sum + kw.searchVolume, 0);
-    const avgCpc = data.keywords.length > 0
-      ? data.keywords.reduce((sum, kw) => sum + kw.cpc, 0) / data.keywords.length
-      : 0;
-    const avgDifficulty = data.difficulties.length > 0
-      ? data.difficulties.reduce((sum, d) => sum + d, 0) / data.difficulties.length
-      : 50; // Default to medium difficulty if unknown
+    const totalSearchVolume = data.keywords.reduce(
+      (sum, kw) => sum + kw.searchVolume,
+      0
+    )
+    const avgCpc =
+      data.keywords.length > 0
+        ? data.keywords.reduce((sum, kw) => sum + kw.cpc, 0) /
+          data.keywords.length
+        : 0
+    const avgDifficulty =
+      data.difficulties.length > 0
+        ? data.difficulties.reduce((sum, d) => sum + d, 0) /
+          data.difficulties.length
+        : 50 // Default to medium difficulty if unknown
 
     // Score = totalSearchVolume × (1 / avgDifficulty)
     // Normalize difficulty to avoid division by zero
-    const normalizedDifficulty = Math.max(avgDifficulty, 1) / 100;
-    const score = totalSearchVolume * (1 / normalizedDifficulty);
+    const normalizedDifficulty = Math.max(avgDifficulty, 1) / 100
+    const score = totalSearchVolume * (1 / normalizedDifficulty)
 
     // Find matching content type
-    const contentPattern = TOPIC_PATTERNS.find((p) => p.topic === topic);
-    const contentType = contentPattern?.contentType ?? suggestContentType(topic, data.keywords);
+    const contentPattern = TOPIC_PATTERNS.find((p) => p.topic === topic)
+    const contentType =
+      contentPattern?.contentType ?? suggestContentType(topic, data.keywords)
 
     // Generate a suggested title
-    const primaryKeyword = data.keywords.sort((a, b) => b.searchVolume - a.searchVolume)[0];
-    const suggestedTitle = generateTitle(topic, primaryKeyword?.keyword ?? topic, contentType);
+    const primaryKeyword = data.keywords.sort(
+      (a, b) => b.searchVolume - a.searchVolume
+    )[0]
+    const suggestedTitle = generateTitle(
+      topic,
+      primaryKeyword?.keyword ?? topic,
+      contentType
+    )
 
     // Determine priority
-    let priority: "high" | "medium" | "low";
-    if (score > 1000) priority = "high";
-    else if (score > 200) priority = "medium";
-    else priority = "low";
+    let priority: "high" | "medium" | "low"
+    if (score > 1000) priority = "high"
+    else if (score > 200) priority = "medium"
+    else priority = "low"
 
     result.push({
       topic,
@@ -209,48 +278,57 @@ function clusterKeywords(
       suggestedTitle,
       priority,
       serpFeatures: Array.from(data.serpFeatures),
-    });
+    })
   }
 
   // Sort by score descending
-  return result.sort((a, b) => b.score - a.score);
+  return result.sort((a, b) => b.score - a.score)
 }
 
 function suggestContentType(topic: string, keywords: KeywordInput[]): string {
   // Heuristic: high CPC keywords suggest commercial intent → landing page
-  const avgCpc = keywords.reduce((sum, kw) => sum + kw.cpc, 0) / keywords.length;
-  if (avgCpc > 5) return "landing-page";
-  if (keywords.length > 5) return "pillar-page";
-  return "blog-post";
+  const avgCpc = keywords.reduce((sum, kw) => sum + kw.cpc, 0) / keywords.length
+  if (avgCpc > 5) return "landing-page"
+  if (keywords.length > 5) return "pillar-page"
+  return "blog-post"
 }
 
-function generateTitle(topic: string, primaryKeyword: string, contentType: string): string {
-  const keyword = primaryKeyword.charAt(0).toUpperCase() + primaryKeyword.slice(1);
+function generateTitle(
+  topic: string,
+  primaryKeyword: string,
+  contentType: string
+): string {
+  const keyword =
+    primaryKeyword.charAt(0).toUpperCase() + primaryKeyword.slice(1)
 
   switch (contentType) {
     case "comparison-page":
-      return `${keyword}: A Comprehensive Comparison`;
+      return `${keyword}: A Comprehensive Comparison`
     case "use-case-page":
-      return `How Teams Use ${keyword} to Ship Faster`;
+      return `How Teams Use ${keyword} to Ship Faster`
     case "landing-page":
-      return `${keyword} | Stoneforge`;
+      return `${keyword} | Stoneforge`
     case "pillar-page":
-      return `The Complete Guide to ${keyword}`;
+      return `The Complete Guide to ${keyword}`
     case "blog-post":
     default:
-      return `Understanding ${keyword}: What You Need to Know`;
+      return `Understanding ${keyword}: What You Need to Know`
   }
 }
 
-function generateContentPlan(clusters: TopicCluster[]): ContentCalendarOutput["contentPlan"] {
-  const plan: ContentCalendarOutput["contentPlan"] = [];
-  let week = 1;
+function generateContentPlan(
+  clusters: TopicCluster[]
+): ContentCalendarOutput["contentPlan"] {
+  const plan: ContentCalendarOutput["contentPlan"] = []
+  let week = 1
 
   // Schedule high priority first, then medium, then low
   const sorted = [...clusters].sort((a, b) => {
-    const priorityOrder = { high: 0, medium: 1, low: 2 };
-    return priorityOrder[a.priority] - priorityOrder[b.priority] || b.score - a.score;
-  });
+    const priorityOrder = { high: 0, medium: 1, low: 2 }
+    return (
+      priorityOrder[a.priority] - priorityOrder[b.priority] || b.score - a.score
+    )
+  })
 
   for (const cluster of sorted) {
     plan.push({
@@ -261,89 +339,93 @@ function generateContentPlan(clusters: TopicCluster[]): ContentCalendarOutput["c
       targetKeywords: cluster.keywords.slice(0, 5), // Top 5 keywords per piece
       priority: cluster.priority,
       estimatedSearchVolume: cluster.totalSearchVolume,
-    });
-    week++;
+    })
+    week++
   }
 
-  return plan;
+  return plan
 }
 
 async function main() {
-  const rawArgs = process.argv.slice(2);
-  const args = parseArgs(rawArgs);
+  const rawArgs = process.argv.slice(2)
+  const args = parseArgs(rawArgs)
 
   if (args.help) {
-    console.log(HELP_TEXT);
-    process.exit(0);
+    console.log(HELP_TEXT)
+    process.exit(0)
   }
 
   // Find --serp and --gsc arguments
-  let serpFile: string | undefined;
-  let gscFile: string | undefined;
+  let serpFile: string | undefined
+  let gscFile: string | undefined
   for (let i = 0; i < rawArgs.length; i++) {
     if (rawArgs[i] === "--serp" && rawArgs[i + 1]) {
-      serpFile = rawArgs[i + 1];
+      serpFile = rawArgs[i + 1]
     }
     if (rawArgs[i] === "--gsc" && rawArgs[i + 1]) {
-      gscFile = rawArgs[i + 1];
+      gscFile = rawArgs[i + 1]
     }
   }
 
   if (!args.file) {
-    console.error("Error: A keyword research file is required.");
-    console.error("Usage: bun run tools/seo/content-calendar.ts -f <keywords-file.json>");
-    console.error("Run keyword-research.ts first to generate the input file.");
-    process.exit(1);
+    console.error("Error: A keyword research file is required.")
+    console.error(
+      "Usage: bun run tools/seo/content-calendar.ts -f <keywords-file.json>"
+    )
+    console.error("Run keyword-research.ts first to generate the input file.")
+    process.exit(1)
   }
 
-  console.log(`\nContent Calendar Generator`);
-  console.log(`Keyword file: ${args.file}`);
-  if (serpFile) console.log(`SERP file: ${serpFile}`);
-  if (gscFile) console.log(`GSC file: ${gscFile}`);
-  console.log();
+  console.log(`\nContent Calendar Generator`)
+  console.log(`Keyword file: ${args.file}`)
+  if (serpFile) console.log(`SERP file: ${serpFile}`)
+  if (gscFile) console.log(`GSC file: ${gscFile}`)
+  console.log()
 
   // Load keyword data
-  const keywordFileContent = await Bun.file(args.file).json();
-  let keywords: KeywordInput[];
+  const keywordFileContent = await Bun.file(args.file).json()
+  let keywords: KeywordInput[]
 
   if (Array.isArray(keywordFileContent)) {
-    keywords = keywordFileContent;
+    keywords = keywordFileContent
   } else if (keywordFileContent.keywords) {
-    keywords = keywordFileContent.keywords;
+    keywords = keywordFileContent.keywords
   } else {
-    throw new Error("Could not parse keywords from file. Expected an array or { keywords: [...] }");
+    throw new Error(
+      "Could not parse keywords from file. Expected an array or { keywords: [...] }"
+    )
   }
 
-  console.log(`Loaded ${keywords.length} keywords`);
+  console.log(`Loaded ${keywords.length} keywords`)
 
   // Load SERP data if provided
-  const serpData = new Map<string, SerpInput>();
+  const serpData = new Map<string, SerpInput>()
   if (serpFile) {
-    const serpFileContent = await Bun.file(serpFile).json();
-    const serpItems: SerpInput[] = serpFileContent.serpData ?? serpFileContent;
+    const serpFileContent = await Bun.file(serpFile).json()
+    const serpItems: SerpInput[] = serpFileContent.serpData ?? serpFileContent
     for (const item of serpItems) {
-      serpData.set(item.keyword.toLowerCase(), item);
+      serpData.set(item.keyword.toLowerCase(), item)
     }
-    console.log(`Loaded ${serpData.size} SERP data entries`);
+    console.log(`Loaded ${serpData.size} SERP data entries`)
   }
 
   // Cluster keywords and generate calendar
-  const clusters = clusterKeywords(keywords, serpData);
-  const contentPlan = generateContentPlan(clusters);
+  const clusters = clusterKeywords(keywords, serpData)
+  const contentPlan = generateContentPlan(clusters)
 
-  const highPriority = clusters.filter((c) => c.priority === "high").length;
-  const mediumPriority = clusters.filter((c) => c.priority === "medium").length;
-  const lowPriority = clusters.filter((c) => c.priority === "low").length;
+  const highPriority = clusters.filter((c) => c.priority === "high").length
+  const mediumPriority = clusters.filter((c) => c.priority === "medium").length
+  const lowPriority = clusters.filter((c) => c.priority === "low").length
 
   // Process GSC data if provided
-  let gscOpportunities: GSCOpportunity[] | undefined;
+  let gscOpportunities: GSCOpportunity[] | undefined
   if (gscFile) {
     try {
-      const gscContent = await Bun.file(gscFile).json();
-      const insights = gscContent.insights?.details as GSCInsights | undefined;
+      const gscContent = await Bun.file(gscFile).json()
+      const insights = gscContent.insights?.details as GSCInsights | undefined
 
       if (insights) {
-        gscOpportunities = [];
+        gscOpportunities = []
 
         for (const row of insights.highImpressionLowCtr ?? []) {
           gscOpportunities.push({
@@ -354,8 +436,9 @@ async function main() {
             clicks: row.clicks,
             ctr: row.ctr,
             position: row.position,
-            suggestedAction: "Optimize title and meta description to improve CTR",
-          });
+            suggestedAction:
+              "Optimize title and meta description to improve CTR",
+          })
         }
 
         for (const row of insights.lowHangingFruit ?? []) {
@@ -368,7 +451,7 @@ async function main() {
             ctr: row.ctr,
             position: row.position,
             suggestedAction: `Currently at position ${row.position} — create or improve content to push into top 5`,
-          });
+          })
         }
 
         for (const row of insights.decliningPages ?? []) {
@@ -380,16 +463,19 @@ async function main() {
             clicks: row.clicks,
             ctr: row.ctr,
             position: row.position,
-            suggestedAction: "Page has low CTR despite decent position — update content and meta tags",
-          });
+            suggestedAction:
+              "Page has low CTR despite decent position — update content and meta tags",
+          })
         }
 
-        console.log(`Loaded ${gscOpportunities.length} GSC opportunities`);
+        console.log(`Loaded ${gscOpportunities.length} GSC opportunities`)
       } else {
-        console.log(`GSC file loaded but no insights found — run search-console.ts first`);
+        console.log(
+          `GSC file loaded but no insights found — run search-console.ts first`
+        )
       }
     } catch (err: any) {
-      console.warn(`Warning: Could not load GSC data: ${err.message}`);
+      console.warn(`Warning: Could not load GSC data: ${err.message}`)
     }
   }
 
@@ -401,59 +487,84 @@ async function main() {
       highPriority,
       mediumPriority,
       lowPriority,
-      totalSearchVolume: clusters.reduce((sum, c) => sum + c.totalSearchVolume, 0),
+      totalSearchVolume: clusters.reduce(
+        (sum, c) => sum + c.totalSearchVolume,
+        0
+      ),
     },
     contentPlan,
     gscOpportunities,
-  };
+  }
 
-  const filename = `calendar-${getTimestamp()}.json`;
-  await writeOutput(filename, output);
+  const filename = `calendar-${getTimestamp()}.json`
+  await writeOutput(filename, output)
 
-  console.log(`\nContent Calendar Summary:`);
-  console.log(`  Topic clusters: ${clusters.length}`);
-  console.log(`  High priority: ${highPriority}`);
-  console.log(`  Medium priority: ${mediumPriority}`);
-  console.log(`  Low priority: ${lowPriority}`);
+  console.log(`\nContent Calendar Summary:`)
+  console.log(`  Topic clusters: ${clusters.length}`)
+  console.log(`  High priority: ${highPriority}`)
+  console.log(`  Medium priority: ${mediumPriority}`)
+  console.log(`  Low priority: ${lowPriority}`)
 
-  console.log(`\nPrioritized Content Plan:`);
+  console.log(`\nPrioritized Content Plan:`)
   for (const item of contentPlan.slice(0, 10)) {
-    console.log(`  Week ${item.week}: [${item.priority}] ${item.suggestedTitle}`);
-    console.log(`    Type: ${item.contentType} | Keywords: ${item.targetKeywords.slice(0, 3).join(", ")}`);
+    console.log(
+      `  Week ${item.week}: [${item.priority}] ${item.suggestedTitle}`
+    )
+    console.log(
+      `    Type: ${item.contentType} | Keywords: ${item.targetKeywords.slice(0, 3).join(", ")}`
+    )
   }
 
   if (gscOpportunities && gscOpportunities.length > 0) {
-    console.log(`\nGoogle Search Console Opportunities:`);
+    console.log(`\nGoogle Search Console Opportunities:`)
     const byType = {
-      "high-impression-low-ctr": gscOpportunities.filter((o) => o.type === "high-impression-low-ctr"),
-      "low-hanging-fruit": gscOpportunities.filter((o) => o.type === "low-hanging-fruit"),
-      "declining-page": gscOpportunities.filter((o) => o.type === "declining-page"),
-    };
+      "high-impression-low-ctr": gscOpportunities.filter(
+        (o) => o.type === "high-impression-low-ctr"
+      ),
+      "low-hanging-fruit": gscOpportunities.filter(
+        (o) => o.type === "low-hanging-fruit"
+      ),
+      "declining-page": gscOpportunities.filter(
+        (o) => o.type === "declining-page"
+      ),
+    }
 
     if (byType["high-impression-low-ctr"].length > 0) {
-      console.log(`  High-impression, low-CTR queries (${byType["high-impression-low-ctr"].length}):`);
+      console.log(
+        `  High-impression, low-CTR queries (${byType["high-impression-low-ctr"].length}):`
+      )
       for (const o of byType["high-impression-low-ctr"].slice(0, 3)) {
-        console.log(`    "${o.query}" — ${o.impressions} imp, ${(o.ctr * 100).toFixed(2)}% CTR`);
+        console.log(
+          `    "${o.query}" — ${o.impressions} imp, ${(o.ctr * 100).toFixed(2)}% CTR`
+        )
       }
     }
 
     if (byType["low-hanging-fruit"].length > 0) {
-      console.log(`  Low-hanging fruit — positions 5-20 (${byType["low-hanging-fruit"].length}):`);
+      console.log(
+        `  Low-hanging fruit — positions 5-20 (${byType["low-hanging-fruit"].length}):`
+      )
       for (const o of byType["low-hanging-fruit"].slice(0, 3)) {
-        console.log(`    "${o.query}" — pos ${o.position}, ${o.impressions} imp`);
+        console.log(
+          `    "${o.query}" — pos ${o.position}, ${o.impressions} imp`
+        )
       }
     }
 
     if (byType["declining-page"].length > 0) {
-      console.log(`  Pages needing updates (${byType["declining-page"].length}):`);
+      console.log(
+        `  Pages needing updates (${byType["declining-page"].length}):`
+      )
       for (const o of byType["declining-page"].slice(0, 3)) {
-        console.log(`    ${o.page} — pos ${o.position}, ${(o.ctr * 100).toFixed(2)}% CTR`);
+        console.log(
+          `    ${o.page} — pos ${o.position}, ${(o.ctr * 100).toFixed(2)}% CTR`
+        )
       }
     }
   }
 }
 
 main().catch((err) => {
-  console.error("Error:", err.message);
-  process.exit(1);
-});
+  console.error("Error:", err.message)
+  process.exit(1)
+})

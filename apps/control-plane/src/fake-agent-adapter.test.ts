@@ -4,7 +4,7 @@ import {
   asRoleDefinitionId,
   asRuntimeId,
   asWorkspaceId,
-} from "@stoneforge/core";
+} from "@stoneforge/core"
 import {
   asAssignmentId,
   asDispatchIntentId,
@@ -17,38 +17,38 @@ import {
   type Checkpoint,
   type Session,
   type Task,
-} from "@stoneforge/execution";
-import { describe, expect, it } from "vitest";
+} from "@stoneforge/execution"
+import { describe, expect, it } from "vitest"
 
-import { createFakeAgentFixture } from "./index.js";
+import { createFakeAgentFixture } from "./index.js"
 
 describe("fake agent adapter", () => {
   it("records starts, resumes, and cancellations deterministically", async () => {
-    const adapter = createFakeAgentFixture();
-    const start = await adapter.start(startContext());
-    const resume = await adapter.resume(resumeContext());
+    const adapter = createFakeAgentFixture()
+    const start = await adapter.start(startContext())
+    const resume = await adapter.resume(resumeContext())
 
-    await adapter.cancel(failedSession());
+    await adapter.cancel(failedSession())
 
-    expect(start.providerSessionId).toBe("local-task-start-1");
-    expect(resume.providerSessionId).toBe("local-merge_request-resume-1");
+    expect(start.providerSessionId).toBe("local-task-start-1")
+    expect(resume.providerSessionId).toBe("local-merge_request-resume-1")
     expect(adapter.starts).toEqual([
       {
         assignmentId: "assign_implementation",
         providerSessionId: "local-task-start-1",
         targetType: "task",
       },
-    ]);
+    ])
     expect(adapter.resumes).toEqual([
       {
         assignmentId: "assign_review",
         failedProviderSessionId: "provider_failed",
         providerSessionId: "local-merge_request-resume-1",
       },
-    ]);
-    expect(adapter.canceledSessionIds).toEqual(["session_failed"]);
-  });
-});
+    ])
+    expect(adapter.canceledSessionIds).toEqual(["session_failed"])
+  })
+})
 
 function startContext(): AgentAdapterStartContext {
   return {
@@ -60,7 +60,7 @@ function startContext(): AgentAdapterStartContext {
     agent: agent(),
     runtime: runtime(),
     roleDefinition: roleDefinition(),
-  };
+  }
 }
 
 function resumeContext(): AgentAdapterResumeContext {
@@ -80,7 +80,7 @@ function resumeContext(): AgentAdapterResumeContext {
     roleDefinition: roleDefinition(),
     checkpoint: checkpoint(),
     failedSession: failedSession(),
-  };
+  }
 }
 
 function task(): Task {
@@ -104,7 +104,7 @@ function task(): Task {
     },
     createdAt: "2026-04-24T10:00:00.000Z",
     updatedAt: "2026-04-24T10:00:00.000Z",
-  };
+  }
 }
 
 function assignment(id: string): Assignment {
@@ -126,7 +126,7 @@ function assignment(id: string): Assignment {
     recoveryFailureCount: 0,
     createdAt: "2026-04-24T10:00:00.000Z",
     updatedAt: "2026-04-24T10:00:00.000Z",
-  };
+  }
 }
 
 function agent(): AgentAdapterStartContext["agent"] {
@@ -141,7 +141,7 @@ function agent(): AgentAdapterStartContext["agent"] {
     healthStatus: "healthy",
     tags: [],
     launcher: "fake-local-agent-adapter",
-  };
+  }
 }
 
 function runtime(): AgentAdapterStartContext["runtime"] {
@@ -153,7 +153,7 @@ function runtime(): AgentAdapterStartContext["runtime"] {
     mode: "local_worktree",
     healthStatus: "healthy",
     tags: [],
-  };
+  }
 }
 
 function roleDefinition(): AgentAdapterStartContext["roleDefinition"] {
@@ -168,7 +168,7 @@ function roleDefinition(): AgentAdapterStartContext["roleDefinition"] {
     lifecycleHooks: [],
     tags: [],
     enabled: true,
-  };
+  }
 }
 
 function failedSession(): Session {
@@ -182,7 +182,7 @@ function failedSession(): Session {
     checkpoints: [checkpoint()],
     createdAt: "2026-04-24T10:00:00.000Z",
     updatedAt: "2026-04-24T10:00:00.000Z",
-  };
+  }
 }
 
 function checkpoint(): Checkpoint {
@@ -191,5 +191,5 @@ function checkpoint(): Checkpoint {
     remainingWork: ["Resume review."],
     importantContext: ["Synthetic adapter fixture."],
     capturedAt: "2026-04-24T10:00:00.000Z",
-  };
+  }
 }

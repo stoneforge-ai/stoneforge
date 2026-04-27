@@ -4,14 +4,14 @@ import type {
   ProviderCheckObservation,
   ProviderPullRequest,
   ProviderPullRequestObservation,
-} from "@stoneforge/merge-request";
+} from "@stoneforge/merge-request"
 
-import type { GitHubTokenProvider } from "./github-app-token-provider.js";
-import { GitHubIntegrationError } from "./github-app-token-provider.js";
-import { upsertWorkingBranchAndChangeMarker } from "./github-branch-file-ops.js";
-import type { GitHubMergeRequestConfig } from "./github-integration-config.js";
-import type { GitHubHttpClient } from "./github-http-client.js";
-import { GitHubHttpError } from "./github-http-client.js";
+import type { GitHubTokenProvider } from "./github-app-token-provider.js"
+import { GitHubIntegrationError } from "./github-app-token-provider.js"
+import { upsertWorkingBranchAndChangeMarker } from "./github-branch-file-ops.js"
+import type { GitHubMergeRequestConfig } from "./github-integration-config.js"
+import type { GitHubHttpClient } from "./github-http-client.js"
+import { GitHubHttpError } from "./github-http-client.js"
 import {
   type JsonObject,
   type JsonValue,
@@ -20,7 +20,7 @@ import {
   jsonObject,
   requiredNumber,
   requiredString,
-} from "./github-json.js";
+} from "./github-json.js"
 import {
   branchPath,
   checkRunObservation,
@@ -29,50 +29,50 @@ import {
   pullRequestState,
   statusObservation,
   statusState,
-} from "./github-merge-request-mapping.js";
+} from "./github-merge-request-mapping.js"
 
 type PullRequestInput = Parameters<
   GitHubMergeRequestAdapter["createOrUpdateTaskPullRequest"]
->[0];
+>[0]
 
 export class GitHubAppMergeRequestClient implements GitHubMergeRequestAdapter {
   constructor(
     private readonly config: GitHubMergeRequestConfig,
     private readonly tokenProvider: GitHubTokenProvider,
     private readonly http: GitHubHttpClient,
-    private readonly now: () => Date = () => new Date(),
+    private readonly now: () => Date = () => new Date()
   ) {}
 
   async createOrUpdateTaskPullRequest(
-    input: PullRequestInput,
+    input: PullRequestInput
   ): Promise<ProviderPullRequest> {
-    const token = await this.tokenProvider.installationToken();
-    const baseSha = await this.baseBranchSha(token, input.targetBranch);
+    const token = await this.tokenProvider.installationToken()
+    const baseSha = await this.baseBranchSha(token, input.targetBranch)
 
     await upsertWorkingBranchAndChangeMarker({
       request: (method, path, body, action) => {
-        return this.request(token, method, path, body, action);
+        return this.request(token, method, path, body, action)
       },
       repoPath: this.repoPath(),
       pullRequest: input,
       baseSha,
       now: this.now(),
-    });
+    })
 
     const pullRequest =
       (await this.findOpenPullRequest(token, input)) ??
-      (await this.createPullRequest(token, input));
+      (await this.createPullRequest(token, input))
 
-    return providerPullRequest(pullRequest);
+    return providerPullRequest(pullRequest)
   }
 
   async publishPolicyCheck(input: {
-    providerPullRequest: ProviderPullRequest;
-    state: PolicyCheckState;
-    reason: string;
+    providerPullRequest: ProviderPullRequest
+    state: PolicyCheckState
+    reason: string
   }): Promise<void> {
-    const token = await this.tokenProvider.installationToken();
-    const headSha = encodeURIComponent(input.providerPullRequest.headSha);
+    const token = await this.tokenProvider.installationToken()
+    const headSha = encodeURIComponent(input.providerPullRequest.headSha)
 
     await this.request(
       token,
@@ -84,68 +84,68 @@ export class GitHubAppMergeRequestClient implements GitHubMergeRequestAdapter {
         description: input.reason.slice(0, 140),
         target_url: input.providerPullRequest.url,
       },
-      "publish Stoneforge policy check",
-    );
+      "publish Stoneforge policy check"
+    )
   }
 
   async mergePullRequest(input: {
-    providerPullRequest: ProviderPullRequest;
+    providerPullRequest: ProviderPullRequest
   }): Promise<{ mergedAt: string }> {
     if (!this.config.allowMerge) {
       throw new GitHubIntegrationError(
-        "GitHub merge is disabled. Set --github-allow-merge only for a sandbox repository and branch.",
-      );
+        "GitHub merge is disabled. Set --github-allow-merge only for a sandbox repository and branch."
+      )
     }
 
-    const token = await this.tokenProvider.installationToken();
+    const token = await this.tokenProvider.installationToken()
     const response = jsonObject(
       await this.request(
         token,
         "PUT",
         `/repos/${this.repoPath()}/pulls/${input.providerPullRequest.number}/merge`,
         { merge_method: "squash" },
-        "merge GitHub pull request",
-      ),
-    );
+        "merge GitHub pull request"
+      )
+    )
 
     if (jsonBoolean(response?.merged) !== true) {
       throw new GitHubIntegrationError(
-        `GitHub rejected merge for PR #${input.providerPullRequest.number}. Check branch protection and required checks.`,
-      );
+        `GitHub rejected merge for PR #${input.providerPullRequest.number}. Check branch protection and required checks.`
+      )
     }
 
-    return { mergedAt: this.now().toISOString() };
+    return { mergedAt: this.now().toISOString() }
   }
 
   async observePullRequest(input: {
-    providerPullRequest: ProviderPullRequest;
+    providerPullRequest: ProviderPullRequest
   }): Promise<ProviderPullRequestObservation> {
-    const token = await this.tokenProvider.installationToken();
+    const token = await this.tokenProvider.installationToken()
     const pullRequest = jsonObject(
       await this.request(
         token,
         "GET",
         `/repos/${this.repoPath()}/pulls/${input.providerPullRequest.number}`,
         undefined,
-        "observe GitHub pull request",
-      ),
-    );
+        "observe GitHub pull request"
+      )
+    )
 
     if (!pullRequest) {
       throw new GitHubIntegrationError(
-        "GitHub PR observation returned no pull request.",
-      );
+        "GitHub PR observation returned no pull request."
+      )
     }
-    const observedHeadSha = headSha(pullRequest);
+    const observedHeadSha = headSha(pullRequest)
 
     return {
       providerPullRequestId: String(
-        requiredNumber(pullRequest, "id", "GitHub PR observation"),
+        requiredNumber(pullRequest, "id", "GitHub PR observation")
       ),
       state: pullRequestState(pullRequest),
       headSha: observedHeadSha,
       checks: await this.checkObservations(token, observedHeadSha),
-    };
+    }
   }
 
   private async baseBranchSha(token: string, branch: string): Promise<string> {
@@ -155,36 +155,36 @@ export class GitHubAppMergeRequestClient implements GitHubMergeRequestAdapter {
         "GET",
         `/repos/${this.repoPath()}/git/ref/heads/${branchPath(branch)}`,
         undefined,
-        "read GitHub base branch",
-      ),
-    );
+        "read GitHub base branch"
+      )
+    )
 
     return requiredString(
       jsonObject(response?.object) ?? {},
       "sha",
-      "GitHub base branch ref",
-    );
+      "GitHub base branch ref"
+    )
   }
 
   private async findOpenPullRequest(
     token: string,
-    input: PullRequestInput,
+    input: PullRequestInput
   ): Promise<JsonObject | undefined> {
-    const head = `${this.config.owner}:${input.sourceBranch}`;
+    const head = `${this.config.owner}:${input.sourceBranch}`
     const response = await this.request(
       token,
       "GET",
       `/repos/${this.repoPath()}/pulls?head=${encodeURIComponent(head)}&base=${encodeURIComponent(input.targetBranch)}&state=open`,
       undefined,
-      "reuse GitHub pull request",
-    );
+      "reuse GitHub pull request"
+    )
 
-    return jsonArray(response).map(jsonObject).find(isPresent);
+    return jsonArray(response).map(jsonObject).find(isPresent)
   }
 
   private async createPullRequest(
     token: string,
-    input: PullRequestInput,
+    input: PullRequestInput
   ): Promise<JsonObject> {
     const response = jsonObject(
       await this.request(
@@ -197,34 +197,34 @@ export class GitHubAppMergeRequestClient implements GitHubMergeRequestAdapter {
           head: input.sourceBranch,
           base: input.targetBranch,
         },
-        "create GitHub pull request",
-      ),
-    );
+        "create GitHub pull request"
+      )
+    )
 
     if (!response) {
       throw new GitHubIntegrationError(
-        "GitHub PR creation returned no pull request.",
-      );
+        "GitHub PR creation returned no pull request."
+      )
     }
 
-    return response;
+    return response
   }
 
   private async checkObservations(
     token: string,
-    sha: string,
+    sha: string
   ): Promise<ProviderCheckObservation[]> {
     const [checkRuns, statuses] = await Promise.all([
       this.checkRuns(token, sha),
       this.statuses(token, sha),
-    ]);
+    ])
 
-    return [...checkRuns, ...statuses];
+    return [...checkRuns, ...statuses]
   }
 
   private async checkRuns(
     token: string,
-    sha: string,
+    sha: string
   ): Promise<ProviderCheckObservation[]> {
     const response = jsonObject(
       await this.request(
@@ -232,28 +232,28 @@ export class GitHubAppMergeRequestClient implements GitHubMergeRequestAdapter {
         "GET",
         `/repos/${this.repoPath()}/commits/${sha}/check-runs`,
         undefined,
-        "observe GitHub checks",
-      ),
-    );
+        "observe GitHub checks"
+      )
+    )
 
-    return jsonArray(response?.check_runs).flatMap(checkRunObservation);
+    return jsonArray(response?.check_runs).flatMap(checkRunObservation)
   }
 
   private async statuses(
     token: string,
-    sha: string,
+    sha: string
   ): Promise<ProviderCheckObservation[]> {
     const response = await this.request(
       token,
       "GET",
       `/repos/${this.repoPath()}/commits/${sha}/statuses`,
       undefined,
-      "observe GitHub statuses",
-    );
+      "observe GitHub statuses"
+    )
 
     return jsonArray(response)
       .flatMap(statusObservation)
-      .filter(isProviderCheck);
+      .filter(isProviderCheck)
   }
 
   private async request(
@@ -261,31 +261,31 @@ export class GitHubAppMergeRequestClient implements GitHubMergeRequestAdapter {
     method: "GET" | "PATCH" | "POST" | "PUT",
     path: string,
     body: JsonObject | undefined,
-    action: string,
+    action: string
   ): Promise<JsonValue | undefined> {
     try {
       const response =
         method === "GET"
           ? await this.http.request({ method, path, token })
-          : await this.http.request({ method, path, token, body });
+          : await this.http.request({ method, path, token, body })
 
-      return response.json;
+      return response.json
     } catch (error) {
       if (error instanceof GitHubHttpError && error.status === 404) {
-        throw error;
+        throw error
       }
 
       throw githubActionError(
         error instanceof Error ? error : undefined,
         action,
         this.config.owner,
-        this.config.repo,
-      );
+        this.config.repo
+      )
     }
   }
 
   private repoPath(): string {
-    return `${encodeURIComponent(this.config.owner)}/${encodeURIComponent(this.config.repo)}`;
+    return `${encodeURIComponent(this.config.owner)}/${encodeURIComponent(this.config.repo)}`
   }
 }
 
@@ -293,14 +293,14 @@ function headSha(pullRequest: JsonObject): string {
   return requiredString(
     jsonObject(pullRequest.head) ?? {},
     "sha",
-    "GitHub PR observation",
-  );
+    "GitHub PR observation"
+  )
 }
 
 function isPresent<T>(value: T | undefined): value is T {
-  return value !== undefined;
+  return value !== undefined
 }
 
 function isProviderCheck(observation: ProviderCheckObservation): boolean {
-  return observation.name !== "stoneforge/policy";
+  return observation.name !== "stoneforge/policy"
 }

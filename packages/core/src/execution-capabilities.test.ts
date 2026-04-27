@@ -1,4 +1,4 @@
-import { describe, expect, expectTypeOf, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest"
 
 import {
   asAgentId,
@@ -11,16 +11,16 @@ import {
   type CustomerHostRuntime,
   type ManagedRuntime,
   type Runtime,
-} from "./index.js";
+} from "./index.js"
 
 describe("runtime capability types", () => {
   it("correlates runtime location with valid execution modes", () => {
     expectTypeOf<
       Extract<Runtime, { location: "customer_host" }>
-    >().toEqualTypeOf<CustomerHostRuntime>();
+    >().toEqualTypeOf<CustomerHostRuntime>()
     expectTypeOf<
       Extract<Runtime, { location: "managed" }>
-    >().toEqualTypeOf<ManagedRuntime>();
+    >().toEqualTypeOf<ManagedRuntime>()
 
     const managed: Runtime = {
       id: asRuntimeId("runtime_1"),
@@ -31,10 +31,10 @@ describe("runtime capability types", () => {
       healthStatus: "healthy",
       tags: [],
       managedProvider: "daytona",
-    };
+    }
 
-    expectTypeOf(managed.mode).toEqualTypeOf<"managed_sandbox">();
-  });
+    expectTypeOf(managed.mode).toEqualTypeOf<"managed_sandbox">()
+  })
 
   it("rejects unsupported location and mode combinations", () => {
     const invalidManagedRuntime = {
@@ -46,12 +46,12 @@ describe("runtime capability types", () => {
       healthStatus: "healthy",
       tags: [],
       managedProvider: "daytona",
-    };
+    }
 
     // @ts-expect-error Managed runtimes must use the managed sandbox mode.
-    const runtime: Runtime = invalidManagedRuntime;
-    expectTypeOf(runtime).toEqualTypeOf<Runtime>();
-  });
+    const runtime: Runtime = invalidManagedRuntime
+    expectTypeOf(runtime).toEqualTypeOf<Runtime>()
+  })
 
   it("clones mutable capability collections", () => {
     const runtime = cloneRuntime({
@@ -62,7 +62,7 @@ describe("runtime capability types", () => {
       mode: "local_worktree",
       healthStatus: "healthy",
       tags: ["default"],
-    });
+    })
     const agent = cloneAgent({
       id: asAgentId("agent_1"),
       workspaceId: asWorkspaceId("workspace_1"),
@@ -74,7 +74,7 @@ describe("runtime capability types", () => {
       healthStatus: "healthy",
       tags: ["default"],
       launcher: "codex",
-    });
+    })
     const roleDefinition = cloneRoleDefinition({
       id: asRoleDefinitionId("role_1"),
       workspaceId: asWorkspaceId("workspace_1"),
@@ -86,13 +86,13 @@ describe("runtime capability types", () => {
       lifecycleHooks: ["quality"],
       tags: ["default"],
       enabled: true,
-    });
+    })
 
-    expect(runtime.tags).toEqual(["default"]);
-    expect(agent.tags).toEqual(["default"]);
-    expect(roleDefinition.toolAccess).toEqual(["shell"]);
-    expect(roleDefinition.skillAccess).toEqual(["type-driven-apis"]);
-    expect(roleDefinition.lifecycleHooks).toEqual(["quality"]);
-    expect(roleDefinition.tags).toEqual(["default"]);
-  });
-});
+    expect(runtime.tags).toEqual(["default"])
+    expect(agent.tags).toEqual(["default"])
+    expect(roleDefinition.toolAccess).toEqual(["shell"])
+    expect(roleDefinition.skillAccess).toEqual(["type-driven-apis"])
+    expect(roleDefinition.lifecycleHooks).toEqual(["quality"])
+    expect(roleDefinition.tags).toEqual(["default"])
+  })
+})

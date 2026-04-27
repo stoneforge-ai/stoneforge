@@ -418,20 +418,20 @@ First-slice rules:
 
 ## Association Contracts
 
-| Association | Contract |
-| --- | --- |
-| Org -> Workspace | One Org owns many Workspaces. A Workspace belongs to one Org. |
-| Workspace -> repository | One Workspace maps to one GitHub repository in the first slice. |
-| Plan -> Task | A Task belongs to zero or one Plan. A Plan contains many Tasks. |
-| Task -> Assignment | A Task may have many Assignments. A Task-owned Assignment belongs to one Task. |
-| MergeRequest -> Assignment | A MergeRequest may have many Assignments. A MergeRequest-owned Assignment belongs to one MergeRequest. |
-| Assignment -> Session | An Assignment may contain many Sessions. A Session belongs to one Assignment. |
-| Task/Plan -> MergeRequest | A MergeRequest belongs to exactly one Task or exactly one Plan. |
-| MergeRequest -> Verification Run | A MergeRequest may have many Verification Runs. A Verification Run belongs to one MergeRequest. |
-| Host -> Runtime | A Host may expose many Runtimes. A customer-managed Runtime belongs to one Host. |
-| Runtime -> Agent | A Runtime may be reused by many Agents. An Agent is bound to one Runtime. |
-| RoleDefinition -> Assignment | A RoleDefinition may be reused by many Assignments. Each Assignment resolves exactly one RoleDefinition. |
-| Automation -> execution intent | Automations create scheduler-evaluated intent; they do not directly start Sessions. |
+| Association                      | Contract                                                                                                 |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Org -> Workspace                 | One Org owns many Workspaces. A Workspace belongs to one Org.                                            |
+| Workspace -> repository          | One Workspace maps to one GitHub repository in the first slice.                                          |
+| Plan -> Task                     | A Task belongs to zero or one Plan. A Plan contains many Tasks.                                          |
+| Task -> Assignment               | A Task may have many Assignments. A Task-owned Assignment belongs to one Task.                           |
+| MergeRequest -> Assignment       | A MergeRequest may have many Assignments. A MergeRequest-owned Assignment belongs to one MergeRequest.   |
+| Assignment -> Session            | An Assignment may contain many Sessions. A Session belongs to one Assignment.                            |
+| Task/Plan -> MergeRequest        | A MergeRequest belongs to exactly one Task or exactly one Plan.                                          |
+| MergeRequest -> Verification Run | A MergeRequest may have many Verification Runs. A Verification Run belongs to one MergeRequest.          |
+| Host -> Runtime                  | A Host may expose many Runtimes. A customer-managed Runtime belongs to one Host.                         |
+| Runtime -> Agent                 | A Runtime may be reused by many Agents. An Agent is bound to one Runtime.                                |
+| RoleDefinition -> Assignment     | A RoleDefinition may be reused by many Assignments. Each Assignment resolves exactly one RoleDefinition. |
+| Automation -> execution intent   | Automations create scheduler-evaluated intent; they do not directly start Sessions.                      |
 
 ## Invariants
 
@@ -456,18 +456,18 @@ First-slice rules:
 
 These are semantic event names for reasoning and docs. They are not frozen API or queue payload names.
 
-| Event | Meaning |
-| --- | --- |
-| `workspace.ready` | workspace has repo connectivity, policy, and at least one runnable execution path |
-| `task.readiness_changed` | a task's dispatch eligibility changed due to dependency, plan, policy, or review state |
-| `dispatch.intent_created` | an automation or human action requested scheduler evaluation |
-| `assignment.started` | a durable dispatch envelope has entered live execution |
-| `session.checkpoint_created` | a Session persisted a resumable Checkpoint into the Task Progress Record |
-| `merge_request.opened` | a provider PR now exists for a task or plan |
-| `verification_run.observed` | new verification status/check information was recorded |
-| `repair.trigger_recorded` | review, verification, mergeability, policy, or branch health requires task or plan repair |
-| `policy.decision_recorded` | a policy-sensitive action was evaluated and its decision stored |
-| `audit.event_emitted` | a required audit record was persisted |
+| Event                        | Meaning                                                                                   |
+| ---------------------------- | ----------------------------------------------------------------------------------------- |
+| `workspace.ready`            | workspace has repo connectivity, policy, and at least one runnable execution path         |
+| `task.readiness_changed`     | a task's dispatch eligibility changed due to dependency, plan, policy, or review state    |
+| `dispatch.intent_created`    | an automation or human action requested scheduler evaluation                              |
+| `assignment.started`         | a durable dispatch envelope has entered live execution                                    |
+| `session.checkpoint_created` | a Session persisted a resumable Checkpoint into the Task Progress Record                  |
+| `merge_request.opened`       | a provider PR now exists for a task or plan                                               |
+| `verification_run.observed`  | new verification status/check information was recorded                                    |
+| `repair.trigger_recorded`    | review, verification, mergeability, policy, or branch health requires task or plan repair |
+| `policy.decision_recorded`   | a policy-sensitive action was evaluated and its decision stored                           |
+| `audit.event_emitted`        | a required audit record was persisted                                                     |
 
 ## Intent Example
 
@@ -500,7 +500,8 @@ org:
           checkpoints:
             - completedWork: ["added retry counters"]
               remainingWork: ["wire PR review summary"]
-              importantContext: ["retry visibility spans scheduler and PR review summary"]
+              importantContext:
+                ["retry visibility spans scheduler and PR review summary"]
           repairContext: []
         assignments:
           - role: "worker-default"

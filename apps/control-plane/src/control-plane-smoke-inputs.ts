@@ -1,16 +1,16 @@
-import type { ConnectGitHubRepositoryInput } from "@stoneforge/workspace";
+import type { ConnectGitHubRepositoryInput } from "@stoneforge/workspace"
 
-import type { ControlPlaneOperationInputs } from "./control-plane-operation-inputs.js";
+import type { ControlPlaneOperationInputs } from "./control-plane-operation-inputs.js"
 
 const fakeRepository: ConnectGitHubRepositoryInput = {
   installationId: "github-installation-local",
   owner: "toolco",
   repository: "stoneforge",
   defaultBranch: "main",
-};
+}
 
 export function localSmokeOperationInputs(
-  repository: ConnectGitHubRepositoryInput = fakeRepository,
+  repository: ConnectGitHubRepositoryInput = fakeRepository
 ): ControlPlaneOperationInputs {
   return {
     workspace: {
@@ -62,5 +62,5 @@ export function localSmokeOperationInputs(
       humanReviewerId: "user_approver",
       humanApprovalReason: "Human reviewer approved the MergeRequest.",
     },
-  };
+  }
 }

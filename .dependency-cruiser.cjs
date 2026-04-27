@@ -76,4 +76,4 @@ module.exports = {
       fileName: "tsconfig.base.json",
     },
   },
-};
+}

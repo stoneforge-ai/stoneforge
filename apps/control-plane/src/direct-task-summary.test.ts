@@ -4,43 +4,35 @@ import {
   asMergeRequestId,
   asRoleDefinitionId,
   asRuntimeId,
-} from "@stoneforge/core";
+} from "@stoneforge/core"
 import {
   asAssignmentId,
   asDispatchIntentId,
   asLeaseId,
   asSessionId,
   asTaskId,
-} from "@stoneforge/execution";
-import {
-  asOrgId,
-  asWorkspaceId,
-} from "@stoneforge/workspace";
-import { describe, expect, it } from "vitest";
+} from "@stoneforge/execution"
+import { asOrgId, asWorkspaceId } from "@stoneforge/workspace"
+import { describe, expect, it } from "vitest"
 
-import type {
-  DirectTaskRunSummaryInput,
-} from "./index.js";
-import {
-  buildSummary,
-  expectState,
-} from "./index.js";
+import type { DirectTaskRunSummaryInput } from "./index.js"
+import { buildSummary, expectState } from "./index.js"
 
 describe("direct-task scenario summary assertions", () => {
   it("throws a clear error when a required state is not reached", () => {
     expect(() => {
-      expectState("ready", "completed", "Task");
-    }).toThrow("Task expected completed but received ready.");
-  });
+      expectState("ready", "completed", "Task")
+    }).toThrow("Task expected completed but received ready.")
+  })
 
   it("uses pending and false defaults before merge policy succeeds", () => {
-    const summary = buildSummary(summaryInputWithoutPolicyCheck());
+    const summary = buildSummary(summaryInputWithoutPolicyCheck())
 
-    expect(summary.policyCheckState).toBe("pending");
-    expect(summary.approvalGateSatisfied).toBe(false);
-    expect(summary.pullRequestMerged).toBe(false);
-  });
-});
+    expect(summary.policyCheckState).toBe("pending")
+    expect(summary.approvalGateSatisfied).toBe(false)
+    expect(summary.pullRequestMerged).toBe(false)
+  })
+})
 
 function summaryInputWithoutPolicyCheck(): DirectTaskRunSummaryInput {
   return {
@@ -96,7 +88,7 @@ function summaryInputWithoutPolicyCheck(): DirectTaskRunSummaryInput {
       observedAt: "2026-04-24T10:00:00.000Z",
     },
     providerSessionIds: [],
-  };
+  }
 }
 
 function workspace(): DirectTaskRunSummaryInput["workspace"] {
@@ -111,7 +103,7 @@ function workspace(): DirectTaskRunSummaryInput["workspace"] {
     roleDefinitions: [],
     createdAt: "2026-04-24T10:00:00.000Z",
     updatedAt: "2026-04-24T10:00:00.000Z",
-  };
+  }
 }
 
 function task(): DirectTaskRunSummaryInput["task"] {
@@ -136,10 +128,12 @@ function task(): DirectTaskRunSummaryInput["task"] {
     },
     createdAt: "2026-04-24T10:00:00.000Z",
     updatedAt: "2026-04-24T10:00:00.000Z",
-  };
+  }
 }
 
-function assignment(id: string): DirectTaskRunSummaryInput["implementation"]["assignment"] {
+function assignment(
+  id: string
+): DirectTaskRunSummaryInput["implementation"]["assignment"] {
   return {
     id: asAssignmentId(id),
     workspaceId: asWorkspaceId("workspace_1"),
@@ -158,10 +152,12 @@ function assignment(id: string): DirectTaskRunSummaryInput["implementation"]["as
     recoveryFailureCount: 0,
     createdAt: "2026-04-24T10:00:00.000Z",
     updatedAt: "2026-04-24T10:00:00.000Z",
-  };
+  }
 }
 
-function session(id: string): DirectTaskRunSummaryInput["implementation"]["session"] {
+function session(
+  id: string
+): DirectTaskRunSummaryInput["implementation"]["session"] {
   return {
     id: asSessionId(id),
     workspaceId: asWorkspaceId("workspace_1"),
@@ -172,5 +168,5 @@ function session(id: string): DirectTaskRunSummaryInput["implementation"]["sessi
     checkpoints: [],
     createdAt: "2026-04-24T10:00:00.000Z",
     updatedAt: "2026-04-24T10:00:00.000Z",
-  };
+  }
 }

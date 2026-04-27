@@ -3,50 +3,50 @@ import type {
   PolicyCheckState,
   ProviderPullRequestObservation,
   ProviderPullRequest,
-} from "@stoneforge/merge-request";
+} from "@stoneforge/merge-request"
 
 type PullRequestInput = Parameters<
   GitHubMergeRequestAdapter["createOrUpdateTaskPullRequest"]
->[0];
+>[0]
 
 export interface FakePullRequestCall {
-  taskId: string;
-  title: string;
-  sourceBranch: string;
-  targetBranch: string;
+  taskId: string
+  title: string
+  sourceBranch: string
+  targetBranch: string
 }
 
 export interface FakePolicyCheckPublication {
-  providerPullRequestId: string;
-  state: PolicyCheckState;
-  reason: string;
+  providerPullRequestId: string
+  state: PolicyCheckState
+  reason: string
 }
 
 export interface FakeMergeCall {
-  providerPullRequestId: string;
-  mergedAt: string;
+  providerPullRequestId: string
+  mergedAt: string
 }
 
 export interface FakeGitHubFixture extends GitHubMergeRequestAdapter {
-  readonly pullRequestCalls: readonly FakePullRequestCall[];
-  readonly policyChecks: readonly FakePolicyCheckPublication[];
-  readonly merges: readonly FakeMergeCall[];
+  readonly pullRequestCalls: readonly FakePullRequestCall[]
+  readonly policyChecks: readonly FakePolicyCheckPublication[]
+  readonly merges: readonly FakeMergeCall[]
 }
 
 class LocalGitHubMergeRequestSink implements FakeGitHubFixture {
-  readonly pullRequestCalls: FakePullRequestCall[] = [];
-  readonly policyChecks: FakePolicyCheckPublication[] = [];
-  readonly merges: FakeMergeCall[] = [];
+  readonly pullRequestCalls: FakePullRequestCall[] = []
+  readonly policyChecks: FakePolicyCheckPublication[] = []
+  readonly merges: FakeMergeCall[] = []
 
   async createOrUpdateTaskPullRequest(
-    input: PullRequestInput,
+    input: PullRequestInput
   ): Promise<ProviderPullRequest> {
     this.pullRequestCalls.push({
       taskId: input.taskId,
       title: input.title,
       sourceBranch: input.sourceBranch,
       targetBranch: input.targetBranch,
-    });
+    })
 
     return {
       provider: "github",
@@ -56,36 +56,36 @@ class LocalGitHubMergeRequestSink implements FakeGitHubFixture {
       headSha: "local-head-sha",
       sourceBranch: input.sourceBranch,
       targetBranch: input.targetBranch,
-    };
+    }
   }
 
   async publishPolicyCheck(input: {
-    providerPullRequest: ProviderPullRequest;
-    state: PolicyCheckState;
-    reason: string;
+    providerPullRequest: ProviderPullRequest
+    state: PolicyCheckState
+    reason: string
   }): Promise<void> {
     this.policyChecks.push({
       providerPullRequestId: input.providerPullRequest.providerPullRequestId,
       state: input.state,
       reason: input.reason,
-    });
+    })
   }
 
   async mergePullRequest(input: {
-    providerPullRequest: ProviderPullRequest;
+    providerPullRequest: ProviderPullRequest
   }): Promise<{ mergedAt: string }> {
-    const mergedAt = "2026-04-24T12:00:00.000Z";
+    const mergedAt = "2026-04-24T12:00:00.000Z"
 
     this.merges.push({
       providerPullRequestId: input.providerPullRequest.providerPullRequestId,
       mergedAt,
-    });
+    })
 
-    return { mergedAt };
+    return { mergedAt }
   }
 
   async observePullRequest(input: {
-    providerPullRequest: ProviderPullRequest;
+    providerPullRequest: ProviderPullRequest
   }): Promise<ProviderPullRequestObservation> {
     return {
       providerPullRequestId: input.providerPullRequest.providerPullRequestId,
@@ -98,14 +98,14 @@ class LocalGitHubMergeRequestSink implements FakeGitHubFixture {
           state: "passed",
         },
       ],
-    };
+    }
   }
 }
 
 export function createFakeGitHubMergeRequestFixture(): FakeGitHubFixture {
-  return new LocalGitHubMergeRequestSink();
+  return new LocalGitHubMergeRequestSink()
 }
 
 function providerPullRequestIdFor(input: PullRequestInput): string {
-  return `github-pr-${input.taskId}`;
+  return `github-pr-${input.taskId}`
 }

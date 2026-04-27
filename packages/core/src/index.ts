@@ -23,7 +23,7 @@ export {
   type RoleDefinitionId,
   type RuntimeId,
   type WorkspaceId,
-} from "./ids.js";
+} from "./ids.js"
 export {
   cloneAgent,
   cloneRoleDefinition,
@@ -38,4 +38,4 @@ export {
   type Runtime,
   type RuntimeLocation,
   type RuntimeMode,
-} from "./execution-capabilities.js";
+} from "./execution-capabilities.js"

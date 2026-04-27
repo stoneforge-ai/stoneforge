@@ -1,61 +1,61 @@
-import { asVerificationRunId } from "@stoneforge/core";
+import { asVerificationRunId } from "@stoneforge/core"
 import type {
   AgentAdapter,
   AgentAdapterResumeContext,
   Session,
-} from "@stoneforge/execution";
-import { TaskDispatchService } from "@stoneforge/execution";
+} from "@stoneforge/execution"
+import { TaskDispatchService } from "@stoneforge/execution"
 import {
   WorkspaceSetupService,
   type AuditActor,
   type Workspace,
-} from "@stoneforge/workspace";
-import { describe, expect, it } from "vitest";
+} from "@stoneforge/workspace"
+import { describe, expect, it } from "vitest"
 
-import { MergeRequestService } from "./merge-request-service.js";
+import { MergeRequestService } from "./merge-request-service.js"
 import type {
   GitHubMergeRequestAdapter,
   PolicyCheckState,
   ProviderPullRequestObservation,
   ProviderPullRequest,
-} from "./models.js";
+} from "./models.js"
 
 const operator: AuditActor = {
   kind: "human",
   id: "user_1",
   displayName: "Platform Lead",
-};
+}
 
 const scheduler: AuditActor = {
   kind: "service",
   id: "scheduler_1",
   displayName: "Stoneforge Scheduler",
-};
+}
 
 class RecordingAgentAdapter implements AgentAdapter {
   async start(): Promise<{ providerSessionId: string }> {
     return {
       providerSessionId: "provider_start_1",
-    };
+    }
   }
 
   async resume(
-    _context: AgentAdapterResumeContext,
+    _context: AgentAdapterResumeContext
   ): Promise<{ providerSessionId: string }> {
     return {
       providerSessionId: "provider_resume_1",
-    };
+    }
   }
 
   async cancel(_session: Session): Promise<void> {}
 }
 
 class RecordingGitHubAdapter implements GitHubMergeRequestAdapter {
-  readonly policyChecks: Array<{ state: PolicyCheckState; reason: string }> = [];
+  readonly policyChecks: Array<{ state: PolicyCheckState; reason: string }> = []
 
   async createOrUpdateTaskPullRequest(input: {
-    sourceBranch: string;
-    targetBranch: string;
+    sourceBranch: string
+    targetBranch: string
   }): Promise<ProviderPullRequest> {
     return {
       provider: "github",
@@ -65,23 +65,23 @@ class RecordingGitHubAdapter implements GitHubMergeRequestAdapter {
       headSha: "provider-head-sha",
       sourceBranch: input.sourceBranch,
       targetBranch: input.targetBranch,
-    };
+    }
   }
 
   async publishPolicyCheck(input: {
-    state: PolicyCheckState;
-    reason: string;
+    state: PolicyCheckState
+    reason: string
   }): Promise<void> {
     this.policyChecks.push({
       state: input.state,
       reason: input.reason,
-    });
+    })
   }
 
   async mergePullRequest(): Promise<{ mergedAt: string }> {
     return {
       mergedAt: new Date().toISOString(),
-    };
+    }
   }
 
   async observePullRequest(): Promise<ProviderPullRequestObservation> {
@@ -90,68 +90,68 @@ class RecordingGitHubAdapter implements GitHubMergeRequestAdapter {
       state: "open",
       headSha: "provider-head-sha",
       checks: [],
-    };
+    }
   }
 }
 
 describe("MergeRequestService edge cases", () => {
   it("rejects opening a MergeRequest from invalid Assignments", async () => {
-    const flow = createConfiguredExecution();
-    const runningTaskAssignment = await startTaskAssignment(flow, false);
+    const flow = createConfiguredExecution()
+    const runningTaskAssignment = await startTaskAssignment(flow, false)
 
     await expect(
       flow.mergeRequests.openOrUpdateTaskMergeRequest({
         taskAssignmentId: runningTaskAssignment.id,
-      }),
-    ).rejects.toThrow(/must succeed/i);
+      })
+    ).rejects.toThrow(/must succeed/i)
 
-    flow.execution.completeAssignment(runningTaskAssignment.id);
+    flow.execution.completeAssignment(runningTaskAssignment.id)
 
     await expect(
       flow.mergeRequests.openOrUpdateTaskMergeRequest({
         taskAssignmentId: runningTaskAssignment.id,
-      }),
-    ).rejects.toThrow(/not waiting/i);
-  });
+      })
+    ).rejects.toThrow(/not waiting/i)
+  })
 
   it("rejects task-owned Assignments in review APIs", async () => {
-    const flow = createConfiguredExecution();
-    const taskAssignment = await startTaskAssignment(flow, true);
+    const flow = createConfiguredExecution()
+    const taskAssignment = await startTaskAssignment(flow, true)
 
-    flow.execution.completeAssignment(taskAssignment.id);
+    flow.execution.completeAssignment(taskAssignment.id)
     const mergeRequest = await flow.mergeRequests.openOrUpdateTaskMergeRequest({
       taskAssignmentId: taskAssignment.id,
-    });
+    })
 
     expect(() =>
-      flow.mergeRequests.recordReviewAssignment(taskAssignment),
-    ).toThrow(/not MergeRequest-owned/i);
+      flow.mergeRequests.recordReviewAssignment(taskAssignment)
+    ).toThrow(/not MergeRequest-owned/i)
     await expect(
       flow.mergeRequests.recordReviewOutcome(mergeRequest.id, {
         assignmentId: taskAssignment.id,
         reviewerKind: "agent",
         reviewerId: taskAssignment.agentId,
         outcome: "approved",
-      }),
-    ).rejects.toThrow(/does not belong/i);
-  });
+      })
+    ).rejects.toThrow(/does not belong/i)
+  })
 
   it("requires review Assignments to finish before recording outcomes", async () => {
-    const flow = createConfiguredExecution();
-    const taskAssignment = await startTaskAssignment(flow, true);
+    const flow = createConfiguredExecution()
+    const taskAssignment = await startTaskAssignment(flow, true)
 
-    flow.execution.completeAssignment(taskAssignment.id);
+    flow.execution.completeAssignment(taskAssignment.id)
     const mergeRequest = await flow.mergeRequests.openOrUpdateTaskMergeRequest({
       taskAssignmentId: taskAssignment.id,
-    });
+    })
 
-    flow.mergeRequests.requestReview(mergeRequest.id);
-    await flow.execution.runSchedulerOnce();
+    flow.mergeRequests.requestReview(mergeRequest.id)
+    await flow.execution.runSchedulerOnce()
 
-    const reviewAssignment = flow.execution.listAssignments().at(-1);
+    const reviewAssignment = flow.execution.listAssignments().at(-1)
 
     if (!reviewAssignment) {
-      throw new Error("Expected review Assignment.");
+      throw new Error("Expected review Assignment.")
     }
 
     await expect(
@@ -160,52 +160,57 @@ describe("MergeRequestService edge cases", () => {
         reviewerKind: "agent",
         reviewerId: reviewAssignment.agentId,
         outcome: "approved",
-      }),
-    ).rejects.toThrow(/must succeed/i);
-  });
+      })
+    ).rejects.toThrow(/must succeed/i)
+  })
 
   it("allows autonomous policy to reach merge_ready without approval", async () => {
-    const flow = createConfiguredExecution("autonomous");
-    const taskAssignment = await startTaskAssignment(flow, true);
+    const flow = createConfiguredExecution("autonomous")
+    const taskAssignment = await startTaskAssignment(flow, true)
 
-    flow.execution.completeAssignment(taskAssignment.id);
+    flow.execution.completeAssignment(taskAssignment.id)
     const mergeRequest = await flow.mergeRequests.openOrUpdateTaskMergeRequest({
       taskAssignmentId: taskAssignment.id,
-    });
-    const reviewAssignment = await startReviewAssignment(flow, mergeRequest.id);
+    })
+    const reviewAssignment = await startReviewAssignment(flow, mergeRequest.id)
 
-    flow.execution.completeAssignment(reviewAssignment.id);
+    flow.execution.completeAssignment(reviewAssignment.id)
     await flow.mergeRequests.recordProviderCheck(mergeRequest.id, {
       providerCheckId: "check_1",
       name: "test",
       state: "passed",
-    });
+    })
 
-    const reviewed = await flow.mergeRequests.recordReviewOutcome(mergeRequest.id, {
-      assignmentId: reviewAssignment.id,
-      reviewerKind: "agent",
-      reviewerId: reviewAssignment.agentId,
-      outcome: "approved",
-    });
+    const reviewed = await flow.mergeRequests.recordReviewOutcome(
+      mergeRequest.id,
+      {
+        assignmentId: reviewAssignment.id,
+        reviewerKind: "agent",
+        reviewerId: reviewAssignment.agentId,
+        outcome: "approved",
+      }
+    )
 
-    expect(reviewed.state).toBe("merge_ready");
-  });
+    expect(reviewed.state).toBe("merge_ready")
+  })
 
   it("throws for missing MergeRequest and VerificationRun records", () => {
-    const flow = createConfiguredExecution();
+    const flow = createConfiguredExecution()
 
-    expect(() => flow.mergeRequests.getMergeRequest("missing" as never)).toThrow(
-      /does not exist/i,
-    );
     expect(() =>
-      flow.mergeRequests.getVerificationRun(asVerificationRunId("missing_verification_run")),
-    ).toThrow(/does not exist/i);
-  });
-});
+      flow.mergeRequests.getMergeRequest("missing" as never)
+    ).toThrow(/does not exist/i)
+    expect(() =>
+      flow.mergeRequests.getVerificationRun(
+        asVerificationRunId("missing_verification_run")
+      )
+    ).toThrow(/does not exist/i)
+  })
+})
 
 async function startTaskAssignment(
   flow: ReturnType<typeof createConfiguredExecution>,
-  requiresMergeRequest: boolean,
+  requiresMergeRequest: boolean
 ) {
   flow.execution.createTask({
     workspaceId: flow.workspaceId,
@@ -213,42 +218,44 @@ async function startTaskAssignment(
     intent: "Complete implementation work.",
     acceptanceCriteria: ["The worker Assignment succeeds."],
     requiresMergeRequest,
-  });
-  await flow.execution.runSchedulerOnce();
+  })
+  await flow.execution.runSchedulerOnce()
 
-  const assignment = flow.execution.listAssignments().at(-1);
+  const assignment = flow.execution.listAssignments().at(-1)
 
   if (!assignment) {
-    throw new Error("Expected task Assignment.");
+    throw new Error("Expected task Assignment.")
   }
 
-  return assignment;
+  return assignment
 }
 
 async function startReviewAssignment(
   flow: ReturnType<typeof createConfiguredExecution>,
-  mergeRequestId: Parameters<MergeRequestService["getMergeRequest"]>[0],
+  mergeRequestId: Parameters<MergeRequestService["getMergeRequest"]>[0]
 ) {
-  flow.mergeRequests.requestReview(mergeRequestId);
-  await flow.execution.runSchedulerOnce();
+  flow.mergeRequests.requestReview(mergeRequestId)
+  await flow.execution.runSchedulerOnce()
 
-  const assignment = flow.execution.listAssignments().at(-1);
+  const assignment = flow.execution.listAssignments().at(-1)
 
   if (!assignment) {
-    throw new Error("Expected review Assignment.");
+    throw new Error("Expected review Assignment.")
   }
 
-  flow.mergeRequests.recordReviewAssignment(assignment);
+  flow.mergeRequests.recordReviewAssignment(assignment)
 
-  return assignment;
+  return assignment
 }
 
-function createConfiguredExecution(policyPreset: "supervised" | "autonomous" = "supervised") {
-  const { workspace } = createReadyWorkspace();
-  const execution = new TaskDispatchService(new RecordingAgentAdapter());
-  const gitHub = new RecordingGitHubAdapter();
+function createConfiguredExecution(
+  policyPreset: "supervised" | "autonomous" = "supervised"
+) {
+  const { workspace } = createReadyWorkspace()
+  const execution = new TaskDispatchService(new RecordingAgentAdapter())
+  const gitHub = new RecordingGitHubAdapter()
 
-  execution.configureWorkspace(workspace);
+  execution.configureWorkspace(workspace)
 
   return {
     execution,
@@ -257,17 +264,17 @@ function createConfiguredExecution(policyPreset: "supervised" | "autonomous" = "
     mergeRequests: new MergeRequestService(execution, gitHub, {
       policyPreset,
     }),
-  };
+  }
 }
 
 function createReadyWorkspace(): { workspace: Workspace } {
-  const service = new WorkspaceSetupService();
-  const org = service.createOrg({ name: "Stoneforge" });
+  const service = new WorkspaceSetupService()
+  const org = service.createOrg({ name: "Stoneforge" })
   const workspace = service.createWorkspace(
     org.id,
     { name: "stoneforge", targetBranch: "main" },
-    operator,
-  );
+    operator
+  )
 
   service.connectGitHubRepository(
     workspace.id,
@@ -277,8 +284,8 @@ function createReadyWorkspace(): { workspace: Workspace } {
       repository: "stoneforge",
       defaultBranch: "main",
     },
-    operator,
-  );
+    operator
+  )
   const runtime = service.registerRuntime(
     workspace.id,
     {
@@ -286,8 +293,8 @@ function createReadyWorkspace(): { workspace: Workspace } {
       location: "customer_host",
       mode: "local_worktree",
     },
-    operator,
-  );
+    operator
+  )
   service.registerAgent(
     workspace.id,
     {
@@ -298,8 +305,8 @@ function createReadyWorkspace(): { workspace: Workspace } {
       concurrencyLimit: 1,
       launcher: "codex-adapter",
     },
-    operator,
-  );
+    operator
+  )
   service.registerRoleDefinition(
     workspace.id,
     {
@@ -307,12 +314,12 @@ function createReadyWorkspace(): { workspace: Workspace } {
       category: "worker",
       prompt: "Implement or review the assigned work.",
     },
-    operator,
-  );
-  service.selectPolicyPreset(workspace.id, "supervised", operator);
-  service.validateWorkspace(workspace.id, scheduler);
+    operator
+  )
+  service.selectPolicyPreset(workspace.id, "supervised", operator)
+  service.validateWorkspace(workspace.id, scheduler)
 
   return {
     workspace: service.getWorkspace(workspace.id),
-  };
+  }
 }

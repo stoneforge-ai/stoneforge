@@ -6,43 +6,39 @@ import {
   type Agent,
   type CustomerHostRuntime,
   type RoleDefinition,
-} from "@stoneforge/core";
-import fc, { type Arbitrary } from "fast-check";
-import { describe, expect, it } from "vitest";
+} from "@stoneforge/core"
+import fc, { type Arbitrary } from "fast-check"
+import { describe, expect, it } from "vitest"
 
 import {
   asDispatchIntentId,
   asTaskId,
   resolvePlacement,
   type WorkspaceExecutionCapabilities,
-} from "./index.js";
-import type { TaskDispatchIntent } from "./models.js";
+} from "./index.js"
+import type { TaskDispatchIntent } from "./models.js"
 
-const workspaceId = asWorkspaceId("workspace_1");
-const runtimeId = asRuntimeId("runtime_1");
-const roleDefinitionId = asRoleDefinitionId("role_1");
+const workspaceId = asWorkspaceId("workspace_1")
+const runtimeId = asRuntimeId("runtime_1")
+const roleDefinitionId = asRoleDefinitionId("role_1")
 
 describe("resolvePlacement", () => {
   it("selects the first healthy Agent with available capacity", () => {
-    const placement = resolvePlacement(capabilities(), intent(), () => 0);
+    const placement = resolvePlacement(capabilities(), intent(), () => 0)
 
     if ("reason" in placement) {
-      throw new Error(`Expected placement but received ${placement.reason}.`);
+      throw new Error(`Expected placement but received ${placement.reason}.`)
     }
 
-    expect(placement.agent.id).toBe(asAgentId("agent_1"));
-    expect(placement.runtime.id).toBe(runtimeId);
-    expect(placement.roleDefinition.id).toBe(roleDefinitionId);
-  });
+    expect(placement.agent.id).toBe(asAgentId("agent_1"))
+    expect(placement.runtime.id).toBe(runtimeId)
+    expect(placement.roleDefinition.id).toBe(roleDefinitionId)
+  })
 
   it("rejects missing or disabled RoleDefinitions", () => {
     expect(
-      resolvePlacement(
-        capabilities({ roleDefinitions: [] }),
-        intent(),
-        () => 0,
-      ),
-    ).toEqual({ reason: "no_eligible_agent" });
+      resolvePlacement(capabilities({ roleDefinitions: [] }), intent(), () => 0)
+    ).toEqual({ reason: "no_eligible_agent" })
 
     expect(
       resolvePlacement(
@@ -50,55 +46,55 @@ describe("resolvePlacement", () => {
           roleDefinitions: [roleDefinition({ enabled: false })],
         }),
         intent({ roleDefinitionId }),
-        () => 0,
-      ),
-    ).toEqual({ reason: "no_eligible_agent" });
-  });
+        () => 0
+      )
+    ).toEqual({ reason: "no_eligible_agent" })
+  })
 
   it("rejects unhealthy or incorrectly tagged execution paths", () => {
     expect(
       resolvePlacement(
         capabilities({ agents: [agent({ healthStatus: "unhealthy" })] }),
         intent(),
-        () => 0,
-      ),
-    ).toEqual({ reason: "no_eligible_agent" });
+        () => 0
+      )
+    ).toEqual({ reason: "no_eligible_agent" })
 
     expect(
       resolvePlacement(
         capabilities({ runtimes: [runtime({ healthStatus: "unhealthy" })] }),
         intent(),
-        () => 0,
-      ),
-    ).toEqual({ reason: "no_eligible_agent" });
+        () => 0
+      )
+    ).toEqual({ reason: "no_eligible_agent" })
 
     expect(
       resolvePlacement(
         capabilities(),
         intent({ requiredAgentTags: ["missing"] }),
-        () => 0,
-      ),
-    ).toEqual({ reason: "no_eligible_agent" });
+        () => 0
+      )
+    ).toEqual({ reason: "no_eligible_agent" })
 
     expect(
       resolvePlacement(
         capabilities(),
         intent({ requiredRuntimeTags: ["missing"] }),
-        () => 0,
-      ),
-    ).toEqual({ reason: "no_eligible_agent" });
-  });
+        () => 0
+      )
+    ).toEqual({ reason: "no_eligible_agent" })
+  })
 
   it("distinguishes exhausted capacity from missing eligibility", () => {
     expect(resolvePlacement(capabilities(), intent(), () => 1)).toEqual({
       reason: "capacity_exhausted",
-    });
-  });
+    })
+  })
 
   it("places work exactly when role, tags, health, runtime, and capacity are eligible", () => {
-    fc.assert(fc.property(placementCaseArbitrary, assertPlacementInvariant));
-  });
-});
+    fc.assert(fc.property(placementCaseArbitrary, assertPlacementInvariant))
+  })
+})
 
 const placementCaseArbitrary: Arbitrary<PlacementCase> = fc.record({
   roleEnabled: fc.boolean(),
@@ -111,55 +107,55 @@ const placementCaseArbitrary: Arbitrary<PlacementCase> = fc.record({
   runtimeHasRequiredTag: fc.boolean(),
   concurrencyLimit: fc.integer({ min: 1, max: 3 }),
   activeLeaseCount: fc.integer({ min: 0, max: 3 }),
-});
+})
 
 interface PlacementCase {
-  roleEnabled: boolean;
-  agentHealthy: boolean;
-  runtimeHealthy: boolean;
-  runtimeLinked: boolean;
-  requiredAgentTag: boolean;
-  agentHasRequiredTag: boolean;
-  requiredRuntimeTag: boolean;
-  runtimeHasRequiredTag: boolean;
-  concurrencyLimit: number;
-  activeLeaseCount: number;
+  roleEnabled: boolean
+  agentHealthy: boolean
+  runtimeHealthy: boolean
+  runtimeLinked: boolean
+  requiredAgentTag: boolean
+  agentHasRequiredTag: boolean
+  requiredRuntimeTag: boolean
+  runtimeHasRequiredTag: boolean
+  concurrencyLimit: number
+  activeLeaseCount: number
 }
 
 function assertPlacementInvariant(placementCase: PlacementCase): void {
   const requiredAgentTags = requiredTags(
     placementCase.requiredAgentTag,
-    "required-agent",
-  );
+    "required-agent"
+  )
   const requiredRuntimeTags = requiredTags(
     placementCase.requiredRuntimeTag,
-    "required-runtime",
-  );
+    "required-runtime"
+  )
   const result = resolvePlacement(
     placementCapabilities(
       placementCase,
       requiredAgentTags,
-      requiredRuntimeTags,
+      requiredRuntimeTags
     ),
     intent({ requiredAgentTags, requiredRuntimeTags }),
-    () => placementCase.activeLeaseCount,
-  );
-  const expectedPlaced = isExpectedPlaced(placementCase);
+    () => placementCase.activeLeaseCount
+  )
+  const expectedPlaced = isExpectedPlaced(placementCase)
 
-  expect("agent" in result).toBe(expectedPlaced);
+  expect("agent" in result).toBe(expectedPlaced)
   if (!expectedPlaced) {
-    expect("reason" in result).toBe(true);
+    expect("reason" in result).toBe(true)
   }
 }
 
 function requiredTags(required: boolean, tag: string): string[] {
-  return required ? [tag] : [];
+  return required ? [tag] : []
 }
 
 function placementCapabilities(
   placementCase: PlacementCase,
   requiredAgentTags: string[],
-  requiredRuntimeTags: string[],
+  requiredRuntimeTags: string[]
 ): WorkspaceExecutionCapabilities {
   return capabilities({
     agents: [
@@ -183,7 +179,7 @@ function placementCapabilities(
       }),
     ],
     roleDefinitions: [roleDefinition({ enabled: placementCase.roleEnabled })],
-  });
+  })
 }
 
 function isExpectedPlaced(placementCase: PlacementCase): boolean {
@@ -195,21 +191,21 @@ function isExpectedPlaced(placementCase: PlacementCase): boolean {
     hasRequiredAgentTag(placementCase) &&
     hasRequiredRuntimeTag(placementCase) &&
     placementCase.activeLeaseCount < placementCase.concurrencyLimit
-  );
+  )
 }
 
 function hasRequiredAgentTag(placementCase: PlacementCase): boolean {
-  return !placementCase.requiredAgentTag || placementCase.agentHasRequiredTag;
+  return !placementCase.requiredAgentTag || placementCase.agentHasRequiredTag
 }
 
 function hasRequiredRuntimeTag(placementCase: PlacementCase): boolean {
   return (
     !placementCase.requiredRuntimeTag || placementCase.runtimeHasRequiredTag
-  );
+  )
 }
 
 function capabilities(
-  overrides: Partial<WorkspaceExecutionCapabilities> = {},
+  overrides: Partial<WorkspaceExecutionCapabilities> = {}
 ): WorkspaceExecutionCapabilities {
   return {
     workspaceId,
@@ -217,13 +213,13 @@ function capabilities(
     agents: [agent()],
     roleDefinitions: [roleDefinition()],
     ...overrides,
-  };
+  }
 }
 
 function intent(
-  overrides: Partial<TaskDispatchIntent> = {},
+  overrides: Partial<TaskDispatchIntent> = {}
 ): TaskDispatchIntent {
-  const now = new Date().toISOString();
+  const now = new Date().toISOString()
 
   return {
     id: asDispatchIntentId("intent_1"),
@@ -238,11 +234,11 @@ function intent(
     createdAt: now,
     updatedAt: now,
     ...overrides,
-  };
+  }
 }
 
 function runtime(
-  overrides: Partial<CustomerHostRuntime> = {},
+  overrides: Partial<CustomerHostRuntime> = {}
 ): CustomerHostRuntime {
   return {
     id: runtimeId,
@@ -253,7 +249,7 @@ function runtime(
     healthStatus: "healthy",
     tags: ["default"],
     ...overrides,
-  };
+  }
 }
 
 function agent(overrides: Partial<Agent> = {}): Agent {
@@ -269,11 +265,11 @@ function agent(overrides: Partial<Agent> = {}): Agent {
     tags: ["default"],
     launcher: "codex-adapter",
     ...overrides,
-  };
+  }
 }
 
 function roleDefinition(
-  overrides: Partial<RoleDefinition> = {},
+  overrides: Partial<RoleDefinition> = {}
 ): RoleDefinition {
   return {
     id: roleDefinitionId,
@@ -287,5 +283,5 @@ function roleDefinition(
     tags: [],
     enabled: true,
     ...overrides,
-  };
+  }
 }

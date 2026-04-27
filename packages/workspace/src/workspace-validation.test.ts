@@ -1,47 +1,49 @@
-import { asAgentId, asRoleDefinitionId, asRuntimeId } from "@stoneforge/core";
-import fc from "fast-check";
-import { describe, expect, it } from "vitest";
+import { asAgentId, asRoleDefinitionId, asRuntimeId } from "@stoneforge/core"
+import fc from "fast-check"
+import { describe, expect, it } from "vitest"
 
 import {
   buildValidationResult,
   computeConfiguredState,
   computeValidatedState,
   type Workspace,
-} from "./index.js";
+} from "./index.js"
 
 describe("workspace validation policy", () => {
   it("preserves archived state during configuration and validation", () => {
-    const archived = workspace({ state: "archived" });
+    const archived = workspace({ state: "archived" })
 
-    expect(computeConfiguredState(archived)).toBe("archived");
+    expect(computeConfiguredState(archived)).toBe("archived")
     expect(
       computeValidatedState(archived, {
         ...buildValidationResult(archived, now),
         ready: false,
-      }),
-    ).toBe("archived");
-  });
+      })
+    ).toBe("archived")
+  })
 
   it("moves through draft, repo_connected, execution_configured, ready, and degraded", () => {
-    expect(computeConfiguredState(workspace())).toBe("draft");
-    expect(computeConfiguredState(workspace({ repositoryConnected: true }))).toBe(
-      "repo_connected",
-    );
-    expect(computeConfiguredState(readyWorkspace())).toBe("execution_configured");
+    expect(computeConfiguredState(workspace())).toBe("draft")
+    expect(
+      computeConfiguredState(workspace({ repositoryConnected: true }))
+    ).toBe("repo_connected")
+    expect(computeConfiguredState(readyWorkspace())).toBe(
+      "execution_configured"
+    )
 
-    const ready = buildValidationResult(readyWorkspace(), now);
+    const ready = buildValidationResult(readyWorkspace(), now)
 
-    expect(computeValidatedState(readyWorkspace(), ready)).toBe("ready");
+    expect(computeValidatedState(readyWorkspace(), ready)).toBe("ready")
     expect(
       computeValidatedState(
         readyWorkspace({ repositoryConnected: false, state: "ready" }),
         buildValidationResult(
           readyWorkspace({ repositoryConnected: false, state: "ready" }),
-          now,
-        ),
-      ),
-    ).toBe("degraded");
-  });
+          now
+        )
+      )
+    ).toBe("degraded")
+  })
 
   it("reports readiness facts and the selected execution path", () => {
     expect(buildValidationResult(workspace(), now)).toMatchObject({
@@ -49,9 +51,9 @@ describe("workspace validation policy", () => {
       policyConfigured: false,
       executionConfigured: false,
       ready: false,
-    });
+    })
 
-    const validation = buildValidationResult(readyWorkspace(), now);
+    const validation = buildValidationResult(readyWorkspace(), now)
 
     expect(validation).toMatchObject({
       repoConnected: true,
@@ -64,68 +66,69 @@ describe("workspace validation policy", () => {
         agentId: "agent_1",
         roleDefinitionId: "role_definition_1",
       },
-    });
-  });
+    })
+  })
 
   it("rejects invalid execution paths", () => {
     expect(
-      buildValidationResult(
-        readyWorkspace({ runtimeHealth: "unhealthy" }),
-        now,
-      ).issues,
-    ).toContainEqual(expect.objectContaining({ code: "no_valid_execution_path" }));
+      buildValidationResult(readyWorkspace({ runtimeHealth: "unhealthy" }), now)
+        .issues
+    ).toContainEqual(
+      expect.objectContaining({ code: "no_valid_execution_path" })
+    )
     expect(
-      buildValidationResult(
-        readyWorkspace({ agentHealth: "unhealthy" }),
-        now,
-      ).issues,
-    ).toContainEqual(expect.objectContaining({ code: "no_valid_execution_path" }));
+      buildValidationResult(readyWorkspace({ agentHealth: "unhealthy" }), now)
+        .issues
+    ).toContainEqual(
+      expect.objectContaining({ code: "no_valid_execution_path" })
+    )
     expect(
-      buildValidationResult(
-        readyWorkspace({ concurrencyLimit: 0 }),
-        now,
-      ).issues,
-    ).toContainEqual(expect.objectContaining({ code: "no_valid_execution_path" }));
+      buildValidationResult(readyWorkspace({ concurrencyLimit: 0 }), now).issues
+    ).toContainEqual(
+      expect.objectContaining({ code: "no_valid_execution_path" })
+    )
     expect(
       buildValidationResult(
         readyWorkspace({ runtimeId: asRuntimeId("missing_runtime") }),
-        now,
-      ).issues,
-    ).toContainEqual(expect.objectContaining({ code: "no_valid_execution_path" }));
-  });
+        now
+      ).issues
+    ).toContainEqual(
+      expect.objectContaining({ code: "no_valid_execution_path" })
+    )
+  })
 
   it("is ready exactly when every readiness prerequisite has a healthy execution path", () => {
     fc.assert(
       fc.property(workspaceOptionArbitrary, (options) => {
-        const validation = buildValidationResult(workspace(options), now);
-        const expectedExecutionPath = hasHealthyExecutionPath(options);
+        const validation = buildValidationResult(workspace(options), now)
+        const expectedExecutionPath = hasHealthyExecutionPath(options)
         const expectedReady =
-          options.repositoryConnected === true && expectedExecutionPath;
+          options.repositoryConnected === true && expectedExecutionPath
 
-        expect(validation.ready).toBe(expectedReady);
-        expect(validation.issues.length === 0).toBe(expectedReady);
+        expect(validation.ready).toBe(expectedReady)
+        expect(validation.issues.length === 0).toBe(expectedReady)
         expect(validation.selectedExecutionPath !== undefined).toBe(
-          expectedExecutionPath,
-        );
-      }),
-    );
-  });
+          expectedExecutionPath
+        )
+      })
+    )
+  })
 
   it("preserves archived state regardless of readiness facts", () => {
     fc.assert(
       fc.property(workspaceOptionArbitrary, (options) => {
-        const archived = workspace({ ...options, state: "archived" });
+        const archived = workspace({ ...options, state: "archived" })
 
-        expect(computeConfiguredState(archived)).toBe("archived");
+        expect(computeConfiguredState(archived)).toBe("archived")
         expect(
-          computeValidatedState(archived, buildValidationResult(archived, now)),
-        ).toBe("archived");
-      }),
-    );
-  });
-});
+          computeValidatedState(archived, buildValidationResult(archived, now))
+        ).toBe("archived")
+      })
+    )
+  })
+})
 
-const now = "2026-04-24T00:00:00.000Z";
+const now = "2026-04-24T00:00:00.000Z"
 const workspaceOptionArbitrary = fc.record({
   repositoryConnected: fc.boolean(),
   policyConfigured: fc.boolean(),
@@ -134,18 +137,18 @@ const workspaceOptionArbitrary = fc.record({
   concurrencyLimit: fc.integer({ min: -1, max: 3 }),
   runtimeLinked: fc.boolean(),
   roleEnabled: fc.boolean(),
-});
+})
 
 interface WorkspaceOptions {
-  state?: Workspace["state"];
-  repositoryConnected?: boolean;
-  policyConfigured?: boolean;
-  runtimeHealth?: "healthy" | "unhealthy";
-  agentHealth?: "healthy" | "unhealthy";
-  concurrencyLimit?: number;
-  runtimeLinked?: boolean;
-  roleEnabled?: boolean;
-  runtimeId?: ReturnType<typeof asRuntimeId>;
+  state?: Workspace["state"]
+  repositoryConnected?: boolean
+  policyConfigured?: boolean
+  runtimeHealth?: "healthy" | "unhealthy"
+  agentHealth?: "healthy" | "unhealthy"
+  concurrencyLimit?: number
+  runtimeLinked?: boolean
+  roleEnabled?: boolean
+  runtimeId?: ReturnType<typeof asRuntimeId>
 }
 
 function hasHealthyExecutionPath(options: WorkspaceOptions): boolean {
@@ -156,7 +159,7 @@ function hasHealthyExecutionPath(options: WorkspaceOptions): boolean {
     (options.concurrencyLimit ?? 1) >= 1 &&
     options.runtimeLinked === true &&
     options.roleEnabled === true
-  );
+  )
 }
 
 function readyWorkspace(overrides: WorkspaceOptions = {}): Workspace {
@@ -167,13 +170,13 @@ function readyWorkspace(overrides: WorkspaceOptions = {}): Workspace {
     agentHealth: "healthy",
     concurrencyLimit: 1,
     ...overrides,
-  });
+  })
 }
 
 function workspace(options: WorkspaceOptions = {}): Workspace {
-  const runtimeId = options.runtimeId ?? asRuntimeId("runtime_1");
+  const runtimeId = options.runtimeId ?? asRuntimeId("runtime_1")
   const agentRuntimeId =
-    options.runtimeLinked === false ? asRuntimeId("missing_runtime") : runtimeId;
+    options.runtimeLinked === false ? asRuntimeId("missing_runtime") : runtimeId
 
   return {
     id: "workspace_1" as never,
@@ -182,19 +185,18 @@ function workspace(options: WorkspaceOptions = {}): Workspace {
     targetBranch: "main",
     state: options.state ?? "draft",
     repository: repository(options),
-    policyPreset:
-      options.policyConfigured === true ? "supervised" : undefined,
+    policyPreset: options.policyConfigured === true ? "supervised" : undefined,
     runtimes: runtimes(options),
     agents: agents(options, agentRuntimeId),
     roleDefinitions: roleDefinitions(options),
     createdAt: now,
     updatedAt: now,
-  };
+  }
 }
 
 function repository(options: WorkspaceOptions): Workspace["repository"] {
   if (options.repositoryConnected !== true) {
-    return undefined;
+    return undefined
   }
 
   return {
@@ -204,12 +206,12 @@ function repository(options: WorkspaceOptions): Workspace["repository"] {
     defaultBranch: "main",
     connectionStatus: "connected",
     connectedAt: now,
-  };
+  }
 }
 
 function runtimes(options: WorkspaceOptions): Workspace["runtimes"] {
   if (options.runtimeHealth === undefined) {
-    return [];
+    return []
   }
 
   return [
@@ -222,15 +224,15 @@ function runtimes(options: WorkspaceOptions): Workspace["runtimes"] {
       healthStatus: options.runtimeHealth,
       tags: [],
     },
-  ];
+  ]
 }
 
 function agents(
   options: WorkspaceOptions,
-  agentRuntimeId: ReturnType<typeof asRuntimeId>,
+  agentRuntimeId: ReturnType<typeof asRuntimeId>
 ): Workspace["agents"] {
   if (options.agentHealth === undefined) {
-    return [];
+    return []
   }
 
   return [
@@ -246,12 +248,14 @@ function agents(
       tags: [],
       launcher: "codex-adapter",
     },
-  ];
+  ]
 }
 
-function roleDefinitions(options: WorkspaceOptions): Workspace["roleDefinitions"] {
+function roleDefinitions(
+  options: WorkspaceOptions
+): Workspace["roleDefinitions"] {
   if (options.policyConfigured !== true) {
-    return [];
+    return []
   }
 
   return [
@@ -267,5 +271,5 @@ function roleDefinitions(options: WorkspaceOptions): Workspace["roleDefinitions"
       tags: [],
       enabled: options.roleEnabled ?? true,
     },
-  ];
+  ]
 }

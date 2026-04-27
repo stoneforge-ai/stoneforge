@@ -1,66 +1,66 @@
-import { Context, Data, Effect, Layer } from "effect";
+import { Context, Data, Effect, Layer } from "effect"
 
 import type {
   AgentAdapter,
   AgentAdapterResumeContext,
   AgentAdapterStartContext,
   SessionHandle,
-} from "./models.js";
-import type { AssignmentId } from "./ids.js";
+} from "./models.js"
+import type { AssignmentId } from "./ids.js"
 
 export class AgentAdapterService extends Context.Tag(
-  "@stoneforge/execution/AgentAdapterService",
+  "@stoneforge/execution/AgentAdapterService"
 )<AgentAdapterService, AgentAdapter>() {}
 
 export function agentAdapterRuntime(
-  adapter: AgentAdapter,
+  adapter: AgentAdapter
 ): Layer.Layer<AgentAdapterService> {
-  return Layer.succeed(AgentAdapterService, adapter);
+  return Layer.succeed(AgentAdapterService, adapter)
 }
 
 export class AdapterStartFailed extends Data.TaggedError("AdapterStartFailed")<{
-  readonly assignmentId: AssignmentId;
+  readonly assignmentId: AssignmentId
 }> {
   get message(): string {
-    return `Agent adapter failed to start Assignment ${this.assignmentId}.`;
+    return `Agent adapter failed to start Assignment ${this.assignmentId}.`
   }
 }
 
 export class AdapterResumeFailed extends Data.TaggedError(
-  "AdapterResumeFailed",
+  "AdapterResumeFailed"
 )<{
-  readonly assignmentId: AssignmentId;
+  readonly assignmentId: AssignmentId
 }> {
   get message(): string {
-    return `Agent adapter failed to resume Assignment ${this.assignmentId}.`;
+    return `Agent adapter failed to resume Assignment ${this.assignmentId}.`
   }
 }
 
 export class TaskRecoveryUnavailable extends Data.TaggedError(
-  "TaskRecoveryUnavailable",
+  "TaskRecoveryUnavailable"
 )<{
-  readonly assignmentId: AssignmentId;
+  readonly assignmentId: AssignmentId
 }> {
   get message(): string {
-    return `Assignment ${this.assignmentId} is not a Task-owned Assignment and cannot use task recovery.`;
+    return `Assignment ${this.assignmentId} is not a Task-owned Assignment and cannot use task recovery.`
   }
 }
 
 export class SessionRecoveryPolicyExceeded extends Data.TaggedError(
-  "SessionRecoveryPolicyExceeded",
+  "SessionRecoveryPolicyExceeded"
 )<{
-  readonly assignmentId: AssignmentId;
+  readonly assignmentId: AssignmentId
 }> {
   get message(): string {
-    return `Assignment ${this.assignmentId} exceeded session recovery policy.`;
+    return `Assignment ${this.assignmentId} exceeded session recovery policy.`
   }
 }
 
 export function startAgentSession(
-  context: AgentAdapterStartContext,
+  context: AgentAdapterStartContext
 ): Effect.Effect<SessionHandle, AdapterStartFailed, AgentAdapterService> {
   return Effect.gen(function* () {
-    const adapter = yield* AgentAdapterService;
+    const adapter = yield* AgentAdapterService
 
     return yield* Effect.tryPromise({
       try: () => adapter.start(context),
@@ -68,22 +68,22 @@ export function startAgentSession(
         new AdapterStartFailed({
           assignmentId: context.assignment.id,
         }),
-    });
+    })
   }).pipe(
     Effect.withSpan("agent_adapter.start_session", {
       attributes: {
         "stoneforge.assignment.id": context.assignment.id,
         "stoneforge.provider.operation": "start",
       },
-    }),
-  );
+    })
+  )
 }
 
 export function resumeAgentSession(
-  context: AgentAdapterResumeContext,
+  context: AgentAdapterResumeContext
 ): Effect.Effect<SessionHandle, AdapterResumeFailed, AgentAdapterService> {
   return Effect.gen(function* () {
-    const adapter = yield* AgentAdapterService;
+    const adapter = yield* AgentAdapterService
 
     return yield* Effect.tryPromise({
       try: () => adapter.resume(context),
@@ -91,7 +91,7 @@ export function resumeAgentSession(
         new AdapterResumeFailed({
           assignmentId: context.assignment.id,
         }),
-    });
+    })
   }).pipe(
     Effect.withSpan("agent_adapter.resume_session", {
       attributes: {
@@ -99,6 +99,6 @@ export function resumeAgentSession(
         "stoneforge.session.id": context.failedSession.id,
         "stoneforge.provider.operation": "resume",
       },
-    }),
-  );
+    })
+  )
 }

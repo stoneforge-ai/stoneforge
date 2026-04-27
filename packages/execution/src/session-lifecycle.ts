@@ -1,26 +1,22 @@
-import {
-  cloneAgent,
-  cloneRoleDefinition,
-  cloneRuntime,
-} from "@stoneforge/core";
-import { Effect } from "effect";
+import { cloneAgent, cloneRoleDefinition, cloneRuntime } from "@stoneforge/core"
+import { Effect } from "effect"
 
-import type { SessionId } from "./ids.js";
+import type { SessionId } from "./ids.js"
 import {
   cloneAssignment,
   cloneCheckpoint,
   cloneSession,
   cloneTask,
-} from "./cloning.js";
-import type { DispatchScheduler } from "./dispatch-scheduler.js";
+} from "./cloning.js"
+import type { DispatchScheduler } from "./dispatch-scheduler.js"
 import {
   type AdapterResumeFailed,
   type AgentAdapterService,
   resumeAgentSession,
   SessionRecoveryPolicyExceeded,
   TaskRecoveryUnavailable,
-} from "./agent-adapter-runtime.js";
-import type { ExecutionState } from "./execution-state.js";
+} from "./agent-adapter-runtime.js"
+import type { ExecutionState } from "./execution-state.js"
 import type {
   Assignment,
   Checkpoint,
@@ -29,71 +25,69 @@ import type {
   SessionHandle,
   SessionHeartbeat,
   Task,
-} from "./models.js";
+} from "./models.js"
 
 export class SessionLifecycle {
   constructor(
     private readonly state: ExecutionState,
     private readonly scheduler: DispatchScheduler,
-    private readonly policy: DispatchPolicy,
+    private readonly policy: DispatchPolicy
   ) {}
 
   recordHeartbeat(sessionId: SessionId, note?: string): SessionHeartbeat {
-    const session = this.state.requireSession(sessionId);
-    const assignment = this.state.requireAssignment(session.assignmentId);
-    const intent = this.state.requireDispatchIntent(
-      assignment.dispatchIntentId,
-    );
-    const observedAt = this.state.now();
+    const session = this.state.requireSession(sessionId)
+    const assignment = this.state.requireAssignment(session.assignmentId)
+    const intent = this.state.requireDispatchIntent(assignment.dispatchIntentId)
+    const observedAt = this.state.now()
     const heartbeat: SessionHeartbeat = {
       sessionId,
       observedAt,
       note,
-    };
-
-    session.heartbeats.push(heartbeat);
-    session.state = "active";
-    session.updatedAt = observedAt;
-    assignment.state = "running";
-    assignment.updatedAt = observedAt;
-    intent.state = "running";
-    intent.updatedAt = observedAt;
-
-    if (assignment.owner.type === "task") {
-      const task = this.state.requireTask(assignment.owner.taskId);
-      task.state = "in_progress";
-      task.updatedAt = observedAt;
     }
 
-    return { ...heartbeat };
+    session.heartbeats.push(heartbeat)
+    session.state = "active"
+    session.updatedAt = observedAt
+    assignment.state = "running"
+    assignment.updatedAt = observedAt
+    intent.state = "running"
+    intent.updatedAt = observedAt
+
+    if (assignment.owner.type === "task") {
+      const task = this.state.requireTask(assignment.owner.taskId)
+      task.state = "in_progress"
+      task.updatedAt = observedAt
+    }
+
+    return { ...heartbeat }
   }
 
   recordCheckpoint(sessionId: SessionId, checkpoint: Checkpoint): Session {
-    const session = this.state.requireSession(sessionId);
-    const assignment = this.state.requireAssignment(session.assignmentId);
-    const storedCheckpoint = cloneCheckpoint(checkpoint);
+    const session = this.state.requireSession(sessionId)
+    const assignment = this.state.requireAssignment(session.assignmentId)
+    const storedCheckpoint = cloneCheckpoint(checkpoint)
 
-    session.checkpoints.push(storedCheckpoint);
-    session.state = "checkpointed";
-    session.updatedAt = storedCheckpoint.capturedAt;
+    session.checkpoints.push(storedCheckpoint)
+    session.state = "checkpointed"
+    session.updatedAt = storedCheckpoint.capturedAt
 
     if (assignment.owner.type === "task") {
-      const task = this.state.requireTask(assignment.owner.taskId);
+      const task = this.state.requireTask(assignment.owner.taskId)
       task.progressRecord.checkpoints.push({
         ...storedCheckpoint,
         assignmentId: assignment.id,
         sessionId: session.id,
-      });
-      task.updatedAt = storedCheckpoint.capturedAt;
+      })
+      task.updatedAt = storedCheckpoint.capturedAt
     }
 
-    return cloneSession(session);
+    return cloneSession(session)
   }
 
   recordRecoverableSessionFailure(
     sessionId: SessionId,
     failureState: "crashed" | "expired",
-    checkpoint: Checkpoint,
+    checkpoint: Checkpoint
   ): Effect.Effect<
     Session,
     | AdapterResumeFailed
@@ -101,21 +95,21 @@ export class SessionLifecycle {
     | TaskRecoveryUnavailable,
     AgentAdapterService
   > {
-    const self = this;
+    const self = this
 
     return Effect.gen(function* () {
-      const failedSession = self.state.requireSession(sessionId);
+      const failedSession = self.state.requireSession(sessionId)
       const assignment = self.state.requireAssignment(
-        failedSession.assignmentId,
-      );
+        failedSession.assignmentId
+      )
 
       if (assignment.owner.type !== "task") {
         return yield* Effect.fail(
-          new TaskRecoveryUnavailable({ assignmentId: assignment.id }),
-        );
+          new TaskRecoveryUnavailable({ assignmentId: assignment.id })
+        )
       }
 
-      const task = self.state.requireTask(assignment.owner.taskId);
+      const task = self.state.requireTask(assignment.owner.taskId)
 
       yield* self.recordRecoverableTaskFailure(
         sessionId,
@@ -123,31 +117,31 @@ export class SessionLifecycle {
         checkpoint,
         failedSession,
         assignment,
-        task,
-      );
+        task
+      )
       const handle = yield* self.resumeTaskSession(
         task,
         assignment,
         checkpoint,
-        failedSession,
-      );
+        failedSession
+      )
       const replacement = self.scheduler.createSession(
         assignment,
-        handle.providerSessionId,
-      );
+        handle.providerSessionId
+      )
 
-      assignment.sessionIds.push(replacement.id);
-      assignment.state = "running";
-      assignment.updatedAt = self.state.now();
+      assignment.sessionIds.push(replacement.id)
+      assignment.state = "running"
+      assignment.updatedAt = self.state.now()
 
-      return cloneSession(replacement);
+      return cloneSession(replacement)
     }).pipe(
       Effect.withSpan("assignment.resume_session", {
         attributes: {
           "stoneforge.session.id": sessionId,
         },
-      }),
-    );
+      })
+    )
   }
 
   private recordRecoverableTaskFailure(
@@ -156,66 +150,66 @@ export class SessionLifecycle {
     checkpoint: Checkpoint,
     failedSession: Session,
     assignment: Assignment,
-    task: Task,
+    task: Task
   ): Effect.Effect<void, SessionRecoveryPolicyExceeded> {
     return Effect.sync(() => {
-      this.recordCheckpoint(sessionId, checkpoint);
-      failSession(failedSession, failureState, this.state.now());
-      assignment.recoveryFailureCount += 1;
+      this.recordCheckpoint(sessionId, checkpoint)
+      failSession(failedSession, failureState, this.state.now())
+      assignment.recoveryFailureCount += 1
 
       if (
         assignment.recoveryFailureCount > this.policy.maxSessionRecoveryFailures
       ) {
-        this.escalateRecoveryFailure(assignment, task);
-        return "escalated";
+        this.escalateRecoveryFailure(assignment, task)
+        return "escalated"
       }
 
-      assignment.state = "resume_pending";
-      assignment.updatedAt = this.state.now();
-      return "resume";
+      assignment.state = "resume_pending"
+      assignment.updatedAt = this.state.now()
+      return "resume"
     }).pipe(
       Effect.tap((decision) =>
         Effect.annotateCurrentSpan(
           "stoneforge.policy.decision",
-          decision === "escalated" ? "escalate" : "resume",
-        ),
+          decision === "escalated" ? "escalate" : "resume"
+        )
       ),
       Effect.flatMap((decision) =>
         decision === "escalated"
           ? Effect.fail(
               new SessionRecoveryPolicyExceeded({
                 assignmentId: assignment.id,
-              }),
+              })
             )
-          : Effect.void,
+          : Effect.void
       ),
       Effect.withSpan("dispatch.recovery_decision", {
         attributes: {
           "stoneforge.assignment.id": assignment.id,
           "stoneforge.session.id": failedSession.id,
         },
-      }),
-    );
+      })
+    )
   }
 
   private resumeTaskSession(
     task: Task,
     assignment: Assignment,
     checkpoint: Checkpoint,
-    failedSession: Session,
+    failedSession: Session
   ): Effect.Effect<SessionHandle, AdapterResumeFailed, AgentAdapterService> {
-    const capabilities = this.state.requireWorkspace(task.workspaceId);
-    const agent = requireById(capabilities.agents, assignment.agentId, "Agent");
+    const capabilities = this.state.requireWorkspace(task.workspaceId)
+    const agent = requireById(capabilities.agents, assignment.agentId, "Agent")
     const runtime = requireById(
       capabilities.runtimes,
       assignment.runtimeId,
-      "Runtime",
-    );
+      "Runtime"
+    )
     const roleDefinition = requireById(
       capabilities.roleDefinitions,
       assignment.roleDefinitionId,
-      "RoleDefinition",
-    );
+      "RoleDefinition"
+    )
 
     return resumeAgentSession({
       target: {
@@ -228,38 +222,38 @@ export class SessionLifecycle {
       roleDefinition: cloneRoleDefinition(roleDefinition),
       checkpoint: cloneCheckpoint(checkpoint),
       failedSession: cloneSession(failedSession),
-    });
+    })
   }
 
   private escalateRecoveryFailure(assignment: Assignment, task: Task): void {
-    assignment.state = "escalated";
-    assignment.updatedAt = this.state.now();
-    task.state = "human_review_required";
-    task.updatedAt = assignment.updatedAt;
-    this.scheduler.releaseLease(assignment.leaseId);
+    assignment.state = "escalated"
+    assignment.updatedAt = this.state.now()
+    task.state = "human_review_required"
+    task.updatedAt = assignment.updatedAt
+    this.scheduler.releaseLease(assignment.leaseId)
   }
 }
 
 function failSession(
   session: Session,
   failureState: "crashed" | "expired",
-  endedAt: string,
+  endedAt: string
 ): void {
-  session.state = failureState;
-  session.endedAt = endedAt;
-  session.updatedAt = endedAt;
+  session.state = failureState
+  session.endedAt = endedAt
+  session.updatedAt = endedAt
 }
 
 function requireById<TItem extends { id: string }>(
   items: TItem[],
   id: string,
-  label: string,
+  label: string
 ): TItem {
-  const item = items.find((candidate) => candidate.id === id);
+  const item = items.find((candidate) => candidate.id === id)
 
   if (!item) {
-    throw new Error(`${label} ${id} does not exist.`);
+    throw new Error(`${label} ${id} does not exist.`)
   }
 
-  return item;
+  return item
 }

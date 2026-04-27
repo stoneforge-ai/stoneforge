@@ -1,14 +1,14 @@
-import type { DirectTaskRunSummary } from "./direct-task-summary.js";
+import type { DirectTaskRunSummary } from "./direct-task-summary.js"
 import {
   type ControlPlaneCommandStatus,
   type ControlPlaneStore,
-} from "./control-plane-store.js";
+} from "./control-plane-store.js"
 import {
   exportSnapshot,
   loadControlPlane,
   type LoadControlPlaneOptions,
   type LoadedControlPlane,
-} from "./persistent-control-plane-context.js";
+} from "./persistent-control-plane-context.js"
 import {
   completeAgentReview,
   configureAgent,
@@ -28,124 +28,124 @@ import {
   recordLocalVerificationPassed,
   requestReview,
   requireObservedProviderVerificationPassed,
-} from "./control-plane-loaded-operations.js";
-import { buildPersistentSummary } from "./persistent-summary.js";
+} from "./control-plane-loaded-operations.js"
+import { buildPersistentSummary } from "./persistent-summary.js"
 
 export class ControlPlaneApplication {
   constructor(
     private readonly store: ControlPlaneStore,
-    private readonly options: LoadControlPlaneOptions = {},
+    private readonly options: LoadControlPlaneOptions = {}
   ) {}
 
   async reset(): Promise<ControlPlaneCommandStatus> {
-    await this.store.reset();
-    return { command: "reset", id: "control-plane-store" };
+    await this.store.reset()
+    return { command: "reset", id: "control-plane-store" }
   }
 
   async initializeWorkspace(): Promise<ControlPlaneCommandStatus> {
-    return this.mutate("initialize-workspace", initializeWorkspace);
+    return this.mutate("initialize-workspace", initializeWorkspace)
   }
 
   async configureRepository(): Promise<ControlPlaneCommandStatus> {
-    return this.mutate("configure-repository", configureRepository);
+    return this.mutate("configure-repository", configureRepository)
   }
 
   async configureRuntime(): Promise<ControlPlaneCommandStatus> {
-    return this.mutate("configure-runtime", configureRuntime);
+    return this.mutate("configure-runtime", configureRuntime)
   }
 
   async configureAgent(): Promise<ControlPlaneCommandStatus> {
-    return this.mutate("configure-agent", configureAgent);
+    return this.mutate("configure-agent", configureAgent)
   }
 
   async configureRoleDefinition(): Promise<ControlPlaneCommandStatus> {
-    return this.mutate("configure-role-definition", configureRole);
+    return this.mutate("configure-role-definition", configureRole)
   }
 
   async configurePolicy(): Promise<ControlPlaneCommandStatus> {
-    return this.mutate("configure-policy", configurePolicy);
+    return this.mutate("configure-policy", configurePolicy)
   }
 
   async evaluateReadiness(): Promise<ControlPlaneCommandStatus> {
-    return this.mutate("evaluate-readiness", evaluateReadiness);
+    return this.mutate("evaluate-readiness", evaluateReadiness)
   }
 
   async createDirectTask(): Promise<ControlPlaneCommandStatus> {
-    return this.mutate("create-direct-task", createDirectTask);
+    return this.mutate("create-direct-task", createDirectTask)
   }
 
   async executeNextDispatch(): Promise<ControlPlaneCommandStatus> {
-    return this.mutateAsync("execute-next-dispatch", executeNextDispatch);
+    return this.mutateAsync("execute-next-dispatch", executeNextDispatch)
   }
 
   async openMergeRequest(): Promise<ControlPlaneCommandStatus> {
-    return this.mutateAsync("open-merge-request", openMergeRequest);
+    return this.mutateAsync("open-merge-request", openMergeRequest)
   }
 
   async recordLocalVerificationPassed(): Promise<ControlPlaneCommandStatus> {
     return this.mutateAsync(
       "record-local-verification-passed",
-      recordLocalVerificationPassed,
-    );
+      recordLocalVerificationPassed
+    )
   }
 
   async observeProviderState(): Promise<ControlPlaneCommandStatus> {
-    return this.mutateAsync("observe-provider-state", observeProviderState);
+    return this.mutateAsync("observe-provider-state", observeProviderState)
   }
 
   async requireObservedProviderVerificationPassed(): Promise<ControlPlaneCommandStatus> {
     return this.mutate(
       "require-provider-verification-passed",
-      requireObservedProviderVerificationPassed,
-    );
+      requireObservedProviderVerificationPassed
+    )
   }
 
   async publishPolicyStatus(): Promise<ControlPlaneCommandStatus> {
-    return this.mutateAsync("publish-policy-status", publishPolicyStatus);
+    return this.mutateAsync("publish-policy-status", publishPolicyStatus)
   }
 
   async requestReview(): Promise<ControlPlaneCommandStatus> {
-    return this.mutate("request-review", requestReview);
+    return this.mutate("request-review", requestReview)
   }
 
   async completeAgentReview(): Promise<ControlPlaneCommandStatus> {
-    return this.mutateAsync("complete-agent-review", completeAgentReview);
+    return this.mutateAsync("complete-agent-review", completeAgentReview)
   }
 
   async recordHumanApproval(): Promise<ControlPlaneCommandStatus> {
-    return this.mutateAsync("record-human-approval", recordHumanApproval);
+    return this.mutateAsync("record-human-approval", recordHumanApproval)
   }
 
   async mergeWhenReady(): Promise<ControlPlaneCommandStatus> {
-    return this.mutateAsync("merge-when-ready", mergeWhenReady);
+    return this.mutateAsync("merge-when-ready", mergeWhenReady)
   }
 
   async readSummary(): Promise<DirectTaskRunSummary> {
-    return buildPersistentSummary(this.store, this.options);
+    return buildPersistentSummary(this.store, this.options)
   }
 
   private async mutate(
     command: string,
     action: (
-      loaded: LoadedControlPlane,
-    ) => Omit<ControlPlaneCommandStatus, "command">,
+      loaded: LoadedControlPlane
+    ) => Omit<ControlPlaneCommandStatus, "command">
   ): Promise<ControlPlaneCommandStatus> {
-    return this.mutateAsync(command, async (loaded) => action(loaded));
+    return this.mutateAsync(command, async (loaded) => action(loaded))
   }
 
   private async mutateAsync(
     command: string,
     action: (
-      loaded: LoadedControlPlane,
-    ) => Promise<Omit<ControlPlaneCommandStatus, "command">>,
+      loaded: LoadedControlPlane
+    ) => Promise<Omit<ControlPlaneCommandStatus, "command">>
   ): Promise<ControlPlaneCommandStatus> {
-    const loaded = loadControlPlane(await this.store.load(), this.options);
-    const result = await action(loaded);
+    const loaded = loadControlPlane(await this.store.load(), this.options)
+    const result = await action(loaded)
 
-    await this.store.save(exportSnapshot(loaded));
+    await this.store.save(exportSnapshot(loaded))
 
-    return { command, ...result };
+    return { command, ...result }
   }
 }
 
-export { ControlPlaneApplication as PersistentControlPlane };
+export { ControlPlaneApplication as PersistentControlPlane }

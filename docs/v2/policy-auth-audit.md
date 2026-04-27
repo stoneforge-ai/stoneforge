@@ -104,7 +104,7 @@ The first slice should support these semantic subject classes even if the final 
 | Workspace admin | repository connection, hosts, runtimes, agents, roles, automations, workspace policy, secrets |
 | Operator        | task and plan creation, dispatch, steering, resume, cancel, failure handling                  |
 | Reviewer        | inspect execution, review MergeRequests, request changes                                      |
-| Approver        | satisfy Approval Gates where policy allows that actor                                  |
+| Approver        | satisfy Approval Gates where policy allows that actor                                         |
 
 One human may belong to multiple subject classes.
 

@@ -5,7 +5,7 @@ import {
   cloneAgent,
   cloneRoleDefinition,
   cloneRuntime,
-} from "@stoneforge/core";
+} from "@stoneforge/core"
 
 import type {
   Agent,
@@ -17,15 +17,15 @@ import type {
   RegisterRuntimeInput,
   RoleDefinition,
   Runtime,
-} from "./models.js";
-import type { RuntimeId, WorkspaceId } from "./ids.js";
-import type { WorkspaceSetupState } from "./workspace-state.js";
+} from "./models.js"
+import type { RuntimeId, WorkspaceId } from "./ids.js"
+import type { WorkspaceSetupState } from "./workspace-state.js"
 import {
   createAgentRecord,
   createRoleDefinitionRecord,
   createRuntimeRecord,
-} from "./workspace-records.js";
-import { computeConfiguredState } from "./workspace-validation.js";
+} from "./workspace-records.js"
+import { computeConfiguredState } from "./workspace-validation.js"
 
 export class WorkspaceCapabilityRegistration {
   constructor(private readonly state: WorkspaceSetupState) {}
@@ -33,18 +33,18 @@ export class WorkspaceCapabilityRegistration {
   registerRuntime(
     workspaceId: WorkspaceId,
     input: RegisterRuntimeInput,
-    actor: AuditActor,
+    actor: AuditActor
   ): Runtime {
-    const workspace = this.state.requireWorkspace(workspaceId);
+    const workspace = this.state.requireWorkspace(workspaceId)
     const runtime = createRuntimeRecord(
       asRuntimeId(this.state.nextId("runtime")),
       workspaceId,
-      input,
-    );
+      input
+    )
 
-    workspace.runtimes.push(runtime);
-    workspace.updatedAt = this.state.now();
-    workspace.state = computeConfiguredState(workspace);
+    workspace.runtimes.push(runtime)
+    workspace.updatedAt = this.state.now()
+    workspace.state = computeConfiguredState(workspace)
 
     this.state.appendAuditEvent({
       actor,
@@ -55,40 +55,40 @@ export class WorkspaceCapabilityRegistration {
       targetType: "runtime",
       outcome: "success",
       policyPreset: workspace.policyPreset,
-    });
+    })
 
-    return cloneRuntime(runtime);
+    return cloneRuntime(runtime)
   }
 
   registerAgent(
     workspaceId: WorkspaceId,
     input: RegisterAgentInput,
-    actor: AuditActor,
+    actor: AuditActor
   ): Agent {
-    const workspace = this.state.requireWorkspace(workspaceId);
+    const workspace = this.state.requireWorkspace(workspaceId)
     const runtime = workspace.runtimes.find((candidate) => {
-      return candidate.id === input.runtimeId;
-    });
+      return candidate.id === input.runtimeId
+    })
 
     if (!runtime) {
       throw new Error(
-        `Runtime ${input.runtimeId} does not exist in workspace ${workspaceId}.`,
-      );
+        `Runtime ${input.runtimeId} does not exist in workspace ${workspaceId}.`
+      )
     }
 
     if (input.concurrencyLimit < 1) {
-      throw new Error("Agent concurrencyLimit must be at least 1.");
+      throw new Error("Agent concurrencyLimit must be at least 1.")
     }
 
     const agent = createAgentRecord(
       asAgentId(this.state.nextId("agent")),
       workspaceId,
-      input,
-    );
+      input
+    )
 
-    workspace.agents.push(agent);
-    workspace.updatedAt = this.state.now();
-    workspace.state = computeConfiguredState(workspace);
+    workspace.agents.push(agent)
+    workspace.updatedAt = this.state.now()
+    workspace.state = computeConfiguredState(workspace)
 
     this.state.appendAuditEvent({
       actor,
@@ -99,26 +99,26 @@ export class WorkspaceCapabilityRegistration {
       targetType: "agent",
       outcome: "success",
       policyPreset: workspace.policyPreset,
-    });
+    })
 
-    return cloneAgent(agent);
+    return cloneAgent(agent)
   }
 
   registerRoleDefinition(
     workspaceId: WorkspaceId,
     input: RegisterRoleDefinitionInput,
-    actor: AuditActor,
+    actor: AuditActor
   ): RoleDefinition {
-    const workspace = this.state.requireWorkspace(workspaceId);
+    const workspace = this.state.requireWorkspace(workspaceId)
     const roleDefinition = createRoleDefinitionRecord(
       asRoleDefinitionId(this.state.nextId("roleDefinition")),
       workspaceId,
-      input,
-    );
+      input
+    )
 
-    workspace.roleDefinitions.push(roleDefinition);
-    workspace.updatedAt = this.state.now();
-    workspace.state = computeConfiguredState(workspace);
+    workspace.roleDefinitions.push(roleDefinition)
+    workspace.updatedAt = this.state.now()
+    workspace.state = computeConfiguredState(workspace)
 
     this.state.appendAuditEvent({
       actor,
@@ -129,30 +129,30 @@ export class WorkspaceCapabilityRegistration {
       targetType: "role_definition",
       outcome: "success",
       policyPreset: workspace.policyPreset,
-    });
+    })
 
-    return cloneRoleDefinition(roleDefinition);
+    return cloneRoleDefinition(roleDefinition)
   }
 
   updateRuntimeHealthStatus(
     workspaceId: WorkspaceId,
     runtimeId: RuntimeId,
     status: HealthStatus,
-    actor: AuditActor,
+    actor: AuditActor
   ): Runtime {
-    const workspace = this.state.requireWorkspace(workspaceId);
+    const workspace = this.state.requireWorkspace(workspaceId)
     const runtime = workspace.runtimes.find((candidate) => {
-      return candidate.id === runtimeId;
-    });
+      return candidate.id === runtimeId
+    })
 
     if (!runtime) {
       throw new Error(
-        `Runtime ${runtimeId} does not exist in workspace ${workspaceId}.`,
-      );
+        `Runtime ${runtimeId} does not exist in workspace ${workspaceId}.`
+      )
     }
 
-    runtime.healthStatus = status;
-    workspace.updatedAt = this.state.now();
+    runtime.healthStatus = status
+    workspace.updatedAt = this.state.now()
 
     this.state.appendAuditEvent({
       actor,
@@ -164,24 +164,24 @@ export class WorkspaceCapabilityRegistration {
       outcome: runtimeHealthOutcome(status),
       reason: runtimeHealthReason(status),
       policyPreset: workspace.policyPreset,
-    });
+    })
 
-    return cloneRuntime(runtime);
+    return cloneRuntime(runtime)
   }
 }
 
 function runtimeHealthOutcome(status: HealthStatus): AuditOutcome {
   if (status === "healthy") {
-    return "success";
+    return "success"
   }
 
-  return "failure";
+  return "failure"
 }
 
 function runtimeHealthReason(status: HealthStatus): string | undefined {
   if (status === "healthy") {
-    return undefined;
+    return undefined
   }
 
-  return "Runtime health check failed.";
+  return "Runtime health check failed."
 }

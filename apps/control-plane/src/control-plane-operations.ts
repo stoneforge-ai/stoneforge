@@ -1,5 +1,5 @@
-import type { ControlPlaneCommandStatus } from "./control-plane-store.js";
-import type { PersistentControlPlane } from "./persistent-control-plane.js";
+import type { ControlPlaneCommandStatus } from "./control-plane-store.js"
+import type { PersistentControlPlane } from "./persistent-control-plane.js"
 
 export const controlPlaneOperationNames = [
   "reset",
@@ -21,14 +21,14 @@ export const controlPlaneOperationNames = [
   "complete-agent-review",
   "record-human-approval",
   "merge-when-ready",
-] as const;
+] as const
 
 export type ControlPlaneOperationName =
-  (typeof controlPlaneOperationNames)[number];
+  (typeof controlPlaneOperationNames)[number]
 
 type ControlPlaneOperationHandler = (
-  controlPlane: PersistentControlPlane,
-) => Promise<ControlPlaneCommandStatus>;
+  controlPlane: PersistentControlPlane
+) => Promise<ControlPlaneCommandStatus>
 
 const controlPlaneOperationHandlers = {
   reset: (controlPlane) => controlPlane.reset(),
@@ -54,11 +54,11 @@ const controlPlaneOperationHandlers = {
   "complete-agent-review": (controlPlane) => controlPlane.completeAgentReview(),
   "record-human-approval": (controlPlane) => controlPlane.recordHumanApproval(),
   "merge-when-ready": (controlPlane) => controlPlane.mergeWhenReady(),
-} satisfies Record<ControlPlaneOperationName, ControlPlaneOperationHandler>;
+} satisfies Record<ControlPlaneOperationName, ControlPlaneOperationHandler>
 
 export function runControlPlaneOperation(
   controlPlane: PersistentControlPlane,
-  operation: ControlPlaneOperationName,
+  operation: ControlPlaneOperationName
 ): Promise<ControlPlaneCommandStatus> {
-  return controlPlaneOperationHandlers[operation](controlPlane);
+  return controlPlaneOperationHandlers[operation](controlPlane)
 }

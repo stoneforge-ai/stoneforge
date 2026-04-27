@@ -1,9 +1,9 @@
-import { describe, expectTypeOf, it } from "vitest";
+import { describe, expectTypeOf, it } from "vitest"
 
 import type {
   RegisterManagedRuntimeInput,
   RegisterRuntimeInput,
-} from "./index.js";
+} from "./index.js"
 
 describe("workspace input types", () => {
   it("correlates registered runtime location with accepted modes", () => {
@@ -12,10 +12,10 @@ describe("workspace input types", () => {
       location: "managed",
       mode: "managed_sandbox",
       managedProvider: "daytona",
-    } satisfies RegisterRuntimeInput;
+    } satisfies RegisterRuntimeInput
 
-    expectTypeOf(managedRuntime).toMatchTypeOf<RegisterManagedRuntimeInput>();
-  });
+    expectTypeOf(managedRuntime).toMatchTypeOf<RegisterManagedRuntimeInput>()
+  })
 
   it("rejects unsupported runtime registration combinations", () => {
     const invalidRuntime = {
@@ -23,10 +23,10 @@ describe("workspace input types", () => {
       location: "managed",
       mode: "local_worktree",
       managedProvider: "daytona",
-    };
+    }
 
     // @ts-expect-error Managed runtime registration must use managed_sandbox.
-    const input: RegisterRuntimeInput = invalidRuntime;
-    expectTypeOf(input).toEqualTypeOf<RegisterRuntimeInput>();
-  });
-});
+    const input: RegisterRuntimeInput = invalidRuntime
+    expectTypeOf(input).toEqualTypeOf<RegisterRuntimeInput>()
+  })
+})

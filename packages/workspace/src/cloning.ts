@@ -1,4 +1,4 @@
-import { cloneAgent, cloneRoleDefinition, cloneRuntime } from "@stoneforge/core";
+import { cloneAgent, cloneRoleDefinition, cloneRuntime } from "@stoneforge/core"
 
 import type {
   AuditEvent,
@@ -6,12 +6,12 @@ import type {
   Org,
   Workspace,
   WorkspaceValidationResult,
-} from "./models.js";
+} from "./models.js"
 
 export function cloneOrg(org: Org): Org {
   return {
     ...org,
-  };
+  }
 }
 
 export function cloneWorkspace(workspace: Workspace): Workspace {
@@ -26,11 +26,11 @@ export function cloneWorkspace(workspace: Workspace): Workspace {
     validation: workspace.validation
       ? cloneValidationResult(workspace.validation)
       : undefined,
-  };
+  }
 }
 
 export function cloneValidationResult(
-  validation: WorkspaceValidationResult,
+  validation: WorkspaceValidationResult
 ): WorkspaceValidationResult {
   return {
     ...validation,
@@ -38,7 +38,7 @@ export function cloneValidationResult(
     selectedExecutionPath: validation.selectedExecutionPath
       ? { ...validation.selectedExecutionPath }
       : undefined,
-  };
+  }
 }
 
 export function cloneAuditEvent(event: AuditEvent): AuditEvent {
@@ -47,13 +47,13 @@ export function cloneAuditEvent(event: AuditEvent): AuditEvent {
     actor: {
       ...event.actor,
     },
-  };
+  }
 }
 
 function cloneRepositoryLink(
-  repository: GitHubRepositoryLink,
+  repository: GitHubRepositoryLink
 ): GitHubRepositoryLink {
   return {
     ...repository,
-  };
+  }
 }

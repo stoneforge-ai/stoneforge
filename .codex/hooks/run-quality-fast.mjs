@@ -1,3 +1,3 @@
-import { runQualityHook } from "../../scripts/run-quality-hook.mjs";
+import { runQualityHook } from "../../scripts/run-quality-hook.mjs"
 
-await runQualityHook("fast", { agentName: "codex" });
+await runQualityHook("fast", { agentName: "codex" })

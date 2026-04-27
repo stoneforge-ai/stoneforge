@@ -1,52 +1,52 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest"
 
 import {
   WorkspaceSetupService,
   type AuditActor,
   type Workspace,
-} from "@stoneforge/workspace";
+} from "@stoneforge/workspace"
 
-import { TaskDispatchService } from "./task-dispatch-service.js";
-import type { AgentAdapter, AgentAdapterStartContext } from "./models.js";
+import { TaskDispatchService } from "./task-dispatch-service.js"
+import type { AgentAdapter, AgentAdapterStartContext } from "./models.js"
 
 const operator: AuditActor = {
   kind: "human",
   id: "user_1",
   displayName: "Platform Lead",
-};
+}
 
 const scheduler: AuditActor = {
   kind: "service",
   id: "scheduler_1",
   displayName: "Stoneforge Scheduler",
-};
+}
 
 describe("TaskDispatchService snapshots", () => {
   it("restores dispatch state and continues id allocation", async () => {
-    const service = new TaskDispatchService(new SnapshotAgentAdapter());
-    const workspace = createReadyWorkspace();
+    const service = new TaskDispatchService(new SnapshotAgentAdapter())
+    const workspace = createReadyWorkspace()
 
-    service.configureWorkspace(workspace);
+    service.configureWorkspace(workspace)
     service.createTask({
       workspaceId: workspace.id,
       title: "Snapshot task",
       intent: "Persist execution records.",
       acceptanceCriteria: ["Execution records survive restore."],
       requiresMergeRequest: false,
-    });
-    await service.runSchedulerOnce();
-    const assignment = service.listAssignments()[0];
+    })
+    await service.runSchedulerOnce()
+    const assignment = service.listAssignments()[0]
 
-    service.completeAssignment(assignment.id);
+    service.completeAssignment(assignment.id)
 
     const restored = new TaskDispatchService(
       new SnapshotAgentAdapter(),
       undefined,
-      service.exportSnapshot(),
-    );
+      service.exportSnapshot()
+    )
 
-    expect(restored.listAssignments()).toHaveLength(1);
-    expect(restored.listSessions()[0]?.providerSessionId).toBe("provider-task");
+    expect(restored.listAssignments()).toHaveLength(1)
+    expect(restored.listSessions()[0]?.providerSessionId).toBe("provider-task")
 
     restored.createTask({
       workspaceId: workspace.id,
@@ -54,32 +54,34 @@ describe("TaskDispatchService snapshots", () => {
       intent: "Continue allocation.",
       acceptanceCriteria: ["New ids follow restored ids."],
       requiresMergeRequest: false,
-    });
+    })
 
-    expect(restored.listDispatchIntents()[1]?.id).toBe("dispatchIntent_2");
-  });
-});
+    expect(restored.listDispatchIntents()[1]?.id).toBe("dispatchIntent_2")
+  })
+})
 
 class SnapshotAgentAdapter implements AgentAdapter {
-  async start(context: AgentAdapterStartContext): Promise<{ providerSessionId: string }> {
-    return { providerSessionId: `provider-${context.target.type}` };
+  async start(
+    context: AgentAdapterStartContext
+  ): Promise<{ providerSessionId: string }> {
+    return { providerSessionId: `provider-${context.target.type}` }
   }
 
   async resume(): Promise<{ providerSessionId: string }> {
-    return { providerSessionId: "provider-resume" };
+    return { providerSessionId: "provider-resume" }
   }
 
   async cancel(): Promise<void> {}
 }
 
 function createReadyWorkspace(): Workspace {
-  const service = new WorkspaceSetupService();
-  const org = service.createOrg({ name: "Stoneforge" });
+  const service = new WorkspaceSetupService()
+  const org = service.createOrg({ name: "Stoneforge" })
   const workspace = service.createWorkspace(
     org.id,
     { name: "stoneforge", targetBranch: "main" },
-    operator,
-  );
+    operator
+  )
 
   service.connectGitHubRepository(
     workspace.id,
@@ -89,8 +91,8 @@ function createReadyWorkspace(): Workspace {
       repository: "stoneforge",
       defaultBranch: "main",
     },
-    operator,
-  );
+    operator
+  )
   const runtime = service.registerRuntime(
     workspace.id,
     {
@@ -99,8 +101,8 @@ function createReadyWorkspace(): Workspace {
       mode: "local_worktree",
       tags: ["customer-host"],
     },
-    operator,
-  );
+    operator
+  )
 
   service.registerAgent(
     workspace.id,
@@ -113,8 +115,8 @@ function createReadyWorkspace(): Workspace {
       launcher: "codex-adapter",
       tags: ["default"],
     },
-    operator,
-  );
+    operator
+  )
   service.registerRoleDefinition(
     workspace.id,
     {
@@ -124,10 +126,10 @@ function createReadyWorkspace(): Workspace {
       toolAccess: ["git", "shell"],
       tags: ["worker"],
     },
-    operator,
-  );
-  service.selectPolicyPreset(workspace.id, "supervised", operator);
-  service.validateWorkspace(workspace.id, scheduler);
+    operator
+  )
+  service.selectPolicyPreset(workspace.id, "supervised", operator)
+  service.validateWorkspace(workspace.id, scheduler)
 
-  return service.getWorkspace(workspace.id);
+  return service.getWorkspace(workspace.id)
 }

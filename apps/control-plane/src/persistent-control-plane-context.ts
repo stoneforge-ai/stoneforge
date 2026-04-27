@@ -1,12 +1,8 @@
-import type { MergeRequestId } from "@stoneforge/core";
-import type {
-  Assignment,
-  DispatchIntent,
-  Session,
-} from "@stoneforge/execution";
-import { TaskDispatchService } from "@stoneforge/execution";
-import type { GitHubMergeRequestAdapter } from "@stoneforge/merge-request";
-import { MergeRequestService } from "@stoneforge/merge-request";
+import type { MergeRequestId } from "@stoneforge/core"
+import type { Assignment, DispatchIntent, Session } from "@stoneforge/execution"
+import { TaskDispatchService } from "@stoneforge/execution"
+import type { GitHubMergeRequestAdapter } from "@stoneforge/merge-request"
+import { MergeRequestService } from "@stoneforge/merge-request"
 import type {
   AuditActor,
   ConnectGitHubRepositoryInput,
@@ -14,81 +10,81 @@ import type {
   RoleDefinition,
   Workspace,
   WorkspaceSetupService,
-} from "@stoneforge/workspace";
-import { WorkspaceSetupService as WorkspaceSetup } from "@stoneforge/workspace";
+} from "@stoneforge/workspace"
+import { WorkspaceSetupService as WorkspaceSetup } from "@stoneforge/workspace"
 
 import {
   type ControlPlaneSnapshot,
   type CurrentControlPlaneIds,
-} from "./control-plane-store.js";
-import type { ControlPlaneOperationInputs } from "./control-plane-operation-inputs.js";
-import { createFakeAgentFixture } from "./fake-agent-adapter.js";
-import { createFakeGitHubMergeRequestFixture } from "./fake-github-merge-request-adapter.js";
+} from "./control-plane-store.js"
+import type { ControlPlaneOperationInputs } from "./control-plane-operation-inputs.js"
+import { createFakeAgentFixture } from "./fake-agent-adapter.js"
+import { createFakeGitHubMergeRequestFixture } from "./fake-github-merge-request-adapter.js"
 
 interface FakeLoadControlPlaneOptions {
-  mergeEnabled?: boolean;
-  mergeProvider?: "fake";
-  mergeRequestAdapter?: GitHubMergeRequestAdapter;
-  operationInputs?: ControlPlaneOperationInputs;
-  repository?: ConnectGitHubRepositoryInput;
-  sourceBranchPrefix?: string;
+  mergeEnabled?: boolean
+  mergeProvider?: "fake"
+  mergeRequestAdapter?: GitHubMergeRequestAdapter
+  operationInputs?: ControlPlaneOperationInputs
+  repository?: ConnectGitHubRepositoryInput
+  sourceBranchPrefix?: string
 }
 
 interface GitHubLoadControlPlaneOptions {
-  mergeEnabled: boolean;
-  mergeProvider: "github";
-  mergeRequestAdapter: GitHubMergeRequestAdapter;
-  operationInputs?: ControlPlaneOperationInputs;
-  repository: ConnectGitHubRepositoryInput;
-  sourceBranchPrefix: string;
+  mergeEnabled: boolean
+  mergeProvider: "github"
+  mergeRequestAdapter: GitHubMergeRequestAdapter
+  operationInputs?: ControlPlaneOperationInputs
+  repository: ConnectGitHubRepositoryInput
+  sourceBranchPrefix: string
 }
 
 export type LoadControlPlaneOptions =
   | FakeLoadControlPlaneOptions
-  | GitHubLoadControlPlaneOptions;
+  | GitHubLoadControlPlaneOptions
 
 export interface LoadedControlPlane {
-  snapshot: ControlPlaneSnapshot;
-  options: LoadControlPlaneOptions;
-  setup: WorkspaceSetupService;
-  execution: TaskDispatchService;
-  mergeRequests: MergeRequestService;
+  snapshot: ControlPlaneSnapshot
+  options: LoadControlPlaneOptions
+  setup: WorkspaceSetupService
+  execution: TaskDispatchService
+  mergeRequests: MergeRequestService
 }
 
 export const operator: AuditActor = {
   kind: "human",
   id: "user_operator",
   displayName: "Local Operator",
-};
+}
 
 export const scheduler: AuditActor = {
   kind: "service",
   id: "scheduler_local",
   displayName: "Local Scheduler",
-};
+}
 
 export function loadControlPlane(
   snapshot: ControlPlaneSnapshot,
-  options: LoadControlPlaneOptions = {},
+  options: LoadControlPlaneOptions = {}
 ): LoadedControlPlane {
-  const setup = new WorkspaceSetup(snapshot.workspace);
+  const setup = new WorkspaceSetup(snapshot.workspace)
   const execution = new TaskDispatchService(
     createFakeAgentFixture(),
     undefined,
-    snapshot.execution,
-  );
+    snapshot.execution
+  )
   const mergeRequests = new MergeRequestService(
     execution,
     options.mergeRequestAdapter ?? createFakeGitHubMergeRequestFixture(),
     mergeRequestOptions(snapshot, setup, options),
-    snapshot.mergeRequests,
-  );
+    snapshot.mergeRequests
+  )
 
-  return { snapshot, options, setup, execution, mergeRequests };
+  return { snapshot, options, setup, execution, mergeRequests }
 }
 
 export function exportSnapshot(
-  loaded: LoadedControlPlane,
+  loaded: LoadedControlPlane
 ): ControlPlaneSnapshot {
   return {
     version: loaded.snapshot.version,
@@ -96,171 +92,171 @@ export function exportSnapshot(
     execution: loaded.execution.exportSnapshot(),
     mergeRequests: loaded.mergeRequests.exportSnapshot(),
     current: { ...loaded.snapshot.current },
-  };
+  }
 }
 
 export function requireRoleDefinition(
-  loaded: LoadedControlPlane,
+  loaded: LoadedControlPlane
 ): RoleDefinition {
   const workspace = loaded.setup.getWorkspace(
-    requireWorkspaceId(loaded.snapshot.current),
-  );
+    requireWorkspaceId(loaded.snapshot.current)
+  )
   const roleDefinitionId = requireValue(
     loaded.snapshot.current.roleDefinitionId,
-    "Configure a RoleDefinition before creating tasks or reviews.",
-  );
+    "Configure a RoleDefinition before creating tasks or reviews."
+  )
   const roleDefinition = workspace.roleDefinitions.find((candidate) => {
-    return candidate.id === roleDefinitionId;
-  });
+    return candidate.id === roleDefinitionId
+  })
 
   return requireValue(
     roleDefinition,
-    `RoleDefinition ${roleDefinitionId} does not exist in the current workspace.`,
-  );
+    `RoleDefinition ${roleDefinitionId} does not exist in the current workspace.`
+  )
 }
 
 export function requireStartedAssignment(
   execution: TaskDispatchService,
-  intent: DispatchIntent | null,
+  intent: DispatchIntent | null
 ): Assignment {
   if (intent === null) {
     throw new Error(
-      "No queued dispatch intent exists. Create or request work first.",
-    );
+      "No queued dispatch intent exists. Create or request work first."
+    )
   }
 
   if (intent.assignmentId === undefined) {
-    throw new Error(startFailureMessage(intent));
+    throw new Error(startFailureMessage(intent))
   }
 
-  return execution.getAssignment(intent.assignmentId);
+  return execution.getAssignment(intent.assignmentId)
 }
 
 export function requireLatestSession(
   execution: TaskDispatchService,
-  assignment: Assignment,
+  assignment: Assignment
 ): Session {
-  const sessionId = assignment.sessionIds.at(-1);
+  const sessionId = assignment.sessionIds.at(-1)
 
   return execution.getSession(
     requireValue(
       sessionId,
-      `Assignment ${assignment.id} did not start a Session.`,
-    ),
-  );
+      `Assignment ${assignment.id} did not start a Session.`
+    )
+  )
 }
 
 export function rememberCompletedAssignment(
   current: CurrentControlPlaneIds,
   assignment: Assignment,
-  session: Session,
+  session: Session
 ): void {
   if (assignment.owner.type === "task") {
-    current.implementationAssignmentId = assignment.id;
-    current.implementationSessionId = session.id;
-    return;
+    current.implementationAssignmentId = assignment.id
+    current.implementationSessionId = session.id
+    return
   }
 
-  current.reviewAssignmentId = assignment.id;
-  current.reviewSessionId = session.id;
+  current.reviewAssignmentId = assignment.id
+  current.reviewSessionId = session.id
 }
 
 export function requireWorkspaceId(
-  current: CurrentControlPlaneIds,
+  current: CurrentControlPlaneIds
 ): Workspace["id"] {
   return requireValue(
     current.workspaceId,
-    "No Workspace exists. Run initialize-workspace first.",
-  );
+    "No Workspace exists. Run initialize-workspace first."
+  )
 }
 
 export function requireRuntimeId(
-  current: CurrentControlPlaneIds,
+  current: CurrentControlPlaneIds
 ): Workspace["runtimes"][number]["id"] {
   return requireValue(
     current.runtimeId,
-    "No Runtime exists. Run configure-runtime before configure-agent.",
-  );
+    "No Runtime exists. Run configure-runtime before configure-agent."
+  )
 }
 
 export function requireTaskId(
-  current: CurrentControlPlaneIds,
+  current: CurrentControlPlaneIds
 ): ReturnType<TaskDispatchService["getTask"]>["id"] {
   return requireValue(
     current.taskId,
-    "No Task exists. Create a direct task first.",
-  );
+    "No Task exists. Create a direct task first."
+  )
 }
 
 export function requireMergeRequestId(
-  current: CurrentControlPlaneIds,
+  current: CurrentControlPlaneIds
 ): MergeRequestId {
   return requireValue(
     current.mergeRequestId,
-    "No MergeRequest exists. Open a MergeRequest first.",
-  );
+    "No MergeRequest exists. Open a MergeRequest first."
+  )
 }
 
 export function requireImplementationSessionId(
-  current: CurrentControlPlaneIds,
+  current: CurrentControlPlaneIds
 ): Session["id"] {
   return requireValue(
     current.implementationSessionId,
-    "No implementation Session exists. Run the implementation worker first.",
-  );
+    "No implementation Session exists. Run the implementation worker first."
+  )
 }
 
 export function requireReviewSessionId(
-  current: CurrentControlPlaneIds,
+  current: CurrentControlPlaneIds
 ): Session["id"] {
   return requireValue(
     current.reviewSessionId,
-    "No review Session exists. Run the review worker first.",
-  );
+    "No review Session exists. Run the review worker first."
+  )
 }
 
 export function requireValue<TValue>(
   value: TValue | undefined,
-  message: string,
+  message: string
 ): TValue {
   if (value === undefined) {
-    throw new Error(message);
+    throw new Error(message)
   }
 
-  return value;
+  return value
 }
 
 function mergeRequestOptions(
   snapshot: ControlPlaneSnapshot,
   setup: WorkspaceSetupService,
-  options: LoadControlPlaneOptions,
+  options: LoadControlPlaneOptions
 ): {
-  policyPreset: PolicyPreset;
-  sourceBranchPrefix?: string;
-  targetBranch: string;
+  policyPreset: PolicyPreset
+  sourceBranchPrefix?: string
+  targetBranch: string
 } {
-  const workspace = findCurrentWorkspace(snapshot, setup);
+  const workspace = findCurrentWorkspace(snapshot, setup)
 
   return {
     policyPreset: workspace?.policyPreset ?? "supervised",
     sourceBranchPrefix: options.sourceBranchPrefix,
     targetBranch: workspace?.targetBranch ?? "main",
-  };
+  }
 }
 
 function findCurrentWorkspace(
   snapshot: ControlPlaneSnapshot,
-  setup: WorkspaceSetupService,
+  setup: WorkspaceSetupService
 ): Workspace | undefined {
   if (snapshot.current.workspaceId === undefined) {
-    return undefined;
+    return undefined
   }
 
-  return setup.getWorkspace(snapshot.current.workspaceId);
+  return setup.getWorkspace(snapshot.current.workspaceId)
 }
 
 function startFailureMessage(intent: DispatchIntent): string {
-  const failure = intent.lastFailureReason ?? "the placement failure";
+  const failure = intent.lastFailureReason ?? "the placement failure"
 
-  return `Dispatch intent ${intent.id} did not start. Resolve ${failure} and run the worker again.`;
+  return `Dispatch intent ${intent.id} did not start. Resolve ${failure} and run the worker again.`
 }

@@ -11,4 +11,4 @@ export {
   type RoleDefinitionId,
   type RuntimeId,
   type WorkspaceId,
-} from "@stoneforge/core";
+} from "@stoneforge/core"

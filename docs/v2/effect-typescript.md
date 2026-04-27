@@ -39,11 +39,11 @@ Acceptable boundary pattern:
 
 ```ts
 export async function createTask(
-  input: CreateTaskInput,
+  input: CreateTaskInput
 ): Promise<CreateTaskResult> {
   return Effect.runPromise(
-    createTaskProgram(input).pipe(Effect.provide(LiveLayer)),
-  );
+    createTaskProgram(input).pipe(Effect.provide(LiveLayer))
+  )
 }
 ```
 

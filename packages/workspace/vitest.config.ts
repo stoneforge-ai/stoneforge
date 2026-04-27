@@ -1,10 +1,15 @@
-import { defineConfig } from "vitest/config";
+import { defineConfig } from "vitest/config"
 
 export default defineConfig({
   test: {
     coverage: {
       all: true,
-      exclude: ["src/**/*.test.ts", "src/index.ts", "src/models.ts", "src/ids.ts"],
+      exclude: [
+        "src/**/*.test.ts",
+        "src/index.ts",
+        "src/models.ts",
+        "src/ids.ts",
+      ],
       include: ["src/**/*.ts"],
       provider: "v8",
       reporter: ["text", "json", "lcov"],
@@ -18,4 +23,4 @@ export default defineConfig({
     include: ["src/**/*.test.ts"],
     exclude: ["dist/**", "node_modules/**"],
   },
-});
+})

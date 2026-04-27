@@ -9,6 +9,7 @@ If you discover a security vulnerability in Stoneforge, please report it respons
 Instead, email: **security@stoneforge.ai**
 
 Include:
+
 - Description of the vulnerability
 - Steps to reproduce
 - Potential impact

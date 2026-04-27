@@ -7,7 +7,7 @@ import type {
   Runtime,
   RuntimeId,
   WorkspaceId,
-} from "@stoneforge/core";
+} from "@stoneforge/core"
 
 import type {
   AssignmentId,
@@ -15,7 +15,7 @@ import type {
   LeaseId,
   SessionId,
   TaskId,
-} from "./ids.js";
+} from "./ids.js"
 
 export type TaskState =
   | "draft"
@@ -27,87 +27,84 @@ export type TaskState =
   | "repair_required"
   | "completed"
   | "human_review_required"
-  | "canceled";
+  | "canceled"
 
-export type TaskPriority = "low" | "normal" | "high";
+export type TaskPriority = "low" | "normal" | "high"
 
 export interface Checkpoint {
-  completedWork: string[];
-  remainingWork: string[];
-  importantContext: string[];
-  capturedAt: string;
+  completedWork: string[]
+  remainingWork: string[]
+  importantContext: string[]
+  capturedAt: string
 }
 
 export interface TaskProgressCheckpoint extends Checkpoint {
-  assignmentId: AssignmentId;
-  sessionId: SessionId;
+  assignmentId: AssignmentId
+  sessionId: SessionId
 }
 
 export interface TaskProgressRecord {
-  checkpoints: TaskProgressCheckpoint[];
-  repairContext: string[];
+  checkpoints: TaskProgressCheckpoint[]
+  repairContext: string[]
 }
 
 export interface TaskDispatchConstraints {
-  roleDefinitionId?: RoleDefinitionId;
-  requiredAgentTags: string[];
-  requiredRuntimeTags: string[];
+  roleDefinitionId?: RoleDefinitionId
+  requiredAgentTags: string[]
+  requiredRuntimeTags: string[]
 }
 
-export type FollowUpSourceOutcome =
-  | "completed"
-  | "canceled"
-  | "closed_unmerged";
+export type FollowUpSourceOutcome = "completed" | "canceled" | "closed_unmerged"
 
 export interface FollowUpSource {
-  taskId: TaskId;
-  sourceOutcome: FollowUpSourceOutcome;
-  mergeRequestId?: MergeRequestId;
+  taskId: TaskId
+  sourceOutcome: FollowUpSourceOutcome
+  mergeRequestId?: MergeRequestId
 }
 
 export interface Task {
-  id: TaskId;
-  workspaceId: WorkspaceId;
-  title: string;
-  intent: string;
-  acceptanceCriteria: string[];
-  priority: TaskPriority;
-  dependencyIds: TaskId[];
-  planId?: string;
-  state: TaskState;
-  requiresMergeRequest: boolean;
-  dispatchConstraints: TaskDispatchConstraints;
-  progressRecord: TaskProgressRecord;
-  followUpSource?: FollowUpSource;
-  createdAt: string;
-  updatedAt: string;
+  id: TaskId
+  workspaceId: WorkspaceId
+  title: string
+  intent: string
+  acceptanceCriteria: string[]
+  priority: TaskPriority
+  dependencyIds: TaskId[]
+  planId?: string
+  state: TaskState
+  requiresMergeRequest: boolean
+  dispatchConstraints: TaskDispatchConstraints
+  progressRecord: TaskProgressRecord
+  followUpSource?: FollowUpSource
+  createdAt: string
+  updatedAt: string
 }
 
 export interface CreateTaskInput {
-  workspaceId: WorkspaceId;
-  title: string;
-  intent: string;
-  acceptanceCriteria?: string[];
-  priority?: TaskPriority;
-  dependencyIds?: TaskId[];
-  planId?: string;
-  requiresMergeRequest?: boolean;
-  followUpSource?: FollowUpSource;
-  dispatchConstraints?: Partial<TaskDispatchConstraints>;
+  workspaceId: WorkspaceId
+  title: string
+  intent: string
+  acceptanceCriteria?: string[]
+  priority?: TaskPriority
+  dependencyIds?: TaskId[]
+  planId?: string
+  requiresMergeRequest?: boolean
+  followUpSource?: FollowUpSource
+  dispatchConstraints?: Partial<TaskDispatchConstraints>
 }
 
 export interface UpdateTaskInput {
-  title?: string;
-  intent?: string;
-  acceptanceCriteria?: string[];
-  priority?: TaskPriority;
-  dependencyIds?: TaskId[];
-  dispatchConstraints?: Partial<TaskDispatchConstraints>;
+  title?: string
+  intent?: string
+  acceptanceCriteria?: string[]
+  priority?: TaskPriority
+  dependencyIds?: TaskId[]
+  dispatchConstraints?: Partial<TaskDispatchConstraints>
 }
 
-export type DispatchAction = "implement";
-export type MergeRequestDispatchAction = "review" | "merge_evaluate";
-export type DispatchTargetType = "task" | "merge_request";
+export type DispatchAction = "implement"
+export type MergeRequestDispatchAction = "review" | "merge_evaluate"
+export type DispatchTargetType = "task" | "merge_request"
 
 export type DispatchIntentState =
   | "created"
@@ -118,55 +115,55 @@ export type DispatchIntentState =
   | "retry_wait"
   | "completed"
   | "escalated"
-  | "canceled";
+  | "canceled"
 
 interface DispatchIntentBase {
-  id: DispatchIntentId;
-  workspaceId: WorkspaceId;
-  state: DispatchIntentState;
-  roleDefinitionId?: RoleDefinitionId;
-  requiredAgentTags: string[];
-  requiredRuntimeTags: string[];
-  leaseId?: LeaseId;
-  assignmentId?: AssignmentId;
-  placementFailureCount: number;
-  lastFailureReason?: PlacementFailureReason;
-  createdAt: string;
-  updatedAt: string;
+  id: DispatchIntentId
+  workspaceId: WorkspaceId
+  state: DispatchIntentState
+  roleDefinitionId?: RoleDefinitionId
+  requiredAgentTags: string[]
+  requiredRuntimeTags: string[]
+  leaseId?: LeaseId
+  assignmentId?: AssignmentId
+  placementFailureCount: number
+  lastFailureReason?: PlacementFailureReason
+  createdAt: string
+  updatedAt: string
 }
 
 export interface TaskDispatchIntent extends DispatchIntentBase {
-  targetType: "task";
-  taskId: TaskId;
-  mergeRequestId?: never;
-  action: DispatchAction;
+  targetType: "task"
+  taskId: TaskId
+  mergeRequestId?: never
+  action: DispatchAction
 }
 
 export interface MergeRequestDispatchIntent extends DispatchIntentBase {
-  targetType: "merge_request";
-  taskId?: never;
-  mergeRequestId: MergeRequestId;
-  action: MergeRequestDispatchAction;
+  targetType: "merge_request"
+  taskId?: never
+  mergeRequestId: MergeRequestId
+  action: MergeRequestDispatchAction
 }
 
-export type DispatchIntent = TaskDispatchIntent | MergeRequestDispatchIntent;
+export type DispatchIntent = TaskDispatchIntent | MergeRequestDispatchIntent
 
 export type PlacementFailureReason =
   | "task_not_ready"
   | "no_eligible_agent"
   | "capacity_exhausted"
-  | "adapter_start_failed";
+  | "adapter_start_failed"
 
 export interface Lease {
-  id: LeaseId;
-  workspaceId: WorkspaceId;
-  agentId: AgentId;
-  runtimeId: RuntimeId;
-  dispatchIntentId: DispatchIntentId;
-  assignmentId?: AssignmentId;
-  state: "active" | "released";
-  leasedAt: string;
-  releasedAt?: string;
+  id: LeaseId
+  workspaceId: WorkspaceId
+  agentId: AgentId
+  runtimeId: RuntimeId
+  dispatchIntentId: DispatchIntentId
+  assignmentId?: AssignmentId
+  state: "active" | "released"
+  leasedAt: string
+  releasedAt?: string
 }
 
 export type AssignmentState =
@@ -175,54 +172,54 @@ export type AssignmentState =
   | "resume_pending"
   | "succeeded"
   | "escalated"
-  | "canceled";
+  | "canceled"
 
 export interface TaskAssignmentOwner {
-  type: "task";
-  taskId: TaskId;
+  type: "task"
+  taskId: TaskId
 }
 
 export interface MergeRequestAssignmentOwner {
-  type: "merge_request";
-  mergeRequestId: MergeRequestId;
+  type: "merge_request"
+  mergeRequestId: MergeRequestId
 }
 
-export type AssignmentOwner = TaskAssignmentOwner | MergeRequestAssignmentOwner;
+export type AssignmentOwner = TaskAssignmentOwner | MergeRequestAssignmentOwner
 
 export interface MergeRequestAssignmentContext {
-  id: MergeRequestId;
-  title: string;
-  providerPullRequestUrl: string;
+  id: MergeRequestId
+  title: string
+  providerPullRequestUrl: string
 }
 
 interface AssignmentBase {
-  id: AssignmentId;
-  workspaceId: WorkspaceId;
-  dispatchIntentId: DispatchIntentId;
-  roleDefinitionId: RoleDefinitionId;
-  agentId: AgentId;
-  runtimeId: RuntimeId;
-  leaseId: LeaseId;
-  state: AssignmentState;
-  sessionIds: SessionId[];
-  recoveryFailureCount: number;
-  createdAt: string;
-  updatedAt: string;
+  id: AssignmentId
+  workspaceId: WorkspaceId
+  dispatchIntentId: DispatchIntentId
+  roleDefinitionId: RoleDefinitionId
+  agentId: AgentId
+  runtimeId: RuntimeId
+  leaseId: LeaseId
+  state: AssignmentState
+  sessionIds: SessionId[]
+  recoveryFailureCount: number
+  createdAt: string
+  updatedAt: string
 }
 
 export interface TaskAssignment extends AssignmentBase {
-  owner: TaskAssignmentOwner;
-  taskId: TaskId;
-  mergeRequestId?: never;
+  owner: TaskAssignmentOwner
+  taskId: TaskId
+  mergeRequestId?: never
 }
 
 export interface MergeRequestAssignment extends AssignmentBase {
-  owner: MergeRequestAssignmentOwner;
-  taskId?: never;
-  mergeRequestId: MergeRequestId;
+  owner: MergeRequestAssignmentOwner
+  taskId?: never
+  mergeRequestId: MergeRequestId
 }
 
-export type Assignment = TaskAssignment | MergeRequestAssignment;
+export type Assignment = TaskAssignment | MergeRequestAssignment
 
 export type SessionState =
   | "launching"
@@ -231,86 +228,86 @@ export type SessionState =
   | "ended"
   | "crashed"
   | "expired"
-  | "canceled";
+  | "canceled"
 
 export interface SessionHeartbeat {
-  sessionId: SessionId;
-  observedAt: string;
-  note?: string;
+  sessionId: SessionId
+  observedAt: string
+  note?: string
 }
 
 export interface Session {
-  id: SessionId;
-  workspaceId: WorkspaceId;
-  assignmentId: AssignmentId;
-  providerSessionId: string;
-  state: SessionState;
-  heartbeats: SessionHeartbeat[];
-  checkpoints: Checkpoint[];
-  startedAt?: string;
-  endedAt?: string;
-  createdAt: string;
-  updatedAt: string;
+  id: SessionId
+  workspaceId: WorkspaceId
+  assignmentId: AssignmentId
+  providerSessionId: string
+  state: SessionState
+  heartbeats: SessionHeartbeat[]
+  checkpoints: Checkpoint[]
+  startedAt?: string
+  endedAt?: string
+  createdAt: string
+  updatedAt: string
 }
 
 export interface AgentAdapterStartContext {
   target:
     | {
-        type: "task";
-        task: Task;
+        type: "task"
+        task: Task
       }
     | {
-        type: "merge_request";
-        mergeRequest: MergeRequestAssignmentContext;
-      };
-  assignment: Assignment;
-  agent: Agent;
-  runtime: Runtime;
-  roleDefinition: RoleDefinition;
+        type: "merge_request"
+        mergeRequest: MergeRequestAssignmentContext
+      }
+  assignment: Assignment
+  agent: Agent
+  runtime: Runtime
+  roleDefinition: RoleDefinition
 }
 
 export interface AgentAdapterResumeContext extends AgentAdapterStartContext {
-  checkpoint: Checkpoint;
-  failedSession: Session;
+  checkpoint: Checkpoint
+  failedSession: Session
 }
 
 export interface CreateMergeRequestDispatchIntentInput {
-  workspaceId: WorkspaceId;
-  mergeRequest: MergeRequestAssignmentContext;
-  action: MergeRequestDispatchAction;
-  roleDefinitionId?: RoleDefinitionId;
-  requiredAgentTags?: string[];
-  requiredRuntimeTags?: string[];
+  workspaceId: WorkspaceId
+  mergeRequest: MergeRequestAssignmentContext
+  action: MergeRequestDispatchAction
+  roleDefinitionId?: RoleDefinitionId
+  requiredAgentTags?: string[]
+  requiredRuntimeTags?: string[]
 }
 
 export interface SessionHandle {
-  providerSessionId: string;
+  providerSessionId: string
 }
 
 export interface AgentAdapter {
-  start(context: AgentAdapterStartContext): Promise<SessionHandle>;
-  resume(context: AgentAdapterResumeContext): Promise<SessionHandle>;
-  cancel(session: Session): Promise<void>;
+  start(context: AgentAdapterStartContext): Promise<SessionHandle>
+  resume(context: AgentAdapterResumeContext): Promise<SessionHandle>
+  cancel(session: Session): Promise<void>
 }
 
 export interface DispatchPolicy {
-  maxPlacementFailures: number;
-  maxSessionRecoveryFailures: number;
+  maxPlacementFailures: number
+  maxSessionRecoveryFailures: number
 }
 
 export interface WorkspaceExecutionCapabilities {
-  workspaceId: WorkspaceId;
-  runtimes: Runtime[];
-  agents: Agent[];
-  roleDefinitions: RoleDefinition[];
+  workspaceId: WorkspaceId
+  runtimes: Runtime[]
+  agents: Agent[]
+  roleDefinitions: RoleDefinition[]
 }
 
 export interface ExecutionSnapshot {
-  workspaces: WorkspaceExecutionCapabilities[];
-  tasks: Task[];
-  dispatchIntents: DispatchIntent[];
-  assignments: Assignment[];
-  sessions: Session[];
-  leases: Lease[];
-  mergeRequestContexts: MergeRequestAssignmentContext[];
+  workspaces: WorkspaceExecutionCapabilities[]
+  tasks: Task[]
+  dispatchIntents: DispatchIntent[]
+  assignments: Assignment[]
+  sessions: Session[]
+  leases: Lease[]
+  mergeRequestContexts: MergeRequestAssignmentContext[]
 }

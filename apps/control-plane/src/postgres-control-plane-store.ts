@@ -1,15 +1,15 @@
-import { Client, type QueryResult, type QueryResultRow } from "pg";
+import { Client, type QueryResult, type QueryResultRow } from "pg"
 
-import type { ExecutionSnapshot } from "@stoneforge/execution";
-import type { MergeRequestSnapshot } from "@stoneforge/merge-request";
-import type { WorkspaceSetupSnapshot } from "@stoneforge/workspace";
+import type { ExecutionSnapshot } from "@stoneforge/execution"
+import type { MergeRequestSnapshot } from "@stoneforge/merge-request"
+import type { WorkspaceSetupSnapshot } from "@stoneforge/workspace"
 
 import {
   ControlPlanePersistenceError,
   type ControlPlaneSnapshot,
   type ControlPlaneStore,
   createEmptyControlPlaneSnapshot,
-} from "./control-plane-store.js";
+} from "./control-plane-store.js"
 import {
   currentSchemaVersion,
   deserializeSnapshot,
@@ -19,65 +19,65 @@ import {
   type SerializedSnapshot,
   serializeSnapshot,
   singletonSnapshotId,
-} from "./sql-snapshot-codec.js";
+} from "./sql-snapshot-codec.js"
 
-type SqlValue = string | number | null;
+type SqlValue = string | number | null
 
 interface PostgresSnapshotRow extends QueryResultRow {
-  snapshot_version: 1;
-  current_org_id: string | null;
-  current_workspace_id: string | null;
-  workspace_snapshot: JsonColumn<WorkspaceSetupSnapshot>;
-  execution_snapshot: JsonColumn<ExecutionSnapshot>;
-  merge_request_snapshot: JsonColumn<MergeRequestSnapshot>;
-  current_snapshot: JsonColumn<ControlPlaneSnapshot["current"]>;
+  snapshot_version: 1
+  current_org_id: string | null
+  current_workspace_id: string | null
+  workspace_snapshot: JsonColumn<WorkspaceSetupSnapshot>
+  execution_snapshot: JsonColumn<ExecutionSnapshot>
+  merge_request_snapshot: JsonColumn<MergeRequestSnapshot>
+  current_snapshot: JsonColumn<ControlPlaneSnapshot["current"]>
 }
 
 export interface PostgresControlPlaneClient {
-  connect(): Promise<void>;
-  end(): Promise<void>;
+  connect(): Promise<void>
+  end(): Promise<void>
   query<TResult extends QueryResultRow = QueryResultRow>(
     sql: string,
-    values?: SqlValue[],
-  ): Promise<QueryResult<TResult>>;
+    values?: SqlValue[]
+  ): Promise<QueryResult<TResult>>
 }
 
 export type CreatePostgresClient = (
-  connectionString: string,
-) => PostgresControlPlaneClient;
+  connectionString: string
+) => PostgresControlPlaneClient
 
 export class PostgresControlPlaneStore implements ControlPlaneStore {
-  private readonly createClient: CreatePostgresClient;
+  private readonly createClient: CreatePostgresClient
 
   constructor(
     private readonly connectionString: string | undefined,
-    createClient: CreatePostgresClient = defaultPostgresClient,
+    createClient: CreatePostgresClient = defaultPostgresClient
   ) {
-    this.createClient = createClient;
+    this.createClient = createClient
   }
 
   async load(): Promise<ControlPlaneSnapshot> {
     return this.withClient("read", async (client) => {
       const result = await client.query<PostgresSnapshotRow>(
         postgresSelectSnapshot,
-        [singletonSnapshotId],
-      );
-      const row = result.rows[0];
+        [singletonSnapshotId]
+      )
+      const row = result.rows[0]
 
       if (row === undefined) {
-        return createEmptyControlPlaneSnapshot();
+        return createEmptyControlPlaneSnapshot()
       }
 
       return deserializeSnapshot(
         postgresRowToSerializedSnapshot(row),
-        "PostgreSQL control-plane database",
-      );
-    });
+        "PostgreSQL control-plane database"
+      )
+    })
   }
 
   async save(snapshot: ControlPlaneSnapshot): Promise<void> {
     await this.withClient("save", async (client) => {
-      const serialized = serializeSnapshot(snapshot);
+      const serialized = serializeSnapshot(snapshot)
 
       await client.query(postgresUpsertSnapshot, [
         singletonSnapshotId,
@@ -88,74 +88,79 @@ export class PostgresControlPlaneStore implements ControlPlaneStore {
         jsonColumnText(serialized.executionSnapshot),
         jsonColumnText(serialized.mergeRequestSnapshot),
         jsonColumnText(serialized.currentSnapshot),
-      ]);
-    });
+      ])
+    })
   }
 
   async reset(): Promise<void> {
     await this.withClient("reset", async (client) => {
       await client.query("delete from control_plane_snapshots where id = $1", [
         singletonSnapshotId,
-      ]);
-    });
+      ])
+    })
   }
 
   private async withClient<TResult>(
     action: "read" | "reset" | "save",
-    run: (client: PostgresControlPlaneClient) => Promise<TResult>,
+    run: (client: PostgresControlPlaneClient) => Promise<TResult>
   ): Promise<TResult> {
-    const client = await this.openClient();
+    const client = await this.openClient()
 
     try {
-      await migratePostgres(client);
-      return await run(client);
+      await migratePostgres(client)
+      return await run(client)
     } catch (error) {
-      throw postgresError(action, error as Error);
+      throw postgresError(action, error as Error)
     } finally {
-      await client.end();
+      await client.end()
     }
   }
 
   private async openClient(): Promise<PostgresControlPlaneClient> {
-    if (this.connectionString === undefined || this.connectionString.length === 0) {
+    if (
+      this.connectionString === undefined ||
+      this.connectionString.length === 0
+    ) {
       throw new ControlPlanePersistenceError(
-        "PostgreSQL control-plane store requires a connection string. Pass --postgres-url or set STONEFORGE_CONTROL_PLANE_POSTGRES_URL.",
-      );
+        "PostgreSQL control-plane store requires a connection string. Pass --postgres-url or set STONEFORGE_CONTROL_PLANE_POSTGRES_URL."
+      )
     }
 
-    return connectPostgresClient(this.createClient(this.connectionString));
+    return connectPostgresClient(this.createClient(this.connectionString))
   }
 }
 
 async function connectPostgresClient(
-  client: PostgresControlPlaneClient,
+  client: PostgresControlPlaneClient
 ): Promise<PostgresControlPlaneClient> {
   try {
-    await client.connect();
-    return client;
+    await client.connect()
+    return client
   } catch (error) {
     throw new ControlPlanePersistenceError(
       `Could not connect to PostgreSQL control-plane database. Check STONEFORGE_CONTROL_PLANE_POSTGRES_URL and database availability. ${errorMessage(
-        error as Error,
-      )}`,
-    );
+        error as Error
+      )}`
+    )
   }
 }
 
-async function migratePostgres(client: PostgresControlPlaneClient): Promise<void> {
+async function migratePostgres(
+  client: PostgresControlPlaneClient
+): Promise<void> {
   try {
-    await client.query(postgresMigration);
+    await client.query(postgresMigration)
   } catch (error) {
     throw new ControlPlanePersistenceError(
       `Could not initialize PostgreSQL control-plane database. Migration failed. ${errorMessage(
-        error as Error,
-      )}`,
-    );
+        error as Error
+      )}`
+    )
   }
 }
 
 function postgresRowToSerializedSnapshot(
-  row: PostgresSnapshotRow,
+  row: PostgresSnapshotRow
 ): SerializedSnapshot {
   return {
     snapshotVersion: row.snapshot_version,
@@ -165,41 +170,43 @@ function postgresRowToSerializedSnapshot(
     executionSnapshot: jsonColumnText(row.execution_snapshot),
     mergeRequestSnapshot: jsonColumnText(row.merge_request_snapshot),
     currentSnapshot: jsonColumnText(row.current_snapshot),
-  };
+  }
 }
 
 function postgresError(
   action: "read" | "reset" | "save",
-  error: Error,
+  error: Error
 ): ControlPlanePersistenceError {
   if (error instanceof ControlPlanePersistenceError) {
-    return error;
+    return error
   }
 
   return new ControlPlanePersistenceError(
     `Could not ${action} PostgreSQL control-plane snapshot. Check the database connection and schema. ${errorMessage(
-      error,
-    )}`,
-  );
+      error
+    )}`
+  )
 }
 
-function defaultPostgresClient(connectionString: string): PostgresControlPlaneClient {
-  const client = new Client({ connectionString });
+function defaultPostgresClient(
+  connectionString: string
+): PostgresControlPlaneClient {
+  const client = new Client({ connectionString })
 
   return {
     async connect() {
-      await client.connect();
+      await client.connect()
     },
     async end() {
-      await client.end();
+      await client.end()
     },
     async query<TResult extends QueryResultRow = QueryResultRow>(
       sql: string,
-      values?: SqlValue[],
+      values?: SqlValue[]
     ) {
-      return client.query<TResult>(sql, values);
+      return client.query<TResult>(sql, values)
     },
-  };
+  }
 }
 
 const postgresMigration = `
@@ -223,7 +230,7 @@ create table if not exists control_plane_snapshots (
 insert into control_plane_schema_migrations (version)
 values (${currentSchemaVersion})
 on conflict (version) do nothing;
-`;
+`
 
 const postgresSelectSnapshot = `
 select
@@ -236,7 +243,7 @@ select
   current_snapshot
 from control_plane_snapshots
 where id = $1
-`;
+`
 
 const postgresUpsertSnapshot = `
 insert into control_plane_snapshots (
@@ -269,4 +276,4 @@ on conflict(id) do update set
   merge_request_snapshot = excluded.merge_request_snapshot,
   current_snapshot = excluded.current_snapshot,
   updated_at = excluded.updated_at
-`;
+`

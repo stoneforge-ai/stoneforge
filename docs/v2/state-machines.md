@@ -42,14 +42,14 @@ These state names are semantic contracts for product behavior. They are not a re
 
 ## Workspace Setup Lifecycle
 
-| State | Meaning |
-| --- | --- |
-| `draft` | workspace record exists but repository integration is not complete |
-| `repo_connected` | GitHub App installation and repository linkage are valid |
-| `execution_configured` | at least one policy preset, Runtime, Agent, and RoleDefinition path has been configured |
-| `ready` | repository integration, policy, and at least one runnable execution path are healthy |
-| `degraded` | workspace was previously ready but now lacks a required dependency or healthy execution path |
-| `archived` | workspace no longer accepts new work |
+| State                  | Meaning                                                                                      |
+| ---------------------- | -------------------------------------------------------------------------------------------- |
+| `draft`                | workspace record exists but repository integration is not complete                           |
+| `repo_connected`       | GitHub App installation and repository linkage are valid                                     |
+| `execution_configured` | at least one policy preset, Runtime, Agent, and RoleDefinition path has been configured      |
+| `ready`                | repository integration, policy, and at least one runnable execution path are healthy         |
+| `degraded`             | workspace was previously ready but now lacks a required dependency or healthy execution path |
+| `archived`             | workspace no longer accepts new work                                                         |
 
 Key transitions:
 
@@ -62,20 +62,20 @@ Key transitions:
 
 ## Task Lifecycle
 
-| State | Meaning |
-| --- | --- |
-| `draft` | task is still being clarified and should not dispatch |
-| `planned` | task definition is accepted but not yet dispatchable |
-| `ready` | task is eligible for dispatch |
-| `leased` | scheduler reserved capacity for an assignment but execution has not fully started yet |
-| `in_progress` | at least one live Assignment/Session is executing task work |
-| `awaiting_review` | implementation or repair work is complete and review or verification gates are pending |
-| `repair_required` | a repair trigger requires repair work |
-| `approval_pending` | automated gates passed but one or more Approval Gates remain |
-| `merge_ready` | the task-level MergeRequest satisfies required checks and approval conditions |
-| `completed` | task work is finished, including merge when code changes were required |
-| `human_review_required` | automated flow stopped and human intervention is required |
-| `canceled` | task was explicitly stopped |
+| State                   | Meaning                                                                                |
+| ----------------------- | -------------------------------------------------------------------------------------- |
+| `draft`                 | task is still being clarified and should not dispatch                                  |
+| `planned`               | task definition is accepted but not yet dispatchable                                   |
+| `ready`                 | task is eligible for dispatch                                                          |
+| `leased`                | scheduler reserved capacity for an assignment but execution has not fully started yet  |
+| `in_progress`           | at least one live Assignment/Session is executing task work                            |
+| `awaiting_review`       | implementation or repair work is complete and review or verification gates are pending |
+| `repair_required`       | a repair trigger requires repair work                                                  |
+| `approval_pending`      | automated gates passed but one or more Approval Gates remain                           |
+| `merge_ready`           | the task-level MergeRequest satisfies required checks and approval conditions          |
+| `completed`             | task work is finished, including merge when code changes were required                 |
+| `human_review_required` | automated flow stopped and human intervention is required                              |
+| `canceled`              | task was explicitly stopped                                                            |
 
 Key transitions:
 
@@ -112,14 +112,14 @@ Whenever those conditions move from false to true, Stoneforge should emit a read
 
 ## Plan Lifecycle
 
-| State | Meaning |
-| --- | --- |
-| `draft` | plan graph is still being assembled |
-| `active` | tasks may dispatch when individually ready |
-| `integration_in_review` | plan-level aggregation branch/PR is under review |
+| State                         | Meaning                                                            |
+| ----------------------------- | ------------------------------------------------------------------ |
+| `draft`                       | plan graph is still being assembled                                |
+| `active`                      | tasks may dispatch when individually ready                         |
+| `integration_in_review`       | plan-level aggregation branch/PR is under review                   |
 | `integration_repair_required` | a plan-level repair trigger requires more task or integration work |
-| `completed` | plan work and plan-level merge are complete |
-| `canceled` | plan execution is intentionally stopped |
+| `completed`                   | plan work and plan-level merge are complete                        |
+| `canceled`                    | plan execution is intentionally stopped                            |
 
 Key transitions:
 
@@ -139,17 +139,17 @@ Plan repair rule:
 
 This is an internal scheduler lifecycle, not a user-facing planning object.
 
-| State | Meaning |
-| --- | --- |
-| `created` | a human action or Automation requested scheduler evaluation |
-| `queued` | intent is durable and waiting for eligibility or capacity |
-| `leased` | scheduler reserved agent/runtime capacity for execution |
-| `starting` | launch request has been handed to the host or provider |
-| `running` | an Assignment is active and heartbeating |
+| State        | Meaning                                                           |
+| ------------ | ----------------------------------------------------------------- |
+| `created`    | a human action or Automation requested scheduler evaluation       |
+| `queued`     | intent is durable and waiting for eligibility or capacity         |
+| `leased`     | scheduler reserved agent/runtime capacity for execution           |
+| `starting`   | launch request has been handed to the host or provider            |
+| `running`    | an Assignment is active and heartbeating                          |
 | `retry_wait` | transient failure occurred and the scheduler will try again later |
-| `completed` | the dispatch intent reached a terminal success outcome |
-| `escalated` | retry policy stopped autonomous placement or relaunch |
-| `canceled` | intent was withdrawn due to cancellation or superseding action |
+| `completed`  | the dispatch intent reached a terminal success outcome            |
+| `escalated`  | retry policy stopped autonomous placement or relaunch             |
+| `canceled`   | intent was withdrawn due to cancellation or superseding action    |
 
 Key transitions:
 
@@ -166,14 +166,14 @@ Key transitions:
 
 ## Assignment Lifecycle
 
-| State | Meaning |
-| --- | --- |
-| `created` | assignment record exists and owns one dispatch |
-| `running` | one Session is live under the Assignment |
+| State            | Meaning                                                                                  |
+| ---------------- | ---------------------------------------------------------------------------------------- |
+| `created`        | assignment record exists and owns one dispatch                                           |
+| `running`        | one Session is live under the Assignment                                                 |
 | `resume_pending` | prior Session ended unexpectedly and the Assignment is waiting to resume from checkpoint |
-| `succeeded` | the assignment completed successfully |
-| `escalated` | autonomous recovery stopped and human review is required |
-| `canceled` | the assignment was stopped intentionally |
+| `succeeded`      | the assignment completed successfully                                                    |
+| `escalated`      | autonomous recovery stopped and human review is required                                 |
+| `canceled`       | the assignment was stopped intentionally                                                 |
 
 Key transitions:
 
@@ -186,15 +186,15 @@ Key transitions:
 
 ## Session Lifecycle
 
-| State | Meaning |
-| --- | --- |
-| `launching` | provider process or thread is being created |
-| `active` | the Session is running and may emit work output |
+| State          | Meaning                                         |
+| -------------- | ----------------------------------------------- |
+| `launching`    | provider process or thread is being created     |
+| `active`       | the Session is running and may emit work output |
 | `checkpointed` | a resumable handoff snapshot has been persisted |
-| `ended` | the Session ended cleanly |
-| `crashed` | the Session ended unexpectedly |
-| `expired` | the Session hit time, token, or context limits |
-| `canceled` | the Session was explicitly stopped |
+| `ended`        | the Session ended cleanly                       |
+| `crashed`      | the Session ended unexpectedly                  |
+| `expired`      | the Session hit time, token, or context limits  |
+| `canceled`     | the Session was explicitly stopped              |
 
 Key transitions:
 
@@ -217,15 +217,15 @@ Key transitions:
 
 ## MergeRequest Lifecycle
 
-| State | Meaning |
-| --- | --- |
-| `draft` | internal MergeRequest exists but the provider PR is not yet open for normal review |
-| `open` | provider PR is open and collecting verification or review signals |
-| `repair_required` | a repair trigger requires more work |
-| `policy_pending` | technical checks passed but Stoneforge policy approval is still outstanding |
-| `merge_ready` | all required checks, Approval Gates, and mergeability conditions are satisfied |
-| `merged` | provider PR merged successfully |
-| `closed_unmerged` | provider PR closed without merge |
+| State             | Meaning                                                                            |
+| ----------------- | ---------------------------------------------------------------------------------- |
+| `draft`           | internal MergeRequest exists but the provider PR is not yet open for normal review |
+| `open`            | provider PR is open and collecting verification or review signals                  |
+| `repair_required` | a repair trigger requires more work                                                |
+| `policy_pending`  | technical checks passed but Stoneforge policy approval is still outstanding        |
+| `merge_ready`     | all required checks, Approval Gates, and mergeability conditions are satisfied     |
+| `merged`          | provider PR merged successfully                                                    |
+| `closed_unmerged` | provider PR closed without merge                                                   |
 
 Key transitions:
 
@@ -240,14 +240,14 @@ Key transitions:
 
 ## Verification Run Lifecycle
 
-| State | Meaning |
-| --- | --- |
-| `queued` | at least one Provider Check is waiting to start |
-| `running` | at least one Provider Check is actively running |
-| `passed` | all required Provider Checks succeeded |
-| `failed` | one or more required Provider Checks failed |
-| `canceled` | verification was canceled by the provider |
-| `stale` | prior Verification Run no longer applies to the current PR head |
+| State      | Meaning                                                         |
+| ---------- | --------------------------------------------------------------- |
+| `queued`   | at least one Provider Check is waiting to start                 |
+| `running`  | at least one Provider Check is actively running                 |
+| `passed`   | all required Provider Checks succeeded                          |
+| `failed`   | one or more required Provider Checks failed                     |
+| `canceled` | verification was canceled by the provider                       |
+| `stale`    | prior Verification Run no longer applies to the current PR head |
 
 Key transitions:
 

@@ -1,26 +1,23 @@
-import type {
-  AuditActor,
-  WorkspaceValidationResult,
-} from "./models.js";
-import { cloneValidationResult } from "./cloning.js";
-import type { WorkspaceId } from "./ids.js";
+import type { AuditActor, WorkspaceValidationResult } from "./models.js"
+import { cloneValidationResult } from "./cloning.js"
+import type { WorkspaceId } from "./ids.js"
 import {
   buildValidationResult,
   computeValidatedState,
-} from "./workspace-validation.js";
-import type { WorkspaceSetupState } from "./workspace-state.js";
+} from "./workspace-validation.js"
+import type { WorkspaceSetupState } from "./workspace-state.js"
 
 export function validateWorkspaceRecord(
   state: WorkspaceSetupState,
   workspaceId: WorkspaceId,
-  actor: AuditActor,
+  actor: AuditActor
 ): WorkspaceValidationResult {
-  const workspace = state.requireWorkspace(workspaceId);
-  const validation = buildValidationResult(workspace, state.now());
+  const workspace = state.requireWorkspace(workspaceId)
+  const validation = buildValidationResult(workspace, state.now())
 
-  workspace.validation = validation;
-  workspace.updatedAt = validation.validatedAt;
-  workspace.state = computeValidatedState(workspace, validation);
+  workspace.validation = validation
+  workspace.updatedAt = validation.validatedAt
+  workspace.state = computeValidatedState(workspace, validation)
 
   state.appendAuditEvent({
     actor,
@@ -34,7 +31,7 @@ export function validateWorkspaceRecord(
       ? undefined
       : validation.issues.map((issue) => issue.code).join(", "),
     policyPreset: workspace.policyPreset,
-  });
+  })
 
-  return cloneValidationResult(validation);
+  return cloneValidationResult(validation)
 }

@@ -1,14 +1,14 @@
-import { mkdir } from "node:fs/promises";
-import { dirname } from "node:path";
+import { mkdir } from "node:fs/promises"
+import { dirname } from "node:path"
 
-import SQLiteDatabase from "better-sqlite3";
+import SQLiteDatabase from "better-sqlite3"
 
 import {
   ControlPlanePersistenceError,
   type ControlPlaneSnapshot,
   type ControlPlaneStore,
   createEmptyControlPlaneSnapshot,
-} from "./control-plane-store.js";
+} from "./control-plane-store.js"
 import {
   currentSchemaVersion,
   deserializeSnapshot,
@@ -16,16 +16,16 @@ import {
   type SerializedSnapshot,
   serializeSnapshot,
   singletonSnapshotId,
-} from "./sql-snapshot-codec.js";
+} from "./sql-snapshot-codec.js"
 
 interface SQLiteSnapshotRow {
-  snapshot_version: 1;
-  current_org_id: string | null;
-  current_workspace_id: string | null;
-  workspace_snapshot: string;
-  execution_snapshot: string;
-  merge_request_snapshot: string;
-  current_snapshot: string;
+  snapshot_version: 1
+  current_org_id: string | null
+  current_workspace_id: string | null
+  workspace_snapshot: string
+  execution_snapshot: string
+  merge_request_snapshot: string
+  current_snapshot: string
 }
 
 export class SQLiteControlPlaneStore implements ControlPlaneStore {
@@ -35,17 +35,17 @@ export class SQLiteControlPlaneStore implements ControlPlaneStore {
     return this.withDatabase("read", (database) => {
       const row = database
         .prepare(sqliteSelectSnapshot)
-        .get(singletonSnapshotId) as SQLiteSnapshotRow | undefined;
+        .get(singletonSnapshotId) as SQLiteSnapshotRow | undefined
 
       if (row === undefined) {
-        return createEmptyControlPlaneSnapshot();
+        return createEmptyControlPlaneSnapshot()
       }
 
       return deserializeSnapshot(
         sqliteRowToSerializedSnapshot(row),
-        `SQLite database at ${this.databasePath}`,
-      );
-    });
+        `SQLite database at ${this.databasePath}`
+      )
+    })
   }
 
   async save(snapshot: ControlPlaneSnapshot): Promise<void> {
@@ -53,60 +53,62 @@ export class SQLiteControlPlaneStore implements ControlPlaneStore {
       database.prepare(sqliteUpsertSnapshot).run({
         id: singletonSnapshotId,
         ...serializeSnapshot(snapshot),
-      });
-    });
+      })
+    })
   }
 
   async reset(): Promise<void> {
     await this.withDatabase("reset", (database) => {
-      database.prepare("delete from control_plane_snapshots where id = ?").run(
-        singletonSnapshotId,
-      );
-    });
+      database
+        .prepare("delete from control_plane_snapshots where id = ?")
+        .run(singletonSnapshotId)
+    })
   }
 
   private async withDatabase<TResult>(
     action: "read" | "reset" | "save",
-    run: (database: SQLiteDatabase.Database) => TResult,
+    run: (database: SQLiteDatabase.Database) => TResult
   ): Promise<TResult> {
-    const database = await this.openDatabase();
+    const database = await this.openDatabase()
 
     try {
-      migrateSQLite(database, this.databasePath);
-      return run(database);
+      migrateSQLite(database, this.databasePath)
+      return run(database)
     } catch (error) {
-      throw sqliteError(action, this.databasePath, error as Error);
+      throw sqliteError(action, this.databasePath, error as Error)
     } finally {
-      database.close();
+      database.close()
     }
   }
 
   private async openDatabase(): Promise<SQLiteDatabase.Database> {
     try {
-      await mkdir(dirname(this.databasePath), { recursive: true });
-      return new SQLiteDatabase(this.databasePath);
+      await mkdir(dirname(this.databasePath), { recursive: true })
+      return new SQLiteDatabase(this.databasePath)
     } catch (error) {
-      throw sqliteError("open", this.databasePath, error as Error);
+      throw sqliteError("open", this.databasePath, error as Error)
     }
   }
 }
 
 function migrateSQLite(
   database: SQLiteDatabase.Database,
-  databasePath: string,
+  databasePath: string
 ): void {
   try {
-    database.exec(sqliteMigration);
+    database.exec(sqliteMigration)
   } catch (error) {
     throw new ControlPlanePersistenceError(
       `Could not initialize SQLite control-plane database at ${databasePath}. Migration failed. ${errorMessage(
-        error as Error,
-      )}`,
-    );
+        error as Error
+      )}`
+    )
   }
 }
 
-function sqliteRowToSerializedSnapshot(row: SQLiteSnapshotRow): SerializedSnapshot {
+function sqliteRowToSerializedSnapshot(
+  row: SQLiteSnapshotRow
+): SerializedSnapshot {
   return {
     snapshotVersion: row.snapshot_version,
     currentOrgId: row.current_org_id,
@@ -115,33 +117,33 @@ function sqliteRowToSerializedSnapshot(row: SQLiteSnapshotRow): SerializedSnapsh
     executionSnapshot: row.execution_snapshot,
     mergeRequestSnapshot: row.merge_request_snapshot,
     currentSnapshot: row.current_snapshot,
-  };
+  }
 }
 
 function sqliteError(
   action: "open" | "read" | "reset" | "save",
   databasePath: string,
-  error: Error,
+  error: Error
 ): ControlPlanePersistenceError {
   if (error instanceof ControlPlanePersistenceError) {
-    return error;
+    return error
   }
 
   return new ControlPlanePersistenceError(
     `Could not ${sqliteActionText(
-      action,
+      action
     )} SQLite control-plane database at ${databasePath}. Check that the path can be created and opened. ${errorMessage(
-      error,
-    )}`,
-  );
+      error
+    )}`
+  )
 }
 
 function sqliteActionText(action: "open" | "read" | "reset" | "save"): string {
   if (action === "open") {
-    return "open";
+    return "open"
   }
 
-  return `${action} from`;
+  return `${action} from`
 }
 
 const sqliteMigration = `
@@ -164,7 +166,7 @@ create table if not exists control_plane_snapshots (
 
 insert or ignore into control_plane_schema_migrations (version)
 values (${currentSchemaVersion});
-`;
+`
 
 const sqliteSelectSnapshot = `
 select
@@ -177,7 +179,7 @@ select
   current_snapshot
 from control_plane_snapshots
 where id = ?
-`;
+`
 
 const sqliteUpsertSnapshot = `
 insert into control_plane_snapshots (
@@ -210,4 +212,4 @@ on conflict(id) do update set
   merge_request_snapshot = excluded.merge_request_snapshot,
   current_snapshot = excluded.current_snapshot,
   updated_at = excluded.updated_at
-`;
+`

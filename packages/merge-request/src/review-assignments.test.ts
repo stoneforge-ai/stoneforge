@@ -4,81 +4,81 @@ import {
   asRuntimeId,
   asWorkspaceId,
   asAgentId,
-} from "@stoneforge/core";
+} from "@stoneforge/core"
 import {
   asAssignmentId,
   asDispatchIntentId,
   asLeaseId,
   asTaskId,
   type Assignment,
-} from "@stoneforge/execution";
-import { describe, expect, it } from "vitest";
+} from "@stoneforge/execution"
+import { describe, expect, it } from "vitest"
 
 import {
   assertMergeRequestReviewAssignment,
   rememberReviewAssignment,
   requireMergeRequestAssignmentId,
   type MergeRequest,
-} from "./index.js";
+} from "./index.js"
 
 type MergeRequestAssignment = Extract<
   Assignment,
   { owner: { type: "merge_request" } }
->;
-type TaskAssignment = Extract<Assignment, { owner: { type: "task" } }>;
+>
+type TaskAssignment = Extract<Assignment, { owner: { type: "task" } }>
 
 describe("review assignment guards", () => {
   it("accepts assignments owned by the expected MergeRequest", () => {
-    const assignment = assignmentForMergeRequest("merge_request_1");
+    const assignment = assignmentForMergeRequest("merge_request_1")
 
     expect(() =>
       assertMergeRequestReviewAssignment(
         assignment,
-        asMergeRequestId("merge_request_1"),
-      ),
-    ).not.toThrow();
-    expect(requireMergeRequestAssignmentId(assignment)).toBe("merge_request_1");
-  });
+        asMergeRequestId("merge_request_1")
+      )
+    ).not.toThrow()
+    expect(requireMergeRequestAssignmentId(assignment)).toBe("merge_request_1")
+  })
 
   it("rejects task-owned and wrong-MergeRequest assignments", () => {
     expect(() =>
       assertMergeRequestReviewAssignment(
         assignmentForTask(),
-        asMergeRequestId("merge_request_1"),
-      ),
-    ).toThrow(/does not belong/i);
+        asMergeRequestId("merge_request_1")
+      )
+    ).toThrow(/does not belong/i)
     expect(() =>
       assertMergeRequestReviewAssignment(
         assignmentForMergeRequest("merge_request_2"),
-        asMergeRequestId("merge_request_1"),
-      ),
-    ).toThrow(/does not belong/i);
+        asMergeRequestId("merge_request_1")
+      )
+    ).toThrow(/does not belong/i)
     expect(() => requireMergeRequestAssignmentId(assignmentForTask())).toThrow(
-      /not MergeRequest-owned/i,
-    );
-  });
+      /not MergeRequest-owned/i
+    )
+  })
 
   it("remembers a review assignment once", () => {
-    const mergeRequest = mergeRequestRecord();
+    const mergeRequest = mergeRequestRecord()
 
     rememberReviewAssignment(
       mergeRequest,
       asAssignmentId("assignment_1"),
-      "2026-04-24T01:00:00.000Z",
-    );
+      "2026-04-24T01:00:00.000Z"
+    )
     rememberReviewAssignment(
       mergeRequest,
       asAssignmentId("assignment_1"),
-      "2026-04-24T02:00:00.000Z",
-    );
+      "2026-04-24T02:00:00.000Z"
+    )
 
-    expect(mergeRequest.reviewAssignmentIds).toEqual(["assignment_1"]);
-    expect(mergeRequest.updatedAt).toBe("2026-04-24T01:00:00.000Z");
-  });
-});
+    expect(mergeRequest.reviewAssignmentIds).toEqual(["assignment_1"])
+    expect(mergeRequest.updatedAt).toBe("2026-04-24T01:00:00.000Z")
+  })
+})
 
 function assignmentForMergeRequest(
-  mergeRequestId: string,
+  mergeRequestId: string
 ): MergeRequestAssignment {
   return {
     ...baseAssignment(),
@@ -87,7 +87,7 @@ function assignmentForMergeRequest(
       mergeRequestId: asMergeRequestId(mergeRequestId),
     },
     mergeRequestId: asMergeRequestId(mergeRequestId),
-  };
+  }
 }
 
 function assignmentForTask(): TaskAssignment {
@@ -98,7 +98,7 @@ function assignmentForTask(): TaskAssignment {
       taskId: asTaskId("task_1"),
     },
     taskId: asTaskId("task_1"),
-  };
+  }
 }
 
 function baseAssignment(): Omit<
@@ -118,7 +118,7 @@ function baseAssignment(): Omit<
     recoveryFailureCount: 0,
     createdAt: "2026-04-24T00:00:00.000Z",
     updatedAt: "2026-04-24T00:00:00.000Z",
-  };
+  }
 }
 
 function mergeRequestRecord(): MergeRequest {
@@ -144,5 +144,5 @@ function mergeRequestRecord(): MergeRequest {
     reviewOutcomes: [],
     createdAt: "2026-04-24T00:00:00.000Z",
     updatedAt: "2026-04-24T00:00:00.000Z",
-  };
+  }
 }

@@ -16,26 +16,24 @@ import type {
   Workspace,
   WorkspaceSetupSnapshot,
   WorkspaceValidationResult,
-} from "./models.js";
-import type { OrgId, RuntimeId, WorkspaceId } from "./ids.js";
-import { cloneWorkspace } from "./cloning.js";
-import {
-  createRepositoryLink,
-} from "./workspace-records.js";
-import { computeConfiguredState } from "./workspace-validation.js";
-import { WorkspaceSetupState } from "./workspace-state.js";
-import { WorkspaceCapabilityRegistration } from "./workspace-capabilities.js";
+} from "./models.js"
+import type { OrgId, RuntimeId, WorkspaceId } from "./ids.js"
+import { cloneWorkspace } from "./cloning.js"
+import { createRepositoryLink } from "./workspace-records.js"
+import { computeConfiguredState } from "./workspace-validation.js"
+import { WorkspaceSetupState } from "./workspace-state.js"
+import { WorkspaceCapabilityRegistration } from "./workspace-capabilities.js"
 import {
   assertRepositoryLinkCompatible,
   repositoryAuditOutcome,
   repositoryConnectReason,
   repositoryStatusReason,
-} from "./repository-connection.js";
+} from "./repository-connection.js"
 import {
   createOrgRecordInState,
   createWorkspaceRecordInState,
-} from "./workspace-creation.js";
-import { validateWorkspaceRecord } from "./workspace-validation-flow.js";
+} from "./workspace-creation.js"
+import { validateWorkspaceRecord } from "./workspace-validation-flow.js"
 
 /**
  * In-memory application service for the Slice 1 workspace onboarding path.
@@ -43,41 +41,41 @@ import { validateWorkspaceRecord } from "./workspace-validation-flow.js";
  * storage layer, or UI surface is frozen.
  */
 export class WorkspaceSetupService {
-  private readonly state: WorkspaceSetupState;
-  private readonly capabilities: WorkspaceCapabilityRegistration;
+  private readonly state: WorkspaceSetupState
+  private readonly capabilities: WorkspaceCapabilityRegistration
 
   constructor(snapshot?: WorkspaceSetupSnapshot) {
-    this.state = new WorkspaceSetupState(snapshot);
-    this.capabilities = new WorkspaceCapabilityRegistration(this.state);
+    this.state = new WorkspaceSetupState(snapshot)
+    this.capabilities = new WorkspaceCapabilityRegistration(this.state)
   }
 
   createOrg(input: CreateOrgInput): Org {
-    return createOrgRecordInState(this.state, input);
+    return createOrgRecordInState(this.state, input)
   }
 
   createWorkspace(
     orgId: OrgId,
     input: CreateWorkspaceInput,
-    actor: AuditActor,
+    actor: AuditActor
   ): Workspace {
-    return createWorkspaceRecordInState(this.state, orgId, input, actor);
+    return createWorkspaceRecordInState(this.state, orgId, input, actor)
   }
 
   connectGitHubRepository(
     workspaceId: WorkspaceId,
     input: ConnectGitHubRepositoryInput,
-    actor: AuditActor,
+    actor: AuditActor
   ): Workspace {
-    const workspace = this.state.requireWorkspace(workspaceId);
+    const workspace = this.state.requireWorkspace(workspaceId)
 
-    assertRepositoryLinkCompatible(workspace, input);
+    assertRepositoryLinkCompatible(workspace, input)
 
-    const now = this.state.now();
-    const repository = createRepositoryLink(input, now);
+    const now = this.state.now()
+    const repository = createRepositoryLink(input, now)
 
-    workspace.repository = repository;
-    workspace.updatedAt = now;
-    workspace.state = computeConfiguredState(workspace);
+    workspace.repository = repository
+    workspace.updatedAt = now
+    workspace.state = computeConfiguredState(workspace)
 
     this.state.appendAuditEvent({
       actor,
@@ -89,21 +87,21 @@ export class WorkspaceSetupService {
       outcome: repositoryAuditOutcome(repository.connectionStatus),
       reason: repositoryConnectReason(repository.connectionStatus),
       policyPreset: workspace.policyPreset,
-    });
+    })
 
-    return cloneWorkspace(workspace);
+    return cloneWorkspace(workspace)
   }
 
   selectPolicyPreset(
     workspaceId: WorkspaceId,
     preset: PolicyPreset,
-    actor: AuditActor,
+    actor: AuditActor
   ): Workspace {
-    const workspace = this.state.requireWorkspace(workspaceId);
+    const workspace = this.state.requireWorkspace(workspaceId)
 
-    workspace.policyPreset = preset;
-    workspace.updatedAt = this.state.now();
-    workspace.state = computeConfiguredState(workspace);
+    workspace.policyPreset = preset
+    workspace.updatedAt = this.state.now()
+    workspace.state = computeConfiguredState(workspace)
 
     this.state.appendAuditEvent({
       actor,
@@ -114,51 +112,51 @@ export class WorkspaceSetupService {
       targetType: "policy",
       outcome: "success",
       policyPreset: preset,
-    });
+    })
 
-    return cloneWorkspace(workspace);
+    return cloneWorkspace(workspace)
   }
 
   registerRuntime(
     workspaceId: WorkspaceId,
     input: RegisterRuntimeInput,
-    actor: AuditActor,
+    actor: AuditActor
   ): Runtime {
-    return this.capabilities.registerRuntime(workspaceId, input, actor);
+    return this.capabilities.registerRuntime(workspaceId, input, actor)
   }
 
   registerAgent(
     workspaceId: WorkspaceId,
     input: RegisterAgentInput,
-    actor: AuditActor,
+    actor: AuditActor
   ): Agent {
-    return this.capabilities.registerAgent(workspaceId, input, actor);
+    return this.capabilities.registerAgent(workspaceId, input, actor)
   }
 
   registerRoleDefinition(
     workspaceId: WorkspaceId,
     input: RegisterRoleDefinitionInput,
-    actor: AuditActor,
+    actor: AuditActor
   ): RoleDefinition {
-    return this.capabilities.registerRoleDefinition(workspaceId, input, actor);
+    return this.capabilities.registerRoleDefinition(workspaceId, input, actor)
   }
 
   recordGitHubRepositoryConnectionStatus(
     workspaceId: WorkspaceId,
     status: "connected" | "disconnected",
-    actor: AuditActor,
+    actor: AuditActor
   ): Workspace {
-    const workspace = this.state.requireWorkspace(workspaceId);
+    const workspace = this.state.requireWorkspace(workspaceId)
 
     if (!workspace.repository) {
-      throw new Error(`Workspace ${workspaceId} is not linked to a repository.`);
+      throw new Error(`Workspace ${workspaceId} is not linked to a repository.`)
     }
 
     workspace.repository = {
       ...workspace.repository,
       connectionStatus: status,
-    };
-    workspace.updatedAt = this.state.now();
+    }
+    workspace.updatedAt = this.state.now()
 
     this.state.appendAuditEvent({
       actor,
@@ -170,41 +168,41 @@ export class WorkspaceSetupService {
       outcome: repositoryAuditOutcome(status),
       reason: repositoryStatusReason(status),
       policyPreset: workspace.policyPreset,
-    });
+    })
 
-    return cloneWorkspace(workspace);
+    return cloneWorkspace(workspace)
   }
 
   updateRuntimeHealthStatus(
     workspaceId: WorkspaceId,
     runtimeId: RuntimeId,
     status: HealthStatus,
-    actor: AuditActor,
+    actor: AuditActor
   ): Runtime {
     return this.capabilities.updateRuntimeHealthStatus(
       workspaceId,
       runtimeId,
       status,
-      actor,
-    );
+      actor
+    )
   }
 
   validateWorkspace(
     workspaceId: WorkspaceId,
-    actor: AuditActor,
+    actor: AuditActor
   ): WorkspaceValidationResult {
-    return validateWorkspaceRecord(this.state, workspaceId, actor);
+    return validateWorkspaceRecord(this.state, workspaceId, actor)
   }
 
   getWorkspace(workspaceId: WorkspaceId): Workspace {
-    return cloneWorkspace(this.state.requireWorkspace(workspaceId));
+    return cloneWorkspace(this.state.requireWorkspace(workspaceId))
   }
 
   listAuditEventsForWorkspace(workspaceId: WorkspaceId): AuditEvent[] {
-    return this.state.listAuditEventsForWorkspace(workspaceId);
+    return this.state.listAuditEventsForWorkspace(workspaceId)
   }
 
   exportSnapshot(): WorkspaceSetupSnapshot {
-    return this.state.exportSnapshot();
+    return this.state.exportSnapshot()
   }
 }

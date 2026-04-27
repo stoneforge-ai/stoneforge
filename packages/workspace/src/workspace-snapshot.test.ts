@@ -1,23 +1,23 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest"
 
-import { WorkspaceSetupService } from "./workspace-setup-service.js";
-import type { AuditActor } from "./models.js";
+import { WorkspaceSetupService } from "./workspace-setup-service.js"
+import type { AuditActor } from "./models.js"
 
 const actor: AuditActor = {
   kind: "human",
   id: "user_operator",
   displayName: "Operator",
-};
+}
 
 describe("WorkspaceSetupService snapshots", () => {
   it("restores setup records and continues id allocation", () => {
-    const service = new WorkspaceSetupService();
-    const org = service.createOrg({ name: "Toolco" });
+    const service = new WorkspaceSetupService()
+    const org = service.createOrg({ name: "Toolco" })
     const workspace = service.createWorkspace(
       org.id,
       { name: "stoneforge", targetBranch: "main" },
-      actor,
-    );
+      actor
+    )
 
     service.connectGitHubRepository(
       workspace.id,
@@ -27,17 +27,17 @@ describe("WorkspaceSetupService snapshots", () => {
         repository: "stoneforge",
         defaultBranch: "main",
       },
-      actor,
-    );
-    service.selectPolicyPreset(workspace.id, "supervised", actor);
+      actor
+    )
+    service.selectPolicyPreset(workspace.id, "supervised", actor)
 
-    const restored = new WorkspaceSetupService(service.exportSnapshot());
-    const restoredWorkspace = restored.getWorkspace(workspace.id);
-    const nextOrg = restored.createOrg({ name: "Next org" });
+    const restored = new WorkspaceSetupService(service.exportSnapshot())
+    const restoredWorkspace = restored.getWorkspace(workspace.id)
+    const nextOrg = restored.createOrg({ name: "Next org" })
 
-    expect(restoredWorkspace.repository?.repository).toBe("stoneforge");
-    expect(restoredWorkspace.policyPreset).toBe("supervised");
-    expect(restored.listAuditEventsForWorkspace(workspace.id)).toHaveLength(3);
-    expect(nextOrg.id).toBe("org_2");
-  });
-});
+    expect(restoredWorkspace.repository?.repository).toBe("stoneforge")
+    expect(restoredWorkspace.policyPreset).toBe("supervised")
+    expect(restored.listAuditEventsForWorkspace(workspace.id)).toHaveLength(3)
+    expect(nextOrg.id).toBe("org_2")
+  })
+})

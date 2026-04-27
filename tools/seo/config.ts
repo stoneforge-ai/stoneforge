@@ -5,24 +5,24 @@
  * Copy .env.example to .env and fill in your API credentials.
  */
 
-import { resolve, dirname } from "path";
-import { fileURLToPath } from "url";
+import { resolve, dirname } from "path"
+import { fileURLToPath } from "url"
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 // Load .env from tools/seo/.env
-const envPath = resolve(__dirname, ".env");
+const envPath = resolve(__dirname, ".env")
 try {
-  const envFile = await Bun.file(envPath).text();
+  const envFile = await Bun.file(envPath).text()
   for (const line of envFile.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const eqIdx = trimmed.indexOf("=");
-    if (eqIdx === -1) continue;
-    const key = trimmed.slice(0, eqIdx).trim();
-    const value = trimmed.slice(eqIdx + 1).trim();
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith("#")) continue
+    const eqIdx = trimmed.indexOf("=")
+    if (eqIdx === -1) continue
+    const key = trimmed.slice(0, eqIdx).trim()
+    const value = trimmed.slice(eqIdx + 1).trim()
     if (value && !process.env[key]) {
-      process.env[key] = value;
+      process.env[key] = value
     }
   }
 } catch {
@@ -43,14 +43,16 @@ export const config = {
      * Comma-separated list of site URLs verified in Google Search Console.
      * Set via GSC_SITE_URLS env var. Falls back to GSC_SITE_URL for backwards compat.
      */
-    siteUrls: (process.env.GSC_SITE_URLS
-      ? process.env.GSC_SITE_URLS.split(",").map((u) => u.trim()).filter(Boolean)
+    siteUrls: process.env.GSC_SITE_URLS
+      ? process.env.GSC_SITE_URLS.split(",")
+          .map((u) => u.trim())
+          .filter(Boolean)
       : process.env.GSC_SITE_URL
         ? [process.env.GSC_SITE_URL.trim()]
-        : []),
+        : [],
   },
   outputDir: resolve(__dirname, "output"),
-} as const;
+} as const
 
 /** Default seed keywords for Stoneforge SEO research */
 export const DEFAULT_SEED_KEYWORDS = [
@@ -63,55 +65,72 @@ export const DEFAULT_SEED_KEYWORDS = [
   "run multiple AI agents",
   "AI pair programming",
   "automated code review AI",
-];
+]
 
 export function getTimestamp(): string {
-  return new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  return new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)
 }
 
-export async function writeOutput(filename: string, data: unknown): Promise<string> {
-  const { mkdirSync } = await import("fs");
-  mkdirSync(config.outputDir, { recursive: true });
-  const filepath = resolve(config.outputDir, filename);
-  await Bun.write(filepath, JSON.stringify(data, null, 2));
-  console.log(`Output written to: ${filepath}`);
-  return filepath;
+export async function writeOutput(
+  filename: string,
+  data: unknown
+): Promise<string> {
+  const { mkdirSync } = await import("fs")
+  mkdirSync(config.outputDir, { recursive: true })
+  const filepath = resolve(config.outputDir, filename)
+  await Bun.write(filepath, JSON.stringify(data, null, 2))
+  console.log(`Output written to: ${filepath}`)
+  return filepath
 }
 
-export function parseArgs(args: string[]): { keywords: string[]; help: boolean; file?: string; domains?: string[] } {
-  const result: { keywords: string[]; help: boolean; file?: string; domains?: string[] } = {
+export function parseArgs(args: string[]): {
+  keywords: string[]
+  help: boolean
+  file?: string
+  domains?: string[]
+} {
+  const result: {
+    keywords: string[]
+    help: boolean
+    file?: string
+    domains?: string[]
+  } = {
     keywords: [],
     help: false,
-  };
+  }
 
   for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
+    const arg = args[i]
     if (arg === "--help" || arg === "-h") {
-      result.help = true;
+      result.help = true
     } else if (arg === "--file" || arg === "-f") {
-      result.file = args[++i];
+      result.file = args[++i]
     } else if (arg === "--domain" || arg === "-d") {
-      if (!result.domains) result.domains = [];
-      result.domains.push(args[++i]);
+      if (!result.domains) result.domains = []
+      result.domains.push(args[++i])
     } else if (!arg.startsWith("-")) {
-      result.keywords.push(arg);
+      result.keywords.push(arg)
     }
   }
 
-  return result;
+  return result
 }
 
 /**
  * Load keywords from a JSON file (output from keyword-research).
  * Expects an array of objects with a `keyword` field, or an object with a `keywords` array.
  */
-export async function loadKeywordsFromFile(filepath: string): Promise<string[]> {
-  const content = await Bun.file(filepath).json();
+export async function loadKeywordsFromFile(
+  filepath: string
+): Promise<string[]> {
+  const content = await Bun.file(filepath).json()
   if (Array.isArray(content)) {
-    return content.map((item: any) => item.keyword ?? item).filter(Boolean);
+    return content.map((item: any) => item.keyword ?? item).filter(Boolean)
   }
   if (content.keywords && Array.isArray(content.keywords)) {
-    return content.keywords.map((item: any) => item.keyword ?? item).filter(Boolean);
+    return content.keywords
+      .map((item: any) => item.keyword ?? item)
+      .filter(Boolean)
   }
-  throw new Error(`Could not parse keywords from file: ${filepath}`);
+  throw new Error(`Could not parse keywords from file: ${filepath}`)
 }

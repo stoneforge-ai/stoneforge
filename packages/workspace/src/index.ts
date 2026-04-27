@@ -1,16 +1,16 @@
-export { asOrgId, asWorkspaceId, type OrgId, type WorkspaceId } from "./ids.js";
+export { asOrgId, asWorkspaceId, type OrgId, type WorkspaceId } from "./ids.js"
 export {
   assertRepositoryLinkCompatible,
   repositoryAuditOutcome,
   repositoryConnectReason,
   repositoryStatusReason,
-} from "./repository-connection.js";
+} from "./repository-connection.js"
 export {
   buildValidationResult,
   computeConfiguredState,
   computeValidatedState,
-} from "./workspace-validation.js";
-export { WorkspaceSetupService } from "./workspace-setup-service.js";
+} from "./workspace-validation.js"
+export { WorkspaceSetupService } from "./workspace-setup-service.js"
 export type {
   Agent,
   AuditActor,
@@ -44,4 +44,4 @@ export type {
   WorkspaceValidationIssue,
   WorkspaceValidationIssueCode,
   WorkspaceValidationResult,
-} from "./models.js";
+} from "./models.js"

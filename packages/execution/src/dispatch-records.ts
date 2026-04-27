@@ -1,8 +1,8 @@
-import type { Agent, RoleDefinition, Runtime } from "@stoneforge/core";
+import type { Agent, RoleDefinition, Runtime } from "@stoneforge/core"
 
-import { asAssignmentId, asLeaseId, asSessionId } from "./ids.js";
-import { cloneTask } from "./cloning.js";
-import type { ExecutionState } from "./execution-state.js";
+import { asAssignmentId, asLeaseId, asSessionId } from "./ids.js"
+import { cloneTask } from "./cloning.js"
+import type { ExecutionState } from "./execution-state.js"
 import type {
   AgentAdapterStartContext,
   Assignment,
@@ -12,21 +12,21 @@ import type {
   Session,
   Task,
   TaskAssignment,
-} from "./models.js";
+} from "./models.js"
 
 export interface PlacementRecordInput {
-  agent: Agent;
-  runtime: Runtime;
-  roleDefinition: RoleDefinition;
+  agent: Agent
+  runtime: Runtime
+  roleDefinition: RoleDefinition
 }
 
 export function createLease(
   state: ExecutionState,
   intent: DispatchIntent,
   agent: Agent,
-  runtime: Runtime,
+  runtime: Runtime
 ): Lease {
-  const now = state.now();
+  const now = state.now()
   const lease: Lease = {
     id: asLeaseId(state.nextId("lease")),
     workspaceId: intent.workspaceId,
@@ -35,41 +35,35 @@ export function createLease(
     dispatchIntentId: intent.id,
     state: "active",
     leasedAt: now,
-  };
+  }
 
-  state.leases.set(lease.id, lease);
-  intent.leaseId = lease.id;
-  intent.state = "leased";
-  intent.updatedAt = now;
+  state.leases.set(lease.id, lease)
+  intent.leaseId = lease.id
+  intent.state = "leased"
+  intent.updatedAt = now
 
-  return lease;
+  return lease
 }
 
 export function createAssignment(
   state: ExecutionState,
   intent: DispatchIntent,
   lease: Lease,
-  placement: PlacementRecordInput,
+  placement: PlacementRecordInput
 ): Assignment {
-  const now = state.now();
+  const now = state.now()
   const assignment =
     intent.targetType === "task"
       ? createTaskAssignmentRecord(state, intent, lease, placement, now)
-      : createMergeRequestAssignmentRecord(
-          state,
-          intent,
-          lease,
-          placement,
-          now,
-        );
+      : createMergeRequestAssignmentRecord(state, intent, lease, placement, now)
 
-  state.assignments.set(assignment.id, assignment);
-  lease.assignmentId = assignment.id;
-  intent.assignmentId = assignment.id;
-  intent.updatedAt = now;
-  markTaskLeased(state, assignment, now);
+  state.assignments.set(assignment.id, assignment)
+  lease.assignmentId = assignment.id
+  intent.assignmentId = assignment.id
+  intent.updatedAt = now
+  markTaskLeased(state, assignment, now)
 
-  return assignment;
+  return assignment
 }
 
 function createTaskAssignmentRecord(
@@ -77,7 +71,7 @@ function createTaskAssignmentRecord(
   intent: Extract<DispatchIntent, { targetType: "task" }>,
   lease: Lease,
   placement: PlacementRecordInput,
-  now: string,
+  now: string
 ): TaskAssignment {
   return {
     id: asAssignmentId(state.nextId("assignment")),
@@ -97,7 +91,7 @@ function createTaskAssignmentRecord(
     recoveryFailureCount: 0,
     createdAt: now,
     updatedAt: now,
-  };
+  }
 }
 
 function createMergeRequestAssignmentRecord(
@@ -105,7 +99,7 @@ function createMergeRequestAssignmentRecord(
   intent: Extract<DispatchIntent, { targetType: "merge_request" }>,
   lease: Lease,
   placement: PlacementRecordInput,
-  now: string,
+  now: string
 ): MergeRequestAssignment {
   return {
     id: asAssignmentId(state.nextId("assignment")),
@@ -125,15 +119,15 @@ function createMergeRequestAssignmentRecord(
     recoveryFailureCount: 0,
     createdAt: now,
     updatedAt: now,
-  };
+  }
 }
 
 export function createSession(
   state: ExecutionState,
   assignment: Assignment,
-  providerSessionId: string,
+  providerSessionId: string
 ): Session {
-  const now = state.now();
+  const now = state.now()
   const session: Session = {
     id: asSessionId(state.nextId("session")),
     workspaceId: assignment.workspaceId,
@@ -145,77 +139,77 @@ export function createSession(
     startedAt: now,
     createdAt: now,
     updatedAt: now,
-  };
+  }
 
-  state.sessions.set(session.id, session);
+  state.sessions.set(session.id, session)
 
-  return session;
+  return session
 }
 
 export function buildAdapterTarget(
   state: ExecutionState,
   intent: DispatchIntent,
-  task: Task | undefined,
+  task: Task | undefined
 ): AgentAdapterStartContext["target"] {
   if (intent.targetType === "task") {
-    return buildTaskAdapterTarget(intent, task);
+    return buildTaskAdapterTarget(intent, task)
   }
 
-  return buildMergeRequestAdapterTarget(state, intent);
+  return buildMergeRequestAdapterTarget(state, intent)
 }
 
 export function endActiveSession(session: Session, endedAt: string): void {
   if (session.state !== "active" && session.state !== "checkpointed") {
-    return;
+    return
   }
 
-  session.state = "ended";
-  session.endedAt = endedAt;
-  session.updatedAt = endedAt;
+  session.state = "ended"
+  session.endedAt = endedAt
+  session.updatedAt = endedAt
 }
 
 function markTaskLeased(
   state: ExecutionState,
   assignment: Assignment,
-  now: string,
+  now: string
 ): void {
   if (assignment.owner.type !== "task") {
-    return;
+    return
   }
 
-  const task = state.requireTask(assignment.owner.taskId);
-  task.state = "leased";
-  task.updatedAt = now;
+  const task = state.requireTask(assignment.owner.taskId)
+  task.state = "leased"
+  task.updatedAt = now
 }
 
 function buildTaskAdapterTarget(
   intent: DispatchIntent,
-  task: Task | undefined,
+  task: Task | undefined
 ): AgentAdapterStartContext["target"] {
   if (!task) {
-    throw new Error(`Task dispatch intent ${intent.id} has no Task.`);
+    throw new Error(`Task dispatch intent ${intent.id} has no Task.`)
   }
 
   return {
     type: "task",
     task: cloneTask(task),
-  };
+  }
 }
 
 function buildMergeRequestAdapterTarget(
   state: ExecutionState,
-  intent: Extract<DispatchIntent, { targetType: "merge_request" }>,
+  intent: Extract<DispatchIntent, { targetType: "merge_request" }>
 ): AgentAdapterStartContext["target"] {
-  const mergeRequest = state.mergeRequestContexts.get(intent.mergeRequestId);
+  const mergeRequest = state.mergeRequestContexts.get(intent.mergeRequestId)
 
   if (!mergeRequest) {
     throw new Error(
-      `MergeRequest context ${intent.mergeRequestId} does not exist.`,
-    );
+      `MergeRequest context ${intent.mergeRequestId} does not exist.`
+    )
   }
 
   return {
     type: "merge_request",
     mergeRequest: { ...mergeRequest },
-  };
+  }
 }

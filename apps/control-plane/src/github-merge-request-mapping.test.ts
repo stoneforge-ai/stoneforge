@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest"
 
-import { GitHubIntegrationError } from "./github-app-token-provider.js";
-import { GitHubHttpError } from "./github-http-client.js";
+import { GitHubIntegrationError } from "./github-app-token-provider.js"
+import { GitHubHttpError } from "./github-http-client.js"
 import {
   branchError,
   branchPath,
@@ -12,7 +12,7 @@ import {
   pullRequestState,
   statusObservation,
   statusState,
-} from "./github-merge-request-mapping.js";
+} from "./github-merge-request-mapping.js"
 
 describe("GitHub merge request mapping", () => {
   it("maps provider pull requests and pull request states", () => {
@@ -23,26 +23,26 @@ describe("GitHub merge request mapping", () => {
         html_url: "https://github.test/toolco/stoneforge/pull/7",
         head: { ref: "stoneforge/task/1", sha: "provider-head-sha" },
         base: { ref: "main" },
-      }),
+      })
     ).toMatchObject({
       providerPullRequestId: "123",
       number: 7,
       headSha: "provider-head-sha",
       sourceBranch: "stoneforge/task/1",
       targetBranch: "main",
-    });
-    expect(pullRequestState({ merged: true, state: "closed" })).toBe("merged");
-    expect(pullRequestState({ state: "closed" })).toBe("closed");
-    expect(pullRequestState({ state: "open" })).toBe("open");
-  });
+    })
+    expect(pullRequestState({ merged: true, state: "closed" })).toBe("merged")
+    expect(pullRequestState({ state: "closed" })).toBe("closed")
+    expect(pullRequestState({ state: "open" })).toBe("open")
+  })
 
   it("maps check and status states", () => {
-    expect(statusState("passed")).toBe("success");
-    expect(statusState("failed")).toBe("failure");
-    expect(statusState("pending")).toBe("pending");
-    expect(checkRunObservation(null)).toEqual([]);
+    expect(statusState("passed")).toBe("success")
+    expect(statusState("failed")).toBe("failure")
+    expect(statusState("pending")).toBe("pending")
+    expect(checkRunObservation(null)).toEqual([])
     expect(
-      checkRunObservation({ id: 1, name: "quality", status: "queued" }),
+      checkRunObservation({ id: 1, name: "quality", status: "queued" })
     ).toEqual([
       {
         providerCheckId: "1",
@@ -50,9 +50,9 @@ describe("GitHub merge request mapping", () => {
         state: "queued",
         observedAt: undefined,
       },
-    ]);
+    ])
     expect(
-      checkRunObservation({ id: 2, name: "quality", status: "in_progress" }),
+      checkRunObservation({ id: 2, name: "quality", status: "in_progress" })
     ).toEqual([
       {
         providerCheckId: "2",
@@ -60,14 +60,14 @@ describe("GitHub merge request mapping", () => {
         state: "running",
         observedAt: undefined,
       },
-    ]);
+    ])
     expect(
       checkRunObservation({
         id: 3,
         name: "quality",
         status: "completed",
         conclusion: "success",
-      }),
+      })
     ).toEqual([
       {
         providerCheckId: "3",
@@ -75,14 +75,14 @@ describe("GitHub merge request mapping", () => {
         state: "passed",
         observedAt: undefined,
       },
-    ]);
+    ])
     expect(
       checkRunObservation({
         id: 4,
         name: "quality",
         status: "completed",
         conclusion: "cancelled",
-      }),
+      })
     ).toEqual([
       {
         providerCheckId: "4",
@@ -90,14 +90,14 @@ describe("GitHub merge request mapping", () => {
         state: "canceled",
         observedAt: undefined,
       },
-    ]);
+    ])
     expect(
       checkRunObservation({
         id: 5,
         name: "quality",
         status: "completed",
         conclusion: "failure",
-      }),
+      })
     ).toEqual([
       {
         providerCheckId: "5",
@@ -105,7 +105,7 @@ describe("GitHub merge request mapping", () => {
         state: "failed",
         observedAt: undefined,
       },
-    ]);
+    ])
     expect(checkRunObservation({ id: 6, name: "quality" })).toEqual([
       {
         providerCheckId: "6",
@@ -113,10 +113,10 @@ describe("GitHub merge request mapping", () => {
         state: "failed",
         observedAt: undefined,
       },
-    ]);
-    expect(statusObservation("not object")).toEqual([]);
+    ])
+    expect(statusObservation("not object")).toEqual([])
     expect(
-      statusObservation({ id: 1, context: "ci", state: "success" }),
+      statusObservation({ id: 1, context: "ci", state: "success" })
     ).toEqual([
       {
         providerCheckId: "1",
@@ -124,9 +124,9 @@ describe("GitHub merge request mapping", () => {
         state: "passed",
         observedAt: undefined,
       },
-    ]);
+    ])
     expect(
-      statusObservation({ id: "s2", context: "ci", state: "pending" }),
+      statusObservation({ id: "s2", context: "ci", state: "pending" })
     ).toEqual([
       {
         providerCheckId: "s2",
@@ -134,9 +134,9 @@ describe("GitHub merge request mapping", () => {
         state: "running",
         observedAt: undefined,
       },
-    ]);
+    ])
     expect(
-      statusObservation({ id: "s3", context: "ci", state: "error" }),
+      statusObservation({ id: "s3", context: "ci", state: "error" })
     ).toEqual([
       {
         providerCheckId: "s3",
@@ -144,11 +144,11 @@ describe("GitHub merge request mapping", () => {
         state: "failed",
         observedAt: undefined,
       },
-    ]);
-  });
+    ])
+  })
 
   it("formats paths, change-marker content, and provider errors", () => {
-    expect(branchPath("stoneforge/task 1")).toBe("stoneforge/task%201");
+    expect(branchPath("stoneforge/task 1")).toBe("stoneforge/task%201")
     expect(
       changeMarkerFileContent(
         {
@@ -156,30 +156,30 @@ describe("GitHub merge request mapping", () => {
           title: "Add policy",
           body: "Implement the policy.",
         },
-        new Date("2026-04-24T12:00:00.000Z"),
-      ),
-    ).toContain("Updated: 2026-04-24T12:00:00.000Z");
+        new Date("2026-04-24T12:00:00.000Z")
+      )
+    ).toContain("Updated: 2026-04-24T12:00:00.000Z")
     expect(branchError(new Error("no ref"), "feature/x").message).toContain(
-      "no ref",
-    );
+      "no ref"
+    )
     expect(
       githubActionError(
         new GitHubHttpError("forbidden", 403, { message: "blocked" }),
         "merge",
         "toolco",
-        "stoneforge",
-      ).message,
-    ).toContain("repository access and installation grants");
+        "stoneforge"
+      ).message
+    ).toContain("repository access and installation grants")
     expect(
       githubActionError(
         new GitHubIntegrationError("already explained"),
         "merge",
         "toolco",
-        "stoneforge",
-      ).message,
-    ).toBe("already explained");
+        "stoneforge"
+      ).message
+    ).toBe("already explained")
     expect(
-      githubActionError(undefined, "merge", "toolco", "stoneforge").message,
-    ).toContain("No provider error details were available.");
-  });
-});
+      githubActionError(undefined, "merge", "toolco", "stoneforge").message
+    ).toContain("No provider error details were available.")
+  })
+})

@@ -282,13 +282,13 @@ Intent example only. This is not final implementation code.
 
 ```ts
 interface AgentAdapter {
-  start(assignmentContext: AssignmentContext): Promise<SessionHandle>;
+  start(assignmentContext: AssignmentContext): Promise<SessionHandle>
   resume(
     assignmentContext: AssignmentContext,
-    checkpoint: Checkpoint,
-  ): Promise<SessionHandle>;
-  cancel(session: SessionHandle): Promise<void>;
-  collectOutcome(session: SessionHandle): Promise<AssignmentOutcome>;
+    checkpoint: Checkpoint
+  ): Promise<SessionHandle>
+  cancel(session: SessionHandle): Promise<void>
+  collectOutcome(session: SessionHandle): Promise<AssignmentOutcome>
 }
 ```
 

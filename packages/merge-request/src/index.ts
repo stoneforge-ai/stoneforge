@@ -1,10 +1,10 @@
-export { evaluateMergePolicy, type PolicyDecision } from "./merge-policy.js";
-export { MergeRequestService } from "./merge-request-service.js";
+export { evaluateMergePolicy, type PolicyDecision } from "./merge-policy.js"
+export { MergeRequestService } from "./merge-request-service.js"
 export {
   assertMergeRequestReviewAssignment,
   rememberReviewAssignment,
   requireMergeRequestAssignmentId,
-} from "./review-assignments.js";
+} from "./review-assignments.js"
 export type {
   VerificationRun,
   VerificationRunState,
@@ -26,4 +26,4 @@ export type {
   ReviewOutcome,
   ReviewOutcomeRecord,
   ReviewerKind,
-} from "./models.js";
+} from "./models.js"

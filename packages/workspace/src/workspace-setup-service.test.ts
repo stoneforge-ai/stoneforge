@@ -1,31 +1,31 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest"
 
-import { WorkspaceSetupService } from "./workspace-setup-service.js";
-import type { AuditActor, WorkspaceSetupAuditAction } from "./models.js";
+import { WorkspaceSetupService } from "./workspace-setup-service.js"
+import type { AuditActor, WorkspaceSetupAuditAction } from "./models.js"
 
 const operator: AuditActor = {
   kind: "human",
   id: "user_1",
   displayName: "Platform Lead",
-};
+}
 
 const scheduler: AuditActor = {
   kind: "service",
   id: "scheduler_1",
   displayName: "Stoneforge Scheduler",
-};
+}
 
 describe("WorkspaceSetupService", () => {
   it("reaches ready only after validation succeeds", () => {
-    const service = new WorkspaceSetupService();
-    const org = service.createOrg({ name: "Stoneforge" });
+    const service = new WorkspaceSetupService()
+    const org = service.createOrg({ name: "Stoneforge" })
     const workspace = service.createWorkspace(
       org.id,
       { name: "stoneforge", targetBranch: "main" },
-      operator,
-    );
+      operator
+    )
 
-    expect(service.getWorkspace(workspace.id).state).toBe("draft");
+    expect(service.getWorkspace(workspace.id).state).toBe("draft")
 
     service.connectGitHubRepository(
       workspace.id,
@@ -35,10 +35,10 @@ describe("WorkspaceSetupService", () => {
         repository: "stoneforge",
         defaultBranch: "main",
       },
-      operator,
-    );
+      operator
+    )
 
-    expect(service.getWorkspace(workspace.id).state).toBe("repo_connected");
+    expect(service.getWorkspace(workspace.id).state).toBe("repo_connected")
 
     const runtime = service.registerRuntime(
       workspace.id,
@@ -48,8 +48,8 @@ describe("WorkspaceSetupService", () => {
         mode: "local_worktree",
         tags: ["customer-host"],
       },
-      operator,
-    );
+      operator
+    )
     const agent = service.registerAgent(
       workspace.id,
       {
@@ -61,8 +61,8 @@ describe("WorkspaceSetupService", () => {
         launcher: "codex-adapter",
         tags: ["default"],
       },
-      operator,
-    );
+      operator
+    )
     const roleDefinition = service.registerRoleDefinition(
       workspace.id,
       {
@@ -72,34 +72,36 @@ describe("WorkspaceSetupService", () => {
         toolAccess: ["git", "shell"],
         tags: ["worker"],
       },
-      operator,
-    );
+      operator
+    )
 
-    expect(service.getWorkspace(workspace.id).state).toBe("repo_connected");
+    expect(service.getWorkspace(workspace.id).state).toBe("repo_connected")
 
-    service.selectPolicyPreset(workspace.id, "supervised", operator);
+    service.selectPolicyPreset(workspace.id, "supervised", operator)
 
-    expect(service.getWorkspace(workspace.id).state).toBe("execution_configured");
+    expect(service.getWorkspace(workspace.id).state).toBe(
+      "execution_configured"
+    )
 
-    const validation = service.validateWorkspace(workspace.id, scheduler);
+    const validation = service.validateWorkspace(workspace.id, scheduler)
 
-    expect(validation.ready).toBe(true);
-    expect(service.getWorkspace(workspace.id).state).toBe("ready");
+    expect(validation.ready).toBe(true)
+    expect(service.getWorkspace(workspace.id).state).toBe("ready")
     expect(validation.selectedExecutionPath).toEqual({
       runtimeId: runtime.id,
       agentId: agent.id,
       roleDefinitionId: roleDefinition.id,
-    });
-  });
+    })
+  })
 
   it("requires one healthy execution path before becoming ready", () => {
-    const service = new WorkspaceSetupService();
-    const org = service.createOrg({ name: "Stoneforge" });
+    const service = new WorkspaceSetupService()
+    const org = service.createOrg({ name: "Stoneforge" })
     const workspace = service.createWorkspace(
       org.id,
       { name: "stoneforge", targetBranch: "main" },
-      operator,
-    );
+      operator
+    )
 
     service.connectGitHubRepository(
       workspace.id,
@@ -109,8 +111,8 @@ describe("WorkspaceSetupService", () => {
         repository: "stoneforge",
         defaultBranch: "main",
       },
-      operator,
-    );
+      operator
+    )
     const runtime = service.registerRuntime(
       workspace.id,
       {
@@ -119,8 +121,8 @@ describe("WorkspaceSetupService", () => {
         mode: "local_worktree",
         healthStatus: "unhealthy",
       },
-      operator,
-    );
+      operator
+    )
     service.registerAgent(
       workspace.id,
       {
@@ -131,8 +133,8 @@ describe("WorkspaceSetupService", () => {
         concurrencyLimit: 1,
         launcher: "codex-adapter",
       },
-      operator,
-    );
+      operator
+    )
     service.registerRoleDefinition(
       workspace.id,
       {
@@ -140,29 +142,31 @@ describe("WorkspaceSetupService", () => {
         category: "worker",
         prompt: "Implement the assigned task.",
       },
-      operator,
-    );
-    service.selectPolicyPreset(workspace.id, "supervised", operator);
+      operator
+    )
+    service.selectPolicyPreset(workspace.id, "supervised", operator)
 
-    const validation = service.validateWorkspace(workspace.id, scheduler);
+    const validation = service.validateWorkspace(workspace.id, scheduler)
 
-    expect(validation.ready).toBe(false);
-    expect(service.getWorkspace(workspace.id).state).toBe("execution_configured");
+    expect(validation.ready).toBe(false)
+    expect(service.getWorkspace(workspace.id).state).toBe(
+      "execution_configured"
+    )
     expect(validation.issues).toContainEqual(
       expect.objectContaining({
         code: "no_valid_execution_path",
-      }),
-    );
-  });
+      })
+    )
+  })
 
   it("enforces exactly one GitHub repository link per workspace", () => {
-    const service = new WorkspaceSetupService();
-    const org = service.createOrg({ name: "Stoneforge" });
+    const service = new WorkspaceSetupService()
+    const org = service.createOrg({ name: "Stoneforge" })
     const workspace = service.createWorkspace(
       org.id,
       { name: "stoneforge", targetBranch: "main" },
-      operator,
-    );
+      operator
+    )
 
     service.connectGitHubRepository(
       workspace.id,
@@ -172,8 +176,8 @@ describe("WorkspaceSetupService", () => {
         repository: "stoneforge",
         defaultBranch: "main",
       },
-      operator,
-    );
+      operator
+    )
 
     expect(() =>
       service.connectGitHubRepository(
@@ -184,19 +188,19 @@ describe("WorkspaceSetupService", () => {
           repository: "other-repo",
           defaultBranch: "main",
         },
-        operator,
-      ),
-    ).toThrow(/already linked/i);
-  });
+        operator
+      )
+    ).toThrow(/already linked/i)
+  })
 
   it("degrades a previously ready workspace when repo connectivity breaks", () => {
-    const service = new WorkspaceSetupService();
-    const org = service.createOrg({ name: "Stoneforge" });
+    const service = new WorkspaceSetupService()
+    const org = service.createOrg({ name: "Stoneforge" })
     const workspace = service.createWorkspace(
       org.id,
       { name: "stoneforge", targetBranch: "main" },
-      operator,
-    );
+      operator
+    )
 
     service.connectGitHubRepository(
       workspace.id,
@@ -206,8 +210,8 @@ describe("WorkspaceSetupService", () => {
         repository: "stoneforge",
         defaultBranch: "main",
       },
-      operator,
-    );
+      operator
+    )
     const runtime = service.registerRuntime(
       workspace.id,
       {
@@ -215,8 +219,8 @@ describe("WorkspaceSetupService", () => {
         location: "customer_host",
         mode: "local_worktree",
       },
-      operator,
-    );
+      operator
+    )
     service.registerAgent(
       workspace.id,
       {
@@ -227,8 +231,8 @@ describe("WorkspaceSetupService", () => {
         concurrencyLimit: 1,
         launcher: "claude-adapter",
       },
-      operator,
-    );
+      operator
+    )
     service.registerRoleDefinition(
       workspace.id,
       {
@@ -236,36 +240,36 @@ describe("WorkspaceSetupService", () => {
         category: "reviewer",
         prompt: "Review the assigned work.",
       },
-      operator,
-    );
-    service.selectPolicyPreset(workspace.id, "supervised", operator);
-    service.validateWorkspace(workspace.id, scheduler);
+      operator
+    )
+    service.selectPolicyPreset(workspace.id, "supervised", operator)
+    service.validateWorkspace(workspace.id, scheduler)
 
     service.recordGitHubRepositoryConnectionStatus(
       workspace.id,
       "disconnected",
-      scheduler,
-    );
+      scheduler
+    )
 
-    const validation = service.validateWorkspace(workspace.id, scheduler);
+    const validation = service.validateWorkspace(workspace.id, scheduler)
 
-    expect(validation.ready).toBe(false);
-    expect(service.getWorkspace(workspace.id).state).toBe("degraded");
+    expect(validation.ready).toBe(false)
+    expect(service.getWorkspace(workspace.id).state).toBe("degraded")
     expect(validation.issues).toContainEqual(
       expect.objectContaining({
         code: "repo_not_connected",
-      }),
-    );
-  });
+      })
+    )
+  })
 
   it("emits setup-path audit events for sensitive setup actions", () => {
-    const service = new WorkspaceSetupService();
-    const org = service.createOrg({ name: "Stoneforge" });
+    const service = new WorkspaceSetupService()
+    const org = service.createOrg({ name: "Stoneforge" })
     const workspace = service.createWorkspace(
       org.id,
       { name: "stoneforge", targetBranch: "main" },
-      operator,
-    );
+      operator
+    )
 
     const runtime = service.registerRuntime(
       workspace.id,
@@ -275,20 +279,20 @@ describe("WorkspaceSetupService", () => {
         mode: "managed_sandbox",
         managedProvider: "daytona",
       },
-      operator,
-    );
+      operator
+    )
     service.updateRuntimeHealthStatus(
       workspace.id,
       runtime.id,
       "unhealthy",
-      scheduler,
-    );
+      scheduler
+    )
     service.updateRuntimeHealthStatus(
       workspace.id,
       runtime.id,
       "healthy",
-      scheduler,
-    );
+      scheduler
+    )
 
     service.connectGitHubRepository(
       workspace.id,
@@ -298,9 +302,9 @@ describe("WorkspaceSetupService", () => {
         repository: "stoneforge",
         defaultBranch: "main",
       },
-      operator,
-    );
-    service.selectPolicyPreset(workspace.id, "autonomous", operator);
+      operator
+    )
+    service.selectPolicyPreset(workspace.id, "autonomous", operator)
     service.registerAgent(
       workspace.id,
       {
@@ -311,8 +315,8 @@ describe("WorkspaceSetupService", () => {
         concurrencyLimit: 1,
         launcher: "codex-adapter",
       },
-      operator,
-    );
+      operator
+    )
     service.registerRoleDefinition(
       workspace.id,
       {
@@ -320,13 +324,15 @@ describe("WorkspaceSetupService", () => {
         category: "worker",
         prompt: "Implement the assigned task.",
       },
-      operator,
-    );
-    service.validateWorkspace(workspace.id, scheduler);
+      operator
+    )
+    service.validateWorkspace(workspace.id, scheduler)
 
     const actions = new Set(
-      service.listAuditEventsForWorkspace(workspace.id).map((event) => event.action),
-    );
+      service
+        .listAuditEventsForWorkspace(workspace.id)
+        .map((event) => event.action)
+    )
 
     const expectedActions: WorkspaceSetupAuditAction[] = [
       "workspace.created",
@@ -337,10 +343,10 @@ describe("WorkspaceSetupService", () => {
       "workspace.agent_registered",
       "workspace.role_definition_registered",
       "workspace.validated",
-    ];
+    ]
 
     for (const action of expectedActions) {
-      expect(actions.has(action)).toBe(true);
+      expect(actions.has(action)).toBe(true)
     }
 
     expect(service.listAuditEventsForWorkspace(workspace.id)).toContainEqual(
@@ -348,7 +354,7 @@ describe("WorkspaceSetupService", () => {
         action: "workspace.runtime_health_updated",
         outcome: "failure",
         reason: "Runtime health check failed.",
-      }),
-    );
-  });
-});
+      })
+    )
+  })
+})

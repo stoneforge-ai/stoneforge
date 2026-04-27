@@ -1,4 +1,4 @@
-import type { DispatchIntentId, TaskId } from "./ids.js";
+import type { DispatchIntentId, TaskId } from "./ids.js"
 import type {
   CreateMergeRequestDispatchIntentInput,
   CreateTaskInput,
@@ -6,12 +6,12 @@ import type {
   Task,
   TaskDispatchConstraints,
   UpdateTaskInput,
-} from "./models.js";
+} from "./models.js"
 
 export function createTaskRecord(
   id: TaskId,
   input: CreateTaskInput,
-  now: string,
+  now: string
 ): Task {
   return {
     id,
@@ -24,7 +24,9 @@ export function createTaskRecord(
     planId: input.planId,
     state: "planned",
     requiresMergeRequest: withDefault(input.requiresMergeRequest, false),
-    dispatchConstraints: normalizeDispatchConstraints(input.dispatchConstraints),
+    dispatchConstraints: normalizeDispatchConstraints(
+      input.dispatchConstraints
+    ),
     progressRecord: {
       checkpoints: [],
       repairContext: [],
@@ -32,13 +34,13 @@ export function createTaskRecord(
     followUpSource: input.followUpSource,
     createdAt: now,
     updatedAt: now,
-  };
+  }
 }
 
 export function createTaskDispatchIntentRecord(
   id: DispatchIntentId,
   task: Task,
-  now: string,
+  now: string
 ): DispatchIntent {
   return {
     id,
@@ -53,13 +55,13 @@ export function createTaskDispatchIntentRecord(
     placementFailureCount: 0,
     createdAt: now,
     updatedAt: now,
-  };
+  }
 }
 
 export function createMergeRequestDispatchIntentRecord(
   id: DispatchIntentId,
   input: CreateMergeRequestDispatchIntentInput,
-  now: string,
+  now: string
 ): DispatchIntent {
   return {
     id,
@@ -74,85 +76,84 @@ export function createMergeRequestDispatchIntentRecord(
     placementFailureCount: 0,
     createdAt: now,
     updatedAt: now,
-  };
+  }
 }
 
 export function applyTaskUpdate(task: Task, input: UpdateTaskInput): void {
   for (const applyUpdate of taskUpdateAppliers) {
-    applyUpdate(task, input);
+    applyUpdate(task, input)
   }
 }
 
 function normalizeDispatchConstraints(
-  input: Partial<TaskDispatchConstraints> | undefined,
+  input: Partial<TaskDispatchConstraints> | undefined
 ): TaskDispatchConstraints {
   return {
     roleDefinitionId: input?.roleDefinitionId,
     requiredAgentTags: cloneArray(input?.requiredAgentTags),
     requiredRuntimeTags: cloneArray(input?.requiredRuntimeTags),
-  };
+  }
 }
 
-const taskUpdateAppliers: Array<
-  (task: Task, input: UpdateTaskInput) => void
-> = [
-  applyTitleUpdate,
-  applyIntentUpdate,
-  applyAcceptanceCriteriaUpdate,
-  applyPriorityUpdate,
-  applyDependencyUpdate,
-  applyDispatchConstraintUpdate,
-];
+const taskUpdateAppliers: Array<(task: Task, input: UpdateTaskInput) => void> =
+  [
+    applyTitleUpdate,
+    applyIntentUpdate,
+    applyAcceptanceCriteriaUpdate,
+    applyPriorityUpdate,
+    applyDependencyUpdate,
+    applyDispatchConstraintUpdate,
+  ]
 
 function applyTitleUpdate(task: Task, input: UpdateTaskInput): void {
   if (input.title !== undefined) {
-    task.title = input.title;
+    task.title = input.title
   }
 }
 
 function applyIntentUpdate(task: Task, input: UpdateTaskInput): void {
   if (input.intent !== undefined) {
-    task.intent = input.intent;
+    task.intent = input.intent
   }
 }
 
 function applyAcceptanceCriteriaUpdate(
   task: Task,
-  input: UpdateTaskInput,
+  input: UpdateTaskInput
 ): void {
   if (input.acceptanceCriteria !== undefined) {
-    task.acceptanceCriteria = [...input.acceptanceCriteria];
+    task.acceptanceCriteria = [...input.acceptanceCriteria]
   }
 }
 
 function applyPriorityUpdate(task: Task, input: UpdateTaskInput): void {
   if (input.priority !== undefined) {
-    task.priority = input.priority;
+    task.priority = input.priority
   }
 }
 
 function applyDependencyUpdate(task: Task, input: UpdateTaskInput): void {
   if (input.dependencyIds !== undefined) {
-    task.dependencyIds = [...input.dependencyIds];
+    task.dependencyIds = [...input.dependencyIds]
   }
 }
 
 function applyDispatchConstraintUpdate(
   task: Task,
-  input: UpdateTaskInput,
+  input: UpdateTaskInput
 ): void {
   if (input.dispatchConstraints !== undefined) {
     task.dispatchConstraints = normalizeDispatchConstraints({
       ...task.dispatchConstraints,
       ...input.dispatchConstraints,
-    });
+    })
   }
 }
 
 function cloneArray<T>(value: T[] | undefined): T[] {
-  return [...(value ?? [])];
+  return [...(value ?? [])]
 }
 
 function withDefault<T>(value: T | undefined, fallback: T): T {
-  return value ?? fallback;
+  return value ?? fallback
 }

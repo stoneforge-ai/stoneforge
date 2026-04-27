@@ -3,62 +3,62 @@ import type {
   ConnectGitHubRepositoryInput,
   RepositoryConnectionStatus,
   Workspace,
-} from "./models.js";
+} from "./models.js"
 
 export function assertRepositoryLinkCompatible(
   workspace: Workspace,
-  input: ConnectGitHubRepositoryInput,
+  input: ConnectGitHubRepositoryInput
 ): void {
   if (!workspace.repository) {
-    return;
+    return
   }
 
   if (isSameRepository(workspace.repository, input)) {
-    return;
+    return
   }
 
   throw new Error(
-    `Workspace ${workspace.id} is already linked to ${workspace.repository.owner}/${workspace.repository.repository}.`,
-  );
+    `Workspace ${workspace.id} is already linked to ${workspace.repository.owner}/${workspace.repository.repository}.`
+  )
 }
 
 export function repositoryAuditOutcome(
-  status: RepositoryConnectionStatus,
+  status: RepositoryConnectionStatus
 ): AuditOutcome {
   if (status === "connected") {
-    return "success";
+    return "success"
   }
 
-  return "failure";
+  return "failure"
 }
 
 export function repositoryConnectReason(
-  status: RepositoryConnectionStatus,
+  status: RepositoryConnectionStatus
 ): string | undefined {
   if (status === "connected") {
-    return undefined;
+    return undefined
   }
 
-  return "Repository link was saved without a live connection.";
+  return "Repository link was saved without a live connection."
 }
 
 export function repositoryStatusReason(
-  status: RepositoryConnectionStatus,
+  status: RepositoryConnectionStatus
 ): string | undefined {
   if (status === "connected") {
-    return undefined;
+    return undefined
   }
 
-  return "Repository connectivity check failed.";
+  return "Repository connectivity check failed."
 }
 
 function isSameRepository(
   existing: { owner: string; repository: string },
-  input: ConnectGitHubRepositoryInput,
+  input: ConnectGitHubRepositoryInput
 ): boolean {
   if (existing.owner !== input.owner) {
-    return false;
+    return false
   }
 
-  return existing.repository === input.repository;
+  return existing.repository === input.repository
 }

@@ -17,15 +17,15 @@ Prefer:
 const resource = defineResource({
   path: "/users/:id",
   parse: parseUser,
-});
+})
 
-client.get(resource, { id: "123" });
+client.get(resource, { id: "123" })
 ```
 
 over:
 
 ```ts
-client.get<User>("/users/123");
+client.get<User>("/users/123")
 ```
 
 The first API can infer path params and output from runtime values; the second asks the caller to make an unchecked promise.
@@ -35,8 +35,10 @@ The first API can infer path params and output from runtime values; the second a
 Use definition helpers to capture exact shape:
 
 ```ts
-function defineConfig<const TConfig extends ConfigShape>(config: TConfig): TConfig {
-  return config;
+function defineConfig<const TConfig extends ConfigShape>(
+  config: TConfig
+): TConfig {
+  return config
 }
 ```
 
@@ -45,7 +47,7 @@ Prefer `satisfies` when validating shape without erasing specifics:
 ```ts
 const routes = {
   user: "/users/:id",
-} satisfies Record<string, string>;
+} satisfies Record<string, string>
 ```
 
 Avoid early annotations like `Record<string, string>` when specific keys and literals matter later.
@@ -60,17 +62,17 @@ type Params<TPath extends string> =
     ? Param | Params<Rest>
     : TPath extends `${string}:${infer Param}`
       ? Param
-      : never;
+      : never
 
 type ParamsObject<TPath extends string> = {
-  [K in Params<TPath>]: string;
-};
+  [K in Params<TPath>]: string
+}
 
 function defineRoute<const TPath extends string>(path: TPath) {
   return {
     path,
     build: (params: ParamsObject<TPath>) => params,
-  };
+  }
 }
 ```
 
@@ -82,14 +84,14 @@ Structured definitions can become typed clients:
 
 ```ts
 type Client<TRouter> = {
-  [K in keyof TRouter]: ProcedureClient<TRouter[K]>;
-};
+  [K in keyof TRouter]: ProcedureClient<TRouter[K]>
+}
 ```
 
 Prefer object trees when they improve editor exploration:
 
 ```ts
-client.task.review.start(input);
+client.task.review.start(input)
 ```
 
 At each dot, autocomplete should show only valid next operations.
@@ -101,7 +103,7 @@ Use discriminated unions to reject invalid combinations:
 ```ts
 type RequestOptions =
   | { method: "GET"; body?: never }
-  | { method: "POST" | "PUT" | "PATCH"; body: JsonBody };
+  | { method: "POST" | "PUT" | "PATCH"; body: JsonBody }
 ```
 
 Use this for execution modes, provider modes, sync vs async behavior, read vs write operations, and lifecycle-specific inputs.
@@ -120,8 +122,8 @@ Use display helpers when editor output gets noisy:
 
 ```ts
 type Prettify<T> = {
-  [K in keyof T]: T[K];
-} & {};
+  [K in keyof T]: T[K]
+} & {}
 ```
 
 Do not leak private conditional-type pipelines through public API names.

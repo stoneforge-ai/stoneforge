@@ -1,4 +1,4 @@
-import type { Agent, RoleDefinition, Runtime } from "@stoneforge/core";
+import type { Agent, RoleDefinition, Runtime } from "@stoneforge/core"
 
 import type {
   ConnectGitHubRepositoryInput,
@@ -9,26 +9,26 @@ import type {
   RegisterRoleDefinitionInput,
   RegisterRuntimeInput,
   Workspace,
-} from "./models.js";
-import type { OrgId, WorkspaceId } from "./ids.js";
+} from "./models.js"
+import type { OrgId, WorkspaceId } from "./ids.js"
 
 export function createOrgRecord(
   id: OrgId,
   name: string,
-  createdAt: string,
+  createdAt: string
 ): Org {
   return {
     id,
     name,
     createdAt,
-  };
+  }
 }
 
 export function createWorkspaceRecord(
   id: WorkspaceId,
   orgId: OrgId,
   input: CreateWorkspaceInput,
-  now: string,
+  now: string
 ): Workspace {
   return {
     id,
@@ -41,12 +41,12 @@ export function createWorkspaceRecord(
     roleDefinitions: [],
     createdAt: now,
     updatedAt: now,
-  };
+  }
 }
 
 export function createRepositoryLink(
   input: ConnectGitHubRepositoryInput,
-  connectedAt: string,
+  connectedAt: string
 ): GitHubRepositoryLink {
   return {
     installationId: input.installationId,
@@ -55,13 +55,13 @@ export function createRepositoryLink(
     defaultBranch: input.defaultBranch,
     connectionStatus: withDefault(input.connectionStatus, "connected"),
     connectedAt,
-  };
+  }
 }
 
 export function createRuntimeRecord(
   id: Runtime["id"],
   workspaceId: WorkspaceId,
-  input: RegisterRuntimeInput,
+  input: RegisterRuntimeInput
 ): Runtime {
   const base = {
     id,
@@ -69,7 +69,7 @@ export function createRuntimeRecord(
     name: input.name,
     healthStatus: withDefault(input.healthStatus, "healthy"),
     tags: cloneArray(input.tags),
-  };
+  }
 
   if (input.location === "managed") {
     return {
@@ -77,7 +77,7 @@ export function createRuntimeRecord(
       location: input.location,
       mode: input.mode,
       managedProvider: input.managedProvider,
-    };
+    }
   }
 
   return {
@@ -85,13 +85,13 @@ export function createRuntimeRecord(
     location: input.location,
     mode: input.mode,
     hostId: input.hostId,
-  };
+  }
 }
 
 export function createAgentRecord(
   id: Agent["id"],
   workspaceId: WorkspaceId,
-  input: RegisterAgentInput,
+  input: RegisterAgentInput
 ): Agent {
   return {
     id,
@@ -104,13 +104,13 @@ export function createAgentRecord(
     healthStatus: withDefault(input.healthStatus, "healthy"),
     tags: cloneArray(input.tags),
     launcher: input.launcher,
-  };
+  }
 }
 
 export function createRoleDefinitionRecord(
   id: RoleDefinition["id"],
   workspaceId: WorkspaceId,
-  input: RegisterRoleDefinitionInput,
+  input: RegisterRoleDefinitionInput
 ): RoleDefinition {
   return {
     id,
@@ -123,13 +123,13 @@ export function createRoleDefinitionRecord(
     lifecycleHooks: cloneArray(input.lifecycleHooks),
     tags: cloneArray(input.tags),
     enabled: withDefault(input.enabled, true),
-  };
+  }
 }
 
 function cloneArray<T>(value: T[] | undefined): T[] {
-  return [...(value ?? [])];
+  return [...(value ?? [])]
 }
 
 function withDefault<T>(value: T | undefined, fallback: T): T {
-  return value ?? fallback;
+  return value ?? fallback
 }

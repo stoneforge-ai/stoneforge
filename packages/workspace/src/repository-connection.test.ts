@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest"
 
 import {
   assertRepositoryLinkCompatible,
@@ -7,45 +7,49 @@ import {
   repositoryStatusReason,
   type ConnectGitHubRepositoryInput,
   type Workspace,
-} from "./index.js";
+} from "./index.js"
 
 describe("repository connection policy", () => {
   it("allows first links and idempotent links to the same repository", () => {
     expect(() =>
-      assertRepositoryLinkCompatible(workspace(), repositoryInput()),
-    ).not.toThrow();
+      assertRepositoryLinkCompatible(workspace(), repositoryInput())
+    ).not.toThrow()
     expect(() =>
       assertRepositoryLinkCompatible(
         workspace({ owner: "stoneforge-ai", repository: "stoneforge" }),
-        repositoryInput(),
-      ),
-    ).not.toThrow();
-  });
+        repositoryInput()
+      )
+    ).not.toThrow()
+  })
 
   it("rejects relinking a workspace to a different repository", () => {
     expect(() =>
       assertRepositoryLinkCompatible(
         workspace({ owner: "stoneforge-ai", repository: "other" }),
-        repositoryInput(),
-      ),
-    ).toThrow(/already linked/i);
+        repositoryInput()
+      )
+    ).toThrow(/already linked/i)
     expect(() =>
       assertRepositoryLinkCompatible(
         workspace({ owner: "other-owner", repository: "stoneforge" }),
-        repositoryInput(),
-      ),
-    ).toThrow(/already linked/i);
-  });
+        repositoryInput()
+      )
+    ).toThrow(/already linked/i)
+  })
 
   it("maps connection status to audit outcome and reasons", () => {
-    expect(repositoryAuditOutcome("connected")).toBe("success");
-    expect(repositoryAuditOutcome("disconnected")).toBe("failure");
-    expect(repositoryConnectReason("connected")).toBeUndefined();
-    expect(repositoryConnectReason("disconnected")).toMatch(/without a live connection/i);
-    expect(repositoryStatusReason("connected")).toBeUndefined();
-    expect(repositoryStatusReason("disconnected")).toMatch(/connectivity check failed/i);
-  });
-});
+    expect(repositoryAuditOutcome("connected")).toBe("success")
+    expect(repositoryAuditOutcome("disconnected")).toBe("failure")
+    expect(repositoryConnectReason("connected")).toBeUndefined()
+    expect(repositoryConnectReason("disconnected")).toMatch(
+      /without a live connection/i
+    )
+    expect(repositoryStatusReason("connected")).toBeUndefined()
+    expect(repositoryStatusReason("disconnected")).toMatch(
+      /connectivity check failed/i
+    )
+  })
+})
 
 function repositoryInput(): ConnectGitHubRepositoryInput {
   return {
@@ -53,12 +57,13 @@ function repositoryInput(): ConnectGitHubRepositoryInput {
     owner: "stoneforge-ai",
     repository: "stoneforge",
     defaultBranch: "main",
-  };
+  }
 }
 
-function workspace(
-  repository?: { owner: string; repository: string },
-): Workspace {
+function workspace(repository?: {
+  owner: string
+  repository: string
+}): Workspace {
   return {
     id: "workspace_1" as never,
     orgId: "org_1" as never,
@@ -78,5 +83,5 @@ function workspace(
     roleDefinitions: [],
     createdAt: "2026-04-24T00:00:00.000Z",
     updatedAt: "2026-04-24T00:00:00.000Z",
-  };
+  }
 }

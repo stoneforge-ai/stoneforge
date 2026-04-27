@@ -22,7 +22,7 @@ Callsites get precise guidance and validation
 Avoid APIs that make callers manually restate what the implementation already knows:
 
 ```ts
-const result = await client.get<User>("/users/123");
+const result = await client.get<User>("/users/123")
 ```
 
 Prefer APIs that infer from concrete structure the caller already provided:
@@ -31,9 +31,9 @@ Prefer APIs that infer from concrete structure the caller already provided:
 const user = defineResource({
   path: "/users/:id",
   parse: parseUser,
-});
+})
 
-const result = await client.get(user, { id: "123" });
+const result = await client.get(user, { id: "123" })
 ```
 
 Here the path, parser output, and required params should be inferred from the resource definition.
@@ -48,7 +48,7 @@ Common callsites should rarely need manual generics. Infer data from functions, 
 const query = createQuery({
   key: ["users"],
   run: fetchUsers,
-});
+})
 ```
 
 Generics may exist as escape hatches, but they should not be required for the normal path.
@@ -60,7 +60,7 @@ Do not widen useful facts too early:
 ```ts
 const routes: Record<string, string> = {
   user: "/users/:id",
-};
+}
 ```
 
 That erases the specific key and path. Prefer:
@@ -68,7 +68,7 @@ That erases the specific key and path. Prefer:
 ```ts
 const routes = {
   user: "/users/:id",
-} satisfies Record<string, string>;
+} satisfies Record<string, string>
 ```
 
 Use `const` generics, `as const`, and `satisfies` to preserve literal information while still validating shape.
@@ -82,7 +82,7 @@ function defineRoute<const TPath extends string>(path: TPath) {
   return {
     path,
     build: (params: ParamsForPath<TPath>) => params,
-  };
+  }
 }
 ```
 
@@ -93,7 +93,7 @@ The generic remembers `TPath` so later calls can require the correct params.
 Runtime API shape affects type quality. Stringly APIs often hide structure:
 
 ```ts
-register("task.review", handler);
+register("task.review", handler)
 ```
 
 Structured APIs give TypeScript more to preserve and transform:
@@ -103,7 +103,7 @@ register({
   task: {
     review: handler,
   },
-});
+})
 ```
 
 Prefer structure when it improves autocomplete, validation, and derived client types.
@@ -115,7 +115,7 @@ Use discriminated unions and constrained option types to prevent invalid combina
 ```ts
 type RequestOptions =
   | { method: "GET"; body?: never }
-  | { method: "POST" | "PUT" | "PATCH"; body: JsonBody };
+  | { method: "POST" | "PUT" | "PATCH"; body: JsonBody }
 ```
 
 The type system should reject states the runtime cannot honor.
@@ -127,7 +127,7 @@ Types should guide the next valid action:
 ```ts
 client.tasks.review.start({
   taskId,
-});
+})
 ```
 
 At each step, autocomplete should expose the valid namespace, operation, input shape, and result type. Correctness is not enough if the editor experience is opaque.
@@ -138,8 +138,8 @@ Advanced conditional and mapped types can produce unreadable errors. Use named h
 
 ```ts
 type Prettify<T> = {
-  [K in keyof T]: T[K];
-} & {};
+  [K in keyof T]: T[K]
+} & {}
 ```
 
 Public type aliases should have domain names such as `WorkflowInput<T>`, `WorkflowOutput<T>`, `RouterClient<T>`, or `DispatchResult<T>` instead of exposing internal machinery.

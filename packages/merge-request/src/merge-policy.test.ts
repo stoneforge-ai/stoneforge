@@ -1,50 +1,66 @@
-import { asMergeRequestId } from "@stoneforge/core";
-import { asTaskId } from "@stoneforge/execution";
-import fc from "fast-check";
-import { describe, expect, it } from "vitest";
+import { asMergeRequestId } from "@stoneforge/core"
+import { asTaskId } from "@stoneforge/execution"
+import fc from "fast-check"
+import { describe, expect, it } from "vitest"
 
-import { evaluateMergePolicy, type VerificationRun, type MergeRequest } from "./index.js";
+import {
+  evaluateMergePolicy,
+  type VerificationRun,
+  type MergeRequest,
+} from "./index.js"
 
 describe("evaluateMergePolicy", () => {
   it("ignores terminal MergeRequests", () => {
-    expect(evaluateMergePolicy(mergeRequest({ state: "merged" }), [], supervised)).toBeNull();
     expect(
-      evaluateMergePolicy(mergeRequest({ state: "closed_unmerged" }), [], supervised),
-    ).toBeNull();
-  });
+      evaluateMergePolicy(mergeRequest({ state: "merged" }), [], supervised)
+    ).toBeNull()
+    expect(
+      evaluateMergePolicy(
+        mergeRequest({ state: "closed_unmerged" }),
+        [],
+        supervised
+      )
+    ).toBeNull()
+  })
 
   it("requires a passing Verification Run and Review Approved before policy can pass", () => {
     expect(evaluateMergePolicy(mergeRequest(), [], supervised)).toEqual({
       checkState: "pending",
       reason: "A passing Verification Run and Review Approved are required.",
-    });
+    })
     expect(
       evaluateMergePolicy(
         mergeRequest({ reviewOutcomes: [approvedReview("agent", "agent_1")] }),
         [verificationRun("failed")],
-        supervised,
-      ),
+        supervised
+      )
     ).toEqual({
       checkState: "pending",
       reason: "A passing Verification Run and Review Approved are required.",
-    });
-  });
+    })
+  })
 
   it("requires a human Approval Gate only for supervised policy", () => {
-    const reviewed = mergeRequest({ reviewOutcomes: [approvedReview("agent", "agent_1")] });
-    const passedVerificationRun = [verificationRun("passed")];
+    const reviewed = mergeRequest({
+      reviewOutcomes: [approvedReview("agent", "agent_1")],
+    })
+    const passedVerificationRun = [verificationRun("passed")]
 
-    expect(evaluateMergePolicy(reviewed, passedVerificationRun, supervised)).toEqual({
+    expect(
+      evaluateMergePolicy(reviewed, passedVerificationRun, supervised)
+    ).toEqual({
       nextState: "policy_pending",
       checkState: "pending",
       reason: "A Human Approval Gate is required by supervised policy.",
-    });
-    expect(evaluateMergePolicy(reviewed, passedVerificationRun, autonomous)).toEqual({
+    })
+    expect(
+      evaluateMergePolicy(reviewed, passedVerificationRun, autonomous)
+    ).toEqual({
       nextState: "merge_ready",
       checkState: "passed",
       reason: "Stoneforge policy gates are satisfied.",
-    });
-  });
+    })
+  })
 
   it("passes supervised policy after a human Review Approved satisfies the Approval Gate", () => {
     expect(
@@ -56,14 +72,14 @@ describe("evaluateMergePolicy", () => {
           ],
         }),
         [verificationRun("passed")],
-        supervised,
-      ),
+        supervised
+      )
     ).toEqual({
       nextState: "merge_ready",
       checkState: "passed",
       reason: "Stoneforge policy gates are satisfied.",
-    });
-  });
+    })
+  })
 
   it("returns the policy state implied by terminal, verification, review, preset, and approval signals", () => {
     fc.assert(
@@ -71,23 +87,30 @@ describe("evaluateMergePolicy", () => {
         const result = evaluateMergePolicy(
           mergeRequest({
             state: policyCase.state,
-            reviewOutcomes: reviewOutcomesFor(policyCase.reviewApproved, policyCase.humanApprovalGateSatisfied),
+            reviewOutcomes: reviewOutcomesFor(
+              policyCase.reviewApproved,
+              policyCase.humanApprovalGateSatisfied
+            ),
           }),
-          policyCase.verificationPassed ? [verificationRun("passed")] : [verificationRun("failed")],
+          policyCase.verificationPassed
+            ? [verificationRun("passed")]
+            : [verificationRun("failed")],
           {
             policyPreset: policyCase.supervised ? "supervised" : "autonomous",
             targetBranch: "main",
-          },
-        );
+          }
+        )
 
         if (["merged", "closed_unmerged"].includes(policyCase.state)) {
-          expect(result).toBeNull();
-          return;
+          expect(result).toBeNull()
+          return
         }
 
         if (!policyCase.verificationPassed || !policyCase.reviewApproved) {
-          expect(result).toEqual(expect.objectContaining({ checkState: "pending" }));
-          return;
+          expect(result).toEqual(
+            expect.objectContaining({ checkState: "pending" })
+          )
+          return
         }
 
         if (policyCase.supervised && !policyCase.humanApprovalGateSatisfied) {
@@ -95,21 +118,21 @@ describe("evaluateMergePolicy", () => {
             expect.objectContaining({
               checkState: "pending",
               nextState: "policy_pending",
-            }),
-          );
-          return;
+            })
+          )
+          return
         }
 
         expect(result).toEqual(
           expect.objectContaining({
             checkState: "passed",
             nextState: "merge_ready",
-          }),
-        );
-      }),
-    );
-  });
-});
+          })
+        )
+      })
+    )
+  })
+})
 
 const policyCaseArbitrary = fc.record({
   state: fc.constantFrom(
@@ -119,27 +142,25 @@ const policyCaseArbitrary = fc.record({
     "policy_pending" as const,
     "merge_ready" as const,
     "merged" as const,
-    "closed_unmerged" as const,
+    "closed_unmerged" as const
   ),
   verificationPassed: fc.boolean(),
   reviewApproved: fc.boolean(),
   supervised: fc.boolean(),
   humanApprovalGateSatisfied: fc.boolean(),
-});
+})
 
 const supervised = {
   policyPreset: "supervised" as const,
   targetBranch: "main",
-};
+}
 
 const autonomous = {
   policyPreset: "autonomous" as const,
   targetBranch: "main",
-};
+}
 
-function mergeRequest(
-  overrides: Partial<MergeRequest> = {},
-): MergeRequest {
+function mergeRequest(overrides: Partial<MergeRequest> = {}): MergeRequest {
   return {
     id: asMergeRequestId("merge_request_1"),
     workspaceId: "workspace_1" as never,
@@ -163,12 +184,12 @@ function mergeRequest(
     createdAt: "2026-04-24T00:00:00.000Z",
     updatedAt: "2026-04-24T00:00:00.000Z",
     ...overrides,
-  };
+  }
 }
 
 function reviewOutcomesFor(
   hasApprovedReview: boolean,
-  hasHumanApprovalGateSatisfied: boolean,
+  hasHumanApprovalGateSatisfied: boolean
 ): MergeRequest["reviewOutcomes"] {
   if (!hasApprovedReview) {
     return [
@@ -178,25 +199,27 @@ function reviewOutcomesFor(
         outcome: "changes_requested",
         recordedAt: "2026-04-24T00:00:00.000Z",
       },
-    ];
+    ]
   }
 
   return [
     approvedReview("agent", "agent_1"),
-    ...(hasHumanApprovalGateSatisfied ? [approvedReview("human", "user_1")] : []),
-  ];
+    ...(hasHumanApprovalGateSatisfied
+      ? [approvedReview("human", "user_1")]
+      : []),
+  ]
 }
 
 function approvedReview(
   reviewerKind: "human" | "agent",
-  reviewerId: string,
+  reviewerId: string
 ): MergeRequest["reviewOutcomes"][number] {
   return {
     reviewerKind,
     reviewerId,
     outcome: "approved",
     recordedAt: "2026-04-24T00:00:00.000Z",
-  };
+  }
 }
 
 function verificationRun(state: VerificationRun["state"]): VerificationRun {
@@ -216,5 +239,5 @@ function verificationRun(state: VerificationRun["state"]): VerificationRun {
       },
     ],
     observedAt: "2026-04-24T00:00:00.000Z",
-  };
+  }
 }

@@ -1,12 +1,12 @@
-import { dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { dirname } from "node:path"
+import { fileURLToPath } from "node:url"
 
-import sonarjs from "eslint-plugin-sonarjs";
-import tseslint from "typescript-eslint";
+import sonarjs from "eslint-plugin-sonarjs"
+import tseslint from "typescript-eslint"
 
-const sourceFiles = ["packages/*/src/**/*.ts", "apps/*/src/**/*.ts"];
-const testFiles = ["packages/*/src/**/*.test.ts", "apps/*/src/**/*.test.ts"];
-const tsconfigRootDir = dirname(fileURLToPath(import.meta.url));
+const sourceFiles = ["packages/*/src/**/*.ts", "apps/*/src/**/*.ts"]
+const testFiles = ["packages/*/src/**/*.test.ts", "apps/*/src/**/*.test.ts"]
+const tsconfigRootDir = dirname(fileURLToPath(import.meta.url))
 
 export default tseslint.config(
   {
@@ -150,5 +150,5 @@ export default tseslint.config(
         },
       ],
     },
-  },
-);
+  }
+)

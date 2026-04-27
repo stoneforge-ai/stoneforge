@@ -24,7 +24,7 @@ The story of the first stoneforge is told differently depending on which guild y
 
 It did. The temperature was extraordinary. The furnace required to reach it was unlike anything previously built. But when they finally achieved it, the stone they pulled from the heat was transformed. It held its mass and its color, but the rigidity was gone. It could be pressed, bent, drawn, shaped by hand and mould. Curves that no chisel could produce. Walls thinner than parchment. Surfaces so smooth they reflected light. And when the stone cooled, it set harder than it had been before the heating, with an internal grain structure that resisted fracture far better than carved stone ever could.
 
-The implications took time to register. Carvers had spent generations mastering the art of subtraction, of working within the constraints of what a chisel could remove. Forging was additive. Formative. You didn't remove what you didn't want; you shaped what you did want. The stone became a medium rather than an obstacle. It *cooperated*.
+The implications took time to register. Carvers had spent generations mastering the art of subtraction, of working within the constraints of what a chisel could remove. Forging was additive. Formative. You didn't remove what you didn't want; you shaped what you did want. The stone became a medium rather than an obstacle. It _cooperated_.
 
 The first structures built from forged stone were modest. Small arches, test walls, decorative panels. But even these early experiments showed qualities that carved stone could not match. The joints were tighter because moulded surfaces could be shaped to fit each other exactly, rather than relying on mortar to fill the gaps left by chisel work. The structural integrity was superior because forged stone had no chisel scars, no micro-fractures from repeated hammer blows, no stress lines from material removal. And the shapes were freer. Curves, undulations, interlocking geometries that would have been impossible to carve appeared in forged stone as naturally as water takes the shape of its vessel.
 
@@ -72,9 +72,9 @@ The first set was carved into the quarry walls. Permanent. Append-only. If a rec
 
 The second set was pressed into clay tablets kept near the quarry entrance. These were quick-reference summaries for daily use. If a tablet cracked or went missing, she remade it from the wall-carvings in an hour. The tablets were fast and expendable. The walls were slow and permanent. Both were necessary.
 
-She watched the Greyspine guilds fail and recognized their root problem. It wasn't that they lacked coordination. They lacked *memory*. When two artisans disagreed about whether a block had already been shaped, no authority could settle the question. There was no shared record. Only opinions and arguments.
+She watched the Greyspine guilds fail and recognized their root problem. It wasn't that they lacked coordination. They lacked _memory_. When two artisans disagreed about whether a block had already been shaped, no authority could settle the question. There was no shared record. Only opinions and arguments.
 
-She expanded her record-keeping beyond raw quarried stone to track *worked* stone through every stage of shaping. She added something new: a chronicle that captured not just the current state of each block but every change ever made to it, by whom, and when. A block heated at dawn by one artisan, shaped at noon by another, and fitted at dusk by a third had all three operations recorded. You could reconstruct the state of any block at any point in its history.
+She expanded her record-keeping beyond raw quarried stone to track _worked_ stone through every stage of shaping. She added something new: a chronicle that captured not just the current state of each block but every change ever made to it, by whom, and when. A block heated at dawn by one artisan, shaped at noon by another, and fitted at dusk by a third had all three operations recorded. You could reconstruct the state of any block at any point in its history.
 
 She called this the Event Record. The keepers who came after her treated it as the foundation of everything that followed.
 
@@ -294,29 +294,29 @@ Carved stone is the work of patience. Forged stone is the work of coordination. 
 
 ## XVI. Glossary
 
-| Term | Meaning |
-|------|---------|
-| **The Quarry** | Where all materials, records, and knowledge are stored. Mine and archive. Permanent ledger and quick-reference cache. |
-| **The Smithy** | The workshop floor where artisans are dispatched and coordinated. Where raw material becomes shaped work. |
-| **The Pulse** | The autonomous cycle that surveys, dispatches, recovers, and reconciles. The forge's constant awareness. |
-| **The Director** | The planner who decomposes visions into tasks, sets priorities, wires dependencies, and answers artisan questions. Does not forge. |
-| **The Worker** | The artisan who shapes stone. Ephemeral (one task, then gone) or Persistent (long-lived, human-directed). |
-| **The Steward** | Quality and continuity guardian. Merge Stewards join work. Docs Stewards maintain the archives. Recovery Stewards triage failure. |
-| **Separate Bench** | An isolated workstation with its own forge, where an artisan shapes their own copy of the stone without affecting other benches. |
-| **The Passing of the Chisel** | Handoff. A Worker leaves unfinished work with detailed notes for the next artisan. Same bench, same stone, same branch. |
-| **The Joining** | Merge. Separate work fused back into the source stone, contradictions resolved, integrity verified. |
-| **Ledger of Stone** | The permanent, append-only record. What is carved into the ledger stays. |
-| **Quick-Reference Tablets** | The fast, expendable cache. Rebuilt from the Ledger when needed. |
-| **The Event Record** | Chronicle of every change: who, when, what, before-state, after-state. Immutable. |
-| **The Maker's Mark** | An artisan's unforgeable signature, pressed into every piece they shape. Verified against their public seal. |
-| **Elements** | The typed building blocks of the forge: Tasks, Entities, Documents, Messages, Plans, Workflows, Playbooks, Libraries, Dependencies, Teams. |
-| **Blueprints** | Plans. Groups of related tasks held in draft until dependencies are wired, then activated for dispatch. |
-| **Scrolls** | Documents. The guild's versioned, searchable, persistent knowledge. |
-| **Speaking Stones** | Channels. Communication conduits between artisans. Messages are permanent once sent. |
-| **Sacred Techniques** | Playbooks. Reusable, composable templates for multi-step forging processes. |
-| **The Archives** | Libraries. Hierarchically organized collections of scrolls. |
-| **The Dependency Web** | The graph of relationships between Elements: blocking, associating, attributing, threading. |
-| **The Provider's Compact** | The standard interface that lets artisans from any tradition work in any forge. |
-| **The Unfinished** | The ruins of the age before. What could not be built without the method. |
-| **The Shattering** | The first great failure of team forging. The catalyst for the Stoneforge method. |
-| **Forging** | Shaping stone at extreme temperatures, producing cleaner forms, fewer fractures, and superior integrity compared to carving. The foundational technology of the stoneforge. |
+| Term                          | Meaning                                                                                                                                                                     |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **The Quarry**                | Where all materials, records, and knowledge are stored. Mine and archive. Permanent ledger and quick-reference cache.                                                       |
+| **The Smithy**                | The workshop floor where artisans are dispatched and coordinated. Where raw material becomes shaped work.                                                                   |
+| **The Pulse**                 | The autonomous cycle that surveys, dispatches, recovers, and reconciles. The forge's constant awareness.                                                                    |
+| **The Director**              | The planner who decomposes visions into tasks, sets priorities, wires dependencies, and answers artisan questions. Does not forge.                                          |
+| **The Worker**                | The artisan who shapes stone. Ephemeral (one task, then gone) or Persistent (long-lived, human-directed).                                                                   |
+| **The Steward**               | Quality and continuity guardian. Merge Stewards join work. Docs Stewards maintain the archives. Recovery Stewards triage failure.                                           |
+| **Separate Bench**            | An isolated workstation with its own forge, where an artisan shapes their own copy of the stone without affecting other benches.                                            |
+| **The Passing of the Chisel** | Handoff. A Worker leaves unfinished work with detailed notes for the next artisan. Same bench, same stone, same branch.                                                     |
+| **The Joining**               | Merge. Separate work fused back into the source stone, contradictions resolved, integrity verified.                                                                         |
+| **Ledger of Stone**           | The permanent, append-only record. What is carved into the ledger stays.                                                                                                    |
+| **Quick-Reference Tablets**   | The fast, expendable cache. Rebuilt from the Ledger when needed.                                                                                                            |
+| **The Event Record**          | Chronicle of every change: who, when, what, before-state, after-state. Immutable.                                                                                           |
+| **The Maker's Mark**          | An artisan's unforgeable signature, pressed into every piece they shape. Verified against their public seal.                                                                |
+| **Elements**                  | The typed building blocks of the forge: Tasks, Entities, Documents, Messages, Plans, Workflows, Playbooks, Libraries, Dependencies, Teams.                                  |
+| **Blueprints**                | Plans. Groups of related tasks held in draft until dependencies are wired, then activated for dispatch.                                                                     |
+| **Scrolls**                   | Documents. The guild's versioned, searchable, persistent knowledge.                                                                                                         |
+| **Speaking Stones**           | Channels. Communication conduits between artisans. Messages are permanent once sent.                                                                                        |
+| **Sacred Techniques**         | Playbooks. Reusable, composable templates for multi-step forging processes.                                                                                                 |
+| **The Archives**              | Libraries. Hierarchically organized collections of scrolls.                                                                                                                 |
+| **The Dependency Web**        | The graph of relationships between Elements: blocking, associating, attributing, threading.                                                                                 |
+| **The Provider's Compact**    | The standard interface that lets artisans from any tradition work in any forge.                                                                                             |
+| **The Unfinished**            | The ruins of the age before. What could not be built without the method.                                                                                                    |
+| **The Shattering**            | The first great failure of team forging. The catalyst for the Stoneforge method.                                                                                            |
+| **Forging**                   | Shaping stone at extreme temperatures, producing cleaner forms, fewer fractures, and superior integrity compared to carving. The foundational technology of the stoneforge. |

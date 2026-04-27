@@ -1,7 +1,7 @@
-import type { AgentId } from "@stoneforge/core";
-import { runLayeredProgram } from "@stoneforge/core/internal/program-runtime";
-import type { Workspace } from "@stoneforge/workspace";
-import type { Layer } from "effect";
+import type { AgentId } from "@stoneforge/core"
+import { runLayeredProgram } from "@stoneforge/core/internal/program-runtime"
+import type { Workspace } from "@stoneforge/workspace"
+import type { Layer } from "effect"
 
 import {
   cloneAssignment,
@@ -9,19 +9,19 @@ import {
   cloneLease,
   cloneSession,
   cloneTask,
-} from "./cloning.js";
-import { DispatchScheduler } from "./dispatch-scheduler.js";
+} from "./cloning.js"
+import { DispatchScheduler } from "./dispatch-scheduler.js"
 import {
   type AgentAdapterService,
   agentAdapterRuntime,
-} from "./agent-adapter-runtime.js";
-import { ExecutionState } from "./execution-state.js";
+} from "./agent-adapter-runtime.js"
+import { ExecutionState } from "./execution-state.js"
 import type {
   AssignmentId,
   DispatchIntentId,
   SessionId,
   TaskId,
-} from "./ids.js";
+} from "./ids.js"
 import type {
   AgentAdapter,
   Assignment,
@@ -37,130 +37,130 @@ import type {
   Task,
   UpdateTaskInput,
   WorkspaceExecutionCapabilities,
-} from "./models.js";
-import { SessionLifecycle } from "./session-lifecycle.js";
-import { TaskLifecycle } from "./task-lifecycle.js";
+} from "./models.js"
+import { SessionLifecycle } from "./session-lifecycle.js"
+import { TaskLifecycle } from "./task-lifecycle.js"
 
 const defaultPolicy: DispatchPolicy = {
   maxPlacementFailures: 3,
   maxSessionRecoveryFailures: 2,
-};
+}
 
 export class TaskDispatchService {
-  private readonly state: ExecutionState;
-  private readonly tasks: TaskLifecycle;
-  private readonly scheduler: DispatchScheduler;
-  private readonly sessions: SessionLifecycle;
-  private readonly adapterRuntime: Layer.Layer<AgentAdapterService>;
+  private readonly state: ExecutionState
+  private readonly tasks: TaskLifecycle
+  private readonly scheduler: DispatchScheduler
+  private readonly sessions: SessionLifecycle
+  private readonly adapterRuntime: Layer.Layer<AgentAdapterService>
 
   constructor(
     adapter: AgentAdapter,
     policy: DispatchPolicy = defaultPolicy,
-    snapshot?: ExecutionSnapshot,
+    snapshot?: ExecutionSnapshot
   ) {
-    this.state = new ExecutionState(snapshot);
-    this.adapterRuntime = agentAdapterRuntime(adapter);
-    this.tasks = new TaskLifecycle(this.state);
-    this.scheduler = new DispatchScheduler(this.state, this.tasks, policy);
-    this.sessions = new SessionLifecycle(this.state, this.scheduler, policy);
+    this.state = new ExecutionState(snapshot)
+    this.adapterRuntime = agentAdapterRuntime(adapter)
+    this.tasks = new TaskLifecycle(this.state)
+    this.scheduler = new DispatchScheduler(this.state, this.tasks, policy)
+    this.sessions = new SessionLifecycle(this.state, this.scheduler, policy)
   }
 
   configureWorkspace(workspace: Workspace): WorkspaceExecutionCapabilities {
-    return this.tasks.configureWorkspace(workspace);
+    return this.tasks.configureWorkspace(workspace)
   }
 
   createTask(input: CreateTaskInput): Task {
-    return this.tasks.createTask(input);
+    return this.tasks.createTask(input)
   }
 
   updateTask(taskId: TaskId, input: UpdateTaskInput): Task {
-    return this.tasks.updateTask(taskId, input);
+    return this.tasks.updateTask(taskId, input)
   }
 
   createMergeRequestDispatchIntent(
-    input: CreateMergeRequestDispatchIntentInput,
+    input: CreateMergeRequestDispatchIntentInput
   ): DispatchIntent {
-    return this.tasks.createMergeRequestDispatchIntent(input);
+    return this.tasks.createMergeRequestDispatchIntent(input)
   }
 
   runSchedulerOnce(): Promise<DispatchIntent | null> {
-    return runLayeredProgram(this.scheduler.runOnce(), this.adapterRuntime);
+    return runLayeredProgram(this.scheduler.runOnce(), this.adapterRuntime)
   }
 
   recordHeartbeat(sessionId: SessionId, note?: string): SessionHeartbeat {
-    return this.sessions.recordHeartbeat(sessionId, note);
+    return this.sessions.recordHeartbeat(sessionId, note)
   }
 
   recordCheckpoint(sessionId: SessionId, checkpoint: Checkpoint): Session {
-    return this.sessions.recordCheckpoint(sessionId, checkpoint);
+    return this.sessions.recordCheckpoint(sessionId, checkpoint)
   }
 
   recordRecoverableSessionFailure(
     sessionId: SessionId,
     failureState: "crashed" | "expired",
-    checkpoint: Checkpoint,
+    checkpoint: Checkpoint
   ): Promise<Session> {
     return runLayeredProgram(
       this.sessions.recordRecoverableSessionFailure(
         sessionId,
         failureState,
-        checkpoint,
+        checkpoint
       ),
-      this.adapterRuntime,
-    );
+      this.adapterRuntime
+    )
   }
 
   completeAssignment(assignmentId: AssignmentId): Assignment {
-    return this.scheduler.completeAssignment(assignmentId);
+    return this.scheduler.completeAssignment(assignmentId)
   }
 
   requireTaskRepair(taskId: TaskId, reason: string): Task {
-    return this.tasks.requireTaskRepair(taskId, reason);
+    return this.tasks.requireTaskRepair(taskId, reason)
   }
 
   completeTaskAfterMerge(taskId: TaskId): Task {
-    return this.tasks.completeTaskAfterMerge(taskId);
+    return this.tasks.completeTaskAfterMerge(taskId)
   }
 
   getTask(taskId: TaskId): Task {
-    return cloneTask(this.state.requireTask(taskId));
+    return cloneTask(this.state.requireTask(taskId))
   }
 
   getDispatchIntent(intentId: DispatchIntentId): DispatchIntent {
-    return cloneDispatchIntent(this.state.requireDispatchIntent(intentId));
+    return cloneDispatchIntent(this.state.requireDispatchIntent(intentId))
   }
 
   getAssignment(assignmentId: AssignmentId): Assignment {
-    return cloneAssignment(this.state.requireAssignment(assignmentId));
+    return cloneAssignment(this.state.requireAssignment(assignmentId))
   }
 
   getSession(sessionId: SessionId): Session {
-    return cloneSession(this.state.requireSession(sessionId));
+    return cloneSession(this.state.requireSession(sessionId))
   }
 
   listDispatchIntents(): DispatchIntent[] {
     return Array.from(this.state.dispatchIntents.values()).map(
-      cloneDispatchIntent,
-    );
+      cloneDispatchIntent
+    )
   }
 
   listAssignments(): Assignment[] {
-    return Array.from(this.state.assignments.values()).map(cloneAssignment);
+    return Array.from(this.state.assignments.values()).map(cloneAssignment)
   }
 
   listSessions(): Session[] {
-    return Array.from(this.state.sessions.values()).map(cloneSession);
+    return Array.from(this.state.sessions.values()).map(cloneSession)
   }
 
   listLeases(): Lease[] {
-    return Array.from(this.state.leases.values()).map(cloneLease);
+    return Array.from(this.state.leases.values()).map(cloneLease)
   }
 
   activeLeaseCount(agentId: AgentId): number {
-    return this.scheduler.activeLeaseCount(agentId);
+    return this.scheduler.activeLeaseCount(agentId)
   }
 
   exportSnapshot(): ExecutionSnapshot {
-    return this.state.exportSnapshot();
+    return this.state.exportSnapshot()
   }
 }

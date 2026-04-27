@@ -1,19 +1,19 @@
-import { execFile } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { execFile } from "node:child_process"
+import { mkdtemp, rm, writeFile } from "node:fs/promises"
+import { fileURLToPath } from "node:url"
+import { join } from "node:path"
+import { tmpdir } from "node:os"
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest"
 
-import type { DirectTaskRunSummary } from "./direct-task-summary.js";
+import type { DirectTaskRunSummary } from "./direct-task-summary.js"
 import {
   runControlPlaneOperation,
   type ControlPlaneOperationName,
-} from "./control-plane-operations.js";
-import { runControlPlaneCommand } from "./persistent-cli.js";
-import { PersistentControlPlane } from "./persistent-control-plane.js";
-import { SQLiteControlPlaneStore } from "./sqlite-control-plane-store.js";
+} from "./control-plane-operations.js"
+import { runControlPlaneCommand } from "./persistent-cli.js"
+import { PersistentControlPlane } from "./persistent-control-plane.js"
+import { SQLiteControlPlaneStore } from "./sqlite-control-plane-store.js"
 
 describe("persistent control-plane CLI", () => {
   const durableWorkflowOperations = [
@@ -38,104 +38,104 @@ describe("persistent control-plane CLI", () => {
     "record-human-approval",
     "publish-policy-status",
     "merge-when-ready",
-  ] satisfies readonly ControlPlaneOperationName[];
+  ] satisfies readonly ControlPlaneOperationName[]
 
   it("drives the smoke flow through durable control-plane operations", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "stoneforge-control-plane-"));
-    const sqlitePath = join(tempDir, "control-plane.sqlite");
+    const tempDir = await mkdtemp(join(tmpdir(), "stoneforge-control-plane-"))
+    const sqlitePath = join(tempDir, "control-plane.sqlite")
     const controlPlane = new PersistentControlPlane(
       new SQLiteControlPlaneStore(sqlitePath),
-      smokeOptions(),
-    );
+      smokeOptions()
+    )
 
     try {
       for (const operation of durableWorkflowOperations) {
-        const status = await runControlPlaneOperation(controlPlane, operation);
+        const status = await runControlPlaneOperation(controlPlane, operation)
 
-        expect(status.command).toBe(operation);
+        expect(status.command).toBe(operation)
       }
 
-      const summary = await controlPlane.readSummary();
+      const summary = await controlPlane.readSummary()
 
-      expect(summary.workspaceState).toBe("ready");
-      expect(summary.taskState).toBe("completed");
-      expect(summary.mergeRequestState).toBe("merged");
-      expect(summary.policyCheckState).toBe("passed");
+      expect(summary.workspaceState).toBe("ready")
+      expect(summary.taskState).toBe("completed")
+      expect(summary.mergeRequestState).toBe("merged")
+      expect(summary.policyCheckState).toBe("passed")
       expect(summary.providerSessionIds).toEqual([
         "local-task-start-1",
         "local-merge_request-start-1",
-      ]);
+      ])
     } finally {
-      await rm(tempDir, { recursive: true, force: true });
+      await rm(tempDir, { recursive: true, force: true })
     }
-  });
+  })
 
   it("exposes durable command names through the CLI", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "stoneforge-control-plane-"));
-    const sqlitePath = join(tempDir, "control-plane.sqlite");
+    const tempDir = await mkdtemp(join(tmpdir(), "stoneforge-control-plane-"))
+    const sqlitePath = join(tempDir, "control-plane.sqlite")
 
     try {
       for (const operation of durableWorkflowOperations) {
-        await expectCommandArgsToPass(operation, sqliteArgs(sqlitePath));
+        await expectCommandArgsToPass(operation, sqliteArgs(sqlitePath))
       }
 
-      const summary = await runSummaryCommandWithArgs(sqliteArgs(sqlitePath));
+      const summary = await runSummaryCommandWithArgs(sqliteArgs(sqlitePath))
 
-      expect(summary.taskState).toBe("completed");
-      expect(summary.mergeRequestState).toBe("merged");
-      expect(summary.policyCheckState).toBe("passed");
+      expect(summary.taskState).toBe("completed")
+      expect(summary.mergeRequestState).toBe("merged")
+      expect(summary.policyCheckState).toBe("passed")
     } finally {
-      await rm(tempDir, { recursive: true, force: true });
+      await rm(tempDir, { recursive: true, force: true })
     }
-  });
+  })
 
   it("resumes a partially completed flow after recreating the SQLite service", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "stoneforge-control-plane-"));
-    const sqlitePath = join(tempDir, "control-plane.sqlite");
+    const tempDir = await mkdtemp(join(tmpdir(), "stoneforge-control-plane-"))
+    const sqlitePath = join(tempDir, "control-plane.sqlite")
 
     try {
       const firstProcess = new PersistentControlPlane(
         new SQLiteControlPlaneStore(sqlitePath),
-        smokeOptions(),
-      );
+        smokeOptions()
+      )
 
-      await firstProcess.reset();
-      await firstProcess.initializeWorkspace();
-      await firstProcess.configureRepository();
-      await firstProcess.configureRuntime();
-      await firstProcess.configureAgent();
-      await firstProcess.configureRoleDefinition();
-      await firstProcess.configurePolicy();
-      await firstProcess.evaluateReadiness();
-      await firstProcess.createDirectTask();
-      await firstProcess.executeNextDispatch();
+      await firstProcess.reset()
+      await firstProcess.initializeWorkspace()
+      await firstProcess.configureRepository()
+      await firstProcess.configureRuntime()
+      await firstProcess.configureAgent()
+      await firstProcess.configureRoleDefinition()
+      await firstProcess.configurePolicy()
+      await firstProcess.evaluateReadiness()
+      await firstProcess.createDirectTask()
+      await firstProcess.executeNextDispatch()
 
       const resumedProcess = new PersistentControlPlane(
         new SQLiteControlPlaneStore(sqlitePath),
-        smokeOptions(),
-      );
+        smokeOptions()
+      )
 
-      await resumedProcess.openMergeRequest();
-      await resumedProcess.recordLocalVerificationPassed();
-      await resumedProcess.requestReview();
-      await resumedProcess.executeNextDispatch();
-      await resumedProcess.completeAgentReview();
-      await resumedProcess.recordHumanApproval();
-      await resumedProcess.mergeWhenReady();
+      await resumedProcess.openMergeRequest()
+      await resumedProcess.recordLocalVerificationPassed()
+      await resumedProcess.requestReview()
+      await resumedProcess.executeNextDispatch()
+      await resumedProcess.completeAgentReview()
+      await resumedProcess.recordHumanApproval()
+      await resumedProcess.mergeWhenReady()
 
-      const summary = await resumedProcess.readSummary();
+      const summary = await resumedProcess.readSummary()
 
-      expect(summary.taskState).toBe("completed");
-      expect(summary.mergeRequestState).toBe("merged");
-      expect(summary.pullRequestMerged).toBe(true);
+      expect(summary.taskState).toBe("completed")
+      expect(summary.mergeRequestState).toBe("merged")
+      expect(summary.pullRequestMerged).toBe(true)
     } finally {
-      await rm(tempDir, { recursive: true, force: true });
+      await rm(tempDir, { recursive: true, force: true })
     }
-  });
+  })
 
   it("runs the one-shot control-plane smoke flow command", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "stoneforge-control-plane-"));
-    const storePath = join(tempDir, "control-plane.json");
+    const tempDir = await mkdtemp(join(tmpdir(), "stoneforge-control-plane-"))
+    const storePath = join(tempDir, "control-plane.json")
 
     try {
       const result = await runCommand([
@@ -143,24 +143,22 @@ describe("persistent control-plane CLI", () => {
         "--store",
         storePath,
         "--json",
-      ]);
-      const summary = JSON.parse(result.stdout) as DirectTaskRunSummary;
+      ])
+      const summary = JSON.parse(result.stdout) as DirectTaskRunSummary
 
-      expect(result.code).toBe(0);
-      expect(summary.taskState).toBe("completed");
-      expect(summary.mergeRequestState).toBe("merged");
+      expect(result.code).toBe(0)
+      expect(summary.taskState).toBe("completed")
+      expect(summary.mergeRequestState).toBe("merged")
     } finally {
-      await rm(tempDir, { recursive: true, force: true });
+      await rm(tempDir, { recursive: true, force: true })
     }
-  });
+  })
 
   it.skipIf(isCoverageRun())(
     "runs the full packaged CLI smoke flow",
     async () => {
-      const tempDir = await mkdtemp(
-        join(tmpdir(), "stoneforge-control-plane-"),
-      );
-      const storePath = join(tempDir, "control-plane.json");
+      const tempDir = await mkdtemp(join(tmpdir(), "stoneforge-control-plane-"))
+      const storePath = join(tempDir, "control-plane.json")
 
       try {
         const result = await runPackagedCli([
@@ -168,161 +166,157 @@ describe("persistent control-plane CLI", () => {
           "--store",
           storePath,
           "--json",
-        ]);
-        const summary = parseCliSummary(result.stdout);
+        ])
+        const summary = parseCliSummary(result.stdout)
 
-        expect(summary.workspaceState).toBe("ready");
-        expect(summary.taskState).toBe("completed");
-        expect(summary.mergeRequestState).toBe("merged");
+        expect(summary.workspaceState).toBe("ready")
+        expect(summary.taskState).toBe("completed")
+        expect(summary.mergeRequestState).toBe("merged")
         expect(summary.providerSessionIds).toEqual([
           "local-task-start-1",
           "local-merge_request-start-1",
-        ]);
+        ])
       } finally {
-        await rm(tempDir, { recursive: true, force: true });
+        await rm(tempDir, { recursive: true, force: true })
       }
     },
-    30_000,
-  );
+    30_000
+  )
 
   it.skipIf(isCoverageRun())(
     "runs the packaged CLI workflow one command at a time",
     async () => {
-      const tempDir = await mkdtemp(
-        join(tmpdir(), "stoneforge-control-plane-"),
-      );
-      const storePath = join(tempDir, "control-plane.json");
+      const tempDir = await mkdtemp(join(tmpdir(), "stoneforge-control-plane-"))
+      const storePath = join(tempDir, "control-plane.json")
 
       try {
         for (const operation of durableWorkflowOperations) {
-          await expectPackagedCommandToPass(operation, storePath);
+          await expectPackagedCommandToPass(operation, storePath)
         }
 
-        const summary = await runPackagedSummaryCommand(storePath);
+        const summary = await runPackagedSummaryCommand(storePath)
 
-        expect(summary.workspaceState).toBe("ready");
-        expect(summary.policyPreset).toBe("supervised");
-        expect(summary.taskState).toBe("completed");
-        expect(summary.implementationAssignmentState).toBe("succeeded");
-        expect(summary.reviewAssignmentState).toBe("succeeded");
-        expect(summary.mergeRequestState).toBe("merged");
-        expect(summary.verificationState).toBe("passed");
-        expect(summary.policyCheckState).toBe("passed");
-        expect(summary.approvalGateSatisfied).toBe(true);
+        expect(summary.workspaceState).toBe("ready")
+        expect(summary.policyPreset).toBe("supervised")
+        expect(summary.taskState).toBe("completed")
+        expect(summary.implementationAssignmentState).toBe("succeeded")
+        expect(summary.reviewAssignmentState).toBe("succeeded")
+        expect(summary.mergeRequestState).toBe("merged")
+        expect(summary.verificationState).toBe("passed")
+        expect(summary.policyCheckState).toBe("passed")
+        expect(summary.approvalGateSatisfied).toBe(true)
         expect(summary.providerSessionIds).toEqual([
           "local-task-start-1",
           "local-merge_request-start-1",
-        ]);
+        ])
       } finally {
-        await rm(tempDir, { recursive: true, force: true });
+        await rm(tempDir, { recursive: true, force: true })
       }
     },
-    60_000,
-  );
+    60_000
+  )
 
   it("prints human-readable status and command errors", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "stoneforge-control-plane-"));
-    const storePath = join(tempDir, "control-plane.json");
+    const tempDir = await mkdtemp(join(tmpdir(), "stoneforge-control-plane-"))
+    const storePath = join(tempDir, "control-plane.json")
 
     try {
       const status = await runCommand([
         "initialize-workspace",
         "--store",
         storePath,
-      ]);
-      const failedSummary = await runCommand(["summary", "--store", storePath]);
+      ])
+      const failedSummary = await runCommand(["summary", "--store", storePath])
       const unknown = await runCommand([
         "unknown-command",
         "--store",
         storePath,
-      ]);
+      ])
 
-      expect(status.code).toBe(0);
-      expect(status.stdout).toContain("initialize-workspace: workspace_1");
-      expect(failedSummary.code).toBe(1);
+      expect(status.code).toBe(0)
+      expect(status.stdout).toContain("initialize-workspace: workspace_1")
+      expect(failedSummary.code).toBe(1)
       expect(failedSummary.stderr).toContain(
-        "No implementation Assignment exists",
-      );
-      expect(unknown.code).toBe(1);
-      expect(unknown.stderr).toContain("Unknown command unknown-command");
+        "No implementation Assignment exists"
+      )
+      expect(unknown.code).toBe(1)
+      expect(unknown.stderr).toContain("Unknown command unknown-command")
     } finally {
-      await rm(tempDir, { recursive: true, force: true });
+      await rm(tempDir, { recursive: true, force: true })
     }
-  });
+  })
 
   it("reports invalid stores and incomplete workflow actions", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "stoneforge-control-plane-"));
-    const storePath = join(tempDir, "control-plane.json");
+    const tempDir = await mkdtemp(join(tmpdir(), "stoneforge-control-plane-"))
+    const storePath = join(tempDir, "control-plane.json")
 
     try {
-      const reset = await runCommand(["reset", "--store", storePath]);
+      const reset = await runCommand(["reset", "--store", storePath])
       const missingIntent = await runCommand([
         "execute-next-dispatch",
         "--store",
         storePath,
-      ]);
+      ])
 
       await expectCommandArgsToPass("initialize-workspace", [
         "--store",
         storePath,
-      ]);
+      ])
 
       const notReady = await runCommand([
         "evaluate-readiness",
         "--store",
         storePath,
-      ]);
+      ])
 
-      await writeFile(storePath, "{not json");
+      await writeFile(storePath, "{not json")
 
-      const invalidStore = await runCommand(["summary", "--store", storePath]);
+      const invalidStore = await runCommand(["summary", "--store", storePath])
 
-      expect(reset.stdout).toBe("reset: control-plane-store");
-      expect(missingIntent.stderr).toContain(
-        "No queued dispatch intent exists",
-      );
-      expect(notReady.stderr).toContain("Workspace is not ready");
+      expect(reset.stdout).toBe("reset: control-plane-store")
+      expect(missingIntent.stderr).toContain("No queued dispatch intent exists")
+      expect(notReady.stderr).toContain("Workspace is not ready")
       expect(invalidStore.stderr).toContain(
-        "Could not read persisted control-plane snapshot",
-      );
+        "Could not read persisted control-plane snapshot"
+      )
     } finally {
-      await rm(tempDir, { recursive: true, force: true });
+      await rm(tempDir, { recursive: true, force: true })
     }
-  });
+  })
 
   it("reports SQL store configuration errors through the CLI", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "stoneforge-control-plane-"));
-    const blockedParent = join(tempDir, "blocked");
+    const tempDir = await mkdtemp(join(tmpdir(), "stoneforge-control-plane-"))
+    const blockedParent = join(tempDir, "blocked")
 
     try {
-      await writeFile(blockedParent, "not a directory");
+      await writeFile(blockedParent, "not a directory")
 
       const sqliteFailure = await runCommand([
         "summary",
         ...sqliteArgs(join(blockedParent, "control-plane.sqlite")),
-      ]);
+      ])
       const postgresFailure = await runCommand([
         "summary",
         "--store-backend",
         "postgres",
-      ]);
+      ])
 
-      expect(sqliteFailure.code).toBe(1);
-      expect(sqliteFailure.stderr).toContain("Could not open SQLite");
-      expect(postgresFailure.code).toBe(1);
-      expect(postgresFailure.stderr).toContain("requires a connection string");
+      expect(sqliteFailure.code).toBe(1)
+      expect(sqliteFailure.stderr).toContain("Could not open SQLite")
+      expect(postgresFailure.code).toBe(1)
+      expect(postgresFailure.stderr).toContain("requires a connection string")
     } finally {
-      await rm(tempDir, { recursive: true, force: true });
+      await rm(tempDir, { recursive: true, force: true })
     }
-  });
+  })
 
   it.skipIf(postgresTestUrl() === undefined)(
     "runs the command-boundary smoke flow against PostgreSQL",
     async () => {
-      const postgresUrl = postgresTestUrl();
+      const postgresUrl = postgresTestUrl()
 
       if (postgresUrl === undefined) {
-        throw new Error("PostgreSQL test URL is required.");
+        throw new Error("PostgreSQL test URL is required.")
       }
 
       const storeArgs = [
@@ -330,124 +324,119 @@ describe("persistent control-plane CLI", () => {
         "postgres",
         "--postgres-url",
         postgresUrl,
-      ];
+      ]
 
       for (const operation of durableWorkflowOperations) {
-        await expectCommandArgsToPass(operation, storeArgs);
+        await expectCommandArgsToPass(operation, storeArgs)
       }
 
-      const summary = await runSummaryCommandWithArgs(storeArgs);
+      const summary = await runSummaryCommandWithArgs(storeArgs)
 
-      expect(summary.workspaceState).toBe("ready");
-      expect(summary.taskState).toBe("completed");
-      expect(summary.mergeRequestState).toBe("merged");
+      expect(summary.workspaceState).toBe("ready")
+      expect(summary.taskState).toBe("completed")
+      expect(summary.mergeRequestState).toBe("merged")
     },
-    30_000,
-  );
+    30_000
+  )
 
   it("prints the one-shot smoke flow summary for humans", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "stoneforge-control-plane-"));
-    const storePath = join(tempDir, "control-plane.json");
+    const tempDir = await mkdtemp(join(tmpdir(), "stoneforge-control-plane-"))
+    const storePath = join(tempDir, "control-plane.json")
 
     try {
-      const result = await runCommand(["smoke-flow", "--store", storePath]);
+      const result = await runCommand(["smoke-flow", "--store", storePath])
 
-      expect(result.code).toBe(0);
+      expect(result.code).toBe(0)
       expect(result.stdout).toContain(
-        "Stoneforge V2 direct-task scenario complete",
-      );
-      expect(result.stdout).toContain("Policy preset: supervised");
-      expect(result.stdout).toContain("Provider Sessions:");
+        "Stoneforge V2 direct-task scenario complete"
+      )
+      expect(result.stdout).toContain("Policy preset: supervised")
+      expect(result.stdout).toContain("Provider Sessions:")
     } finally {
-      await rm(tempDir, { recursive: true, force: true });
+      await rm(tempDir, { recursive: true, force: true })
     }
-  });
-});
+  })
+})
 
 async function expectCommandArgsToPass(
   command: string,
-  storeArgs: readonly string[],
+  storeArgs: readonly string[]
 ): Promise<void> {
-  const result = await runCommand([command, ...storeArgs, "--json"]);
+  const result = await runCommand([command, ...storeArgs, "--json"])
 
-  expect(result.code).toBe(0);
-  expect(result.stderr).toBe("");
+  expect(result.code).toBe(0)
+  expect(result.stderr).toBe("")
 }
 
 async function runSummaryCommandWithArgs(
-  storeArgs: readonly string[],
+  storeArgs: readonly string[]
 ): Promise<DirectTaskRunSummary> {
-  const result = await runCommand(["summary", ...storeArgs, "--json"]);
+  const result = await runCommand(["summary", ...storeArgs, "--json"])
 
-  expect(result.code).toBe(0);
-  expect(result.stderr).toBe("");
+  expect(result.code).toBe(0)
+  expect(result.stderr).toBe("")
 
-  return JSON.parse(result.stdout) as DirectTaskRunSummary;
+  return JSON.parse(result.stdout) as DirectTaskRunSummary
 }
 
 async function expectPackagedCommandToPass(
   command: string,
-  storePath: string,
+  storePath: string
 ): Promise<void> {
-  const result = await runPackagedCli([
-    command,
-    "--store",
-    storePath,
-    "--json",
-  ]);
+  const result = await runPackagedCli([command, "--store", storePath, "--json"])
 
-  expect(lastJsonLine(result.stdout)).toContain(`"command":"${command}"`);
+  expect(lastJsonLine(result.stdout)).toContain(`"command":"${command}"`)
 }
 
 async function runPackagedSummaryCommand(
-  storePath: string,
+  storePath: string
 ): Promise<DirectTaskRunSummary> {
   const result = await runPackagedCli([
     "summary",
     "--store",
     storePath,
     "--json",
-  ]);
+  ])
 
-  return parseCliSummary(result.stdout);
+  return parseCliSummary(result.stdout)
 }
 
 async function runCommand(
   argv: readonly string[],
-  cwd?: string,
+  cwd?: string
 ): Promise<{
-  code: number;
-  stdout: string;
-  stderr: string;
+  code: number
+  stdout: string
+  stderr: string
 }> {
-  let stdout = "";
-  let stderr = "";
-  const originalCwd = process.cwd();
+  let stdout = ""
+  let stderr = ""
+  const originalCwd = process.cwd()
 
   if (cwd !== undefined) {
-    process.chdir(cwd);
+    process.chdir(cwd)
   }
 
   try {
     const code = await runControlPlaneCommand(argv, {
       write: (text) => {
-        stdout = text;
+        stdout = text
       },
       writeError: (text) => {
-        stderr = text;
+        stderr = text
       },
-    });
+    })
 
-    return { code, stdout, stderr };
+    return { code, stdout, stderr }
   } finally {
     if (cwd !== undefined) {
-      process.chdir(originalCwd);
+      process.chdir(originalCwd)
     }
   }
 }
 
 function sqliteArgs(sqlitePath: string): string[] {
-  return ["--store-backend", "sqlite", "--sqlite-path", sqlitePath];
+  return ["--store-backend", "sqlite", "--sqlite-path", sqlitePath]
 }
 
 function smokeOptions(): NonNullable<
@@ -510,18 +499,18 @@ function smokeOptions(): NonNullable<
         humanApprovalReason: "Human reviewer approved the MergeRequest.",
       },
     },
-  };
+  }
 }
 
 function postgresTestUrl(): string | undefined {
-  return process.env.STONEFORGE_CONTROL_PLANE_POSTGRES_TEST_URL;
+  return process.env.STONEFORGE_CONTROL_PLANE_POSTGRES_TEST_URL
 }
 
 async function runPackagedCli(argv: readonly string[]): Promise<{
-  stdout: string;
-  stderr: string;
+  stdout: string
+  stderr: string
 }> {
-  await ensurePackagedCliBuilt();
+  await ensurePackagedCliBuilt()
 
   return new Promise((resolve, reject) => {
     execFile(
@@ -530,21 +519,21 @@ async function runPackagedCli(argv: readonly string[]): Promise<{
       { cwd: controlPlanePackageDir(), env: childProcessEnv() },
       (error, stdout, stderr) => {
         if (error) {
-          reject(error);
-          return;
+          reject(error)
+          return
         }
 
-        resolve({ stdout, stderr });
-      },
-    );
-  });
+        resolve({ stdout, stderr })
+      }
+    )
+  })
 }
 
-let packagedCliBuild: Promise<void> | undefined;
+let packagedCliBuild: Promise<void> | undefined
 
 function ensurePackagedCliBuilt(): Promise<void> {
-  packagedCliBuild ??= buildPackagedCli();
-  return packagedCliBuild;
+  packagedCliBuild ??= buildPackagedCli()
+  return packagedCliBuild
 }
 
 function buildPackagedCli(): Promise<void> {
@@ -555,48 +544,48 @@ function buildPackagedCli(): Promise<void> {
       { cwd: controlPlanePackageDir(), env: childProcessEnv() },
       (error) => {
         if (error) {
-          reject(error);
-          return;
+          reject(error)
+          return
         }
 
-        resolve();
-      },
-    );
-  });
+        resolve()
+      }
+    )
+  })
 }
 
 function parseCliSummary(stdout: string): DirectTaskRunSummary {
-  const jsonLine = lastJsonLine(stdout);
+  const jsonLine = lastJsonLine(stdout)
 
-  return JSON.parse(jsonLine) as DirectTaskRunSummary;
+  return JSON.parse(jsonLine) as DirectTaskRunSummary
 }
 
 function lastJsonLine(stdout: string): string {
-  const lines = stdout.split("\n");
+  const lines = stdout.split("\n")
 
   for (let index = lines.length - 1; index >= 0; index -= 1) {
-    const line = lines[index];
+    const line = lines[index]
 
     if (line.startsWith("{") && line.endsWith("}")) {
-      return line;
+      return line
     }
   }
 
-  throw new Error("Packaged CLI did not print a JSON summary.");
+  throw new Error("Packaged CLI did not print a JSON summary.")
 }
 
 function controlPlanePackageDir(): string {
-  return fileURLToPath(new URL("..", import.meta.url));
+  return fileURLToPath(new URL("..", import.meta.url))
 }
 
 function childProcessEnv(): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...process.env };
+  const env: NodeJS.ProcessEnv = { ...process.env }
 
-  delete env.NODE_V8_COVERAGE;
+  delete env.NODE_V8_COVERAGE
 
-  return env;
+  return env
 }
 
 function isCoverageRun(): boolean {
-  return process.env.npm_lifecycle_event === "coverage";
+  return process.env.npm_lifecycle_event === "coverage"
 }

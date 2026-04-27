@@ -1,27 +1,27 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { mkdtemp, rm, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 
-import { describe, expect, expectTypeOf, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest"
 
 import {
   githubValueFlags,
   parseMergeProviderConfig,
   type GitHubMergeRequestConfig,
   type MergeProviderConfig,
-} from "./index.js";
+} from "./index.js"
 
 describe("GitHub integration config", () => {
   it("defaults to the fake merge provider", () => {
-    const config = parseMergeProviderConfig([], {});
+    const config = parseMergeProviderConfig([], {})
 
-    expectTypeOf(config).toEqualTypeOf<MergeProviderConfig>();
-    expect(config).toEqual({ provider: "fake" });
-  });
+    expectTypeOf(config).toEqualTypeOf<MergeProviderConfig>()
+    expect(config).toEqual({ provider: "fake" })
+  })
 
   it("parses GitHub provider config from CLI flags", () => {
     const privateKey =
-      "-----BEGIN RSA PRIVATE KEY-----\\nline\\n-----END RSA PRIVATE KEY-----";
+      "-----BEGIN RSA PRIVATE KEY-----\\nline\\n-----END RSA PRIVATE KEY-----"
     const config = parseMergeProviderConfig(
       [
         "--merge-provider",
@@ -45,8 +45,8 @@ describe("GitHub integration config", () => {
         "--github-allow-merge",
         "true",
       ],
-      {},
-    );
+      {}
+    )
 
     expect(config).toEqual({
       provider: "github",
@@ -61,21 +61,21 @@ describe("GitHub integration config", () => {
         apiBaseUrl: "https://github.test",
         allowMerge: true,
       },
-    });
+    })
 
     if (config.provider !== "github") {
-      throw new Error("Expected GitHub provider config.");
+      throw new Error("Expected GitHub provider config.")
     }
 
-    expectTypeOf(config.github).toEqualTypeOf<GitHubMergeRequestConfig>();
-  });
+    expectTypeOf(config.github).toEqualTypeOf<GitHubMergeRequestConfig>()
+  })
 
   it("parses GitHub provider config from environment and private key files", async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), "stoneforge-github-config-"));
-    const privateKeyPath = join(tempDir, "app.pem");
+    const tempDir = await mkdtemp(join(tmpdir(), "stoneforge-github-config-"))
+    const privateKeyPath = join(tempDir, "app.pem")
 
     try {
-      await writeFile(privateKeyPath, "pem-value");
+      await writeFile(privateKeyPath, "pem-value")
 
       expect(
         parseMergeProviderConfig([], {
@@ -86,7 +86,7 @@ describe("GitHub integration config", () => {
           STONEFORGE_GITHUB_REPO: "stoneforge",
           STONEFORGE_GITHUB_BASE_BRANCH: "main",
           STONEFORGE_GITHUB_ALLOW_MERGE: "1",
-        }),
+        })
       ).toEqual({
         provider: "github",
         github: {
@@ -100,22 +100,22 @@ describe("GitHub integration config", () => {
           allowMerge: true,
           apiBaseUrl: undefined,
         },
-      });
+      })
     } finally {
-      await rm(tempDir, { recursive: true, force: true });
+      await rm(tempDir, { recursive: true, force: true })
     }
-  });
+  })
 
   it("reports invalid provider values and missing required GitHub config", () => {
     expect(() =>
-      parseMergeProviderConfig(["--merge-provider", "gitlab"], {}),
-    ).toThrow("Unknown merge provider gitlab. Use fake or github.");
+      parseMergeProviderConfig(["--merge-provider", "gitlab"], {})
+    ).toThrow("Unknown merge provider gitlab. Use fake or github.")
     expect(() => parseMergeProviderConfig(["--merge-provider"], {})).toThrow(
-      "Missing value for --merge-provider.",
-    );
+      "Missing value for --merge-provider."
+    )
     expect(() =>
-      parseMergeProviderConfig(["--merge-provider", "github"], {}),
-    ).toThrow("GitHub App ID is required for the GitHub merge provider.");
+      parseMergeProviderConfig(["--merge-provider", "github"], {})
+    ).toThrow("GitHub App ID is required for the GitHub merge provider.")
     expect(() =>
       parseMergeProviderConfig(
         [
@@ -134,13 +134,13 @@ describe("GitHub integration config", () => {
           "--github-base-branch",
           "main",
         ],
-        {},
-      ),
-    ).toThrow("GitHub installation ID must be a positive integer.");
-  });
+        {}
+      )
+    ).toThrow("GitHub installation ID must be a positive integer.")
+  })
 
   it("lists GitHub value flags consumed by the CLI parser", () => {
-    expect(githubValueFlags()).toContain("--github-private-key-path");
-    expect(githubValueFlags()).toContain("--github-api-base-url");
-  });
-});
+    expect(githubValueFlags()).toContain("--github-private-key-path")
+    expect(githubValueFlags()).toContain("--github-api-base-url")
+  })
+})

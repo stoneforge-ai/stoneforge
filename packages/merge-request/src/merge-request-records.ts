@@ -1,30 +1,30 @@
-import type { VerificationRunId, MergeRequestId } from "@stoneforge/core";
-import type { Task } from "@stoneforge/execution";
+import type { VerificationRunId, MergeRequestId } from "@stoneforge/core"
+import type { Task } from "@stoneforge/execution"
 
 import type {
   VerificationRun,
   MergeRequest,
   ProviderPullRequest,
-} from "./models.js";
+} from "./models.js"
 
 export function applyProviderPullRequestUpdate(
   mergeRequest: MergeRequest,
   providerPullRequest: ProviderPullRequest,
-  updatedAt: string,
+  updatedAt: string
 ): void {
-  mergeRequest.providerPullRequest = providerPullRequest;
+  mergeRequest.providerPullRequest = providerPullRequest
   mergeRequest.state =
     mergeRequest.state === "draft" || mergeRequest.state === "repair_required"
       ? "open"
-      : mergeRequest.state;
-  mergeRequest.updatedAt = updatedAt;
+      : mergeRequest.state
+  mergeRequest.updatedAt = updatedAt
 }
 
 export function createTaskMergeRequestRecord(
   id: MergeRequestId,
   task: Task,
   providerPullRequest: ProviderPullRequest,
-  now: string,
+  now: string
 ): MergeRequest {
   return {
     id,
@@ -40,13 +40,13 @@ export function createTaskMergeRequestRecord(
     reviewOutcomes: [],
     createdAt: now,
     updatedAt: now,
-  };
+  }
 }
 
 export function createVerificationRunRecord(
   id: VerificationRunId,
   mergeRequest: MergeRequest,
-  observedAt: string,
+  observedAt: string
 ): VerificationRun {
   return {
     id,
@@ -56,5 +56,5 @@ export function createVerificationRunRecord(
     state: "queued",
     providerChecks: [],
     observedAt,
-  };
+  }
 }
