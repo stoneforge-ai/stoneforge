@@ -15,11 +15,11 @@ export class WorkspaceAuditLog {
     )
   }
 
-  append(input: Omit<AuditEvent, "id" | "timestamp">): void {
+  append(input: Omit<AuditEvent, "id" | "timestamp">, timestamp: string): void {
     const event: AuditEvent = {
       ...input,
       id: asAuditEventId(this.nextId()),
-      timestamp: new Date().toISOString(),
+      timestamp,
     }
 
     this.events.push(event)

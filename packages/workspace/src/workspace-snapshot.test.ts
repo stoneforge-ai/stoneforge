@@ -10,6 +10,31 @@ const actor: AuditActor = {
 }
 
 describe("WorkspaceSetupService snapshots", () => {
+  it("uses the injected clock for records and audit events", () => {
+    const service = new WorkspaceSetupService(undefined, {
+      clock: {
+        currentTimeMillis: () => Date.parse("2026-04-24T12:00:00.000Z"),
+      },
+    })
+
+    const org = service.createOrg({ name: "Toolco" })
+    const workspace = service.createWorkspace(
+      org.id,
+      { name: "stoneforge", targetBranch: "main" },
+      actor
+    )
+    const validation = service.validateWorkspace(workspace.id, actor)
+    const auditEvents = service.listAuditEventsForWorkspace(workspace.id)
+
+    expect(org.createdAt).toBe("2026-04-24T12:00:00.000Z")
+    expect(workspace.createdAt).toBe("2026-04-24T12:00:00.000Z")
+    expect(validation.validatedAt).toBe("2026-04-24T12:00:00.000Z")
+    expect(auditEvents.map((event) => event.timestamp)).toEqual([
+      "2026-04-24T12:00:00.000Z",
+      "2026-04-24T12:00:00.000Z",
+    ])
+  })
+
   it("restores setup records and continues id allocation", () => {
     const service = new WorkspaceSetupService()
     const org = service.createOrg({ name: "Toolco" })

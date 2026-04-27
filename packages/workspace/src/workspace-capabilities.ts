@@ -6,6 +6,7 @@ import {
   cloneRoleDefinition,
   cloneRuntime,
 } from "@stoneforge/core"
+import { Effect } from "effect"
 
 import type {
   Agent,
@@ -17,6 +18,7 @@ import type {
   RegisterRuntimeInput,
   RoleDefinition,
   Runtime,
+  Workspace,
 } from "./models.js"
 import type { RuntimeId, WorkspaceId } from "./ids.js"
 import type { WorkspaceSetupState } from "./workspace-state.js"
@@ -26,6 +28,12 @@ import {
   createRuntimeRecord,
 } from "./workspace-records.js"
 import { computeConfiguredState } from "./workspace-validation.js"
+import {
+  InvalidAgentConcurrencyLimit,
+  RuntimeNotFound,
+  WorkspaceNotFound,
+} from "./workspace-errors.js"
+import { now, type WorkspaceClockService } from "./workspace-runtime.js"
 
 export class WorkspaceCapabilityRegistration {
   constructor(private readonly state: WorkspaceSetupState) {}
@@ -34,104 +42,145 @@ export class WorkspaceCapabilityRegistration {
     workspaceId: WorkspaceId,
     input: RegisterRuntimeInput,
     actor: AuditActor
-  ): Runtime {
-    const workspace = this.state.requireWorkspace(workspaceId)
-    const runtime = createRuntimeRecord(
-      asRuntimeId(this.state.nextId("runtime")),
-      workspaceId,
-      input
+  ): Effect.Effect<Runtime, WorkspaceNotFound, WorkspaceClockService> {
+    return Effect.gen(this, function* () {
+      const workspace = yield* this.workspaceRecord(workspaceId)
+      const timestamp = yield* now()
+      const runtime = createRuntimeRecord(
+        asRuntimeId(this.state.nextId("runtime")),
+        workspaceId,
+        input
+      )
+
+      workspace.runtimes.push(runtime)
+      workspace.updatedAt = timestamp
+      workspace.state = computeConfiguredState(workspace)
+
+      this.state.appendAuditEvent(
+        {
+          actor,
+          action: "workspace.runtime_registered",
+          orgId: workspace.orgId,
+          workspaceId: workspace.id,
+          targetId: runtime.id,
+          targetType: "runtime",
+          outcome: "success",
+          policyPreset: workspace.policyPreset,
+        },
+        timestamp
+      )
+
+      return cloneRuntime(runtime)
+    }).pipe(
+      Effect.withSpan("workspace.register_runtime", {
+        attributes: workspaceAttributes(workspaceId),
+      })
     )
-
-    workspace.runtimes.push(runtime)
-    workspace.updatedAt = this.state.now()
-    workspace.state = computeConfiguredState(workspace)
-
-    this.state.appendAuditEvent({
-      actor,
-      action: "workspace.runtime_registered",
-      orgId: workspace.orgId,
-      workspaceId: workspace.id,
-      targetId: runtime.id,
-      targetType: "runtime",
-      outcome: "success",
-      policyPreset: workspace.policyPreset,
-    })
-
-    return cloneRuntime(runtime)
   }
 
   registerAgent(
     workspaceId: WorkspaceId,
     input: RegisterAgentInput,
     actor: AuditActor
-  ): Agent {
-    const workspace = this.state.requireWorkspace(workspaceId)
-    const runtime = workspace.runtimes.find((candidate) => {
-      return candidate.id === input.runtimeId
-    })
+  ): Effect.Effect<
+    Agent,
+    WorkspaceNotFound | RuntimeNotFound | InvalidAgentConcurrencyLimit,
+    WorkspaceClockService
+  > {
+    return Effect.gen(this, function* () {
+      const workspace = yield* this.workspaceRecord(workspaceId)
+      const runtime = workspace.runtimes.find((candidate) => {
+        return candidate.id === input.runtimeId
+      })
 
-    if (!runtime) {
-      throw new Error(
-        `Runtime ${input.runtimeId} does not exist in workspace ${workspaceId}.`
+      if (!runtime) {
+        return yield* Effect.fail(
+          new RuntimeNotFound({
+            workspaceId,
+            runtimeId: input.runtimeId,
+          })
+        )
+      }
+
+      if (input.concurrencyLimit < 1) {
+        return yield* Effect.fail(
+          new InvalidAgentConcurrencyLimit({
+            concurrencyLimit: input.concurrencyLimit,
+          })
+        )
+      }
+
+      const timestamp = yield* now()
+      const agent = createAgentRecord(
+        asAgentId(this.state.nextId("agent")),
+        workspaceId,
+        input
       )
-    }
 
-    if (input.concurrencyLimit < 1) {
-      throw new Error("Agent concurrencyLimit must be at least 1.")
-    }
+      workspace.agents.push(agent)
+      workspace.updatedAt = timestamp
+      workspace.state = computeConfiguredState(workspace)
 
-    const agent = createAgentRecord(
-      asAgentId(this.state.nextId("agent")),
-      workspaceId,
-      input
+      this.state.appendAuditEvent(
+        {
+          actor,
+          action: "workspace.agent_registered",
+          orgId: workspace.orgId,
+          workspaceId: workspace.id,
+          targetId: agent.id,
+          targetType: "agent",
+          outcome: "success",
+          policyPreset: workspace.policyPreset,
+        },
+        timestamp
+      )
+
+      return cloneAgent(agent)
+    }).pipe(
+      Effect.withSpan("workspace.register_agent", {
+        attributes: workspaceAttributes(workspaceId),
+      })
     )
-
-    workspace.agents.push(agent)
-    workspace.updatedAt = this.state.now()
-    workspace.state = computeConfiguredState(workspace)
-
-    this.state.appendAuditEvent({
-      actor,
-      action: "workspace.agent_registered",
-      orgId: workspace.orgId,
-      workspaceId: workspace.id,
-      targetId: agent.id,
-      targetType: "agent",
-      outcome: "success",
-      policyPreset: workspace.policyPreset,
-    })
-
-    return cloneAgent(agent)
   }
 
   registerRoleDefinition(
     workspaceId: WorkspaceId,
     input: RegisterRoleDefinitionInput,
     actor: AuditActor
-  ): RoleDefinition {
-    const workspace = this.state.requireWorkspace(workspaceId)
-    const roleDefinition = createRoleDefinitionRecord(
-      asRoleDefinitionId(this.state.nextId("roleDefinition")),
-      workspaceId,
-      input
+  ): Effect.Effect<RoleDefinition, WorkspaceNotFound, WorkspaceClockService> {
+    return Effect.gen(this, function* () {
+      const workspace = yield* this.workspaceRecord(workspaceId)
+      const timestamp = yield* now()
+      const roleDefinition = createRoleDefinitionRecord(
+        asRoleDefinitionId(this.state.nextId("roleDefinition")),
+        workspaceId,
+        input
+      )
+
+      workspace.roleDefinitions.push(roleDefinition)
+      workspace.updatedAt = timestamp
+      workspace.state = computeConfiguredState(workspace)
+
+      this.state.appendAuditEvent(
+        {
+          actor,
+          action: "workspace.role_definition_registered",
+          orgId: workspace.orgId,
+          workspaceId: workspace.id,
+          targetId: roleDefinition.id,
+          targetType: "role_definition",
+          outcome: "success",
+          policyPreset: workspace.policyPreset,
+        },
+        timestamp
+      )
+
+      return cloneRoleDefinition(roleDefinition)
+    }).pipe(
+      Effect.withSpan("workspace.register_role_definition", {
+        attributes: workspaceAttributes(workspaceId),
+      })
     )
-
-    workspace.roleDefinitions.push(roleDefinition)
-    workspace.updatedAt = this.state.now()
-    workspace.state = computeConfiguredState(workspace)
-
-    this.state.appendAuditEvent({
-      actor,
-      action: "workspace.role_definition_registered",
-      orgId: workspace.orgId,
-      workspaceId: workspace.id,
-      targetId: roleDefinition.id,
-      targetType: "role_definition",
-      outcome: "success",
-      policyPreset: workspace.policyPreset,
-    })
-
-    return cloneRoleDefinition(roleDefinition)
   }
 
   updateRuntimeHealthStatus(
@@ -139,34 +188,63 @@ export class WorkspaceCapabilityRegistration {
     runtimeId: RuntimeId,
     status: HealthStatus,
     actor: AuditActor
-  ): Runtime {
-    const workspace = this.state.requireWorkspace(workspaceId)
-    const runtime = workspace.runtimes.find((candidate) => {
-      return candidate.id === runtimeId
-    })
+  ): Effect.Effect<
+    Runtime,
+    WorkspaceNotFound | RuntimeNotFound,
+    WorkspaceClockService
+  > {
+    return Effect.gen(this, function* () {
+      const workspace = yield* this.workspaceRecord(workspaceId)
+      const runtime = workspace.runtimes.find((candidate) => {
+        return candidate.id === runtimeId
+      })
 
-    if (!runtime) {
-      throw new Error(
-        `Runtime ${runtimeId} does not exist in workspace ${workspaceId}.`
+      if (!runtime) {
+        return yield* Effect.fail(
+          new RuntimeNotFound({ workspaceId, runtimeId })
+        )
+      }
+
+      const timestamp = yield* now()
+      runtime.healthStatus = status
+      workspace.updatedAt = timestamp
+
+      this.state.appendAuditEvent(
+        {
+          actor,
+          action: "workspace.runtime_health_updated",
+          orgId: workspace.orgId,
+          workspaceId: workspace.id,
+          targetId: runtime.id,
+          targetType: "runtime",
+          outcome: runtimeHealthOutcome(status),
+          reason: runtimeHealthReason(status),
+          policyPreset: workspace.policyPreset,
+        },
+        timestamp
       )
+
+      return cloneRuntime(runtime)
+    }).pipe(
+      Effect.withSpan("workspace.update_runtime_health", {
+        attributes: {
+          ...workspaceAttributes(workspaceId),
+          "stoneforge.runtime.id": runtimeId,
+        },
+      })
+    )
+  }
+
+  private workspaceRecord(
+    workspaceId: WorkspaceId
+  ): Effect.Effect<Workspace, WorkspaceNotFound> {
+    const workspace = this.state.getWorkspace(workspaceId)
+
+    if (!workspace) {
+      return Effect.fail(new WorkspaceNotFound({ workspaceId }))
     }
 
-    runtime.healthStatus = status
-    workspace.updatedAt = this.state.now()
-
-    this.state.appendAuditEvent({
-      actor,
-      action: "workspace.runtime_health_updated",
-      orgId: workspace.orgId,
-      workspaceId: workspace.id,
-      targetId: runtime.id,
-      targetType: "runtime",
-      outcome: runtimeHealthOutcome(status),
-      reason: runtimeHealthReason(status),
-      policyPreset: workspace.policyPreset,
-    })
-
-    return cloneRuntime(runtime)
+    return Effect.succeed(workspace)
   }
 }
 
@@ -184,4 +262,12 @@ function runtimeHealthReason(status: HealthStatus): string | undefined {
   }
 
   return "Runtime health check failed."
+}
+
+function workspaceAttributes(workspaceId: WorkspaceId): {
+  readonly "stoneforge.workspace.id": WorkspaceId
+} {
+  return {
+    "stoneforge.workspace.id": workspaceId,
+  }
 }

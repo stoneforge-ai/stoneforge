@@ -4,22 +4,32 @@ import type {
   RepositoryConnectionStatus,
   Workspace,
 } from "./models.js"
+import { RepositoryAlreadyLinked } from "./workspace-errors.js"
 
 export function assertRepositoryLinkCompatible(
   workspace: Workspace,
   input: ConnectGitHubRepositoryInput
 ): void {
-  if (!workspace.repository) {
-    return
+  const conflict = repositoryLinkConflict(workspace, input)
+
+  if (conflict) {
+    throw conflict
+  }
+}
+
+export function repositoryLinkConflict(
+  workspace: Workspace,
+  input: ConnectGitHubRepositoryInput
+): RepositoryAlreadyLinked | null {
+  if (!workspace.repository || isSameRepository(workspace.repository, input)) {
+    return null
   }
 
-  if (isSameRepository(workspace.repository, input)) {
-    return
-  }
-
-  throw new Error(
-    `Workspace ${workspace.id} is already linked to ${workspace.repository.owner}/${workspace.repository.repository}.`
-  )
+  return new RepositoryAlreadyLinked({
+    workspaceId: workspace.id,
+    owner: workspace.repository.owner,
+    repository: workspace.repository.repository,
+  })
 }
 
 export function repositoryAuditOutcome(

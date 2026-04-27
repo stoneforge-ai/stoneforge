@@ -144,6 +144,9 @@ importers:
       '@stoneforge/core':
         specifier: workspace:*
         version: link:../core
+      effect:
+        specifier: ^3.21.2
+        version: 3.21.2
     devDependencies:
       vitest:
         specifier: ^4.0.18

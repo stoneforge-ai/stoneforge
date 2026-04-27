@@ -21,7 +21,8 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@stoneforge/core": "workspace:*"
+    "@stoneforge/core": "workspace:*",
+    "effect": "^3.21.2"
   },
   "devDependencies": {
     "vitest": "^4.0.18"

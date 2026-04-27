@@ -7,6 +7,7 @@ import type {
 } from "./models.js"
 import type { OrgId, WorkspaceId } from "./ids.js"
 import { WorkspaceAuditLog } from "./audit-log.js"
+import { WorkspaceNotFound } from "./workspace-errors.js"
 
 type CounterName = "org" | "workspace" | "runtime" | "agent" | "roleDefinition"
 
@@ -35,14 +36,21 @@ export class WorkspaceSetupState {
     const workspace = this.workspaces.get(workspaceId)
 
     if (!workspace) {
-      throw new Error(`Workspace ${workspaceId} does not exist.`)
+      throw new WorkspaceNotFound({ workspaceId })
     }
 
     return workspace
   }
 
-  appendAuditEvent(input: Omit<AuditEvent, "id" | "timestamp">): void {
-    this.auditLog.append(input)
+  getWorkspace(workspaceId: WorkspaceId): Workspace | undefined {
+    return this.workspaces.get(workspaceId)
+  }
+
+  appendAuditEvent(
+    input: Omit<AuditEvent, "id" | "timestamp">,
+    timestamp: string
+  ): void {
+    this.auditLog.append(input, timestamp)
   }
 
   listAuditEventsForWorkspace(workspaceId: WorkspaceId): AuditEvent[] {
@@ -60,10 +68,6 @@ export class WorkspaceSetupState {
   nextId(counterName: CounterName): string {
     this.counters[counterName] += 1
     return `${counterName}_${this.counters[counterName]}`
-  }
-
-  now(): string {
-    return new Date().toISOString()
   }
 
   private restoreSnapshot(snapshot: WorkspaceSetupSnapshot): void {
