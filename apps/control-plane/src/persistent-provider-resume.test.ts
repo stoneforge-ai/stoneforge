@@ -185,6 +185,37 @@ describe("persistent provider resume", () => {
       await rm(tempDir, { recursive: true, force: true })
     }
   })
+
+  it("reports the latest observed provider check when it is not passing", async () => {
+    const tempDir = await mkdtemp(
+      join(tmpdir(), "stoneforge-provider-verification-failed-")
+    )
+    const sqlitePath = join(tempDir, "control-plane.sqlite")
+    const controlPlane = new PersistentControlPlane(
+      new SQLiteControlPlaneStore(sqlitePath),
+      {
+        mergeRequestAdapter: new ResumeRecordingAdapter([
+          {
+            providerCheckId: "provider-check-1",
+            name: "provider quality",
+            state: "running",
+          },
+        ]),
+        ...smokeOptions(),
+      }
+    )
+
+    try {
+      await prepareOpenMergeRequest(controlPlane)
+      await controlPlane.observeProviderState()
+
+      await expect(
+        controlPlane.requireObservedProviderVerificationPassed()
+      ).rejects.toThrow("Latest provider check provider quality is running")
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
 })
 
 async function prepareOpenMergeRequest(

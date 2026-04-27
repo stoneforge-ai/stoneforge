@@ -160,6 +160,7 @@ function testInternalImports() {
     "ids",
     "index",
     "models",
+    "program-runtime",
     ...publicModuleNames(),
   ])
 

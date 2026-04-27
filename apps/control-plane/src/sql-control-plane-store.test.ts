@@ -66,6 +66,33 @@ describe("SQL control-plane stores", () => {
     }
   })
 
+  it("reports JSON store write and reset failures", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "stoneforge-json-errors-"))
+    const blockedParent = join(tempDir, "blocked")
+    const snapshot = createEmptyControlPlaneSnapshot()
+
+    try {
+      await writeFile(blockedParent, "not a directory")
+
+      await expect(
+        new FileControlPlaneStore(join(blockedParent, "store.json")).save(
+          snapshot
+        )
+      ).rejects.toThrow("Could not create control-plane store directory")
+      await expect(
+        new FileControlPlaneStore(tempDir).save(snapshot)
+      ).rejects.toThrow("Could not write control-plane store")
+      await expect(new FileControlPlaneStore(tempDir).reset()).rejects.toThrow(
+        "Could not reset control-plane store"
+      )
+      await expect(new FileControlPlaneStore(tempDir).load()).rejects.toThrow(
+        "Could not read control-plane store"
+      )
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("reports SQLite open and corrupt snapshot failures for humans", async () => {
     const tempDir = await mkdtemp(join(tmpdir(), "stoneforge-sqlite-errors-"))
     const blockedParent = join(tempDir, "blocked")
@@ -154,6 +181,24 @@ describe("SQL control-plane stores", () => {
         () => new FailingPostgresClient("read")
       ).load()
     ).rejects.toThrow("Could not read PostgreSQL control-plane snapshot")
+    await expect(
+      new PostgresControlPlaneStore(
+        "postgres://stoneforge.example/control-plane",
+        () => new NonErrorFailingPostgresClient("connect")
+      ).load()
+    ).rejects.toThrow("Unknown PostgreSQL connection error")
+    await expect(
+      new PostgresControlPlaneStore(
+        "postgres://stoneforge.example/control-plane",
+        () => new NonErrorFailingPostgresClient("migration")
+      ).load()
+    ).rejects.toThrow("Unknown PostgreSQL migration error")
+    await expect(
+      new PostgresControlPlaneStore(
+        "postgres://stoneforge.example/control-plane",
+        () => new NonErrorFailingPostgresClient("read")
+      ).load()
+    ).rejects.toThrow("Unknown PostgreSQL error")
   })
 })
 
@@ -280,6 +325,32 @@ class FailingPostgresClient implements PostgresControlPlaneClient {
 
     if (this.failure === "read" && sql.startsWith("\nselect")) {
       throw new Error("select failed")
+    }
+
+    return queryResult([])
+  }
+}
+
+class NonErrorFailingPostgresClient implements PostgresControlPlaneClient {
+  constructor(private readonly failure: "connect" | "migration" | "read") {}
+
+  async connect(): Promise<void> {
+    if (this.failure === "connect") {
+      return Promise.reject("connection refused")
+    }
+  }
+
+  async end(): Promise<void> {}
+
+  async query<TResult extends QueryResultRow = QueryResultRow>(
+    sql = ""
+  ): Promise<QueryResult<TResult>> {
+    if (this.failure === "migration") {
+      return Promise.reject("permission denied")
+    }
+
+    if (this.failure === "read" && sql.startsWith("\nselect")) {
+      return Promise.reject("select failed")
     }
 
     return queryResult([])

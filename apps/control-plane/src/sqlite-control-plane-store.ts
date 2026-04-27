@@ -2,6 +2,7 @@ import { mkdir } from "node:fs/promises"
 import { dirname } from "node:path"
 
 import SQLiteDatabase from "better-sqlite3"
+import { Effect } from "effect"
 
 import {
   ControlPlanePersistenceError,
@@ -9,6 +10,7 @@ import {
   type ControlPlaneStore,
   createEmptyControlPlaneSnapshot,
 } from "./control-plane-store.js"
+import { runControlPlaneEffect } from "./control-plane-runtime.js"
 import {
   currentSchemaVersion,
   deserializeSnapshot,
@@ -31,7 +33,7 @@ interface SQLiteSnapshotRow {
 export class SQLiteControlPlaneStore implements ControlPlaneStore {
   constructor(private readonly databasePath: string) {}
 
-  async load(): Promise<ControlPlaneSnapshot> {
+  load(): Promise<ControlPlaneSnapshot> {
     return this.withDatabase("read", (database) => {
       const row = database
         .prepare(sqliteSelectSnapshot)
@@ -48,8 +50,8 @@ export class SQLiteControlPlaneStore implements ControlPlaneStore {
     })
   }
 
-  async save(snapshot: ControlPlaneSnapshot): Promise<void> {
-    await this.withDatabase("save", (database) => {
+  save(snapshot: ControlPlaneSnapshot): Promise<void> {
+    return this.withDatabase("save", (database) => {
       database.prepare(sqliteUpsertSnapshot).run({
         id: singletonSnapshotId,
         ...serializeSnapshot(snapshot),
@@ -57,37 +59,66 @@ export class SQLiteControlPlaneStore implements ControlPlaneStore {
     })
   }
 
-  async reset(): Promise<void> {
-    await this.withDatabase("reset", (database) => {
+  reset(): Promise<void> {
+    return this.withDatabase("reset", (database) => {
       database
         .prepare("delete from control_plane_snapshots where id = ?")
         .run(singletonSnapshotId)
     })
   }
 
-  private async withDatabase<TResult>(
+  private withDatabase<TResult>(
     action: "read" | "reset" | "save",
     run: (database: SQLiteDatabase.Database) => TResult
   ): Promise<TResult> {
-    const database = await this.openDatabase()
-
-    try {
-      migrateSQLite(database, this.databasePath)
-      return run(database)
-    } catch (error) {
-      throw sqliteError(action, this.databasePath, error as Error)
-    } finally {
-      database.close()
-    }
+    return runControlPlaneEffect(
+      Effect.acquireUseRelease(
+        this.openDatabase(),
+        (database) =>
+          Effect.try({
+            try: () => {
+              migrateSQLite(database, this.databasePath)
+              return run(database)
+            },
+            catch: (error) =>
+              sqliteError(
+                action,
+                this.databasePath,
+                error instanceof Error
+                  ? error
+                  : new Error("Unknown SQLite error.")
+              ),
+          }),
+        (database) => Effect.sync(() => database.close())
+      ).pipe(Effect.withSpan(`control_plane.sqlite_store.${action}`))
+    )
   }
 
-  private async openDatabase(): Promise<SQLiteDatabase.Database> {
-    try {
-      await mkdir(dirname(this.databasePath), { recursive: true })
-      return new SQLiteDatabase(this.databasePath)
-    } catch (error) {
-      throw sqliteError("open", this.databasePath, error as Error)
-    }
+  private openDatabase(): Effect.Effect<
+    SQLiteDatabase.Database,
+    ControlPlanePersistenceError
+  > {
+    return Effect.gen(this, function* () {
+      yield* Effect.tryPromise({
+        try: () => mkdir(dirname(this.databasePath), { recursive: true }),
+        catch: (error) =>
+          sqliteError(
+            "open",
+            this.databasePath,
+            error instanceof Error ? error : new Error("Unknown SQLite error.")
+          ),
+      })
+
+      return yield* Effect.try({
+        try: () => new SQLiteDatabase(this.databasePath),
+        catch: (error) =>
+          sqliteError(
+            "open",
+            this.databasePath,
+            error instanceof Error ? error : new Error("Unknown SQLite error.")
+          ),
+      })
+    })
   }
 }
 

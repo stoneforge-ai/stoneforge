@@ -1,4 +1,5 @@
 import { Client, type QueryResult, type QueryResultRow } from "pg"
+import { Effect } from "effect"
 
 import type { ExecutionSnapshot } from "@stoneforge/execution"
 import type { MergeRequestSnapshot } from "@stoneforge/merge-request"
@@ -10,6 +11,7 @@ import {
   type ControlPlaneStore,
   createEmptyControlPlaneSnapshot,
 } from "./control-plane-store.js"
+import { runControlPlaneEffect } from "./control-plane-runtime.js"
 import {
   currentSchemaVersion,
   deserializeSnapshot,
@@ -56,7 +58,7 @@ export class PostgresControlPlaneStore implements ControlPlaneStore {
     this.createClient = createClient
   }
 
-  async load(): Promise<ControlPlaneSnapshot> {
+  load(): Promise<ControlPlaneSnapshot> {
     return this.withClient("read", async (client) => {
       const result = await client.query<PostgresSnapshotRow>(
         postgresSelectSnapshot,
@@ -75,8 +77,8 @@ export class PostgresControlPlaneStore implements ControlPlaneStore {
     })
   }
 
-  async save(snapshot: ControlPlaneSnapshot): Promise<void> {
-    await this.withClient("save", async (client) => {
+  save(snapshot: ControlPlaneSnapshot): Promise<void> {
+    return this.withClient("save", async (client) => {
       const serialized = serializeSnapshot(snapshot)
 
       await client.query(postgresUpsertSnapshot, [
@@ -92,37 +94,66 @@ export class PostgresControlPlaneStore implements ControlPlaneStore {
     })
   }
 
-  async reset(): Promise<void> {
-    await this.withClient("reset", async (client) => {
+  reset(): Promise<void> {
+    return this.withClient("reset", async (client) => {
       await client.query("delete from control_plane_snapshots where id = $1", [
         singletonSnapshotId,
       ])
     })
   }
 
-  private async withClient<TResult>(
+  private withClient<TResult>(
     action: "read" | "reset" | "save",
     run: (client: PostgresControlPlaneClient) => Promise<TResult>
   ): Promise<TResult> {
-    const client = await this.openClient()
-
-    try {
-      await migratePostgres(client)
-      return await run(client)
-    } catch (error) {
-      throw postgresError(action, error as Error)
-    } finally {
-      await client.end()
-    }
+    return runControlPlaneEffect(
+      Effect.acquireUseRelease(
+        this.openClient(),
+        (client) =>
+          migratePostgres(client).pipe(
+            Effect.flatMap(() =>
+              Effect.tryPromise({
+                try: () => run(client),
+                catch: (error) =>
+                  postgresError(
+                    action,
+                    asError(
+                      "Unknown PostgreSQL error.",
+                      error instanceof Error ? error : undefined
+                    )
+                  ),
+              })
+            )
+          ),
+        (client) =>
+          Effect.tryPromise({
+            try: () => client.end(),
+            catch: (error) =>
+              new ControlPlanePersistenceError(
+                `Could not close PostgreSQL control-plane database connection. ${errorMessage(
+                  asError(
+                    "Unknown PostgreSQL close error.",
+                    error instanceof Error ? error : undefined
+                  )
+                )}`
+              ),
+          }).pipe(Effect.orDie)
+      ).pipe(Effect.withSpan(`control_plane.postgres_store.${action}`))
+    )
   }
 
-  private async openClient(): Promise<PostgresControlPlaneClient> {
+  private openClient(): Effect.Effect<
+    PostgresControlPlaneClient,
+    ControlPlanePersistenceError
+  > {
     if (
       this.connectionString === undefined ||
       this.connectionString.length === 0
     ) {
-      throw new ControlPlanePersistenceError(
-        "PostgreSQL control-plane store requires a connection string. Pass --postgres-url or set STONEFORGE_CONTROL_PLANE_POSTGRES_URL."
+      return Effect.fail(
+        new ControlPlanePersistenceError(
+          "PostgreSQL control-plane store requires a connection string. Pass --postgres-url or set STONEFORGE_CONTROL_PLANE_POSTGRES_URL."
+        )
       )
     }
 
@@ -130,33 +161,43 @@ export class PostgresControlPlaneStore implements ControlPlaneStore {
   }
 }
 
-async function connectPostgresClient(
+function connectPostgresClient(
   client: PostgresControlPlaneClient
-): Promise<PostgresControlPlaneClient> {
-  try {
-    await client.connect()
-    return client
-  } catch (error) {
-    throw new ControlPlanePersistenceError(
-      `Could not connect to PostgreSQL control-plane database. Check STONEFORGE_CONTROL_PLANE_POSTGRES_URL and database availability. ${errorMessage(
-        error as Error
-      )}`
-    )
-  }
+): Effect.Effect<PostgresControlPlaneClient, ControlPlanePersistenceError> {
+  return Effect.tryPromise({
+    try: async () => {
+      await client.connect()
+      return client
+    },
+    catch: (error) =>
+      new ControlPlanePersistenceError(
+        `Could not connect to PostgreSQL control-plane database. Check STONEFORGE_CONTROL_PLANE_POSTGRES_URL and database availability. ${errorMessage(
+          asError(
+            "Unknown PostgreSQL connection error.",
+            error instanceof Error ? error : undefined
+          )
+        )}`
+      ),
+  })
 }
 
-async function migratePostgres(
+function migratePostgres(
   client: PostgresControlPlaneClient
-): Promise<void> {
-  try {
-    await client.query(postgresMigration)
-  } catch (error) {
-    throw new ControlPlanePersistenceError(
-      `Could not initialize PostgreSQL control-plane database. Migration failed. ${errorMessage(
-        error as Error
-      )}`
-    )
-  }
+): Effect.Effect<void, ControlPlanePersistenceError> {
+  return Effect.tryPromise({
+    try: async () => {
+      await client.query(postgresMigration)
+    },
+    catch: (error) =>
+      new ControlPlanePersistenceError(
+        `Could not initialize PostgreSQL control-plane database. Migration failed. ${errorMessage(
+          asError(
+            "Unknown PostgreSQL migration error.",
+            error instanceof Error ? error : undefined
+          )
+        )}`
+      ),
+  })
 }
 
 function postgresRowToSerializedSnapshot(
@@ -207,6 +248,10 @@ function defaultPostgresClient(
       return client.query<TResult>(sql, values)
     },
   }
+}
+
+function asError(fallbackMessage: string, error: Error | undefined): Error {
+  return error instanceof Error ? error : new Error(fallbackMessage)
 }
 
 const postgresMigration = `

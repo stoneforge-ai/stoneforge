@@ -3,6 +3,9 @@ import {
   type JsonValue,
   parseJsonValue,
 } from "./github-json.js"
+import { Effect } from "effect"
+
+import { runControlPlaneEffect } from "./control-plane-runtime.js"
 
 interface GitHubHttpRequestBase {
   path: string
@@ -41,24 +44,55 @@ export class GitHubHttpError extends Error {
 export class FetchGitHubHttpClient implements GitHubHttpClient {
   constructor(private readonly baseUrl = "https://api.github.com") {}
 
-  async request(request: GitHubHttpRequest): Promise<GitHubHttpResponse> {
-    const response = await fetch(`${this.baseUrl}${request.path}`, {
-      method: request.method,
-      headers: requestHeaders(request),
-      body:
-        request.body === undefined ? undefined : JSON.stringify(request.body),
-    })
-    const json = await responseJson(response)
+  request(request: GitHubHttpRequest): Promise<GitHubHttpResponse> {
+    return runControlPlaneEffect(
+      Effect.tryPromise({
+        try: async () => {
+          const response = await fetch(`${this.baseUrl}${request.path}`, {
+            method: request.method,
+            headers: requestHeaders(request),
+            body:
+              request.body === undefined
+                ? undefined
+                : JSON.stringify(request.body),
+          })
+          const json = await responseJson(response)
 
-    if (response.status >= 400) {
-      throw new GitHubHttpError(
-        `GitHub API ${request.method} ${request.path} failed with HTTP ${response.status}.`,
-        response.status,
-        json
+          if (response.status >= 400) {
+            throw new GitHubHttpError(
+              `GitHub API ${request.method} ${request.path} failed with HTTP ${response.status}.`,
+              response.status,
+              json
+            )
+          }
+
+          return { status: response.status, json }
+        },
+        catch: (error) => {
+          if (error instanceof GitHubHttpError) {
+            return error
+          }
+
+          return new GitHubHttpError(
+            `GitHub API ${request.method} ${request.path} failed before an HTTP response was available.`,
+            0
+          )
+        },
+      }).pipe(
+        Effect.tap((response) =>
+          Effect.annotateCurrentSpan(
+            "http.response.status_code",
+            response.status
+          )
+        ),
+        Effect.withSpan("github.http_request", {
+          attributes: {
+            "stoneforge.provider.name": "github",
+            "stoneforge.provider.operation": request.method,
+          },
+        })
       )
-    }
-
-    return { status: response.status, json }
+    )
   }
 }
 

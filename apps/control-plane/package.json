@@ -22,6 +22,7 @@
     "@stoneforge/merge-request": "workspace:*",
     "@stoneforge/workspace": "workspace:*",
     "better-sqlite3": "^11.10.0",
+    "effect": "^3.21.2",
     "pg": "^8.20.0"
   },
   "devDependencies": {

@@ -92,6 +92,45 @@ describe("GitHubAppInstallationTokenProvider", () => {
     ])
   })
 
+  it("reuses discovered installation ids when refreshing expired tokens", async () => {
+    const http = new RecordingGitHubHttpClient([
+      { status: 200, json: { id: 789 } },
+      {
+        status: 201,
+        json: {
+          token: "expired-token",
+          expires_at: "2026-04-24T12:00:30.000Z",
+        },
+      },
+      {
+        status: 201,
+        json: {
+          token: "refreshed-token",
+          expires_at: "2026-04-24T12:10:00.000Z",
+        },
+      },
+    ])
+    const provider = new GitHubAppInstallationTokenProvider(
+      {
+        appId: "123",
+        privateKey: testPrivateKey(),
+        owner: "toolco",
+        repo: "stoneforge",
+      },
+      http,
+      fixedNow
+    )
+
+    await expect(provider.installationToken()).resolves.toBe("expired-token")
+    await expect(provider.installationToken()).resolves.toBe("refreshed-token")
+
+    expect(http.requests.map((request) => request.path)).toEqual([
+      "/repos/toolco/stoneforge/installation",
+      "/app/installations/789/access_tokens",
+      "/app/installations/789/access_tokens",
+    ])
+  })
+
   it("reports invalid configuration and GitHub discovery failures", async () => {
     expect(() => {
       new GitHubAppInstallationTokenProvider(
@@ -128,6 +167,13 @@ describe("GitHubAppInstallationTokenProvider", () => {
     await expect(
       providerForDiscoveryError(new Error("network gone")).installationToken()
     ).rejects.toThrow("network gone")
+
+    await expect(
+      new GitHubAppInstallationTokenProvider(
+        { appId: "123", privateKey: testPrivateKey(), installationId: 1 },
+        new NonErrorRejectingGitHubHttpClient()
+      ).installationToken()
+    ).rejects.toThrow("GitHub installation token request failed.")
   })
 
   it("requires object token and discovery responses", async () => {
@@ -176,6 +222,12 @@ class RecordingGitHubHttpClient implements GitHubHttpClient {
     }
 
     return response
+  }
+}
+
+class NonErrorRejectingGitHubHttpClient implements GitHubHttpClient {
+  async request(): Promise<GitHubHttpResponse> {
+    return Promise.reject("not an error")
   }
 }
 

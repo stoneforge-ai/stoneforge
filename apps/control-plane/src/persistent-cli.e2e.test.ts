@@ -310,6 +310,41 @@ describe("persistent control-plane CLI", () => {
     }
   })
 
+  it("parses store backend flags and reports malformed options", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "stoneforge-control-plane-"))
+    const jsonPath = join(tempDir, "custom-control-plane.json")
+
+    try {
+      const defaultSqlite = await runCommand(["summary"], tempDir)
+      const jsonStore = await runCommand([
+        "summary",
+        "--store-backend",
+        "json",
+        "--json-store",
+        jsonPath,
+      ])
+      const unknownBackend = await runCommand([
+        "summary",
+        "--store-backend",
+        "memory",
+      ])
+      const missingOptionValue = await runCommand(["summary", "--sqlite-path"])
+
+      expect(defaultSqlite.code).toBe(1)
+      expect(defaultSqlite.stderr).toContain("No implementation Assignment")
+      expect(jsonStore.code).toBe(1)
+      expect(jsonStore.stderr).toContain("No implementation Assignment")
+      expect(unknownBackend.stderr).toContain(
+        "Unknown control-plane store backend memory"
+      )
+      expect(missingOptionValue.stderr).toContain(
+        "Missing value for --sqlite-path"
+      )
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it.skipIf(postgresTestUrl() === undefined)(
     "runs the command-boundary smoke flow against PostgreSQL",
     async () => {

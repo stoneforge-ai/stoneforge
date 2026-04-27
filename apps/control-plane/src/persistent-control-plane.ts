@@ -1,8 +1,18 @@
+import { Effect } from "effect"
+
 import type { DirectTaskRunSummary } from "./direct-task-summary.js"
 import {
   type ControlPlaneCommandStatus,
   type ControlPlaneStore,
 } from "./control-plane-store.js"
+import {
+  loadControlPlaneSnapshot,
+  resetControlPlaneSnapshot,
+  runControlPlaneEffect,
+  runControlPlaneProgram,
+  saveControlPlaneSnapshot,
+  type ControlPlaneStoreService,
+} from "./control-plane-runtime.js"
 import {
   exportSnapshot,
   loadControlPlane,
@@ -37,9 +47,15 @@ export class ControlPlaneApplication {
     private readonly options: LoadControlPlaneOptions = {}
   ) {}
 
-  async reset(): Promise<ControlPlaneCommandStatus> {
-    await this.store.reset()
-    return { command: "reset", id: "control-plane-store" }
+  reset(): Promise<ControlPlaneCommandStatus> {
+    return this.run(
+      resetControlPlaneSnapshot().pipe(
+        Effect.as({ command: "reset", id: "control-plane-store" }),
+        Effect.withSpan("control_plane.command", {
+          attributes: { "stoneforge.control_plane.command": "reset" },
+        })
+      )
+    )
   }
 
   async initializeWorkspace(): Promise<ControlPlaneCommandStatus> {
@@ -120,32 +136,95 @@ export class ControlPlaneApplication {
     return this.mutateAsync("merge-when-ready", mergeWhenReady)
   }
 
-  async readSummary(): Promise<DirectTaskRunSummary> {
-    return buildPersistentSummary(this.store, this.options)
+  readSummary(): Promise<DirectTaskRunSummary> {
+    return runControlPlaneEffect(
+      Effect.tryPromise({
+        try: () => buildPersistentSummary(this.store, this.options),
+        catch: (error) =>
+          commandError(error instanceof Error ? error : undefined),
+      }).pipe(
+        Effect.withSpan("control_plane.command", {
+          attributes: { "stoneforge.control_plane.command": "summary" },
+        })
+      )
+    )
   }
 
-  private async mutate(
+  private mutate(
     command: string,
     action: (
       loaded: LoadedControlPlane
     ) => Omit<ControlPlaneCommandStatus, "command">
   ): Promise<ControlPlaneCommandStatus> {
-    return this.mutateAsync(command, async (loaded) => action(loaded))
+    return this.mutateProgram(command, (loaded) =>
+      Effect.try({
+        try: () => action(loaded),
+        catch: (error) =>
+          commandError(error instanceof Error ? error : undefined),
+      })
+    )
   }
 
-  private async mutateAsync(
+  private mutateAsync(
     command: string,
     action: (
       loaded: LoadedControlPlane
     ) => Promise<Omit<ControlPlaneCommandStatus, "command">>
   ): Promise<ControlPlaneCommandStatus> {
-    const loaded = loadControlPlane(await this.store.load(), this.options)
-    const result = await action(loaded)
+    return this.mutateProgram(command, (loaded) =>
+      Effect.tryPromise({
+        try: () => action(loaded),
+        catch: (error) =>
+          commandError(error instanceof Error ? error : undefined),
+      })
+    )
+  }
 
-    await this.store.save(exportSnapshot(loaded))
+  private mutateProgram(
+    command: string,
+    action: (
+      loaded: LoadedControlPlane
+    ) => Effect.Effect<Omit<ControlPlaneCommandStatus, "command">, Error>
+  ): Promise<ControlPlaneCommandStatus> {
+    return this.run(
+      Effect.gen(this, function* () {
+        const snapshot = yield* loadControlPlaneSnapshot()
+        const loaded = yield* Effect.try({
+          try: () => loadControlPlane(snapshot, this.options),
+          catch: (error) =>
+            commandError(error instanceof Error ? error : undefined),
+        })
+        const result = yield* action(loaded)
+        const exported = yield* Effect.try({
+          try: () => exportSnapshot(loaded),
+          catch: (error) =>
+            commandError(error instanceof Error ? error : undefined),
+        })
 
-    return { command, ...result }
+        yield* saveControlPlaneSnapshot(exported)
+
+        return { command, ...result }
+      }).pipe(
+        Effect.withSpan("control_plane.command", {
+          attributes: { "stoneforge.control_plane.command": command },
+        })
+      )
+    )
+  }
+
+  private run<TResult>(
+    program: Effect.Effect<TResult, Error, ControlPlaneStoreService>
+  ): Promise<TResult> {
+    return runControlPlaneProgram(program, this.store)
   }
 }
 
 export { ControlPlaneApplication as PersistentControlPlane }
+
+function commandError(error: Error | undefined): Error {
+  if (error instanceof Error) {
+    return error
+  }
+
+  return new Error("Control-plane command failed.")
+}

@@ -88,6 +88,21 @@ describe("FetchGitHubHttpClient", () => {
     })
   })
 
+  it("reports transport failures before GitHub returns a response", async () => {
+    vi.stubGlobal("fetch", async () => Promise.reject("network unavailable"))
+
+    await expect(
+      new FetchGitHubHttpClient("https://github.test").request({
+        method: "GET",
+        path: "/repos/toolco/private",
+      })
+    ).rejects.toMatchObject({
+      message:
+        "GitHub API GET /repos/toolco/private failed before an HTTP response was available.",
+      status: 0,
+    })
+  })
+
   it("disallows request bodies for read-only methods", () => {
     const postRequest = {
       method: "POST",

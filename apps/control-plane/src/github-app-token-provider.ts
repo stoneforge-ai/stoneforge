@@ -1,5 +1,8 @@
 import { createPrivateKey, createSign, type KeyObject } from "node:crypto"
 
+import { Effect } from "effect"
+
+import { runControlPlaneEffect } from "./control-plane-runtime.js"
 import type { GitHubHttpClient } from "./github-http-client.js"
 import { GitHubHttpError } from "./github-http-client.js"
 import { jsonObject, requiredNumber, requiredString } from "./github-json.js"
@@ -45,87 +48,134 @@ export class GitHubAppInstallationTokenProvider implements GitHubTokenProvider {
     this.privateKey = parsePrivateKey(config.privateKey)
   }
 
-  async installationToken(): Promise<string> {
-    if (this.cachedToken && this.cachedToken.expiresAt > this.refreshCutoff()) {
-      return this.cachedToken.token
-    }
+  installationToken(): Promise<string> {
+    return runControlPlaneEffect(
+      Effect.gen(this, function* () {
+        if (
+          this.cachedToken &&
+          this.cachedToken.expiresAt > this.refreshCutoff()
+        ) {
+          return this.cachedToken.token
+        }
 
-    const installationId = await this.resolveInstallationId()
-    const response = await this.http.request({
-      method: "POST",
-      path: `/app/installations/${installationId}/access_tokens`,
-      token: this.appJwt(),
-    })
-    const json = jsonObject(response.json)
+        const installationId = yield* this.resolveInstallationId()
+        const response = yield* Effect.tryPromise({
+          try: () =>
+            this.http.request({
+              method: "POST",
+              path: `/app/installations/${installationId}/access_tokens`,
+              token: this.appJwt(),
+            }),
+          catch: (error) =>
+            error instanceof Error
+              ? error
+              : new GitHubIntegrationError(
+                  "GitHub installation token request failed."
+                ),
+        })
+        const json = jsonObject(response.json)
 
-    if (!json) {
-      throw new GitHubIntegrationError(
-        "GitHub installation token response was empty."
+        if (!json) {
+          return yield* Effect.fail(
+            new GitHubIntegrationError(
+              "GitHub installation token response was empty."
+            )
+          )
+        }
+
+        this.cachedToken = {
+          token: requiredString(
+            json,
+            "token",
+            "GitHub installation token response"
+          ),
+          expiresAt: Date.parse(
+            requiredString(
+              json,
+              "expires_at",
+              "GitHub installation token response"
+            )
+          ),
+        }
+
+        return this.cachedToken.token
+      }).pipe(
+        Effect.withSpan("github.create_installation_token", {
+          attributes: {
+            "stoneforge.provider.name": "github",
+            "stoneforge.provider.operation": "create_installation_token",
+          },
+        })
       )
-    }
-
-    this.cachedToken = {
-      token: requiredString(
-        json,
-        "token",
-        "GitHub installation token response"
-      ),
-      expiresAt: Date.parse(
-        requiredString(json, "expires_at", "GitHub installation token response")
-      ),
-    }
-
-    return this.cachedToken.token
+    )
   }
 
-  private async resolveInstallationId(): Promise<number> {
+  private resolveInstallationId(): Effect.Effect<number, Error> {
     if (this.config.installationId !== undefined) {
-      return this.config.installationId
+      return Effect.succeed(this.config.installationId)
     }
 
     if (this.discoveredInstallationId !== undefined) {
-      return this.discoveredInstallationId
+      return Effect.succeed(this.discoveredInstallationId)
     }
 
-    this.discoveredInstallationId = await this.discoverInstallationId()
-    return this.discoveredInstallationId
+    return this.discoverInstallationId().pipe(
+      Effect.tap((installationId) =>
+        Effect.sync(() => {
+          this.discoveredInstallationId = installationId
+        })
+      )
+    )
   }
 
-  private async discoverInstallationId(): Promise<number> {
+  private discoverInstallationId(): Effect.Effect<number, Error> {
     if (this.config.owner === undefined || this.config.repo === undefined) {
-      throw new GitHubIntegrationError(
-        "GitHub installation discovery requires owner and repo."
+      return Effect.fail(
+        new GitHubIntegrationError(
+          "GitHub installation discovery requires owner and repo."
+        )
       )
     }
 
-    try {
-      const response = await this.http.request({
-        method: "GET",
-        path: `/repos/${encodeURIComponent(this.config.owner)}/${encodeURIComponent(
-          this.config.repo
-        )}/installation`,
-        token: this.appJwt(),
+    const owner = this.config.owner
+    const repo = this.config.repo
+
+    return Effect.gen(this, function* () {
+      const response = yield* Effect.tryPromise({
+        try: () =>
+          this.http.request({
+            method: "GET",
+            path: `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(
+              repo
+            )}/installation`,
+            token: this.appJwt(),
+          }),
+        catch: (error) =>
+          error instanceof Error
+            ? installationDiscoveryError(error, owner, repo)
+            : new GitHubIntegrationError(
+                "GitHub installation discovery failed."
+              ),
       })
       const json = jsonObject(response.json)
 
       if (!json) {
-        throw new GitHubIntegrationError(
-          "GitHub installation discovery returned no installation."
+        return yield* Effect.fail(
+          new GitHubIntegrationError(
+            "GitHub installation discovery returned no installation."
+          )
         )
       }
 
       return requiredNumber(json, "id", "GitHub installation discovery")
-    } catch (error) {
-      if (error instanceof Error) {
-        throw installationDiscoveryError(
-          error,
-          this.config.owner,
-          this.config.repo
-        )
-      }
-
-      throw new GitHubIntegrationError("GitHub installation discovery failed.")
-    }
+    }).pipe(
+      Effect.withSpan("github.discover_installation", {
+        attributes: {
+          "stoneforge.provider.name": "github",
+          "stoneforge.provider.operation": "discover_installation",
+        },
+      })
+    )
   }
 
   private appJwt(): string {
