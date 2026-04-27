@@ -26,6 +26,8 @@ Read these first for V2 work:
 
 For historical behavior, old UX patterns, or prior implementations, use `docs/v2/v1-reference.md`. Do not edit `reference/` unless the user explicitly asks for legacy or prototype work.
 
+Use `docs/engineering/llm-coding-guidelines.md` for behavioral guardrails on assumptions, simplicity, surgical edits, and verification-driven execution. It reinforces these repo instructions and should resolve ambiguity in favor of smaller, clearer, verified changes.
+
 Use V2 docs as planning contracts: they should explain product intent, domain language, behavioral guarantees, and architectural constraints before code relies on them. Treat `docs/v2/UBIQUITOUS_LANGUAGE.md` as the source of truth for canonical Stoneforge terms; update it when a change introduces, renames, or sharpens domain language. Good doc updates are concise, durable, and decision-oriented; they name the behavior being promised, the boundary it affects, and any intentionally unresolved details. Update `docs/v2/` when implementation changes documented V2 behavior.
 
 ## Implementation Guidelines
@@ -91,53 +93,36 @@ Hard rules: every `useEffect` must synchronize with something external to React,
 
 **Software must be simple, well-separated, encapsulated, cohesive, loosely coupled, and explicit. DRY and SOLID are tools to support those goals, not goals by themselves. When principles conflict, prefer clarity, simplicity, and ease of change over abstraction purity.**
 
-### Core standards
+### Design and change standards
 
-These take priority over the rest.
+These are ordered by priority.
 
 1. **Code must be simple.**
-   Choose the simplest design that correctly solves the real problem.
+   Choose the simplest design that correctly solves the real problem. Do not add features, configuration, extension points, error handling, or abstractions for scenarios that are not required by the request or documented V2 contracts.
 
-2. **Code must have clear separation of concerns.**
+2. **Changes must be goal-directed and verifiable.**
+   Every changed line should trace to the requested behavior, a cleanup caused by that behavior, or a test/doc/quality check proving it. For non-trivial work, define success criteria before editing and verify before handoff.
+
+3. **Code must have clear separation of concerns.**
    Distinct responsibilities must be kept in distinct modules, layers, or services.
 
-3. **Modules must encapsulate their implementation details.**
+4. **Modules must encapsulate their implementation details.**
    Internals must be hidden behind small, stable, well-defined interfaces.
 
-### Structural standards
-
-These support the core standards.
-
-4. **Modules must be highly cohesive.**
+5. **Modules must be highly cohesive.**
    Each module should contain closely related behavior and one clear purpose.
 
-5. **Modules must be loosely coupled.**
+6. **Modules must be loosely coupled.**
    A change in one module should require minimal change elsewhere.
 
-6. **Code must be explicit and predictable.**
+7. **Code must be explicit and predictable.**
    Avoid hidden behavior, unnecessary magic, surprising side effects, and unclear control flow.
 
-### Tactical standards
-
-Use these as implementation heuristics, not absolute goals.
-
-7. **Code must not duplicate knowledge or business rules.**
+8. **Code must not duplicate knowledge or business rules.**
    Maintain a single source of truth for logic, policy, and domain meaning.
 
-8. **Code must not introduce speculative abstraction.**
-   Do not generalize for hypothetical future requirements.
-
-9. **Composition should be preferred over inheritance.**
-   Build behavior from small, composable parts unless inheritance is clearly simpler and safer.
-
-10. **Software must follow SOLID where it improves maintainability.**
-    In particular:
-
-- modules should have one reason to change
-- interfaces should be small and purpose-specific
-- extensions should not require destabilizing existing code
-- substitutes must honor their contracts
-- high-level policy should depend on abstractions, not details
+9. **Abstractions must earn their keep.**
+   Do not generalize for hypothetical requirements. Prefer composition over inheritance. Use small purpose-specific interfaces, substitutable implementations, and stable contracts between high-level policy and details only when they make code simpler to change without adding indirection.
 
 ### Architecture depth standards
 
@@ -188,17 +173,10 @@ When committing, commit only files you changed after a meaningful unit of work a
 
 When standards conflict, apply them in this order:
 
-**simplicity > separation of concerns > encapsulation > cohesion/coupling > explicitness > DRY/SOLID heuristics**
+**simplicity > goal-directed scope > separation of concerns > encapsulation > cohesion/coupling > explicitness > DRY/SOLID heuristics**
 
 Apply these standards with judgment. Do not use DRY, SOLID, metrics, or module splitting to add indirection, obscure behavior, or fracture cohesive code. Prefer clarity over cleverness, duplication over the wrong abstraction, and real use cases over speculative seams.
 
 ### Review test
 
-A change is acceptable only if it makes the codebase, on balance:
-
-- simpler
-- easier to understand
-- easier to change safely
-- less coupled
-- less repetitive in knowledge
-- more predictable for future engineers
+A change is acceptable only if it makes the codebase, on balance, simpler, easier to understand, easier to change safely, less coupled, less repetitive in knowledge, and more predictable for future engineers without broadening scope unnecessarily.
