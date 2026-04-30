@@ -14,6 +14,8 @@ import {
   agentStartCommand,
   agentStopCommand,
   agentStreamCommand,
+  agentDisableCommand,
+  agentEnableCommand,
 } from './agent.js';
 
 describe('Agent Command Structure', () => {
@@ -31,6 +33,8 @@ describe('Agent Command Structure', () => {
       expect(agentCommand.subcommands!.start).toBe(agentStartCommand);
       expect(agentCommand.subcommands!.stop).toBe(agentStopCommand);
       expect(agentCommand.subcommands!.stream).toBe(agentStreamCommand);
+      expect(agentCommand.subcommands!.disable).toBe(agentDisableCommand);
+      expect(agentCommand.subcommands!.enable).toBe(agentEnableCommand);
     });
 
     it('should default to list handler', () => {
@@ -219,6 +223,24 @@ describe('Agent Command Structure', () => {
       expect(typeof agentStreamCommand.handler).toBe('function');
     });
   });
+
+  describe('agentDisableCommand', () => {
+    it('should have correct structure', () => {
+      expect(agentDisableCommand.name).toBe('disable');
+      expect(agentDisableCommand.description).toBe('Disable an agent (skipped by dispatch and scheduler, kept in the list)');
+      expect(agentDisableCommand.usage).toBe('sf agent disable <id>');
+      expect(typeof agentDisableCommand.handler).toBe('function');
+    });
+  });
+
+  describe('agentEnableCommand', () => {
+    it('should have correct structure', () => {
+      expect(agentEnableCommand.name).toBe('enable');
+      expect(agentEnableCommand.description).toBe('Enable a previously disabled agent');
+      expect(agentEnableCommand.usage).toBe('sf agent enable <id>');
+      expect(typeof agentEnableCommand.handler).toBe('function');
+    });
+  });
 });
 
 describe('Agent Command Validation', () => {
@@ -269,6 +291,22 @@ describe('Agent Command Validation', () => {
   describe('agentStreamCommand', () => {
     it('should fail without id argument', async () => {
       const result = await agentStreamCommand.handler([], {});
+      expect(result.exitCode).not.toBe(0);
+      expect(result.error).toContain('Usage');
+    });
+  });
+
+  describe('agentDisableCommand', () => {
+    it('should fail without id argument', async () => {
+      const result = await agentDisableCommand.handler([], {});
+      expect(result.exitCode).not.toBe(0);
+      expect(result.error).toContain('Usage');
+    });
+  });
+
+  describe('agentEnableCommand', () => {
+    it('should fail without id argument', async () => {
+      const result = await agentEnableCommand.handler([], {});
       expect(result.exitCode).not.toBe(0);
       expect(result.error).toContain('Usage');
     });

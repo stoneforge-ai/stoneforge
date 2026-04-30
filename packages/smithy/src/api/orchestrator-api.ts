@@ -230,6 +230,14 @@ export interface OrchestratorAPI extends QuarryAPI {
       markAsStarted?: boolean;
     }
   ): Promise<Task>;
+
+  /**
+   * Updates an agent's metadata (merges with existing metadata)
+   */
+  updateAgentMetadata(
+    agentId: EntityId,
+    updates: Partial<AgentMetadata>
+  ): Promise<AgentEntity>;
 }
 
 // ============================================================================
@@ -629,9 +637,9 @@ export class OrchestratorAPIImpl extends QuarryAPIImpl implements OrchestratorAP
   }
 
   /**
-   * Updates an agent's metadata
+   * Updates an agent's metadata (merges with existing metadata)
    */
-  private async updateAgentMetadata(
+  async updateAgentMetadata(
     agentId: EntityId,
     updates: Partial<AgentMetadata>
   ): Promise<AgentEntity> {

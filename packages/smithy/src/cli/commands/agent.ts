@@ -13,7 +13,7 @@
 import type { Command, GlobalOptions, CommandResult, CommandOption } from '@stoneforge/quarry/cli';
 import { success, failure, ExitCode, getFormatter, getOutputMode, OPERATOR_ENTITY_ID } from '@stoneforge/quarry/cli';
 import type { EntityId, ElementId } from '@stoneforge/core';
-import type { AgentRole, WorkerMode, StewardFocus } from '../../types/index.js';
+import type { AgentRole, WorkerMode, StewardFocus, AgentMetadata } from '../../types/index.js';
 import type { OrchestratorAPI, AgentEntity } from '../../api/index.js';
 
 // ============================================================================
@@ -1047,6 +1047,72 @@ Examples:
 };
 
 // ============================================================================
+// Agent Disable Command
+// ============================================================================
+
+async function agentDisableHandler(
+  args: string[],
+  options: GlobalOptions
+): Promise<CommandResult> {
+  const [id] = args;
+  if (!id) {
+    return failure('Usage: sf agent disable <id>', ExitCode.INVALID_ARGUMENTS);
+  }
+  const { api, error } = await createOrchestratorClient(options);
+  if (error || !api) return failure(error ?? 'Failed to create API', ExitCode.GENERAL_ERROR);
+
+  const agent = await api.getAgent(id as EntityId);
+  if (!agent) return failure(`Agent not found: ${id}`, ExitCode.NOT_FOUND);
+
+  await api.updateAgentMetadata(id as EntityId, { disabled: true } as Partial<AgentMetadata>);
+  return success({ id, disabled: true }, `Agent ${id} disabled. It will be skipped by dispatch and the scheduler.`);
+}
+
+export const agentDisableCommand: Command = {
+  name: 'disable',
+  description: 'Disable an agent (skipped by dispatch and scheduler, kept in the list)',
+  usage: 'sf agent disable <id>',
+  help: `Mark an agent as disabled. The agent stays visible in 'sf agent list' but is skipped by the dispatch daemon and steward scheduler. In-flight sessions are NOT terminated; only future work is blocked. Re-enable with 'sf agent enable <id>'.
+
+Arguments:
+  id    Agent identifier`,
+  handler: agentDisableHandler as Command['handler'],
+};
+
+// ============================================================================
+// Agent Enable Command
+// ============================================================================
+
+async function agentEnableHandler(
+  args: string[],
+  options: GlobalOptions
+): Promise<CommandResult> {
+  const [id] = args;
+  if (!id) {
+    return failure('Usage: sf agent enable <id>', ExitCode.INVALID_ARGUMENTS);
+  }
+  const { api, error } = await createOrchestratorClient(options);
+  if (error || !api) return failure(error ?? 'Failed to create API', ExitCode.GENERAL_ERROR);
+
+  const agent = await api.getAgent(id as EntityId);
+  if (!agent) return failure(`Agent not found: ${id}`, ExitCode.NOT_FOUND);
+
+  await api.updateAgentMetadata(id as EntityId, { disabled: undefined } as Partial<AgentMetadata>);
+  return success({ id, disabled: false }, `Agent ${id} enabled.`);
+}
+
+export const agentEnableCommand: Command = {
+  name: 'enable',
+  description: 'Enable a previously disabled agent',
+  usage: 'sf agent enable <id>',
+  help: `Re-enable a disabled agent so it is considered again by dispatch and the scheduler.
+
+Arguments:
+  id    Agent identifier`,
+  handler: agentEnableHandler as Command['handler'],
+};
+
+// ============================================================================
 // Main Agent Command
 // ============================================================================
 
@@ -1063,6 +1129,8 @@ Subcommands:
   start     Start an agent process
   stop      Stop an agent session
   stream    Get agent channel for streaming
+  disable   Disable an agent (skipped by dispatch and scheduler)
+  enable    Re-enable a previously disabled agent
 
 Examples:
   sf agent list
@@ -1076,6 +1144,8 @@ Examples:
     start: agentStartCommand,
     stop: agentStopCommand,
     stream: agentStreamCommand,
+    disable: agentDisableCommand,
+    enable: agentEnableCommand,
     // Aliases (hidden from --help via dedup in getCommandHelp)
     create: agentRegisterCommand,
     ls: agentListCommand,
