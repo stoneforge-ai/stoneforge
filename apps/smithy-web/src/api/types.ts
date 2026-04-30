@@ -48,6 +48,8 @@ export interface BaseAgentMetadata {
   provider?: string;
   model?: string;
   executablePath?: string;
+  /** When true, the agent is parked: kept in the list but skipped by dispatch and the scheduler. */
+  disabled?: boolean;
 }
 
 export interface DirectorMetadata extends BaseAgentMetadata {

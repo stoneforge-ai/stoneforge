@@ -491,6 +491,27 @@ export function useChangeAgentTriggers() {
 }
 
 /**
+ * Hook to disable or enable an agent.
+ * Disabled agents stay in the list but are skipped by dispatch and the steward scheduler.
+ */
+export function useToggleAgentDisabled() {
+  const queryClient = useQueryClient();
+
+  return useMutation<AgentResponse, Error, { agentId: string; disabled: boolean }>({
+    mutationFn: async ({ agentId, disabled }) => {
+      return fetchApi<AgentResponse>(`/agents/${agentId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ disabled }),
+      });
+    },
+    onSuccess: (_, { agentId }) => {
+      queryClient.invalidateQueries({ queryKey: ['agents'] });
+      queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
+    },
+  });
+}
+
+/**
  * Hook to delete an agent
  */
 export function useDeleteAgent() {
