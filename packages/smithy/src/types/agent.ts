@@ -187,6 +187,8 @@ export interface BaseAgentMetadata {
   readonly model?: string;
   /** Custom executable path for the agent's provider CLI (e.g., '/usr/local/bin/claude'). If not set, uses provider default. */
   readonly executablePath?: string;
+  /** When true, this agent is parked and excluded from dispatch and scheduler triggers. Defaults to false (omitted). */
+  readonly disabled?: boolean;
 }
 
 /**

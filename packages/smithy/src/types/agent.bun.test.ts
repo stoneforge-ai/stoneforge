@@ -2,7 +2,7 @@
  * Agent Types Tests
  */
 
-import { describe, test, expect } from 'bun:test';
+import { describe, it, test, expect } from 'bun:test';
 import type {
   CronTrigger,
   EventTrigger,
@@ -154,6 +154,22 @@ describe('AgentMetadata type guards', () => {
     expect(isStewardMetadata(steward)).toBe(true);
     expect(isStewardMetadata(director)).toBe(false);
     expect(isStewardMetadata(worker)).toBe(false);
+  });
+});
+
+describe('disabled flag', () => {
+  it('accepts disabled: true on each role', () => {
+    const director: DirectorMetadata = { agentRole: 'director', sessionStatus: 'idle', disabled: true };
+    const worker: WorkerMetadata = { agentRole: 'worker', workerMode: 'ephemeral', sessionStatus: 'idle', disabled: true };
+    const steward: StewardMetadata = { agentRole: 'steward', stewardFocus: 'merge', sessionStatus: 'idle', disabled: true };
+    expect(director.disabled).toBe(true);
+    expect(worker.disabled).toBe(true);
+    expect(steward.disabled).toBe(true);
+  });
+
+  it('treats omitted disabled as enabled', () => {
+    const director: DirectorMetadata = { agentRole: 'director', sessionStatus: 'idle' };
+    expect(director.disabled).toBeUndefined();
   });
 });
 
