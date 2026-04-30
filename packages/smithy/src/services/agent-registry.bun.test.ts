@@ -14,6 +14,8 @@ import {
   type AgentRegistry,
   generateAgentChannelName,
   parseAgentChannelName,
+  isAgentDisabled,
+  isAgentEnabled,
 } from './agent-registry.js';
 import {
   type AgentEntity,
@@ -693,5 +695,34 @@ describe('AgentRegistry', () => {
         registry.ensureAgentChannel('non-existent-id' as EntityId)
       ).rejects.toThrow('Agent not found');
     });
+  });
+});
+
+describe('isAgentDisabled / isAgentEnabled', () => {
+  const baseAgent = {
+    id: 'el-test',
+    type: 'entity' as const,
+    createdAt: '2026-04-29T00:00:00Z',
+    updatedAt: '2026-04-29T00:00:00Z',
+    createdBy: 'el-0000',
+    tags: [],
+    metadata: { agent: { agentRole: 'worker' as const, workerMode: 'ephemeral' as const, sessionStatus: 'idle' as const } },
+  };
+
+  test('returns false when disabled is undefined', () => {
+    expect(isAgentDisabled(baseAgent as never)).toBe(false);
+    expect(isAgentEnabled(baseAgent as never)).toBe(true);
+  });
+
+  test('returns true when disabled is true', () => {
+    const disabled = { ...baseAgent, metadata: { agent: { ...baseAgent.metadata.agent, disabled: true } } };
+    expect(isAgentDisabled(disabled as never)).toBe(true);
+    expect(isAgentEnabled(disabled as never)).toBe(false);
+  });
+
+  test('returns false when disabled is explicitly false', () => {
+    const enabled = { ...baseAgent, metadata: { agent: { ...baseAgent.metadata.agent, disabled: false } } };
+    expect(isAgentDisabled(enabled as never)).toBe(false);
+    expect(isAgentEnabled(enabled as never)).toBe(true);
   });
 });

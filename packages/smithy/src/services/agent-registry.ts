@@ -43,6 +43,16 @@ import {
 export type { AgentEntity };
 export { isAgentEntity, getAgentMetadata };
 
+/** Returns true if the agent is disabled (parked from dispatch and scheduling). */
+export function isAgentDisabled(agent: AgentEntity): boolean {
+  return getAgentMetadata(agent)?.disabled === true;
+}
+
+/** Returns true if the agent is not disabled. Inverse of isAgentDisabled. */
+export function isAgentEnabled(agent: AgentEntity): boolean {
+  return !isAgentDisabled(agent);
+}
+
 // ============================================================================
 // Constants
 // ============================================================================
