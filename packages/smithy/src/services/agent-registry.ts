@@ -470,7 +470,7 @@ export class AgentRegistryImpl implements AgentRegistry {
     const directors = await this.getDirectors();
     const running = directors.filter(d => {
       const meta = getAgentMetadata(d);
-      return meta?.sessionStatus === 'running';
+      return meta?.sessionStatus === 'running' && !isAgentDisabled(d);
     });
     if (preferredId) {
       const preferred = running.find(d => d.id === asElementId(preferredId));

@@ -726,3 +726,55 @@ describe('isAgentDisabled / isAgentEnabled', () => {
     expect(isAgentEnabled(enabled as never)).toBe(true);
   });
 });
+
+describe('getAvailableDirector with disabled', () => {
+  let registry: AgentRegistry;
+  let api: QuarryAPI;
+  let testDbPath: string;
+  let systemEntity: EntityId;
+
+  beforeEach(async () => {
+    testDbPath = `/tmp/agent-registry-director-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`;
+    const storage = createStorage(testDbPath);
+    initializeSchema(storage);
+    api = createQuarryAPI(storage);
+    registry = createAgentRegistry(api);
+
+    const entity = await createEntity({
+      name: 'test-system',
+      entityType: EntityTypeValue.SYSTEM,
+      createdBy: 'system:test' as EntityId,
+    });
+    const saved = await api.create(entity as unknown as Record<string, unknown> & { createdBy: EntityId });
+    systemEntity = saved.id as unknown as EntityId;
+  });
+
+  afterEach(() => {
+    if (fs.existsSync(testDbPath)) {
+      fs.unlinkSync(testDbPath);
+    }
+  });
+
+  test('does not return a disabled director even if its session is running', async () => {
+    const enabled = await registry.registerDirector({
+      name: 'CEO-1',
+      createdBy: systemEntity,
+    });
+    const disabled = await registry.registerDirector({
+      name: 'CEO-2',
+      createdBy: systemEntity,
+    });
+
+    // Mark both as running, then mark the second as disabled.
+    await registry.updateAgentMetadata(enabled.id as unknown as EntityId, {
+      sessionStatus: 'running',
+    } as never);
+    await registry.updateAgentMetadata(disabled.id as unknown as EntityId, {
+      sessionStatus: 'running',
+      disabled: true,
+    } as never);
+
+    const result = await registry.getAvailableDirector();
+    expect(result?.id).toBe(enabled.id);
+  });
+});
