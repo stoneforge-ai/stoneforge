@@ -2,10 +2,14 @@
  * Agent Command Tests
  *
  * Tests for orchestrator CLI agent commands structure and validation.
- * Note: Full integration tests would require database setup.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect, test, beforeEach } from 'bun:test';
+import { createStorage, initializeSchema } from '@stoneforge/quarry';
+import { createOrchestratorAPI } from '../../api/index.js';
+import { isAgentDisabled } from '../../services/agent-registry.js';
+import type { EntityId } from '@stoneforge/core';
+import type { AgentMetadata } from '../../types/index.js';
 import {
   agentCommand,
   agentListCommand,
@@ -310,5 +314,74 @@ describe('Agent Command Validation', () => {
       expect(result.exitCode).not.toBe(0);
       expect(result.error).toContain('Usage');
     });
+  });
+});
+
+// ============================================================================
+// Behavioural round-trip tests for agent disable / enable
+//
+// The CLI handlers call createOrchestratorClient(), which runs
+// findStoneforgeDir(process.cwd()) before honouring options.db. Invoking the
+// handler literally in a test environment (no .stoneforge dir on disk) would
+// always hit the "Run sf init first" early-return path, so these tests verify
+// the mutation behaviour by calling the SAME api methods the handlers call,
+// using an in-memory SQLite backend. The handler bodies are intentionally
+// thin wrappers around api.updateAgentMetadata, so this approach gives full
+// coverage of the observable effect without duplicating handler logic.
+// ============================================================================
+
+describe('agent disable / enable behavioural', () => {
+  // Reuse the OPERATOR_ENTITY_ID constant ('el-0000') as the creator.
+  // It is a valid EntityId string - no DB row is needed for it since
+  // registerWorker only stores the value, it does not foreign-key-check it.
+  const CREATOR = 'el-0000' as EntityId;
+
+  let api: ReturnType<typeof createOrchestratorAPI>;
+  let agentId: EntityId;
+
+  beforeEach(async () => {
+    const backend = createStorage({ path: ':memory:' });
+    initializeSchema(backend);
+    api = createOrchestratorAPI(backend);
+
+    const registered = await api.registerWorker({
+      name: 'test-worker',
+      workerMode: 'ephemeral',
+      createdBy: CREATOR,
+    });
+    agentId = registered.id as unknown as EntityId;
+  });
+
+  test('disable round-trip: updateAgentMetadata sets disabled to true', async () => {
+    // This mirrors exactly what agentDisableHandler does after resolving the API.
+    await api.updateAgentMetadata(agentId, { disabled: true } as Partial<AgentMetadata>);
+
+    const agent = await api.getAgent(agentId);
+    expect(agent).toBeDefined();
+    expect((agent!.metadata.agent as { disabled?: boolean }).disabled).toBe(true);
+    expect(isAgentDisabled(agent!)).toBe(true);
+  });
+
+  test('enable round-trip: updateAgentMetadata removes disabled key from serialised JSON', async () => {
+    // First disable the agent, then re-enable it - same sequence as the two
+    // handlers called back-to-back.
+    await api.updateAgentMetadata(agentId, { disabled: true } as Partial<AgentMetadata>);
+    // Sanity-check that it is actually disabled before we enable it.
+    const disabledAgent = await api.getAgent(agentId);
+    expect(isAgentDisabled(disabledAgent!)).toBe(true);
+
+    // This mirrors exactly what agentEnableHandler does after resolving the API.
+    await api.updateAgentMetadata(agentId, { disabled: undefined } as Partial<AgentMetadata>);
+
+    const agent = await api.getAgent(agentId);
+    expect(agent).toBeDefined();
+
+    // isAgentDisabled must return false after the enable call.
+    expect(isAgentDisabled(agent!)).toBe(false);
+
+    // JSON.stringify drops undefined values, so the serialised agent metadata
+    // must contain no "disabled" key - this is the contract that
+    // absent-means-enabled relies on.
+    expect(JSON.stringify(agent!.metadata!.agent).includes('"disabled"')).toBe(false);
   });
 });
