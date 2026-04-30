@@ -10,6 +10,7 @@ import type { EntityId, ElementId, Task } from '@stoneforge/core';
 import { createTimestamp, ElementType } from '@stoneforge/core';
 import type { SessionFilter, SpawnedSessionEvent, AgentRole, WorkerMetadata, StewardMetadata } from '../../index.js';
 import { loadRolePrompt, buildWorkflowPresetSection, getAgentMetadata, generateSessionBranchName, generateSessionWorktreePath, trackListeners } from '../../index.js';
+import { isAgentDisabled } from '../../services/agent-registry.js';
 import type { WorkflowPresetContext } from '../../prompts/index.js';
 import { getValue } from '@stoneforge/quarry';
 import type { WorkflowPreset, AgentPermissionModel } from '@stoneforge/quarry';
@@ -234,6 +235,18 @@ export function createSessionRoutes(
       const agent = await agentRegistry.getAgent(agentId);
       if (!agent) {
         return c.json({ error: { code: 'NOT_FOUND', message: 'Agent not found' } }, 404);
+      }
+
+      if (isAgentDisabled(agent)) {
+        return c.json(
+          {
+            error: {
+              code: 'AGENT_DISABLED',
+              message: `Agent ${agentId} is disabled. Enable it before starting a session.`,
+            },
+          },
+          409
+        );
       }
 
       const existingSession = sessionManager.getActiveSession(agentId);
@@ -558,6 +571,18 @@ Please begin working on this task. Use \`sf task get ${taskResult.id}\` to see f
       const agent = await agentRegistry.getAgent(agentId);
       if (!agent) {
         return c.json({ error: { code: 'NOT_FOUND', message: 'Agent not found' } }, 404);
+      }
+
+      if (isAgentDisabled(agent)) {
+        return c.json(
+          {
+            error: {
+              code: 'AGENT_DISABLED',
+              message: `Agent ${agentId} is disabled. Enable it before resuming a session.`,
+            },
+          },
+          409
+        );
       }
 
       const existingSession = sessionManager.getActiveSession(agentId);
