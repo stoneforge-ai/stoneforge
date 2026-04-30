@@ -41,7 +41,7 @@ import { createLogger } from '../utils/logger.js';
 import { isRateLimitMessage, parseRateLimitResetTime, getFallbackResetTime } from '../utils/rate-limit-parser.js';
 
 import type { AgentRegistry, AgentEntity } from './agent-registry.js';
-import { getAgentMetadata } from './agent-registry.js';
+import { getAgentMetadata, isAgentDisabled } from './agent-registry.js';
 import type { SessionManager, SessionRecord } from '../runtime/session-manager.js';
 import type { DispatchService, DispatchOptions } from './dispatch-service.js';
 import type { WorktreeManager, CreateWorktreeResult } from '../git/worktree-manager.js';
@@ -876,6 +876,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       // defer task assignment so the next cycle's triage pass can handle them.
       const availableWorkers: AgentEntity[] = [];
       for (const worker of workers) {
+        if (isAgentDisabled(worker)) continue;
         const session = this.sessionManager.getActiveSession(asEntityId(worker.id));
         if (session) continue;
 
@@ -953,6 +954,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       for (const agent of agents) {
         try {
           const agentId = asEntityId(agent.id);
+          if (isAgentDisabled(agent)) continue;
           const meta = getAgentMetadata(agent);
           if (!meta) continue;
 
@@ -1083,9 +1085,10 @@ export class DispatchDaemonImpl implements DispatchDaemon {
     try {
       const stewards = await this.agentRegistry.getStewards();
 
-      // Find available stewards (no active session)
+      // Find available stewards (no active session, not disabled)
       const availableStewards: AgentEntity[] = [];
       for (const steward of stewards) {
+        if (isAgentDisabled(steward)) continue;
         const session = this.sessionManager.getActiveSession(asEntityId(steward.id));
         if (!session) {
           availableStewards.push(steward);
@@ -1220,6 +1223,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       const stewardsUsedThisCycle = new Set<string>();
 
       for (const worker of workers) {
+        if (isAgentDisabled(worker)) continue;
         const workerId = asEntityId(worker.id);
 
         // 2. Skip if worker has an active session
@@ -1324,6 +1328,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       });
 
       for (const steward of mergeStewards) {
+        if (isAgentDisabled(steward)) continue;
         const stewardId = asEntityId(steward.id);
 
         // Skip if steward has an active session
@@ -3434,6 +3439,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
     // cycle but may still have tasks assigned from the previous cycle.
     let recoverySteward: AgentEntity | undefined;
     for (const steward of stewards) {
+      if (isAgentDisabled(steward)) continue;
       const sid = asEntityId(steward.id);
       if (stewardsUsedThisCycle?.has(sid as string)) continue;
       const session = this.sessionManager.getActiveSession(sid);

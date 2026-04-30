@@ -313,6 +313,7 @@ export function createAgentRoutes(services: Services) {
         executablePath?: string | null;
         targetBranch?: string | null;
         triggers?: Array<{ type: 'cron'; schedule: string } | { type: 'event'; event: string; condition?: string }>;
+        disabled?: boolean;
       };
 
       const agent = await agentRegistry.getAgent(agentId);
@@ -338,6 +339,10 @@ export function createAgentRoutes(services: Services) {
 
       if (body.targetBranch !== undefined && body.targetBranch !== null && (typeof body.targetBranch !== 'string' || body.targetBranch.trim().length === 0)) {
         return c.json({ error: { code: 'VALIDATION_ERROR', message: 'targetBranch must be a non-empty string or null' } }, 400);
+      }
+
+      if (body.disabled !== undefined && typeof body.disabled !== 'boolean') {
+        return c.json({ error: { code: 'VALIDATION_ERROR', message: 'disabled must be a boolean' } }, 400);
       }
 
       // Update name if provided
@@ -404,6 +409,27 @@ export function createAgentRoutes(services: Services) {
             await stewardScheduler.registerSteward(agentId);
           } catch (err) {
             logger.warn('Failed to re-register steward with scheduler after trigger update:', err);
+          }
+        }
+      }
+
+      // Toggle disabled flag. Setting to false drops the property so the absent-means-enabled
+      // contract holds in the JSON-serialised metadata. Stewards re-register or unregister
+      // immediately so a running scheduler does not need a restart.
+      if (body.disabled !== undefined) {
+        updatedAgent = await agentRegistry.updateAgentMetadata(agentId, {
+          disabled: body.disabled === false ? undefined : true,
+        });
+        const isSteward = updatedAgent.metadata?.agent?.agentRole === 'steward';
+        if (isSteward && stewardScheduler.isRunning()) {
+          try {
+            if (body.disabled) {
+              await stewardScheduler.unregisterSteward(agentId);
+            } else {
+              await stewardScheduler.registerSteward(agentId);
+            }
+          } catch (err) {
+            logger.warn('Failed to update steward scheduler state after disabled toggle:', err);
           }
         }
       }

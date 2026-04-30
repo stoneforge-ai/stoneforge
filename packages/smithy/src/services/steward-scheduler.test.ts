@@ -38,13 +38,15 @@ function createMockAgentEntity(
   id: string,
   name: string,
   focus: 'merge' | 'docs' | 'recovery' | 'custom',
-  triggers: StewardTrigger[] = []
+  triggers: StewardTrigger[] = [],
+  disabled?: boolean
 ): AgentEntity {
   const metadata: StewardMetadata = {
     agentRole: 'steward',
     stewardFocus: focus,
     triggers,
     sessionStatus: 'idle',
+    ...(disabled !== undefined ? { disabled } : {}),
   };
 
   return {
@@ -915,5 +917,55 @@ describe('StewardSchedulerImpl - logging', () => {
     );
 
     await scheduler.stop();
+  });
+});
+
+// ============================================================================
+// Disabled Steward Tests
+// ============================================================================
+
+describe('disabled stewards', () => {
+  it('registerSteward returns false and registers nothing when the steward is disabled', async () => {
+    const disabledSteward = createMockAgentEntity(
+      'steward-disabled',
+      'Disabled Steward',
+      'merge',
+      [{ type: 'cron', schedule: '*/5 * * * *' }],
+      true
+    );
+    const registry = createMockAgentRegistry([disabledSteward]);
+    const executor = createMockExecutor();
+    const scheduler = createStewardScheduler(registry, executor);
+
+    const ok = await scheduler.registerSteward('steward-disabled' as EntityId);
+    expect(ok).toBe(false);
+
+    // No cron jobs or event subscriptions should have been created.
+    const stats = scheduler.getStats();
+    expect(stats.registeredStewards).toBe(0);
+    expect(stats.activeCronJobs).toBe(0);
+    expect(stats.activeEventSubscriptions).toBe(0);
+  });
+
+  it('registerAllStewards skips disabled stewards in the count', async () => {
+    const enabledSteward = createMockAgentEntity(
+      's1',
+      's1',
+      'merge',
+      [{ type: 'cron', schedule: '*/5 * * * *' }]
+    );
+    const disabledSteward = createMockAgentEntity(
+      's2',
+      's2',
+      'docs',
+      [{ type: 'cron', schedule: '0 * * * *' }],
+      true
+    );
+    const registry = createMockAgentRegistry([enabledSteward, disabledSteward]);
+    const executor = createMockExecutor();
+    const scheduler = createStewardScheduler(registry, executor);
+
+    const registered = await scheduler.registerAllStewards();
+    expect(registered).toBe(1);
   });
 });

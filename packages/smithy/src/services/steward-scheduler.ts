@@ -41,7 +41,7 @@ import type { WorkflowPreset, AgentPermissionModel } from '@stoneforge/quarry';
 import { AUTO_ALLOWED_TOOLS, AUTO_ALLOWED_SF_COMMANDS } from '../permissions/types.js';
 import { detectTargetBranch } from '../git/merge.js';
 import type { AgentRegistry, AgentEntity } from './agent-registry.js';
-import { getAgentMetadata } from './agent-registry.js';
+import { getAgentMetadata, isAgentDisabled } from './agent-registry.js';
 import type { MergeStewardService } from './merge-steward-service.js';
 import type { DocsStewardService } from './docs-steward-service.js';
 import type { RateLimitTracker } from './rate-limit-tracker.js';
@@ -591,6 +591,11 @@ export class StewardSchedulerImpl implements StewardScheduler {
 
     const metadata = getAgentMetadata(agent);
     if (!metadata || metadata.agentRole !== 'steward') {
+      return false;
+    }
+
+    if (isAgentDisabled(agent)) {
+      logger.debug(`Skipping disabled steward ${stewardId}`);
       return false;
     }
 

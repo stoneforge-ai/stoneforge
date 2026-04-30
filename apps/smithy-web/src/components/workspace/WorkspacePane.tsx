@@ -13,7 +13,7 @@ import { StreamViewer } from './StreamViewer';
 import { TerminalInput } from './TerminalInput';
 import { Tooltip } from '@stoneforge/ui';
 import { SessionHistoryModal } from './SessionHistoryModal';
-import { useAgentStatus, useStartAgentSession, useStopAgentSession, useInterruptAgentSession, useResumeAgentSession } from '../../api/hooks/useAgents';
+import { useAgent, useAgentStatus, useStartAgentSession, useStopAgentSession, useInterruptAgentSession, useResumeAgentSession } from '../../api/hooks/useAgents';
 import { useAgentTokens, formatTokenCount } from '../../api/hooks/useAgentTokens';
 
 export interface WorkspacePaneProps {
@@ -92,6 +92,8 @@ export const WorkspacePane = forwardRef<WorkspacePaneHandle, WorkspacePaneProps>
 
   // Session status and controls for workers (not director - that has its own panel)
   const { data: statusData } = useAgentStatus(pane.agentRole !== 'director' ? pane.agentId : undefined);
+  const { data: agentData } = useAgent(pane.agentId);
+  const isAgentDisabled = agentData?.agent?.metadata?.agent?.disabled === true;
   const startSession = useStartAgentSession();
   const stopSession = useStopAgentSession();
   const interruptSession = useInterruptAgentSession();
@@ -337,7 +339,7 @@ export const WorkspacePane = forwardRef<WorkspacePaneHandle, WorkspacePaneProps>
                       e.stopPropagation();
                       handleStartSession();
                     }}
-                    disabled={startSession.isPending}
+                    disabled={startSession.isPending || isAgentDisabled}
                     className="
                       p-1 rounded
                       text-green-600 dark:text-green-400
@@ -345,7 +347,7 @@ export const WorkspacePane = forwardRef<WorkspacePaneHandle, WorkspacePaneProps>
                       transition-colors
                       disabled:opacity-50
                     "
-                    title="Start Session"
+                    title={isAgentDisabled ? 'Agent is disabled. Enable it before starting a session.' : 'Start Session'}
                     data-testid="pane-start-session"
                   >
                     {startSession.isPending ? (
@@ -694,7 +696,8 @@ export const WorkspacePane = forwardRef<WorkspacePaneHandle, WorkspacePaneProps>
                 {/* Start button */}
                 <button
                   onClick={handleStartSession}
-                  disabled={startSession.isPending}
+                  disabled={startSession.isPending || isAgentDisabled}
+                  title={isAgentDisabled ? 'Agent is disabled. Enable it before starting a session.' : undefined}
                   className="
                     inline-flex items-center gap-2 flex-shrink-0
                     px-4 py-2 rounded-lg

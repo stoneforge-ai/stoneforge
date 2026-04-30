@@ -2,10 +2,17 @@
  * Agent Command Tests
  *
  * Tests for orchestrator CLI agent commands structure and validation.
- * Note: Full integration tests would require database setup.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect, test, beforeEach } from 'bun:test';
+import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createStorage, initializeSchema } from '@stoneforge/quarry';
+import { createOrchestratorAPI } from '../../api/index.js';
+import { isAgentDisabled } from '../../services/agent-registry.js';
+import type { EntityId } from '@stoneforge/core';
+import type { AgentMetadata } from '../../types/index.js';
 import {
   agentCommand,
   agentListCommand,
@@ -14,6 +21,8 @@ import {
   agentStartCommand,
   agentStopCommand,
   agentStreamCommand,
+  agentDisableCommand,
+  agentEnableCommand,
 } from './agent.js';
 
 describe('Agent Command Structure', () => {
@@ -31,6 +40,8 @@ describe('Agent Command Structure', () => {
       expect(agentCommand.subcommands!.start).toBe(agentStartCommand);
       expect(agentCommand.subcommands!.stop).toBe(agentStopCommand);
       expect(agentCommand.subcommands!.stream).toBe(agentStreamCommand);
+      expect(agentCommand.subcommands!.disable).toBe(agentDisableCommand);
+      expect(agentCommand.subcommands!.enable).toBe(agentEnableCommand);
     });
 
     it('should default to list handler', () => {
@@ -219,6 +230,24 @@ describe('Agent Command Structure', () => {
       expect(typeof agentStreamCommand.handler).toBe('function');
     });
   });
+
+  describe('agentDisableCommand', () => {
+    it('should have correct structure', () => {
+      expect(agentDisableCommand.name).toBe('disable');
+      expect(agentDisableCommand.description).toBe('Disable an agent (skipped by dispatch and scheduler, kept in the list)');
+      expect(agentDisableCommand.usage).toBe('sf agent disable <id>');
+      expect(typeof agentDisableCommand.handler).toBe('function');
+    });
+  });
+
+  describe('agentEnableCommand', () => {
+    it('should have correct structure', () => {
+      expect(agentEnableCommand.name).toBe('enable');
+      expect(agentEnableCommand.description).toBe('Enable a previously disabled agent');
+      expect(agentEnableCommand.usage).toBe('sf agent enable <id>');
+      expect(typeof agentEnableCommand.handler).toBe('function');
+    });
+  });
 });
 
 describe('Agent Command Validation', () => {
@@ -272,5 +301,185 @@ describe('Agent Command Validation', () => {
       expect(result.exitCode).not.toBe(0);
       expect(result.error).toContain('Usage');
     });
+  });
+
+  describe('agentDisableCommand', () => {
+    it('should fail without id argument', async () => {
+      const result = await agentDisableCommand.handler([], {});
+      expect(result.exitCode).not.toBe(0);
+      expect(result.error).toContain('Usage');
+    });
+  });
+
+  describe('agentEnableCommand', () => {
+    it('should fail without id argument', async () => {
+      const result = await agentEnableCommand.handler([], {});
+      expect(result.exitCode).not.toBe(0);
+      expect(result.error).toContain('Usage');
+    });
+  });
+});
+
+// ============================================================================
+// Behavioural round-trip tests for agent disable / enable
+//
+// The CLI handlers call createOrchestratorClient(), which runs
+// findStoneforgeDir(process.cwd()) before honouring options.db. Invoking the
+// handler literally in a test environment (no .stoneforge dir on disk) would
+// always hit the "Run sf init first" early-return path, so these tests verify
+// the mutation behaviour by calling the SAME api methods the handlers call,
+// using an in-memory SQLite backend. The handler bodies are intentionally
+// thin wrappers around api.updateAgentMetadata, so this approach gives full
+// coverage of the observable effect without duplicating handler logic.
+// ============================================================================
+
+describe('agent disable / enable behavioural', () => {
+  // Reuse the OPERATOR_ENTITY_ID constant ('el-0000') as the creator.
+  // It is a valid EntityId string - no DB row is needed for it since
+  // registerWorker only stores the value, it does not foreign-key-check it.
+  const CREATOR = 'el-0000' as EntityId;
+
+  let api: ReturnType<typeof createOrchestratorAPI>;
+  let agentId: EntityId;
+
+  beforeEach(async () => {
+    const backend = createStorage({ path: ':memory:' });
+    initializeSchema(backend);
+    api = createOrchestratorAPI(backend);
+
+    const registered = await api.registerWorker({
+      name: 'test-worker',
+      workerMode: 'ephemeral',
+      createdBy: CREATOR,
+    });
+    agentId = registered.id as unknown as EntityId;
+  });
+
+  test('disable round-trip: updateAgentMetadata sets disabled to true', async () => {
+    // This mirrors exactly what agentDisableHandler does after resolving the API.
+    await api.updateAgentMetadata(agentId, { disabled: true } as Partial<AgentMetadata>);
+
+    const agent = await api.getAgent(agentId);
+    expect(agent).toBeDefined();
+    expect((agent!.metadata.agent as { disabled?: boolean }).disabled).toBe(true);
+    expect(isAgentDisabled(agent!)).toBe(true);
+  });
+
+  test('enable round-trip: updateAgentMetadata removes disabled key from serialised JSON', async () => {
+    // First disable the agent, then re-enable it - same sequence as the two
+    // handlers called back-to-back.
+    await api.updateAgentMetadata(agentId, { disabled: true } as Partial<AgentMetadata>);
+    // Sanity-check that it is actually disabled before we enable it.
+    const disabledAgent = await api.getAgent(agentId);
+    expect(isAgentDisabled(disabledAgent!)).toBe(true);
+
+    // This mirrors exactly what agentEnableHandler does after resolving the API.
+    await api.updateAgentMetadata(agentId, { disabled: undefined } as Partial<AgentMetadata>);
+
+    const agent = await api.getAgent(agentId);
+    expect(agent).toBeDefined();
+
+    // isAgentDisabled must return false after the enable call.
+    expect(isAgentDisabled(agent!)).toBe(false);
+
+    // JSON.stringify drops undefined values, so the serialised agent metadata
+    // must contain no "disabled" key - this is the contract that
+    // absent-means-enabled relies on.
+    expect(JSON.stringify(agent!.metadata!.agent).includes('"disabled"')).toBe(false);
+  });
+
+  // -------------------------------------------------------------------------
+  // agentListHandler annotation test
+  //
+  // chdir into a tmpdir with a real .stoneforge/stoneforge.db so that
+  // createOrchestratorClient can resolve the DB and the handler runs end-to-end.
+  // -------------------------------------------------------------------------
+  test('list output marks disabled agents', async () => {
+    const tmpRoot = mkdtempSync(join(tmpdir(), 'sf-disable-list-'));
+    try {
+      mkdirSync(join(tmpRoot, '.stoneforge'), { recursive: true });
+      const dbPath = join(tmpRoot, '.stoneforge', 'stoneforge.db');
+      const tmpBackend = createStorage({ path: dbPath, create: true });
+      initializeSchema(tmpBackend);
+      const tmpApi = createOrchestratorAPI(tmpBackend);
+
+      await tmpApi.registerWorker({
+        name: 'enabled-w',
+        workerMode: 'ephemeral',
+        createdBy: CREATOR,
+      });
+      const disabledRegistered = await tmpApi.registerWorker({
+        name: 'disabled-w',
+        workerMode: 'ephemeral',
+        createdBy: CREATOR,
+      });
+      await tmpApi.updateAgentMetadata(
+        disabledRegistered.id as unknown as EntityId,
+        { disabled: true } as Partial<AgentMetadata>
+      );
+
+      const cwdBefore = process.cwd();
+      process.chdir(tmpRoot);
+      try {
+        const result = await agentListCommand.handler!([], { db: dbPath } as never);
+        expect(result.exitCode).toBe(0);
+        const out = String(result.message ?? '');
+        // Disabled agent should have (disabled) in its row
+        const disabledLine = out.split('\n').find(l => l.includes('disabled-w'));
+        expect(disabledLine).toBeTruthy();
+        expect(disabledLine).toContain('(disabled)');
+        // Enabled agent must NOT have the marker
+        const enabledLine = out.split('\n').find(l => l.includes('enabled-w'));
+        expect(enabledLine).toBeTruthy();
+        expect(enabledLine).not.toContain('(disabled)');
+      } finally {
+        process.chdir(cwdBefore);
+      }
+    } finally {
+      rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // agentStartHandler refusal test
+  //
+  // createOrchestratorClient calls findStoneforgeDir(process.cwd()), so we
+  // chdir into a tmpdir that has a .stoneforge subdir containing a real SQLite
+  // DB. This lets us exercise the actual handler code path (including the
+  // isAgentDisabled guard) without spawning a process.
+  // -------------------------------------------------------------------------
+  test('start refuses on a disabled agent', async () => {
+    const tmpRoot = mkdtempSync(join(tmpdir(), 'sf-disable-test-'));
+    const cwdBefore = process.cwd();
+    try {
+      mkdirSync(join(tmpRoot, '.stoneforge'), { recursive: true });
+      const dbPath = join(tmpRoot, '.stoneforge', 'stoneforge.db');
+      const tmpBackend = createStorage({ path: dbPath, create: true });
+      initializeSchema(tmpBackend);
+      const tmpApi = createOrchestratorAPI(tmpBackend);
+      const registered = await tmpApi.registerWorker({
+        name: 'disabled-worker',
+        workerMode: 'ephemeral',
+        createdBy: CREATOR,
+      });
+      // Disable the agent via the API (same as agentDisableHandler would do).
+      await tmpApi.updateAgentMetadata(registered.id as unknown as EntityId, { disabled: true } as Partial<AgentMetadata>);
+
+      process.chdir(tmpRoot);
+      try {
+        const result = await agentStartCommand.handler!(
+          [registered.id as unknown as string],
+          { db: dbPath } as never
+        );
+        expect(result.exitCode).not.toBe(0);
+        const errMsg = String(result.error ?? '');
+        expect(errMsg.toLowerCase()).toContain('disabled');
+        expect(errMsg).toContain('sf agent enable');
+      } finally {
+        process.chdir(cwdBefore);
+      }
+    } finally {
+      rmSync(tmpRoot, { recursive: true, force: true });
+    }
   });
 });
