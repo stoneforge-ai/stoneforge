@@ -15,6 +15,7 @@ import { success, failure, ExitCode, getFormatter, getOutputMode, OPERATOR_ENTIT
 import type { EntityId, ElementId } from '@stoneforge/core';
 import type { AgentRole, WorkerMode, StewardFocus, AgentMetadata } from '../../types/index.js';
 import type { OrchestratorAPI, AgentEntity } from '../../api/index.js';
+import { isAgentDisabled } from '../../services/agent-registry.js';
 
 // ============================================================================
 // Shared Helpers
@@ -900,6 +901,13 @@ async function agentStartHandler(
     const agent = await api.getAgent(id as EntityId);
     if (!agent) {
       return failure(`Agent not found: ${id}`, ExitCode.NOT_FOUND);
+    }
+
+    if (isAgentDisabled(agent)) {
+      return failure(
+        `Agent ${id} is disabled. Run 'sf agent enable ${id}' first to bring it back online.`,
+        ExitCode.VALIDATION
+      );
     }
 
     const meta = getAgentMeta(agent);

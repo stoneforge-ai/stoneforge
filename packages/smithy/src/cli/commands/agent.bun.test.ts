@@ -5,6 +5,9 @@
  */
 
 import { describe, it, expect, test, beforeEach } from 'bun:test';
+import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createStorage, initializeSchema } from '@stoneforge/quarry';
 import { createOrchestratorAPI } from '../../api/index.js';
 import { isAgentDisabled } from '../../services/agent-registry.js';
@@ -383,5 +386,48 @@ describe('agent disable / enable behavioural', () => {
     // must contain no "disabled" key - this is the contract that
     // absent-means-enabled relies on.
     expect(JSON.stringify(agent!.metadata!.agent).includes('"disabled"')).toBe(false);
+  });
+
+  // -------------------------------------------------------------------------
+  // agentStartHandler refusal test
+  //
+  // createOrchestratorClient calls findStoneforgeDir(process.cwd()), so we
+  // chdir into a tmpdir that has a .stoneforge subdir containing a real SQLite
+  // DB. This lets us exercise the actual handler code path (including the
+  // isAgentDisabled guard) without spawning a process.
+  // -------------------------------------------------------------------------
+  test('start refuses on a disabled agent', async () => {
+    const tmpRoot = mkdtempSync(join(tmpdir(), 'sf-disable-test-'));
+    const cwdBefore = process.cwd();
+    try {
+      mkdirSync(join(tmpRoot, '.stoneforge'), { recursive: true });
+      const dbPath = join(tmpRoot, '.stoneforge', 'stoneforge.db');
+      const tmpBackend = createStorage({ path: dbPath, create: true });
+      initializeSchema(tmpBackend);
+      const tmpApi = createOrchestratorAPI(tmpBackend);
+      const registered = await tmpApi.registerWorker({
+        name: 'disabled-worker',
+        workerMode: 'ephemeral',
+        createdBy: CREATOR,
+      });
+      // Disable the agent via the API (same as agentDisableHandler would do).
+      await tmpApi.updateAgentMetadata(registered.id as unknown as EntityId, { disabled: true } as Partial<AgentMetadata>);
+
+      process.chdir(tmpRoot);
+      try {
+        const result = await agentStartCommand.handler!(
+          [registered.id as unknown as string],
+          { db: dbPath } as never
+        );
+        expect(result.exitCode).not.toBe(0);
+        const errMsg = String(result.error ?? '');
+        expect(errMsg.toLowerCase()).toContain('disabled');
+        expect(errMsg).toContain('sf agent enable');
+      } finally {
+        process.chdir(cwdBefore);
+      }
+    } finally {
+      rmSync(tmpRoot, { recursive: true, force: true });
+    }
   });
 });
