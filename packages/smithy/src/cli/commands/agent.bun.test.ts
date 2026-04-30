@@ -389,6 +389,58 @@ describe('agent disable / enable behavioural', () => {
   });
 
   // -------------------------------------------------------------------------
+  // agentListHandler annotation test
+  //
+  // chdir into a tmpdir with a real .stoneforge/stoneforge.db so that
+  // createOrchestratorClient can resolve the DB and the handler runs end-to-end.
+  // -------------------------------------------------------------------------
+  test('list output marks disabled agents', async () => {
+    const tmpRoot = mkdtempSync(join(tmpdir(), 'sf-disable-list-'));
+    try {
+      mkdirSync(join(tmpRoot, '.stoneforge'), { recursive: true });
+      const dbPath = join(tmpRoot, '.stoneforge', 'stoneforge.db');
+      const tmpBackend = createStorage({ path: dbPath, create: true });
+      initializeSchema(tmpBackend);
+      const tmpApi = createOrchestratorAPI(tmpBackend);
+
+      await tmpApi.registerWorker({
+        name: 'enabled-w',
+        workerMode: 'ephemeral',
+        createdBy: CREATOR,
+      });
+      const disabledRegistered = await tmpApi.registerWorker({
+        name: 'disabled-w',
+        workerMode: 'ephemeral',
+        createdBy: CREATOR,
+      });
+      await tmpApi.updateAgentMetadata(
+        disabledRegistered.id as unknown as EntityId,
+        { disabled: true } as Partial<AgentMetadata>
+      );
+
+      const cwdBefore = process.cwd();
+      process.chdir(tmpRoot);
+      try {
+        const result = await agentListCommand.handler!([], { db: dbPath } as never);
+        expect(result.exitCode).toBe(0);
+        const out = String(result.message ?? '');
+        // Disabled agent should have (disabled) in its row
+        const disabledLine = out.split('\n').find(l => l.includes('disabled-w'));
+        expect(disabledLine).toBeTruthy();
+        expect(disabledLine).toContain('(disabled)');
+        // Enabled agent must NOT have the marker
+        const enabledLine = out.split('\n').find(l => l.includes('enabled-w'));
+        expect(enabledLine).toBeTruthy();
+        expect(enabledLine).not.toContain('(disabled)');
+      } finally {
+        process.chdir(cwdBefore);
+      }
+    } finally {
+      rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // -------------------------------------------------------------------------
   // agentStartHandler refusal test
   //
   // createOrchestratorClient calls findStoneforgeDir(process.cwd()), so we

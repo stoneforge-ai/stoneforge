@@ -274,11 +274,13 @@ async function agentListHandler(
     const headers = ['ID', 'NAME', 'ROLE', 'STATUS', 'SESSION'];
     const rows = agents.map((agent) => {
       const meta = getAgentMeta(agent);
+      const baseStatus = (meta.sessionStatus as string) ?? 'idle';
+      const status = meta.disabled === true ? `${baseStatus} (disabled)` : baseStatus;
       return [
         agent.id,
         agent.name ?? '-',
         (meta.agentRole as string) ?? '-',
-        (meta.sessionStatus as string) ?? 'idle',
+        status,
         (meta.sessionId as string)?.slice(0, 8) ?? '-',
       ];
     });
