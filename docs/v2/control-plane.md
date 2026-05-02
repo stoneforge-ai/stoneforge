@@ -13,8 +13,10 @@ First-slice scope:
 - durable command/API handlers for workspace setup, readiness evaluation,
   dispatch, provider observation, policy status publication, review, approval,
   and merge
-- local SQLite, deployment-oriented PostgreSQL, and JSON dev/test persistence
-  through one control-plane store abstraction
+- local SQLite and deployment-oriented PostgreSQL persistence through one
+  control-plane store abstraction, moving toward normalized relational tables
+  and typed SQL access
+- JSON dev/test persistence only as a fallback or compatibility bridge
 - fake local adapters plus opt-in GitHub App MergeRequest wiring
 - smoke/e2e flows that compose the same public operations used by operators,
   CI, webhook handlers, or future HTTP APIs
@@ -32,7 +34,7 @@ Frozen in this doc:
 Intentionally not specified yet:
 
 - final REST, RPC, or event API shape
-- database schema beyond current snapshot persistence
+- exact relational schema and migration sequence
 - deployment process topology
 - complete authentication and authorization middleware
 - final operator UI navigation
@@ -55,6 +57,13 @@ The app does not own the product rules themselves:
 The control-plane boundary is allowed to choose which package operation happens
 next. It is not allowed to restate package-owned policy decisions or skip
 package-owned state transitions for convenience.
+
+The persistence layer is part of the control-plane infrastructure boundary.
+It should expose typed store interfaces to operation handlers while keeping SQL
+drivers and query builders out of domain packages. Core first-slice workflow
+state should be modeled relationally early, with migrations applied as the
+model evolves, to avoid a large productionization refactor after the workflow
+surface grows.
 
 ## Operation Surface
 
