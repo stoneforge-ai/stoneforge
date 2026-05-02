@@ -89,6 +89,8 @@ When writing or modifying React code, read `docs/engineering/react.md` before im
 
 Hard rules: every `useEffect` must synchronize with something external to React, fetches and mutations must use `@tanstack/react-query`, and query state must be rendered directly instead of mirrored into local component state.
 
+Preferred composition patterns: avoid boolean prop proliferation; use explicit variant components, children composition, and compound components with provider-owned `state`, `actions`, and `meta` context when shared component state is needed.
+
 ## Engineering Standards
 
 **Software must be simple, well-separated, encapsulated, cohesive, loosely coupled, and explicit. DRY and SOLID are tools to support those goals, not goals by themselves. When principles conflict, prefer clarity, simplicity, and ease of change over abstraction purity.**
