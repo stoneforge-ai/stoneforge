@@ -6449,7 +6449,7 @@ interface DaemonHarness {
   dispose(): Promise<void>;
 }
 
-async function setupDaemonHarness(): Promise<DaemonHarness> {
+async function setupDaemonHarness(opts?: { configOverrides?: Partial<DispatchDaemonConfig> }): Promise<DaemonHarness> {
   const dbPath = `/tmp/dispatch-health-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`;
   const storage = createStorage({ path: dbPath, create: true });
   initializeSchema(storage);
@@ -6479,6 +6479,7 @@ async function setupDaemonHarness(): Promise<DaemonHarness> {
     inboxPollEnabled: false,
     stewardTriggerPollEnabled: false,
     workflowTaskPollEnabled: false,
+    ...opts?.configOverrides,
   };
 
   const daemon = createDispatchDaemon(
@@ -6580,6 +6581,31 @@ describe('getDispatchHealth', () => {
       const health = await harness.daemon.getDispatchHealth();
       expect(health.availableWorkers).toBe(0);
       expect(health.stuck).toBe(true);
+    } finally {
+      await harness.dispose();
+    }
+  });
+});
+
+describe('stuck-queue tick warning', () => {
+  test('emits a warn log on tick when the queue is stuck', async () => {
+    const warnSpy = mock((..._args: unknown[]) => {});
+    const harness = await setupDaemonHarness({
+      configOverrides: { logger: { warn: warnSpy } },
+    });
+    try {
+      const task = await createTask({
+        title: 'x',
+        createdBy: harness.systemEntity,
+        status: TaskStatus.OPEN,
+      });
+      await harness.api.create(task as unknown as Record<string, unknown> & { createdBy: EntityId });
+      // No workers registered; queue is stuck.
+      await harness.daemon.tick();
+      expect(warnSpy).toHaveBeenCalled();
+      const message = warnSpy.mock.calls[0][0] as string;
+      expect(message).toContain('1 task(s) ready');
+      expect(message).toContain('no available workers');
     } finally {
       await harness.dispose();
     }

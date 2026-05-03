@@ -524,6 +524,12 @@ export interface DispatchDaemon {
    */
   getDispatchHealth(): Promise<DispatchHealth>;
 
+  /**
+   * Manually triggers one complete poll cycle (same work as the interval-driven cycle).
+   * Useful for testing and for callers that want to force an immediate dispatch pass.
+   */
+  tick(): Promise<void>;
+
   // ----------------------------------------
   // Events
   // ----------------------------------------
@@ -613,6 +619,15 @@ export class DispatchDaemonImpl implements DispatchDaemon {
 
   /** TTL for emitted warning deduplication keys (5 minutes). */
   private static readonly WARNING_DEDUP_TTL_MS = 5 * 60 * 1000;
+
+  /**
+   * Ticks elapsed since the last stuck-queue warn was emitted.
+   * Initialized to POSITIVE_INFINITY so the first stuck tick warns immediately
+   * (Infinity + 1 is still Infinity, which is >= any interval).
+   * Reset to POSITIVE_INFINITY when the queue is healthy so re-stuckening
+   * warns immediately again.
+   */
+  private ticksSinceLastStuckWarn = Number.POSITIVE_INFINITY;
 
   constructor(
     api: QuarryAPI,
@@ -778,6 +793,35 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       hasStuckQueue: stuck,
       computedAt: new Date().toISOString(),
     };
+  }
+
+  async tick(): Promise<void> {
+    await this.runPollCycle();
+  }
+
+  private async maybeLogStuckQueueWarning(): Promise<void> {
+    const interval = this.config.stuckWarnTickInterval;
+    let health: DispatchHealth;
+    try {
+      health = await this.getDispatchHealth();
+    } catch {
+      // Health computation must never crash the tick loop.
+      return;
+    }
+
+    if (!health.stuck) {
+      this.ticksSinceLastStuckWarn = Number.POSITIVE_INFINITY;
+      return;
+    }
+
+    this.ticksSinceLastStuckWarn += 1;
+    if (this.ticksSinceLastStuckWarn < interval) return;
+
+    const log = this.config.logger ?? logger;
+    log.warn(
+      `[dispatch] ${health.readyUnassignedTasks} task(s) ready, no available workers. Register or enable a worker so dispatch can proceed.`
+    );
+    this.ticksSinceLastStuckWarn = 0;
   }
 
   // ----------------------------------------
@@ -2201,6 +2245,8 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       if (this.config.workflowAutoTransitionEnabled) {
         await this.pollWorkflowAutoTransition();
       }
+
+      await this.maybeLogStuckQueueWarning();
     } finally {
       this.polling = false;
     }
