@@ -6436,3 +6436,152 @@ describe('assignTaskToWorker - per-director targetBranch propagation', () => {
     });
   });
 });
+
+// ============================================================================
+// getDispatchHealth harness + tests
+// ============================================================================
+
+interface DaemonHarness {
+  api: QuarryAPI;
+  registry: AgentRegistry;
+  daemon: DispatchDaemon;
+  systemEntity: EntityId;
+  dispose(): Promise<void>;
+}
+
+async function setupDaemonHarness(): Promise<DaemonHarness> {
+  const dbPath = `/tmp/dispatch-health-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`;
+  const storage = createStorage({ path: dbPath, create: true });
+  initializeSchema(storage);
+
+  const api = createQuarryAPI(storage);
+  const inboxService = createInboxService(storage);
+  const registry = createAgentRegistry(api);
+  const taskAssignment = createTaskAssignmentService(api);
+  const dispatchService = createDispatchService(api, taskAssignment, registry);
+  const sessionManager = createMockSessionManager();
+  const worktreeManager = createMockWorktreeManager();
+  const stewardScheduler = createMockStewardScheduler();
+
+  const { createEntity, EntityTypeValue } = await import('@stoneforge/core');
+  const systemRaw = await createEntity({
+    name: 'health-test-system',
+    entityType: EntityTypeValue.SYSTEM,
+    createdBy: 'system:test' as EntityId,
+  });
+  const saved = await api.create(systemRaw as unknown as Record<string, unknown> & { createdBy: EntityId });
+  const systemEntity = saved.id as unknown as EntityId;
+
+  const config: DispatchDaemonConfig = {
+    ensureTargetBranchExists: mockEnsureTargetBranchExists,
+    pollIntervalMs: 100,
+    workerAvailabilityPollEnabled: false,
+    inboxPollEnabled: false,
+    stewardTriggerPollEnabled: false,
+    workflowTaskPollEnabled: false,
+  };
+
+  const daemon = createDispatchDaemon(
+    api,
+    registry,
+    sessionManager,
+    dispatchService,
+    worktreeManager,
+    taskAssignment,
+    stewardScheduler,
+    inboxService,
+    config
+  );
+
+  return {
+    api,
+    registry,
+    daemon,
+    systemEntity,
+    async dispose() {
+      await daemon.stop();
+      if (fs.existsSync(dbPath)) {
+        fs.unlinkSync(dbPath);
+      }
+    },
+  };
+}
+
+describe('getDispatchHealth', () => {
+  test('reports stuck=false when there are no ready tasks', async () => {
+    const harness = await setupDaemonHarness();
+    try {
+      const health = await harness.daemon.getDispatchHealth();
+      expect(health.readyUnassignedTasks).toBe(0);
+      expect(health.availableWorkers).toBe(0);
+      expect(health.stuck).toBe(false);
+      expect(typeof health.computedAt).toBe('string');
+    } finally {
+      await harness.dispose();
+    }
+  });
+
+  test('reports stuck=true when ready unassigned tasks exist and no workers are registered', async () => {
+    const harness = await setupDaemonHarness();
+    try {
+      const task = await createTask({
+        title: 'do the thing',
+        createdBy: harness.systemEntity,
+        status: TaskStatus.OPEN,
+      });
+      await harness.api.create(task as unknown as Record<string, unknown> & { createdBy: EntityId });
+      const health = await harness.daemon.getDispatchHealth();
+      expect(health.readyUnassignedTasks).toBe(1);
+      expect(health.availableWorkers).toBe(0);
+      expect(health.stuck).toBe(true);
+    } finally {
+      await harness.dispose();
+    }
+  });
+
+  test('reports stuck=false when ready unassigned tasks have at least one available worker', async () => {
+    const harness = await setupDaemonHarness();
+    try {
+      const task = await createTask({
+        title: 'do the thing',
+        createdBy: harness.systemEntity,
+        status: TaskStatus.OPEN,
+      });
+      await harness.api.create(task as unknown as Record<string, unknown> & { createdBy: EntityId });
+      await harness.registry.registerWorker({
+        name: 'w1',
+        workerMode: 'ephemeral',
+        createdBy: harness.systemEntity,
+      });
+      const health = await harness.daemon.getDispatchHealth();
+      expect(health.readyUnassignedTasks).toBe(1);
+      expect(health.availableWorkers).toBe(1);
+      expect(health.stuck).toBe(false);
+    } finally {
+      await harness.dispose();
+    }
+  });
+
+  test('treats disabled workers as unavailable for stuck-queue detection', async () => {
+    const harness = await setupDaemonHarness();
+    try {
+      const task = await createTask({
+        title: 'do the thing',
+        createdBy: harness.systemEntity,
+        status: TaskStatus.OPEN,
+      });
+      await harness.api.create(task as unknown as Record<string, unknown> & { createdBy: EntityId });
+      const w = await harness.registry.registerWorker({
+        name: 'w1',
+        workerMode: 'ephemeral',
+        createdBy: harness.systemEntity,
+      });
+      await harness.registry.updateAgentMetadata(w.id, { disabled: true });
+      const health = await harness.daemon.getDispatchHealth();
+      expect(health.availableWorkers).toBe(0);
+      expect(health.stuck).toBe(true);
+    } finally {
+      await harness.dispose();
+    }
+  });
+});

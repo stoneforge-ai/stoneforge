@@ -294,6 +294,32 @@ export interface DispatchDaemonConfig {
    * Useful for testing without triggering real git remote operations.
    */
   readonly ensureTargetBranchExists?: (projectRoot: string, branchName: string) => Promise<void>;
+
+  /** Optional logger override. Defaults to the module-level dispatch-daemon logger. Used for testability. */
+  readonly logger?: { warn: (...args: unknown[]) => void };
+
+  /** Number of ticks between repeated stuck-queue warnings. Default 20. */
+  readonly stuckWarnTickInterval?: number;
+}
+
+/**
+ * Snapshot of the dispatch worker queue's stuck state.
+ * Computed on demand from the agent registry and ready-task list.
+ * A queue is "stuck" when there are unassigned ready tasks but no worker
+ * could take them (registered, not disabled, not terminated). At-capacity
+ * workers do NOT count: the queue is busy, not stuck.
+ */
+export interface DispatchHealth {
+  /** Count of ready tasks (api.ready result) that have no assignee. */
+  readonly readyUnassignedTasks: number;
+  /** Count of workers eligible to take new work: registered, not disabled, not terminated. */
+  readonly availableWorkers: number;
+  /** True iff readyUnassignedTasks > 0 && availableWorkers === 0. */
+  readonly stuck: boolean;
+  /** Convenience alias for stuck, matching the field name surfaced in the HTTP and UI layers. */
+  readonly hasStuckQueue: boolean;
+  /** Timestamp the snapshot was computed (ISO 8601). */
+  readonly computedAt: string;
 }
 
 /**
@@ -338,6 +364,8 @@ interface NormalizedConfig {
   directorInboxForwardingEnabled: boolean;
   directorInboxIdleThresholdMs: number;
   ensureTargetBranchExists: (projectRoot: string, branchName: string) => Promise<void>;
+  logger?: { warn: (...args: unknown[]) => void };
+  stuckWarnTickInterval: number;
 }
 
 // ============================================================================
@@ -478,13 +506,23 @@ export interface DispatchDaemon {
   /**
    * Gets the current configuration.
    */
-  getConfig(): Omit<Required<DispatchDaemonConfig>, 'onSessionStarted'> & { onSessionStarted?: OnSessionStartedCallback };
+  getConfig(): Omit<Required<DispatchDaemonConfig>, 'onSessionStarted' | 'logger'> & { onSessionStarted?: OnSessionStartedCallback; logger?: { warn: (...args: unknown[]) => void } };
 
   /**
    * Updates the configuration.
    * Takes effect on the next poll cycle.
    */
   updateConfig(config: Partial<DispatchDaemonConfig>): void;
+
+  // ----------------------------------------
+  // Health
+  // ----------------------------------------
+
+  /**
+   * Returns a snapshot of dispatch worker-queue health.
+   * Inexpensive (one ready-task query, one agent list query); safe to call from HTTP routes.
+   */
+  getDispatchHealth(): Promise<DispatchHealth>;
 
   // ----------------------------------------
   // Events
@@ -712,6 +750,34 @@ export class DispatchDaemonImpl implements DispatchDaemon {
 
   isRunning(): boolean {
     return this.running;
+  }
+
+  // ----------------------------------------
+  // Health
+  // ----------------------------------------
+
+  async getDispatchHealth(): Promise<DispatchHealth> {
+    const readyTasks = await this.api.ready({ includeEphemeral: true });
+    const readyUnassignedTasks = readyTasks.filter(t => !t.assignee).length;
+
+    const allAgents = await this.agentRegistry.listAgents();
+    const availableWorkers = allAgents.filter(a => {
+      const meta = getAgentMetadata(a);
+      if (!meta || meta.agentRole !== 'worker') return false;
+      if (isAgentDisabled(a)) return false;
+      if (meta.sessionStatus === 'terminated') return false;
+      return true;
+    }).length;
+
+    const stuck = readyUnassignedTasks > 0 && availableWorkers === 0;
+
+    return {
+      readyUnassignedTasks,
+      availableWorkers,
+      stuck,
+      hasStuckQueue: stuck,
+      computedAt: new Date().toISOString(),
+    };
   }
 
   // ----------------------------------------
@@ -1916,7 +1982,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
   // Configuration
   // ----------------------------------------
 
-  getConfig(): Omit<Required<DispatchDaemonConfig>, 'onSessionStarted'> & { onSessionStarted?: OnSessionStartedCallback } {
+  getConfig(): Omit<Required<DispatchDaemonConfig>, 'onSessionStarted' | 'logger'> & { onSessionStarted?: OnSessionStartedCallback; logger?: { warn: (...args: unknown[]) => void } } {
     return { ...this.config };
   }
 
@@ -2027,6 +2093,8 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       directorInboxForwardingEnabled: config?.directorInboxForwardingEnabled ?? true,
       directorInboxIdleThresholdMs: config?.directorInboxIdleThresholdMs ?? 120_000,
       ensureTargetBranchExists: config?.ensureTargetBranchExists ?? ensureTargetBranchExists,
+      logger: config?.logger,
+      stuckWarnTickInterval: config?.stuckWarnTickInterval ?? 20,
     };
   }
 
