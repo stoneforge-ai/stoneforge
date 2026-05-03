@@ -104,6 +104,46 @@ const availableWorkers = await api.getAvailableWorkers();
 const allWorkers = await api.getAgentsByRole('worker');
 ```
 
+### Disabled agents
+
+Agents carry an optional `disabled: boolean` flag on `BaseAgentMetadata`. When `true`, the agent stays visible in queries and listings but is skipped by:
+
+- `getAvailableDirector` (returns the next director that is `running` AND not disabled)
+- The dispatch daemon's worker, steward, and orphan-recovery candidate-selection loops
+- The steward scheduler's `registerSteward` (returns `false` for disabled stewards, so cron and event triggers are not registered)
+- Session start and resume routes (`POST /api/agents/:id/start` and `POST /api/agents/:id/resume` return `409 AGENT_DISABLED`)
+
+The flag does NOT terminate in-flight sessions: an agent disabled while running keeps its session until it completes or is explicitly stopped. Only future work is blocked.
+
+Read the flag through helpers rather than touching metadata directly:
+
+```typescript
+import { isAgentDisabled, isAgentEnabled, getAgentMetadata } from '@stoneforge/smithy';
+
+const agent = await api.getAgent(agentId);
+if (agent && isAgentDisabled(agent)) {
+  // Skip dispatch / start / register
+}
+
+// Equivalent inverse:
+if (agent && isAgentEnabled(agent)) { /* ... */ }
+```
+
+Toggle the flag through `updateAgentMetadata`. To enable an agent, omit the property entirely (do not set `disabled: false`) so the JSON-serialised metadata stays in the canonical absent-means-enabled shape:
+
+```typescript
+// Disable
+await api.updateAgentMetadata(agentId, { disabled: true });
+
+// Enable (delete the property)
+const meta = getAgentMetadata(agent);
+const next = { ...meta };
+delete next.disabled;
+await api.updateAgentMetadata(agentId, next);
+```
+
+The HTTP route `PATCH /api/agents/:id` accepts `{ "disabled": true | false }` and applies the same canonical shape internally; it additionally reconciles a running steward scheduler (calls `registerSteward` on enable, `unregisterSteward` on disable) so the change takes effect immediately.
+
 ---
 
 ## Agent channels

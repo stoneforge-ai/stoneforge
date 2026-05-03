@@ -1060,6 +1060,36 @@ Examples:
 // Agent Disable Command
 // ============================================================================
 
+/**
+ * Tries to apply a disabled-flag change through the running orchestrator's
+ * PATCH /api/agents/:id endpoint so an active scheduler can reconcile (e.g.
+ * unregister a steward's cron jobs immediately). Returns true on success,
+ * false on any failure (server unreachable, non-2xx, network error, timeout)
+ * so the caller can fall back to a direct DB write. The CLI must produce a
+ * consistent end state whether the orchestrator is up or not.
+ */
+async function tryReconcileDisabledViaServer(
+  id: string,
+  disabled: boolean
+): Promise<boolean> {
+  const apiUrl = (process.env.STONEFORGE_API_URL || 'http://localhost:3457').replace(/\/$/, '');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 1500);
+  try {
+    const response = await fetch(`${apiUrl}/api/agents/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ disabled }),
+      signal: controller.signal,
+    });
+    return response.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function agentDisableHandler(
   args: string[],
   options: GlobalOptions
@@ -1068,6 +1098,14 @@ async function agentDisableHandler(
   if (!id) {
     return failure('Usage: sf agent disable <id>', ExitCode.INVALID_ARGUMENTS);
   }
+
+  // Try the running server first so an active scheduler reconciles steward
+  // triggers immediately. If unreachable, fall back to direct DB write.
+  const reconciled = await tryReconcileDisabledViaServer(id, true);
+  if (reconciled) {
+    return success({ id, disabled: true }, `Agent ${id} disabled. It will be skipped by dispatch and the scheduler.`);
+  }
+
   const { api, error } = await createOrchestratorClient(options);
   if (error || !api) return failure(error ?? 'Failed to create API', ExitCode.GENERAL_ERROR);
 
@@ -1075,7 +1113,7 @@ async function agentDisableHandler(
   if (!agent) return failure(`Agent not found: ${id}`, ExitCode.NOT_FOUND);
 
   await api.updateAgentMetadata(id as EntityId, { disabled: true } as Partial<AgentMetadata>);
-  return success({ id, disabled: true }, `Agent ${id} disabled. It will be skipped by dispatch and the scheduler.`);
+  return success({ id, disabled: true }, `Agent ${id} disabled. Scheduler will pick up the change on next start.`);
 }
 
 export const agentDisableCommand: Command = {
@@ -1101,6 +1139,14 @@ async function agentEnableHandler(
   if (!id) {
     return failure('Usage: sf agent enable <id>', ExitCode.INVALID_ARGUMENTS);
   }
+
+  // Try the running server first so an active scheduler re-registers a
+  // steward's triggers immediately. If unreachable, fall back to direct DB write.
+  const reconciled = await tryReconcileDisabledViaServer(id, false);
+  if (reconciled) {
+    return success({ id, disabled: false }, `Agent ${id} enabled.`);
+  }
+
   const { api, error } = await createOrchestratorClient(options);
   if (error || !api) return failure(error ?? 'Failed to create API', ExitCode.GENERAL_ERROR);
 
@@ -1108,7 +1154,7 @@ async function agentEnableHandler(
   if (!agent) return failure(`Agent not found: ${id}`, ExitCode.NOT_FOUND);
 
   await api.updateAgentMetadata(id as EntityId, { disabled: undefined } as Partial<AgentMetadata>);
-  return success({ id, disabled: false }, `Agent ${id} enabled.`);
+  return success({ id, disabled: false }, `Agent ${id} enabled. Scheduler will pick up the change on next start.`);
 }
 
 export const agentEnableCommand: Command = {
