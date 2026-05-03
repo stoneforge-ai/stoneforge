@@ -1,6 +1,6 @@
 # React Engineering Rules
 
-Use this document whenever you write or modify React code. It explains how to avoid unnecessary Effects, how to compose components without mode explosions, how to handle server state, and how to keep React and Next.js work performant.
+Use this document whenever you write or modify React code. It explains how to avoid unnecessary Effects, how to compose components without mode explosions, how to handle server state, and how to keep React with TanStack Router and TanStack Start performant.
 
 ## Default Shape
 
@@ -109,7 +109,11 @@ For React-version-specific APIs, follow the app's React major version. In React 
 
 ## Server State
 
-Never put a fetch or mutation inside `useEffect`. All async server state must go through `@tanstack/react-query`.
+Never put a fetch or mutation inside `useEffect`. Route-critical reads should load through TanStack Router loaders, and shared async server state should use `@tanstack/react-query`.
+
+Use route loaders to ensure route data is available before rendering the route. Read loader results with the route's `useLoaderData()` API when the data is route-local.
+
+When route data should also live in the query cache, have the loader call `queryClient.ensureQueryData(queryOptions)` and render with `useSuspenseQuery(queryOptions)` or `useQuery(queryOptions)` from the route component.
 
 Use `useQuery({ queryKey, queryFn })` for reads. Render directly from `data`, `isLoading`, and `error`; do not mirror query state into local component state.
 
@@ -121,25 +125,25 @@ Derive UI state from query state during render. Do not copy it with `useState` p
 
 Keep browser storage small, explicit, and versioned. Do not treat `localStorage` or `sessionStorage` as an untyped data store; validate and migrate persisted client data at the boundary.
 
-## Async and Server Rendering
+## Route Loading and Server Rendering
 
 Avoid async waterfalls. Start independent work early, await it late, and use `Promise.all()` when operations have no dependency on each other. Check cheap synchronous conditions before expensive async work, and move awaits into the branch that actually needs the result.
 
 Use Suspense boundaries to stream UI when only part of a page depends on async data. Do not block the whole layout on data needed by one section unless that data is required for the layout itself, above-the-fold SEO, or avoiding unacceptable layout shift.
 
-For Next.js server work:
+For TanStack Router and TanStack Start server work:
 
-- Authenticate and authorize Server Actions like public API routes.
-- Do not store request-specific mutable state in module scope.
-- Minimize data passed from server components to client components.
-- Use per-request deduplication such as `React.cache()` where repeated server reads are expected.
+- Authenticate and authorize server functions and server routes like public API endpoints.
+- Validate server function inputs at the server boundary before using them.
+- Use route loaders for navigation-critical data so preloading, SSR, hydration, and error handling stay coordinated with the route.
+- Pass request-specific data through router context, loader context, server function context, or explicit parameters. Do not store request-specific mutable state in module scope.
 - Hoist static I/O to module scope only when it is truly request-independent.
 
 ## Bundle Boundaries
 
 Keep imports and file paths statically analyzable. Avoid dynamic import paths or filesystem paths that make the bundler include broad sets of possible modules.
 
-Prefer package import patterns that the app's bundler can optimize. In Next.js, use configured package import optimization when available; in other environments, import directly from typed subpaths when the package supports them.
+Prefer package import patterns that Vite can optimize. Import directly from typed subpaths when a package supports them, and keep dynamic import maps explicit so the reachable modules stay narrow.
 
 Lazy-load heavy or non-critical client modules with dynamic imports. Editors, charts, canvas tools, analytics, logging, and optional feature panels should not enter the initial client bundle unless they are needed for the first interaction.
 

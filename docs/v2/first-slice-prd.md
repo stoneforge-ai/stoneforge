@@ -14,6 +14,8 @@ Stoneforge V2 will provide a GitHub-first control plane for supervised, agent-dr
 
 The first-slice user experience follows the approved Stoneforge V2 UI/workflow prototype for onboarding, operational lists, tasks, plans, merge requests, diffs, sessions, automations, agents, runtimes, role definitions, documents, workspaces, notifications, and intervention surfaces. The product must prioritize operator visibility, control, recoverability, durable context, policy clarity, and auditability over chat-first coding or editor-first workflows.
 
+Stoneforge V2 will ship the same first-slice product through two app shells: a TanStack Start web app and an Electron desktop app. The web app must support local/single-user operation in a browser against a local control-plane server on localhost, plus team operation against a remote control plane. The desktop app must support local/single-user operation by launching or connecting to a local control plane, plus team operation by connecting to a remote Workspace. Both shells use the same product model, command/API contract, route and component system where practical, policy behavior, GitHub-backed workflow semantics, and operator experience.
+
 ## User Stories
 
 1. As an Org owner, I want to create or select an Org, so that Workspaces and membership have a clear tenant boundary.
@@ -116,10 +118,23 @@ The first-slice user experience follows the approved Stoneforge V2 UI/workflow p
 98. As a keyboard user, I want primary workflows to be keyboard navigable with visible focus states and accessible labels, so that the UI meets the practical accessibility baseline.
 99. As a screen-reader user, I want blockers, review state, verification, and progress to expose screen-reader-friendly status text, so that workflow state is not only visual.
 100. As a team evaluating the first slice, I want a repeatable real GitHub-backed proving scenario from onboarding through repair and merge, so that the product demonstrates the whole control-plane loop.
+101. As a local web user, I want to run the TanStack Start web app on localhost against a local control-plane server, so that I can use Stoneforge locally in a browser without a remote team deployment.
+102. As a team web user, I want the TanStack Start web app to connect to a remote control plane and Workspace, so that I can supervise Stoneforge workflows from a browser.
+103. As a desktop user, I want the Electron app to launch or connect to a local control plane, so that I can run local/single-user Stoneforge from my desktop.
+104. As a desktop team user, I want the Electron app to connect to a remote team Workspace, so that I can use the desktop app for shared team workflows.
+105. As an operator, I want local web, desktop local, and remote team modes to expose the same workflow behavior, so that app shell choice does not fork the product.
+106. As a platform lead, I want app connection mode to be explicit, so that local, desktop-managed local, and remote control-plane connections are configured and diagnosed predictably.
 
 ## Implementation Decisions
 
 - Build around the active V2 boundaries: core domain primitives, Workspace readiness and policy, execution and Scheduler behavior, MergeRequest/review/verification policy, and the control-plane application that wires persistence, providers, diagnostics, and command-shaped operation handlers.
+- Treat application delivery mode as a first-slice product boundary. Stoneforge ships a TanStack Start web shell and an Electron desktop shell over the same control-plane workflows.
+- Support three Control Plane Connection Modes: `local` for an app connecting to a local control-plane server, `managed-by-desktop` for Electron launching and supervising a local control-plane process before connecting to it, and `remote` for connecting to a remote team control plane.
+- The TanStack Start web app supports `local` and `remote` connection modes. Local web mode runs in the browser on localhost against a local control-plane server.
+- The Electron desktop app supports `managed-by-desktop`, `local`, and `remote` connection modes. Desktop mode must not duplicate domain logic in the Electron shell.
+- Define a shared typed command/client contract used by TanStack Start server functions, web clients, Electron preload/IPC bridges, and desktop-controlled local control-plane connections.
+- Keep shared routes, UI components, domain language, and workflow behavior common across web and desktop where practical. Differences are allowed only for OS lifecycle, deployment, identity, local process access, and secure local storage.
+- Treat the Electron main process as an OS/app lifecycle, window, update, local-process, and secure bridge boundary. Electron renderer code should use the shared UI surface and should not receive unrestricted Node.js or secret access.
 - Treat the Workspace as the first-slice operational boundary. Each Workspace links to one primary GitHub repository. Cross-repository Workspaces are deferred.
 - Include a minimal Org container for create/select Org, Workspace management, basic membership and roles, and GitHub org/repo permission projection. Advanced org administration is deferred.
 - Implement guided onboarding as a product requirement, covering Org selection, Workspace creation, GitHub repository connection, default RoleDefinitions, Runtime path, Agent setup, policy preset, docs root selection, secrets/readiness, and visible blockers.
@@ -137,6 +152,8 @@ The first-slice user experience follows the approved Stoneforge V2 UI/workflow p
 - Support customer-managed Hosts through outbound connectivity, registration, heartbeat, capacity advertisement, reconnect, disable, remove, contact-loss reconciliation, and safe handling of running work.
 - Support Daytona as the first managed sandbox path under a provider-neutral managed Runtime contract.
 - Support Claude Code and OpenAI Codex as first-class execution backends under a shared control-plane model. Do not make golden workflow acceptance depend on live LLM quality for every CI run.
+- Use `reference/t3code/` as implementation reference material for provider-driver, provider-instance, Claude Code, OpenAI Codex, OpenCode, ACP, Codex app-server, provider event normalization, runtime-event ingestion, provider health probing, and provider session resume/cancel behavior. Useful reference areas include `reference/t3code/apps/server/src/provider/`, `reference/t3code/apps/server/src/provider/acp/`, `reference/t3code/packages/effect-acp/`, `reference/t3code/packages/effect-codex-app-server/`, `reference/t3code/packages/contracts/`, and `reference/t3code/docs/providers/`.
+- Treat `reference/t3code/` as adapter and protocol reference material only. Stoneforge's Scheduler, Dispatch Intent, Lease, Assignment, Session, Runtime, Agent, RoleDefinition, Agent Command Surface, policy, audit, GitHub MergeRequest, Verification Run, and repair models remain the authoritative V2 architecture and must not be replaced by t3code's thread-first orchestration model.
 - Classify adapter Session connectivity as connectionless or connectionful. Use one Stoneforge Session per provider Session ID unless a replacement provider execution context is needed.
 - Implement the Agent Command Surface as the scoped Stoneforge control-plane/API/CLI/tool boundary for assigned work: read assigned context, update Checkpoints, add task-local todos, report outcomes, request escalation, manage previews, inspect allowed context, and invoke secret-backed capabilities.
 - Authenticate agent command access with short-lived Session Command Credentials scoped to Workspace, target object, resolved branch/worktree/runtime, and allowed command categories.
@@ -194,8 +211,12 @@ The first-slice user experience follows the approved Stoneforge V2 UI/workflow p
 ## Testing Decisions
 
 - Test external behavior through the same interfaces production callers use. Domain tests should exercise package-level behavior; control-plane tests should exercise command/API-shaped operation handlers; UI tests should exercise user-visible workflows.
+- Test every vertical workflow first through the shared control-plane command/client contract, then through the app shells that have been introduced by that slice.
+- Test TanStack Start local web mode against a local control-plane server on localhost and remote web mode against a remote/team control-plane configuration.
+- Test Electron local modes for launching or connecting to a local control plane, safe preload/IPC behavior, renderer use of the shared UI, and remote Workspace connection.
 - Cover the golden path with repeatable end-to-end or integration tests: real GitHub-backed Workspace onboarding, Runtime/Agent/RoleDefinition/policy configuration, intent creation or import, Director Task/Plan creation, Worker execution, PR creation, Provider Check observation, Review Outcome, at least one repair loop, merge/policy evaluation, audit/lineage, Documents context, and GitHub sync visibility.
 - Use deterministic test Agents or adapters for stable CI coverage of state machines, Scheduler behavior, GitHub PR flow, policy, review, repair, and merge. Complement that with release smoke coverage against real Claude Code and OpenAI Codex launch, resume, cancel, provider Session identity, progress, and outcome paths.
+- When implementing or testing live provider paths, compare expected launch, resume, cancel, approval, user-input, event-normalization, and provider-log behavior against the relevant `reference/t3code/` adapter tests and protocol packages. Port useful test cases only through Stoneforge's Assignment/Session and Agent Command Surface interfaces.
 - Test Workspace readiness and onboarding through repository connection, policy, Runtime, Agent, RoleDefinition, docs root, and blocker cases.
 - Test GitHub Issue intake policy for supervised and autopilot defaults, trusted maintainer labels, untrusted label warnings, external-origin Draft Tasks, triage approval, sync metadata, PR issue references, and label writeback reconciliation.
 - Test Task, Plan, Assignment, Session, Dispatch Intent, AutomationRun, MergeRequest, Verification Run, Repair Context, and cancellation/resume state transitions at semantic boundaries.
@@ -210,6 +231,7 @@ The first-slice user experience follows the approved Stoneforge V2 UI/workflow p
 - Test Automations for curated triggers, schedules, missed-run behavior, manual runs, signed inbound webhooks, outbound webhook signing, idempotency, chain-depth blocking, run version snapshots, blocked-run re-evaluation, callbacks, reruns, disabling, and archive/soft-delete semantics.
 - Test Host, Runtime, preview, and secret boundaries for registration, capacity, health, contact loss, reconnect reconciliation, preview secret warnings, low-risk preview/dev injection, controlled provider-log access, and local `act` capability reporting.
 - Test auth, RBAC, and audit for delegated identity, single-user local principal, GitHub permission projection, linked GitHub identity requirements, sensitive actions, policy-bypass attempts, AuditEvent creation, Workflow Event creation, retention controls, and transcript/log redaction.
+- Expand security coverage for app shells to include Electron IPC/preload isolation, desktop local secret storage, local process spawning, update/download trust boundaries, open-url/file-system access, and browser/server trust boundaries for TanStack Start.
 - Test UI workflows with browser automation where user-visible behavior changes: onboarding, readiness blockers, operational lists, task detail, Plan graph/activation, MergeRequest diff review, sessions, automations, documents, policy blockers, notifications, and human intervention.
 - Include accessibility checks for semantic structure, keyboard navigation, visible focus, accessible labels, contrast, and screen-reader-friendly status text in primary workflows.
 - Maintain package coverage thresholds and mutation-strength expectations for critical policy, state-machine, parser, authorization, persistence, and dispatch logic.
@@ -218,6 +240,7 @@ The first-slice user experience follows the approved Stoneforge V2 UI/workflow p
 
 - V1 or Smithy data migration.
 - Editing frozen historical reference implementations or using the prototype as active implementation code.
+- Treating `reference/t3code/` as active implementation code, copying t3code's thread-first orchestration model into Stoneforge, or letting t3code provider abstractions override the V2 Scheduler/Assignment/Session/Agent/Runtime/RoleDefinition contracts.
 - Cross-repository Workspaces.
 - Non-GitHub source-control providers.
 - GitHub Projects sync, issue forms/schema mapping, field-perfect Issue sync, perfect bidirectional comment editing/deletion sync, threaded-resolution parity, and complex Issue sync conflict resolution.
@@ -232,6 +255,8 @@ The first-slice user experience follows the approved Stoneforge V2 UI/workflow p
 - Advanced org billing, SSO enforcement, audit export, cross-Workspace policy inheritance, org-wide analytics, cloud SaaS operations, Kubernetes/high availability, managed upgrades, backup/restore automation, and broad Workspace export/import.
 - Email, Slack, digest preferences, escalation schedules, notification routing rules, and webhook notification delivery as first-class notification channels.
 - Product metrics dashboards, tracing UI, performance analytics, usage analytics, cost analytics, per-task token accounting, budget alerts, invoices, chargeback, pricing plans, and model-cost analytics.
+- Separate product behavior, domain rules, policy semantics, or workflow state machines per app shell.
+- Treating Electron as a separate backend implementation or allowing renderer code unrestricted Node.js, filesystem, process, or secret access.
 - Pixel-perfect reproduction of the prototype when workflow, page coverage, and user-visible behavior remain faithful.
 - Full formal WCAG audit, advanced screen-reader certification, localization, and comprehensive keyboard shortcut customization.
 - Document-specific ACLs, rich binary uploads, rendered PDF management, Google Docs import, Google Docs-style real-time coauthoring, rich redlines, complex block-editor documents, and automatic external page crawling.
@@ -248,5 +273,5 @@ The first-slice user experience follows the approved Stoneforge V2 UI/workflow p
 - The approved UI prototype is a workflow and interaction reference, not an implementation target. Do not edit the reference prototype for this first-slice implementation.
 - The first-slice acceptance metric is operational completion: one real repository can be onboarded to ready, receive or create intent, produce a valid Task or Plan, run Worker execution, open a PR, evaluate verification and review gates, recover from at least one failure through repair, and merge with policy, audit/lineage, Documents context, and GitHub sync visible.
 - A core success condition is that an operator can quickly understand why work is blocked and which action can unblock it.
-- Remaining implementation details that may be decided during build: exact database schema, exact API routes and wire payloads, exact branch naming, exact webhook payload mapping, exact lease timeout values, exact provider SDK usage, exact UI component internals, and exact storage backend for secrets/log artifacts.
+- Remaining implementation details that may be decided during build: exact database schema, exact API routes and wire payloads, exact branch naming, exact webhook payload mapping, exact lease timeout values, exact provider SDK usage, exact UI component internals, exact app package layout, exact Electron packaging/updater choice, exact TanStack Start deployment adapter, and exact storage backend for secrets/log artifacts.
 - These assumptions materially affect implementation but do not add product scope: normalized SQL should be established early for production-oriented paths; deterministic adapters can support CI; real provider smoke tests are still required for release acceptance; local/dev single-user mode still emits audit and lineage; and mirrored Documents should use one primary docs root in the first slice.

@@ -58,10 +58,9 @@ This document captures decisions, open questions, and recommended answers from a
 
 ## Current Implementation Context
 
-- Active V2 package boundaries already exist for `core`, `workspace`, `execution`, and `merge-request`.
-- `apps/control-plane` is the current backend entrypoint. It owns orchestration, persistence, provider wiring, and command-shaped operation handlers.
-- Existing domain packages already cover workspace setup/readiness, execution capabilities, task readiness/dispatch, Assignment/Session lifecycle, MergeRequest flow, Verification Run aggregation, review/approval/policy, and current snapshot persistence.
-- The current control-plane README documents a local smoke flow and SQLite/PostgreSQL/JSON persistence paths. Any fake MergeRequest provider mode is implementation/dev-test scaffolding only; first-slice product acceptance should use the real GitHub App provider boundary.
+- The pre-PRD V2 packages and `apps/control-plane` implementation were removed after review because they were smoke-flow scaffolding rather than a strong first-slice foundation.
+- Future active implementation should recreate only the package/app boundaries needed by the current vertical slice, using the PRD nouns and constraints as the source of truth.
+- Fake providers may still be useful as deterministic test adapters, but they should not define product acceptance; first-slice product acceptance should use the real GitHub App provider boundary where the PRD requires it.
 
 ## Decisions From Grilling
 
