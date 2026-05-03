@@ -23,7 +23,7 @@ Frozen in this doc:
 - one Assignment owns one dispatch; one or more Sessions may exist under that Assignment
 - role attachment happens at dispatch time
 - Agents are stateless configuration/capability records; Session state lives in Sessions, and execution capacity is constrained by Runtime, Host, or provider limits plus any configured Agent-level throttle
-- backend runtime, scheduler, adapter, persistence, and recovery internals use Effect with OpenTelemetry instrumentation as described in [effect-typescript.md](effect-typescript.md)
+- backend runtime, scheduler, adapter, persistence, and recovery internals use Effect with OpenTelemetry instrumentation as described in [effect-typescript.md](../engineering/effect-typescript.md)
 
 Working assumptions:
 

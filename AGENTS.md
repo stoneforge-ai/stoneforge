@@ -21,8 +21,8 @@ Read these first for V2 work:
 - `docs/v2/runtime-architecture.md` — runtime and dispatch
 - `docs/v2/policy-auth-audit.md` — policy, auth, and audit
 - `docs/v2/integrations-and-first-slice.md` — first build slice
-- `docs/v2/typescript-type-driven-apis.md` — TypeScript interface typing principles
-- `docs/v2/effect-typescript.md` — backend/library Effect and OpenTelemetry rules
+- `docs/engineering/typescript-type-driven-apis.md` — TypeScript interface typing principles
+- `docs/engineering/effect-typescript.md` — backend/library Effect and OpenTelemetry rules
 
 For historical behavior, old UX patterns, or prior implementations, use `docs/v2/v1-reference.md`. Do not edit `reference/` unless the user explicitly asks for legacy or prototype work.
 
@@ -41,7 +41,7 @@ Use V2 docs as planning contracts: they should explain product intent, domain la
 
 ### Type-Driven API Design
 
-For TypeScript interfaces, read `docs/v2/typescript-type-driven-apis.md` before designing exported APIs, builders, registries, clients, or config surfaces.
+For TypeScript interfaces, read `docs/engineering/typescript-type-driven-apis.md` before designing exported APIs, builders, registries, clients, or config surfaces.
 
 - Make runtime structure visible to the type system without requiring duplicate user-written types.
 - Prefer inference from user-provided functions, schemas, literals, and config objects over mandatory explicit generics.
@@ -56,7 +56,7 @@ For TypeScript interfaces, read `docs/v2/typescript-type-driven-apis.md` before 
 
 ### Effect rules
 
-When writing or modifying backend or library TypeScript code, read `docs/v2/effect-typescript.md` before implementation.
+When writing or modifying backend or library TypeScript code, read `docs/engineering/effect-typescript.md` before implementation.
 
 - Use Effect internally for backend/library work that performs I/O, async orchestration, typed operational failure, dependency injection, retry, interruption, resource management, scheduling, or observability.
 - Keep pure domain functions as plain TypeScript when they do not need operational effects.
@@ -72,7 +72,10 @@ When writing or modifying backend or library TypeScript code, read `docs/v2/effe
 
 ### Testing
 
+- Read `docs/engineering/testing.md` before adding or changing tests.
 - Keep tests close to source and aligned with the package Interface that production callers use.
+- Prefer vertical red-green-refactor cycles: one failing behavior test, minimal implementation, then refactor only after green.
+- Test observable behavior through public interfaces; mock only at trust boundaries, not internal collaborators.
 - Test coverage: use unit tests and property tests where useful to prove observable decisions, boundaries, invariants, and failure modes. Coverage must satisfy the thresholds in Engineering Standards.
 - Mutation tests: critical policy, state-machine, parser, authorization, persistence, and dispatch logic must have tests strong enough to kill meaningful mutations, not just execute lines.
 - E2E tests: use the `playwright-cli` skill for browser workflows, screenshots, and UI regressions when a change affects an interactive app or user-visible flow.

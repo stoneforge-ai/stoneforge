@@ -33,8 +33,8 @@ These docs are subordinate to this README. They translate the charter into first
 - [runtime-architecture.md](runtime-architecture.md)
 - [policy-auth-audit.md](policy-auth-audit.md)
 - [integrations-and-first-slice.md](integrations-and-first-slice.md)
-- [typescript-type-driven-apis.md](typescript-type-driven-apis.md)
-- [effect-typescript.md](effect-typescript.md)
+- [typescript-type-driven-apis.md](../engineering/typescript-type-driven-apis.md)
+- [effect-typescript.md](../engineering/effect-typescript.md)
 
 ## What Stoneforge V2 Is
 
