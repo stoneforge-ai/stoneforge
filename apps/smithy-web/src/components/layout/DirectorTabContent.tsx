@@ -29,6 +29,7 @@ interface DirectorTabContentProps {
 export function DirectorTabContent({ info, isVisible, showMessagesQueue, onTerminalReady }: DirectorTabContentProps) {
   const { director, hasActiveSession, hasResumableSession, error } = info;
   const lastResumableSession = info.lastResumableSession as { providerSessionId?: string } | null;
+  const isDirectorDisabled = director.metadata?.agent?.disabled === true;
 
   const [terminalStatus, setTerminalStatus] = useState<TerminalStatus>('disconnected');
   const [resumeError, setResumeError] = useState<string | null>(null);
@@ -231,7 +232,8 @@ export function DirectorTabContent({ info, isVisible, showMessagesQueue, onTermi
                             <div className="flex flex-col items-center gap-3">
                               <button
                                 onClick={handleResumeSession}
-                                disabled={resumeSession.isPending || startSession.isPending}
+                                disabled={resumeSession.isPending || startSession.isPending || isDirectorDisabled}
+                                title={isDirectorDisabled ? 'Director is disabled. Enable it before resuming a session.' : undefined}
                                 className="
                                   inline-flex items-center gap-2
                                   px-5 py-2 rounded-lg
@@ -261,7 +263,8 @@ export function DirectorTabContent({ info, isVisible, showMessagesQueue, onTermi
 
                               <button
                                 onClick={handleStartSession}
-                                disabled={startSession.isPending || resumeSession.isPending}
+                                disabled={startSession.isPending || resumeSession.isPending || isDirectorDisabled}
+                                title={isDirectorDisabled ? 'Director is disabled. Enable it before starting a session.' : undefined}
                                 className="
                                   inline-flex items-center gap-2
                                   px-4 py-1.5 rounded-md

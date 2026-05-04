@@ -13,8 +13,9 @@
 import type { Command, GlobalOptions, CommandResult, CommandOption } from '@stoneforge/quarry/cli';
 import { success, failure, ExitCode, getFormatter, getOutputMode, OPERATOR_ENTITY_ID } from '@stoneforge/quarry/cli';
 import type { EntityId, ElementId } from '@stoneforge/core';
-import type { AgentRole, WorkerMode, StewardFocus } from '../../types/index.js';
+import type { AgentRole, WorkerMode, StewardFocus, AgentMetadata } from '../../types/index.js';
 import type { OrchestratorAPI, AgentEntity } from '../../api/index.js';
+import { isAgentDisabled } from '../../services/agent-registry.js';
 
 // ============================================================================
 // Shared Helpers
@@ -273,11 +274,13 @@ async function agentListHandler(
     const headers = ['ID', 'NAME', 'ROLE', 'STATUS', 'SESSION'];
     const rows = agents.map((agent) => {
       const meta = getAgentMeta(agent);
+      const baseStatus = (meta.sessionStatus as string) ?? 'idle';
+      const status = meta.disabled === true ? `${baseStatus} (disabled)` : baseStatus;
       return [
         agent.id,
         agent.name ?? '-',
         (meta.agentRole as string) ?? '-',
-        (meta.sessionStatus as string) ?? 'idle',
+        status,
         (meta.sessionId as string)?.slice(0, 8) ?? '-',
       ];
     });
@@ -902,6 +905,13 @@ async function agentStartHandler(
       return failure(`Agent not found: ${id}`, ExitCode.NOT_FOUND);
     }
 
+    if (isAgentDisabled(agent)) {
+      return failure(
+        `Agent ${id} is disabled. Run 'sf agent enable ${id}' first to bring it back online.`,
+        ExitCode.VALIDATION
+      );
+    }
+
     const meta = getAgentMeta(agent);
     const agentRole = (meta.agentRole as AgentRole) ?? 'worker';
 
@@ -1047,6 +1057,118 @@ Examples:
 };
 
 // ============================================================================
+// Agent Disable Command
+// ============================================================================
+
+/**
+ * Tries to apply a disabled-flag change through the running orchestrator's
+ * PATCH /api/agents/:id endpoint so an active scheduler can reconcile (e.g.
+ * unregister a steward's cron jobs immediately). Returns true on success,
+ * false on any failure (server unreachable, non-2xx, network error, timeout)
+ * so the caller can fall back to a direct DB write. The CLI must produce a
+ * consistent end state whether the orchestrator is up or not.
+ */
+async function tryReconcileDisabledViaServer(
+  id: string,
+  disabled: boolean
+): Promise<boolean> {
+  const apiUrl = (process.env.STONEFORGE_API_URL || 'http://localhost:3457').replace(/\/$/, '');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 1500);
+  try {
+    const response = await fetch(`${apiUrl}/api/agents/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ disabled }),
+      signal: controller.signal,
+    });
+    return response.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function agentDisableHandler(
+  args: string[],
+  options: GlobalOptions
+): Promise<CommandResult> {
+  const [id] = args;
+  if (!id) {
+    return failure('Usage: sf agent disable <id>', ExitCode.INVALID_ARGUMENTS);
+  }
+
+  // Try the running server first so an active scheduler reconciles steward
+  // triggers immediately. If unreachable, fall back to direct DB write.
+  const reconciled = await tryReconcileDisabledViaServer(id, true);
+  if (reconciled) {
+    return success({ id, disabled: true }, `Agent ${id} disabled. It will be skipped by dispatch and the scheduler.`);
+  }
+
+  const { api, error } = await createOrchestratorClient(options);
+  if (error || !api) return failure(error ?? 'Failed to create API', ExitCode.GENERAL_ERROR);
+
+  const agent = await api.getAgent(id as EntityId);
+  if (!agent) return failure(`Agent not found: ${id}`, ExitCode.NOT_FOUND);
+
+  await api.updateAgentMetadata(id as EntityId, { disabled: true } as Partial<AgentMetadata>);
+  return success({ id, disabled: true }, `Agent ${id} disabled. Scheduler will pick up the change on next start.`);
+}
+
+export const agentDisableCommand: Command = {
+  name: 'disable',
+  description: 'Disable an agent (skipped by dispatch and scheduler, kept in the list)',
+  usage: 'sf agent disable <id>',
+  help: `Mark an agent as disabled. The agent stays visible in 'sf agent list' but is skipped by the dispatch daemon and steward scheduler. In-flight sessions are NOT terminated; only future work is blocked. Re-enable with 'sf agent enable <id>'.
+
+Arguments:
+  id    Agent identifier`,
+  handler: agentDisableHandler as Command['handler'],
+};
+
+// ============================================================================
+// Agent Enable Command
+// ============================================================================
+
+async function agentEnableHandler(
+  args: string[],
+  options: GlobalOptions
+): Promise<CommandResult> {
+  const [id] = args;
+  if (!id) {
+    return failure('Usage: sf agent enable <id>', ExitCode.INVALID_ARGUMENTS);
+  }
+
+  // Try the running server first so an active scheduler re-registers a
+  // steward's triggers immediately. If unreachable, fall back to direct DB write.
+  const reconciled = await tryReconcileDisabledViaServer(id, false);
+  if (reconciled) {
+    return success({ id, disabled: false }, `Agent ${id} enabled.`);
+  }
+
+  const { api, error } = await createOrchestratorClient(options);
+  if (error || !api) return failure(error ?? 'Failed to create API', ExitCode.GENERAL_ERROR);
+
+  const agent = await api.getAgent(id as EntityId);
+  if (!agent) return failure(`Agent not found: ${id}`, ExitCode.NOT_FOUND);
+
+  await api.updateAgentMetadata(id as EntityId, { disabled: undefined } as Partial<AgentMetadata>);
+  return success({ id, disabled: false }, `Agent ${id} enabled. Scheduler will pick up the change on next start.`);
+}
+
+export const agentEnableCommand: Command = {
+  name: 'enable',
+  description: 'Enable a previously disabled agent',
+  usage: 'sf agent enable <id>',
+  help: `Re-enable a disabled agent so it is considered again by dispatch and the scheduler.
+
+Arguments:
+  id    Agent identifier`,
+  handler: agentEnableHandler as Command['handler'],
+};
+
+// ============================================================================
 // Main Agent Command
 // ============================================================================
 
@@ -1063,6 +1185,8 @@ Subcommands:
   start     Start an agent process
   stop      Stop an agent session
   stream    Get agent channel for streaming
+  disable   Disable an agent (skipped by dispatch and scheduler)
+  enable    Re-enable a previously disabled agent
 
 Examples:
   sf agent list
@@ -1076,6 +1200,8 @@ Examples:
     start: agentStartCommand,
     stop: agentStopCommand,
     stream: agentStreamCommand,
+    disable: agentDisableCommand,
+    enable: agentEnableCommand,
     // Aliases (hidden from --help via dedup in getCommandHelp)
     create: agentRegisterCommand,
     ls: agentListCommand,

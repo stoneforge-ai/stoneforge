@@ -26,6 +26,8 @@ sf agent list [options]
 | `--reportsTo <id>` | Filter by manager entity ID |
 | `--hasSession` | Only show agents with active sessions |
 
+Disabled agents are listed alongside enabled ones, with `(disabled)` appended to their session-status column. Disabled is independent of `--status`: filtering by `--status idle` returns both disabled-and-idle and enabled-and-idle agents.
+
 Alias: `sf agents`
 
 #### `sf agent show`
@@ -96,6 +98,26 @@ sf agent stop <id> [--no-graceful] [--reason <text>]
 | `-g, --graceful` | Graceful shutdown (default: true) |
 | `--no-graceful` | Force immediate shutdown |
 | `-r, --reason <text>` | Reason for stopping |
+
+#### `sf agent disable`
+
+```bash
+sf agent disable <id>
+```
+
+Mark an agent as disabled. The agent stays visible in `sf agent list` but is skipped by the dispatch daemon, agent pool selection, `getAvailableDirector`, and the steward scheduler. In-flight sessions are NOT terminated; only future work is blocked. `sf agent start` refuses on a disabled agent.
+
+When `sf serve smithy` is reachable on `STONEFORGE_API_URL` (default `http://localhost:3457`), the CLI routes the change through the HTTP API so the running scheduler reconciles immediately (a disabled steward unregisters its cron and event triggers without an orchestrator restart). When the server is unreachable, the CLI writes the metadata directly; the scheduler picks up the change on its next start via `registerAllStewards`.
+
+Re-enable with `sf agent enable <id>`.
+
+#### `sf agent enable`
+
+```bash
+sf agent enable <id>
+```
+
+Clear the `disabled` flag on a previously-disabled agent. Same HTTP-first / direct-write reconciliation behaviour as `sf agent disable`. After enable, the agent is eligible for dispatch on the next tick and (if a steward) is re-registered with the scheduler.
 
 #### `sf agent stream`
 

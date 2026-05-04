@@ -6395,4 +6395,44 @@ describe('assignTaskToWorker - per-director targetBranch propagation', () => {
     const opts = lastCallArgs[0];
     expect(opts.baseBranch).toBe('staging');
   });
+
+  describe('disabled agents', () => {
+    test('does not dispatch to a disabled worker when it is the only candidate', async () => {
+      // Register only a disabled worker. No enabled worker exists.
+      const disabledWorker = await createTestWorker('disabled-worker');
+      await agentRegistry.updateAgentMetadata(
+        disabledWorker.id as unknown as EntityId,
+        { disabled: true } as never
+      );
+
+      // Create a task that would normally be picked up.
+      await createTestTask('Task that must not go to disabled worker');
+
+      // Run the poll. With the filter in place, processed should be 0.
+      // Without the filter, it would be 1 (disabled worker gets the task).
+      const result = await daemon.pollWorkerAvailability();
+
+      expect(result.processed).toBe(0);
+    });
+
+    test('dispatches to enabled worker when disabled worker is also registered', async () => {
+      const enabledWorker = await createTestWorker('enabled-worker');
+      const disabledWorker = await createTestWorker('disabled-worker');
+      await agentRegistry.updateAgentMetadata(
+        disabledWorker.id as unknown as EntityId,
+        { disabled: true } as never
+      );
+
+      await createTestTask('Task for enabled worker only');
+
+      const result = await daemon.pollWorkerAvailability();
+
+      expect(result.processed).toBe(1);
+      // Confirm the disabled worker's id never appeared in startSession calls.
+      const startSessionCalls = (sessionManager.startSession as ReturnType<typeof mock>).mock.calls;
+      const assignedIds = startSessionCalls.map((c: unknown[]) => c[0] as string);
+      expect(assignedIds).toContain(enabledWorker.id as unknown as string);
+      expect(assignedIds).not.toContain(disabledWorker.id as unknown as string);
+    });
+  });
 });

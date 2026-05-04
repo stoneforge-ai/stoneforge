@@ -14,6 +14,8 @@ import {
   type AgentRegistry,
   generateAgentChannelName,
   parseAgentChannelName,
+  isAgentDisabled,
+  isAgentEnabled,
 } from './agent-registry.js';
 import {
   type AgentEntity,
@@ -693,5 +695,86 @@ describe('AgentRegistry', () => {
         registry.ensureAgentChannel('non-existent-id' as EntityId)
       ).rejects.toThrow('Agent not found');
     });
+  });
+});
+
+describe('isAgentDisabled / isAgentEnabled', () => {
+  const baseAgent = {
+    id: 'el-test',
+    type: 'entity' as const,
+    createdAt: '2026-04-29T00:00:00Z',
+    updatedAt: '2026-04-29T00:00:00Z',
+    createdBy: 'el-0000',
+    tags: [],
+    metadata: { agent: { agentRole: 'worker' as const, workerMode: 'ephemeral' as const, sessionStatus: 'idle' as const } },
+  };
+
+  test('returns false when disabled is undefined', () => {
+    expect(isAgentDisabled(baseAgent as never)).toBe(false);
+    expect(isAgentEnabled(baseAgent as never)).toBe(true);
+  });
+
+  test('returns true when disabled is true', () => {
+    const disabled = { ...baseAgent, metadata: { agent: { ...baseAgent.metadata.agent, disabled: true } } };
+    expect(isAgentDisabled(disabled as never)).toBe(true);
+    expect(isAgentEnabled(disabled as never)).toBe(false);
+  });
+
+  test('returns false when disabled is explicitly false', () => {
+    const enabled = { ...baseAgent, metadata: { agent: { ...baseAgent.metadata.agent, disabled: false } } };
+    expect(isAgentDisabled(enabled as never)).toBe(false);
+    expect(isAgentEnabled(enabled as never)).toBe(true);
+  });
+});
+
+describe('getAvailableDirector with disabled', () => {
+  let registry: AgentRegistry;
+  let api: QuarryAPI;
+  let testDbPath: string;
+  let systemEntity: EntityId;
+
+  beforeEach(async () => {
+    testDbPath = `/tmp/agent-registry-director-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`;
+    const storage = createStorage(testDbPath);
+    initializeSchema(storage);
+    api = createQuarryAPI(storage);
+    registry = createAgentRegistry(api);
+
+    const entity = await createEntity({
+      name: 'test-system',
+      entityType: EntityTypeValue.SYSTEM,
+      createdBy: 'system:test' as EntityId,
+    });
+    const saved = await api.create(entity as unknown as Record<string, unknown> & { createdBy: EntityId });
+    systemEntity = saved.id as unknown as EntityId;
+  });
+
+  afterEach(() => {
+    if (fs.existsSync(testDbPath)) {
+      fs.unlinkSync(testDbPath);
+    }
+  });
+
+  test('does not return a disabled director even if its session is running', async () => {
+    const enabled = await registry.registerDirector({
+      name: 'CEO-1',
+      createdBy: systemEntity,
+    });
+    const disabled = await registry.registerDirector({
+      name: 'CEO-2',
+      createdBy: systemEntity,
+    });
+
+    // Mark both as running, then mark the second as disabled.
+    await registry.updateAgentMetadata(enabled.id as unknown as EntityId, {
+      sessionStatus: 'running',
+    } as never);
+    await registry.updateAgentMetadata(disabled.id as unknown as EntityId, {
+      sessionStatus: 'running',
+      disabled: true,
+    } as never);
+
+    const result = await registry.getAvailableDirector();
+    expect(result?.id).toBe(enabled.id);
   });
 });

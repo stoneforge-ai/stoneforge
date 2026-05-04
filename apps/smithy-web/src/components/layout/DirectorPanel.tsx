@@ -954,11 +954,13 @@ export function DirectorPanel({ collapsed = false, onToggle, isMaximized = false
                 </Tooltip>
 
                 {/* Session Controls */}
-                {!activeInfo.hasActiveSession ? (
-                  <Tooltip content="Start Session" side="bottom">
+                {(() => {
+                  const activeIsDisabled = activeInfo.director.metadata?.agent?.disabled === true;
+                  return !activeInfo.hasActiveSession ? (
+                  <Tooltip content={activeIsDisabled ? 'Director is disabled. Enable it before starting a session.' : 'Start Session'} side="bottom">
                     <button
                       onClick={handleStartActiveSession}
-                      disabled={startSessionMutation.isPending}
+                      disabled={startSessionMutation.isPending || activeIsDisabled}
                       className="p-1 rounded-md text-[var(--color-success)] hover:bg-[var(--color-surface-hover)] transition-colors duration-150 disabled:opacity-50"
                       aria-label="Start Session"
                       data-testid={`director-start-${activeDirectorId}`}
@@ -972,10 +974,10 @@ export function DirectorPanel({ collapsed = false, onToggle, isMaximized = false
                   </Tooltip>
                 ) : (
                   <>
-                    <Tooltip content="Restart Session" side="bottom">
+                    <Tooltip content={activeIsDisabled ? 'Director is disabled. Enable it before restarting.' : 'Restart Session'} side="bottom">
                       <button
                         onClick={handleRestartActiveSession}
-                        disabled={stopSessionMutation.isPending || startSessionMutation.isPending}
+                        disabled={stopSessionMutation.isPending || startSessionMutation.isPending || activeIsDisabled}
                         className="p-1 rounded-md text-[var(--color-warning)] hover:bg-[var(--color-surface-hover)] transition-colors duration-150 disabled:opacity-50"
                         aria-label="Restart Session"
                         data-testid={`director-restart-${activeDirectorId}`}
@@ -1003,7 +1005,8 @@ export function DirectorPanel({ collapsed = false, onToggle, isMaximized = false
                       </button>
                     </Tooltip>
                   </>
-                )}
+                );
+                })()}
               </>
             );
           })()}

@@ -5,12 +5,13 @@
  */
 
 import { useState, useRef, useEffect } from 'react';
-import { Play, Square, RefreshCw, Terminal, MoreVertical, Clock, GitBranch, Pencil, Inbox, Trash2, ArrowLeftRight, Settings, Zap } from 'lucide-react';
+import { Play, Square, RefreshCw, Terminal, MoreVertical, Clock, GitBranch, Pencil, Inbox, Trash2, ArrowLeftRight, Settings, Zap, Power, PowerOff } from 'lucide-react';
 import type { Agent, WorkerMetadata, StewardMetadata, SessionStatus } from '../../api/types';
 import { AgentStatusBadge } from './AgentStatusBadge';
 import { AgentRoleBadge } from './AgentRoleBadge';
 import { Tooltip } from '@stoneforge/ui';
 import { useAgentInboxCount } from '../../api/hooks/useAgentInbox';
+import { useToggleAgentDisabled } from '../../api/hooks/useAgents';
 import { AgentInboxDrawer } from './AgentInboxDrawer';
 import { ChangeProviderDialog } from './ChangeProviderDialog';
 import { getProviderLabel } from '../../lib/providers';
@@ -55,8 +56,10 @@ export function AgentCard({
 
   const agentMeta = agent.metadata?.agent;
   const isRunning = activeSessionStatus === 'running' || activeSessionStatus === 'starting';
-  const canStart = !isRunning && !isStarting;
+  const isDisabled = agentMeta?.disabled === true;
+  const canStart = !isRunning && !isStarting && !isDisabled;
   const canStop = isRunning && !isStopping;
+  const toggleDisabled = useToggleAgentDisabled();
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -78,8 +81,9 @@ export function AgentCard({
 
   return (
     <div
-      className="p-4 border border-[var(--color-border)] rounded-lg bg-[var(--color-surface)] hover:border-[var(--color-border-hover)] transition-colors duration-150"
+      className={`p-4 border border-[var(--color-border)] rounded-lg bg-[var(--color-surface)] hover:border-[var(--color-border-hover)] transition-colors duration-150${isDisabled ? ' opacity-60' : ''}`}
       data-testid={`agent-card-${agent.id}`}
+      data-disabled={isDisabled || undefined}
     >
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
@@ -116,6 +120,15 @@ export function AgentCard({
                 data-testid={`agent-model-${agent.id}`}
               >
                 {agentMeta.model}
+              </span>
+            )}
+            {isDisabled && (
+              <span
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded bg-[var(--color-warning-muted)] text-[var(--color-warning-text)] border border-[var(--color-warning)]"
+                data-testid={`agent-disabled-badge-${agent.id}`}
+              >
+                <PowerOff className="w-3 h-3" />
+                Disabled
               </span>
             )}
           </div>
@@ -219,6 +232,25 @@ export function AgentCard({
                   Change triggers
                 </button>
               )}
+              <button
+                onClick={() => {
+                  setMenuOpen(false);
+                  toggleDisabled.mutate({ agentId: agent.id, disabled: !isDisabled });
+                }}
+                disabled={toggleDisabled.isPending}
+                className="
+                  w-full flex items-center gap-2 px-3 py-1.5 text-left text-sm
+                  text-[var(--color-text-secondary)]
+                  hover:bg-[var(--color-surface-hover)]
+                  hover:text-[var(--color-text)]
+                  whitespace-nowrap
+                  disabled:opacity-50 disabled:cursor-not-allowed
+                "
+                data-testid={`agent-toggle-disabled-${agent.id}`}
+              >
+                {isDisabled ? <Power className="w-3.5 h-3.5" /> : <PowerOff className="w-3.5 h-3.5" />}
+                {isDisabled ? 'Enable agent' : 'Disable agent'}
+              </button>
               <button
                 onClick={() => {
                   setMenuOpen(false);
