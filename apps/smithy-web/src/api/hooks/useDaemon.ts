@@ -5,6 +5,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import type { DispatchHealth } from '../types';
 
 // ============================================================================
 // Types
@@ -28,6 +29,7 @@ export interface DaemonStatusResponse {
     limits: Array<{ executable: string; resetsAt: string }>;
     soonestReset?: string;
   };
+  health?: DispatchHealth;
 }
 
 export interface DaemonStartResponse {
@@ -85,7 +87,7 @@ export function useDaemonStatus() {
   return useQuery<DaemonStatusResponse, Error>({
     queryKey: ['daemon-status'],
     queryFn: () => fetchApi<DaemonStatusResponse>('/daemon/status'),
-    refetchInterval: 10000, // Poll every 10 seconds
+    refetchInterval: 5000, // Poll every 5 seconds
   });
 }
 
