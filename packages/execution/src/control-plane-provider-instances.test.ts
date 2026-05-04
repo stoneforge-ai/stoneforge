@@ -89,6 +89,16 @@ describe("execution provider instance routing", () => {
     await expect(
       controlPlane.readWorkspaceExecution({ workspaceId })
     ).resolves.toMatchObject({
+      agents: [
+        {
+          id: "agent-1",
+          providerInstanceId: primaryProviderInstance.id
+        },
+        {
+          id: "agent-2",
+          providerInstanceId: reviewProviderInstance.id
+        }
+      ],
       sessions: [
         {
           finalSummary: "Review Claude completed the task.",

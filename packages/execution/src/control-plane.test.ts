@@ -480,8 +480,8 @@ describe("shared execution control-plane contract", () => {
   it("selects the highest-priority acceptable Runtime for dispatch", async () => {
     const workspaceId = makeWorkspaceId("workspace-runtime-priority")
     const taskId = makeTaskId("task-runtime-priority")
-    const lowerRuntimeId = makeRuntimeId("runtime-lower")
-    const higherRuntimeId = makeRuntimeId("runtime-higher")
+    const lowerRuntimeId = makeRuntimeId("runtime-a-lower")
+    const higherRuntimeId = makeRuntimeId("runtime-z-higher")
     const controlPlane = createExecutionControlPlane({
       providerInstances: [claudeProviderInstanceFixture()]
     })
