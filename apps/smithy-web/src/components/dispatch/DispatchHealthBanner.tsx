@@ -2,7 +2,12 @@ import { useState } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 import { useDaemonStatus } from '../../api/hooks/useDaemon';
 
-export function DispatchHealthBanner() {
+interface DispatchHealthBannerProps {
+  /** Optional layout classes applied to the outer banner element. Lets each mount site control its own page-specific padding without leaving an empty wrapper when the banner self-hides. */
+  className?: string;
+}
+
+export function DispatchHealthBanner({ className }: DispatchHealthBannerProps = {}) {
   const { data } = useDaemonStatus();
   const [dismissed, setDismissed] = useState(false);
 
@@ -11,9 +16,11 @@ export function DispatchHealthBanner() {
 
   const { readyUnassignedTasks } = data.health;
 
+  const baseClasses = 'mb-4 flex items-start gap-3 px-4 py-3 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-100';
+
   return (
     <div
-      className="mb-4 flex items-start gap-3 px-4 py-3 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-100"
+      className={className ? `${className} ${baseClasses}` : baseClasses}
       data-testid="dispatch-health-banner"
       role="alert"
     >
