@@ -31,7 +31,7 @@ repair contracts remain the source of truth for first-slice issues.
 
 ## Issues
 
-- [ ] [#65: V2 Slice 01: Shared contract runs Claude and Codex no-code Tasks](https://github.com/stoneforge-ai/stoneforge/issues/65)
+- [x] [#65: V2 Slice 01: Shared contract runs Claude and Codex no-code Tasks](https://github.com/stoneforge-ai/stoneforge/issues/65)
   - Blocked by: None - can start immediately
   - Use `reference/t3code/apps/server/src/provider/`,
     `reference/t3code/packages/contracts/`,

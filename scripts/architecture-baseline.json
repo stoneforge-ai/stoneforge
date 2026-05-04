@@ -1,3 +1,9 @@
 {
-  "findings": {}
+  "findings": {
+    "Tests Crossing Internal Seams": [
+      "packages/execution/src/control-plane.test.ts imports ./control-plane-test-support.js; prefer testing through the package Interface unless this internal Seam is deliberately test-only.",
+      "packages/execution/src/providers.test.ts imports ./codex-app-server-fixtures.test-support.js; prefer testing through the package Interface unless this internal Seam is deliberately test-only.",
+      "packages/execution/src/providers.test.ts imports ./codex-app-server-hung-fixture.test-support.js; prefer testing through the package Interface unless this internal Seam is deliberately test-only."
+    ]
+  }
 }
