@@ -1,33 +1,31 @@
 {
-  "name": "@stoneforge/web",
+  "name": "@stoneforge/desktop",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "vite build",
+    "build": "tsc -p tsconfig.build.json && vite build",
     "coverage": "vitest run --coverage",
-    "dev": "vite dev --host 127.0.0.1",
+    "dev": "pnpm build && electron dist/main.js",
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
+    "smoke": "pnpm build && STONEFORGE_DESKTOP_SMOKE=1 electron dist/main.js",
     "test": "vitest run",
-    "test:browser": "node tests/local-web-browser.mjs",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.test.json --noEmit"
   },
   "dependencies": {
     "@stoneforge/app-shell": "workspace:*",
     "@stoneforge/execution": "workspace:*",
-    "@tanstack/react-router": "^1.139.0",
-    "@tanstack/react-start": "^1.139.3",
     "lucide-react": "^0.561.0",
     "react": "^19.2.3",
-    "react-dom": "^19.2.3",
-    "zod": "^4.4.2"
+    "react-dom": "^19.2.3"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.2.4",
-    "@types/node": "^25.0.0",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.2",
+    "@vitest/coverage-v8": "^4.0.18",
+    "electron": "^39.2.7",
     "tailwindcss": "^4.2.4",
     "typescript": "^5.0.0",
     "vite": "^7.3.0",

@@ -1,0 +1,23 @@
+:root {
+  color: #17211c;
+  background: #f2f0e8;
+  font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+  font-synthesis: none;
+  line-height: 1.5;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  min-width: 320px;
+  margin: 0;
+  background:
+    linear-gradient(90deg, rgba(23, 33, 28, 0.05) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(23, 33, 28, 0.05) 1px, transparent 1px), #f2f0e8;
+  background-size: 32px 32px;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}

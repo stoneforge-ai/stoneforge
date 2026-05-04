@@ -41,7 +41,7 @@ repair contracts remain the source of truth for first-slice issues.
     Assignment/Session interface.
 - [x] [#66: V2 Slice 02: TanStack Start local web runs no-code Tasks](https://github.com/stoneforge-ai/stoneforge/issues/66)
   - Blocked by: #65
-- [ ] [#67: V2 Slice 03: Electron local desktop runs no-code Tasks](https://github.com/stoneforge-ai/stoneforge/issues/67)
+- [x] [#67: V2 Slice 03: Electron local desktop runs no-code Tasks](https://github.com/stoneforge-ai/stoneforge/issues/67)
   - Blocked by: #66
 - [ ] [#68: V2 Slice 04: Remote team connection mode for both app shells](https://github.com/stoneforge-ai/stoneforge/issues/68)
   - Blocked by: #66, #67

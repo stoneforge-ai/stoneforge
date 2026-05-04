@@ -1,0 +1,40 @@
+{
+  "name": "@stoneforge/app-shell",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./local-task-console-view": {
+      "types": "./dist/local-task-console-view.d.ts",
+      "default": "./dist/local-task-console-view.js"
+    },
+    "./styles.css": "./src/styles.css"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "coverage": "vitest run --coverage",
+    "lint": "eslint \"src/**/*.{ts,tsx}\"",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.test.json --noEmit"
+  },
+  "dependencies": {
+    "@stoneforge/execution": "workspace:*",
+    "lucide-react": "^0.561.0",
+    "react": "^19.2.3"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.0",
+    "@types/node": "^25.0.0",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@vitest/coverage-v8": "^4.0.18",
+    "jsdom": "^27.3.0",
+    "react-dom": "^19.2.3",
+    "typescript": "^5.0.0",
+    "vitest": "^4.0.18"
+  }
+}
