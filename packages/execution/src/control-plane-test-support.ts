@@ -75,7 +75,7 @@ export async function configureClaudeWorkspace(
           acceptableRuntimes: [{ id: runtimeId, priority: 10 }],
           concurrencyLimit: 1,
           id: makeAgentId("agent-claude-test"),
-          model: "claude-sonnet-4.5",
+          model: "claude-sonnet-4-6",
           modelFamily: "claude",
           provider: "claude-code",
           providerInstanceId: makeProviderInstanceId("claude-test")

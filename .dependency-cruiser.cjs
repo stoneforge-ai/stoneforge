@@ -4,9 +4,12 @@ module.exports = {
     {
       name: "no-circular",
       severity: "error",
-      from: {},
+      from: {
+        pathNot: "routeTree\\.gen\\.ts$",
+      },
       to: {
         circular: true,
+        pathNot: "routeTree\\.gen\\.ts$",
       },
     },
     {

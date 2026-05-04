@@ -55,7 +55,7 @@ describe("shared execution control-plane contract", () => {
           acceptableRuntimes: [{ id: runtimeId, priority: 10 }],
           concurrencyLimit: 1,
           id: agentId,
-          model: "claude-sonnet-4.5",
+          model: "claude-sonnet-4-6",
           modelFamily: "claude",
           provider: "claude-code",
           providerInstanceId
@@ -109,7 +109,7 @@ describe("shared execution control-plane contract", () => {
           providerInstanceId,
           systemTags: [
             "agent:agent-claude",
-            "model:claude-sonnet-4.5",
+            "model:claude-sonnet-4-6",
             "model-family:claude",
             "provider-instance:claude-primary",
             "provider:claude-code"
@@ -275,7 +275,7 @@ describe("shared execution control-plane contract", () => {
           acceptableRuntimes: [{ id: runtimeId, priority: 10 }],
           concurrencyLimit: 1,
           id: claudeAgentId,
-          model: "claude-sonnet-4.5",
+          model: "claude-sonnet-4-6",
           modelFamily: "claude",
           provider: "claude-code",
           providerInstanceId: claudeProviderInstanceId
@@ -284,7 +284,7 @@ describe("shared execution control-plane contract", () => {
           acceptableRuntimes: [{ id: runtimeId, priority: 10 }],
           concurrencyLimit: 1,
           id: codexAgentId,
-          model: "gpt-5.1-codex",
+          model: "gpt-5.5",
           modelFamily: "gpt",
           provider: "openai-codex",
           providerInstanceId: codexProviderInstanceId
@@ -495,7 +495,7 @@ describe("shared execution control-plane contract", () => {
           ],
           concurrencyLimit: 1,
           id: makeAgentId("agent-priority"),
-          model: "claude-sonnet-4.5",
+          model: "claude-sonnet-4-6",
           modelFamily: "claude",
           provider: "claude-code",
           providerInstanceId: makeProviderInstanceId("claude-test")

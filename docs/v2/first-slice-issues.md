@@ -39,7 +39,7 @@ repair contracts remain the source of truth for first-slice issues.
     `reference/t3code/packages/effect-codex-app-server/` to shape the
     provider-driver and adapter protocol reference points behind the Stoneforge
     Assignment/Session interface.
-- [ ] [#66: V2 Slice 02: TanStack Start local web runs no-code Tasks](https://github.com/stoneforge-ai/stoneforge/issues/66)
+- [x] [#66: V2 Slice 02: TanStack Start local web runs no-code Tasks](https://github.com/stoneforge-ai/stoneforge/issues/66)
   - Blocked by: #65
 - [ ] [#67: V2 Slice 03: Electron local desktop runs no-code Tasks](https://github.com/stoneforge-ai/stoneforge/issues/67)
   - Blocked by: #66

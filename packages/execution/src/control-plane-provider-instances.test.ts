@@ -46,7 +46,7 @@ describe("execution provider instance routing", () => {
         {
           acceptableRuntimes: [{ id: runtimeId, priority: 10 }],
           concurrencyLimit: 1,
-          model: "claude-sonnet-4.5",
+          model: "claude-sonnet-4-6",
           modelFamily: "claude",
           provider: "claude-code",
           providerInstanceId: primaryProviderInstance.id
@@ -54,7 +54,7 @@ describe("execution provider instance routing", () => {
         {
           acceptableRuntimes: [{ id: runtimeId, priority: 10 }],
           concurrencyLimit: 1,
-          model: "claude-sonnet-4.5",
+          model: "claude-sonnet-4-6",
           modelFamily: "claude",
           provider: "claude-code",
           providerInstanceId: reviewProviderInstance.id

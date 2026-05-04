@@ -124,7 +124,6 @@ async function startClaudeNoCodeSession(input: {
   const result = await collectClaudeResultAndFacts(
     input.query({
       options: {
-        maxTurns: 1,
         model: input.context.agent.model,
         pathToClaudeCodeExecutable: input.pathToClaudeCodeExecutable,
         permissionMode: "dontAsk",

@@ -1,0 +1,34 @@
+{
+  "name": "@stoneforge/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "coverage": "vitest run --coverage",
+    "dev": "vite dev --host 127.0.0.1",
+    "lint": "eslint \"src/**/*.{ts,tsx}\"",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@stoneforge/execution": "workspace:*",
+    "@tanstack/react-router": "^1.139.0",
+    "@tanstack/react-start": "^1.139.3",
+    "lucide-react": "^0.561.0",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "zod": "^4.4.2"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.2.4",
+    "@types/node": "^25.0.0",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.2",
+    "tailwindcss": "^4.2.4",
+    "typescript": "^5.0.0",
+    "vite": "^7.3.0",
+    "vitest": "^4.0.18"
+  }
+}

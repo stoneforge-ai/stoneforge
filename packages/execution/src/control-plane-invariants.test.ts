@@ -70,7 +70,7 @@ describe("execution control-plane invariants", () => {
             acceptableRuntimes: [{ id: runtimeId, priority: 10 }],
             concurrencyLimit: 1,
             id: makeAgentId("agent-readiness"),
-            model: "claude-sonnet-4.5",
+            model: "claude-sonnet-4-6",
             modelFamily: "claude",
             provider: "claude-code",
             providerInstanceId: makeProviderInstanceId("claude-test")
@@ -107,7 +107,7 @@ describe("execution control-plane invariants", () => {
     await controlPlane.createNoCodeTask({
       id: taskId,
       intent: "Require a tag combination no single Agent has.",
-      requiredAgentTags: ["provider:claude-code", "model:gpt-5.1-codex"],
+      requiredAgentTags: ["provider:claude-code", "model:gpt-5.5"],
       title: "Require all tags",
       workspaceId
     })
@@ -224,7 +224,7 @@ async function configureClaudeWorkspace(
         acceptableRuntimes: [{ id: runtimeId, priority: 10 }],
         concurrencyLimit: 1,
         id: makeAgentId("agent-claude-test"),
-        model: "claude-sonnet-4.5",
+        model: "claude-sonnet-4-6",
         modelFamily: "claude",
         provider: "claude-code",
         providerInstanceId: makeProviderInstanceId("claude-test")

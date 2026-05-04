@@ -98,8 +98,7 @@ describe("production provider adapters", () => {
     expect(calls).toEqual([
       {
         options: {
-          maxTurns: 1,
-          model: "claude-sonnet-4.5",
+          model: "claude-sonnet-4-6",
           pathToClaudeCodeExecutable: "/opt/stoneforge/bin/claude",
           permissionMode: "dontAsk",
           tools: []
@@ -169,7 +168,7 @@ describe("production provider adapters", () => {
     expect(calls).toEqual([
       {
         cwd: "/workspaces/stoneforge",
-        model: "gpt-5.1-codex",
+        model: "gpt-5.5",
         prompt:
           "Stoneforge no-code Task\n\nTitle: Verify no-code provider path\n\nIntent:\nConfirm provider dispatch without repository edits.\n\nReturn a concise completion summary and do not edit files."
       }
@@ -296,7 +295,7 @@ describe("production provider adapters", () => {
 
     const result = await appServerClient.runTurn({
       cwd: "/workspaces/stoneforge",
-      model: "gpt-5.1-codex",
+      model: "gpt-5.5",
       prompt: "Summarize this repo."
     })
 
@@ -336,7 +335,7 @@ describe("production provider adapters", () => {
 
     await expect(
       appServerClient.runTurn({
-        model: "gpt-5.1-codex",
+        model: "gpt-5.5",
         prompt: "Summarize this repo."
       })
     ).rejects.toThrow("codex app-server request failed: not authenticated")
@@ -349,7 +348,7 @@ describe("production provider adapters", () => {
     })
 
     const result = await appServerClient.runTurn({
-      model: "gpt-5.1-codex",
+      model: "gpt-5.5",
       prompt: "Summarize this repo."
     })
 
@@ -386,7 +385,7 @@ describe("production provider adapters", () => {
 
     await expect(
       appServerClient.runTurn({
-        model: "gpt-5.1-codex",
+        model: "gpt-5.5",
         prompt: "Summarize this repo."
       })
     ).resolves.toMatchObject({
@@ -412,7 +411,7 @@ describe("production provider adapters", () => {
 
     await expect(
       appServerClient.runTurn({
-        model: "gpt-5.1-codex",
+        model: "gpt-5.5",
         prompt: "Summarize this repo."
       })
     ).rejects.toThrow("codex app-server emitted invalid JSON-RPC message.")
@@ -426,7 +425,7 @@ describe("production provider adapters", () => {
 
     await expect(
       appServerClient.runTurn({
-        model: "gpt-5.1-codex",
+        model: "gpt-5.5",
         prompt: "Summarize this repo."
       })
     ).rejects.toThrow("codex app-server response missing object field thread.")
@@ -440,7 +439,7 @@ describe("production provider adapters", () => {
 
     await expect(
       appServerClient.runTurn({
-        model: "gpt-5.1-codex",
+        model: "gpt-5.5",
         prompt: "Summarize this repo."
       })
     ).rejects.toThrow("codex app-server turn ended as failed.")
@@ -454,7 +453,7 @@ describe("production provider adapters", () => {
 
     await expect(
       appServerClient.runTurn({
-        model: "gpt-5.1-codex",
+        model: "gpt-5.5",
         prompt: "Summarize this repo."
       })
     ).rejects.toThrow("codex app-server response missing string field id.")
@@ -468,7 +467,7 @@ describe("production provider adapters", () => {
 
     await expect(
       appServerClient.runTurn({
-        model: "gpt-5.1-codex",
+        model: "gpt-5.5",
         prompt: "Summarize this repo."
       })
     ).rejects.toThrow("codex app-server exited with code 7: startup failed")
@@ -482,7 +481,7 @@ describe("production provider adapters", () => {
 
     await expect(
       appServerClient.runTurn({
-        model: "gpt-5.1-codex",
+        model: "gpt-5.5",
         prompt: "Summarize this repo."
       })
     ).rejects.toThrow("codex app-server exited with code 8: turn crashed")
@@ -497,7 +496,7 @@ describe("production provider adapters", () => {
 
     await expect(
       appServerClient.runTurn({
-        model: "gpt-5.1-codex",
+        model: "gpt-5.5",
         prompt: "Summarize this repo."
       })
     ).rejects.toThrow("codex app-server turn/start timed out.")
@@ -550,7 +549,7 @@ function startContext(
       acceptableRuntimes: [{ id: makeRuntimeId("runtime"), priority: 10 }],
       concurrencyLimit: 1,
       id: makeAgentId("agent"),
-      model: provider === "claude-code" ? "claude-sonnet-4.5" : "gpt-5.1-codex",
+      model: provider === "claude-code" ? "claude-sonnet-4-6" : "gpt-5.5",
       modelFamily: provider === "claude-code" ? "claude" : "gpt",
       provider,
       providerInstanceId:

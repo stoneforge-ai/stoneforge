@@ -107,6 +107,17 @@ Do not introduce a provider only to pass through props once. Use compound compon
 
 For React-version-specific APIs, follow the app's React major version. In React 19 code, prefer `ref` as a normal prop over new `forwardRef` usage, and use React 19 context APIs consistently with the surrounding code. In React 18 code, keep `forwardRef` and `useContext` where required.
 
+## Styling
+
+Use this order when styling React applications and shared UI:
+
+1. Keep global CSS to the minimum needed for clean app defaults, such as base font, page background, reset-level defaults, and app-wide CSS definitions that do not belong to one component.
+2. Default to Tailwind utility class names for component layout, spacing, typography, color, state, and responsive styling.
+3. Use local CSS modules when Tailwind cannot express the required styling clearly or when a component needs scoped selectors that would be harder to maintain inline.
+4. Use global CSS only when the behavior is truly app-wide, such as global animation keyframes, base document defaults, or third-party integration styles that cannot be scoped cleanly.
+
+Do not add custom global class names for ordinary component styling. If a utility class list repeats as a meaningful local primitive, keep the shared class string close to the component or extract a small component before reaching for global CSS.
+
 ## Server State
 
 Never put a fetch or mutation inside `useEffect`. Route-critical reads should load through TanStack Router loaders, and shared async server state should use `@tanstack/react-query`.

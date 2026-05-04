@@ -114,7 +114,7 @@ function startContextForResume(
       acceptableRuntimes: [{ id: makeRuntimeId("runtime-resume"), priority: 10 }],
       concurrencyLimit: 1,
       id: makeAgentId("agent-resume"),
-      model: "gpt-5.1-codex",
+      model: "gpt-5.5",
       modelFamily: "gpt",
       provider: "openai-codex",
       providerInstanceId
