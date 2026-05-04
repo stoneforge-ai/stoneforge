@@ -10,8 +10,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createTimestamp } from '@stoneforge/core';
-import type { ElementId, EntityId } from '@stoneforge/core';
+import type { ElementId } from '@stoneforge/core';
 import type { Services } from '../services.js';
 import { createAgentRoutes } from './agents.js';
 
@@ -254,8 +253,3 @@ describe('PATCH /api/agents/:id — disabled flag', () => {
     expect(agentRegistry.updateAgentMetadata).not.toHaveBeenCalled();
   });
 });
-
-// Reference unused symbols that come from @stoneforge/core to satisfy the
-// import at the top while keeping the test fixture lean.
-void createTimestamp;
-void (null as unknown as EntityId);
