@@ -179,6 +179,8 @@ function TaskSummary({
   readonly copy: LocalTaskConsoleCopy
   readonly state: LocalTaskConsoleView
 }) {
+  const latestAssignment = state.assignments.at(-1)
+  const latestLineage = state.lineage.at(-1)
   const latestTask = state.tasks.at(-1)
   const latestSession = state.sessions.at(-1)
 
@@ -211,12 +213,38 @@ function TaskSummary({
               {latestSession.provider}
             </p>
           )}
+          <dl className="grid gap-2 border border-[#17211c] bg-[#fffdf4] p-3 text-sm">
+            {latestAssignment === undefined ? null : (
+              <RunDetail label="Assignment" value={latestAssignment.id} />
+            )}
+            {latestSession === undefined ? null : (
+              <RunDetail label="Session" value={latestSession.id} />
+            )}
+            {latestLineage === undefined ? null : (
+              <RunDetail label="Lineage" value={latestLineage.event} />
+            )}
+          </dl>
           <blockquote className="m-0 border-l-4 border-[#d83c1f] pl-3.5 text-[#304039]">
             {latestSession?.finalSummary ?? "Session summary is not available."}
           </blockquote>
         </article>
       )}
     </section>
+  )
+}
+
+function RunDetail({
+  label,
+  value,
+}: {
+  readonly label: string
+  readonly value: string
+}) {
+  return (
+    <div className="grid gap-0.5">
+      <dt className={labelClassName}>{label}</dt>
+      <dd className="m-0 break-all font-bold text-[#17211c]">{value}</dd>
+    </div>
   )
 }
 
