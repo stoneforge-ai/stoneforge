@@ -1,12 +1,14 @@
 import {
   createClaudeCodeProviderRuntime,
   createExecutionControlPlane,
+  createOpenAICodexProviderRuntime,
 } from "@stoneforge/execution"
 import type {
   AgentId,
   CreateExecutionControlPlaneInput,
   ExecutionControlPlane,
   ExecutionProviderInstance,
+  ProviderKind,
   ProviderInstanceId,
   RuntimeId,
   SessionView,
@@ -27,17 +29,27 @@ import {
 
 export type ControlPlaneConnectionMode = "local"
 export type LocalHumanPrincipal = "local-human"
+export type LocalWebProvider = ProviderKind
 type AssignmentView = WorkspaceExecutionSnapshot["assignments"][number]
 type IdSequence = NonNullable<CreateExecutionControlPlaneInput["idSequence"]>
+type LineageView = WorkspaceExecutionSnapshot["lineage"][number]
+
+interface LocalWebProviderConfig {
+  readonly agentId?: AgentId
+  readonly model: string
+  readonly modelFamily: string
+  readonly provider: LocalWebProvider
+  readonly providerInstanceId: ProviderInstanceId
+}
 
 export interface RunNoCodeTaskInput {
   readonly intent: string
+  readonly provider: LocalWebProvider
   readonly title: string
 }
 
 export interface LocalWebWorkspaceConfig {
-  readonly agentId: AgentId
-  readonly providerInstanceId: ProviderInstanceId
+  readonly providers: readonly LocalWebProviderConfig[]
   readonly runtimeId: RuntimeId
   readonly workspaceId: WorkspaceId
 }
@@ -52,6 +64,7 @@ export interface LocalTaskRunResult {
   readonly connectionMode: ControlPlaneConnectionMode
   readonly finalSummary: string
   readonly humanPrincipal: LocalHumanPrincipal
+  readonly provider: LocalWebProvider
   readonly providerSessionId: string
   readonly sessionId: string
   readonly status: "completed"
@@ -62,6 +75,7 @@ export interface LocalTaskConsoleView {
   readonly assignments: readonly AssignmentView[]
   readonly connectionMode: ControlPlaneConnectionMode
   readonly humanPrincipal: LocalHumanPrincipal
+  readonly lineage: readonly LineageView[]
   readonly sessions: readonly SessionView[]
   readonly tasks: readonly TaskView[]
   readonly workspace: WorkspaceView
@@ -81,7 +95,12 @@ export function createLocalTaskConsole(
   const controlPlane = createExecutionControlPlane({
     idSequence: input.idSequence ?? createLocalWebIdSequence(),
     providerInstances: input.providerInstances ?? [
-      createClaudeCodeProviderRuntime({ id: workspace.providerInstanceId }),
+      createClaudeCodeProviderRuntime({
+        id: providerConfig(workspace, "claude-code").providerInstanceId,
+      }),
+      createOpenAICodexProviderRuntime({
+        id: providerConfig(workspace, "openai-codex").providerInstanceId,
+      }),
     ],
   })
   let configured = false
@@ -109,7 +128,7 @@ async function runLocalNoCodeTask(
 ): Promise<LocalTaskRunResult> {
   const task = await controlPlane.createNoCodeTask({
     intent: input.intent,
-    requiredAgentTags: ["provider:claude-code"],
+    requiredAgentTags: [`provider:${input.provider}`],
     title: input.title,
     workspaceId,
   })
@@ -125,6 +144,7 @@ async function runLocalNoCodeTask(
     connectionMode: "local",
     finalSummary: session.finalSummary,
     humanPrincipal: "local-human",
+    provider: session.provider,
     providerSessionId: session.providerSessionId,
     sessionId: session.id,
     status: "completed",
@@ -142,6 +162,7 @@ async function taskConsoleView(
     assignments: snapshot.assignments,
     connectionMode: "local",
     humanPrincipal: "local-human",
+    lineage: snapshot.lineage,
     sessions: snapshot.sessions,
     tasks: snapshot.tasks,
     workspace: snapshot.workspace,
@@ -158,17 +179,15 @@ async function ensureConfigured(
   }
 
   await controlPlane.configureWorkspace({
-    agents: [
-      {
-        acceptableRuntimes: [{ id: workspace.runtimeId, priority: 10 }],
-        concurrencyLimit: 1,
-        id: workspace.agentId,
-        model: "claude-sonnet-4-6",
-        modelFamily: "claude",
-        provider: "claude-code",
-        providerInstanceId: workspace.providerInstanceId,
-      },
-    ],
+    agents: workspace.providers.map((provider) => ({
+      acceptableRuntimes: [{ id: workspace.runtimeId, priority: 10 }],
+      concurrencyLimit: 1,
+      id: provider.agentId,
+      model: provider.model,
+      modelFamily: provider.modelFamily,
+      provider: provider.provider,
+      providerInstanceId: provider.providerInstanceId,
+    })),
     id: workspace.workspaceId,
     repository: {
       owner: "stoneforge-ai",
@@ -190,20 +209,49 @@ async function ensureConfigured(
 
 function defaultWorkspaceConfig(): LocalWebWorkspaceConfig {
   return {
-    agentId: makeAgentId("agent-claude-local-web"),
-    providerInstanceId: makeProviderInstanceId("claude-local-web"),
+    providers: [
+      {
+        model: "claude-sonnet-4-6",
+        modelFamily: "claude",
+        provider: "claude-code",
+        providerInstanceId: makeProviderInstanceId("claude-local-web"),
+      },
+      {
+        model: "gpt-5.5",
+        modelFamily: "gpt",
+        provider: "openai-codex",
+        providerInstanceId: makeProviderInstanceId("codex-local-web"),
+      },
+    ],
     runtimeId: makeRuntimeId("runtime-local-web"),
     workspaceId: makeWorkspaceId("workspace-local-web"),
   }
 }
 
+function providerConfig(
+  workspace: LocalWebWorkspaceConfig,
+  provider: LocalWebProvider
+): LocalWebProviderConfig {
+  const config = workspace.providers.find(
+    (candidate) => candidate.provider === provider
+  )
+
+  if (config === undefined) {
+    throw new Error(`Local web Workspace is missing a ${provider} Provider.`)
+  }
+
+  return config
+}
+
 function createLocalWebIdSequence(): IdSequence {
+  let agentCounter = 0
   let assignmentCounter = 0
   let sessionCounter = 0
   let taskCounter = 0
 
   return {
-    nextAgentId: () => makeAgentId("agent-local-web-generated"),
+    nextAgentId: () =>
+      makeAgentId(`agent-local-web-${String((agentCounter += 1))}`),
     nextAssignmentId: () =>
       makeAssignmentId(
         `assignment-local-web-${String((assignmentCounter += 1))}`

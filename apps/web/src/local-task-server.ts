@@ -19,6 +19,7 @@ import { taskRunFailureMessage } from "./local-task-errors.js"
 
 const runNoCodeTaskInput = z.object({
   intent: z.string().trim().min(1),
+  provider: z.enum(["claude-code", "openai-codex"]),
   title: z.string().trim().min(1),
 })
 
@@ -67,7 +68,10 @@ function getLocalTaskConsole(): LocalTaskConsole {
 function createConfiguredLocalTaskConsole(): LocalTaskConsole {
   if (process.env.STONEFORGE_WEB_PROVIDER_MODE === "deterministic") {
     return createLocalTaskConsole({
-      providerInstances: [deterministicLocalProvider()],
+      providerInstances: [
+        deterministicLocalProvider(),
+        deterministicCodexLocalProvider(),
+      ],
     })
   }
 
@@ -87,15 +91,44 @@ function deterministicLocalProvider(): ExecutionProviderInstance {
   })
 }
 
+function deterministicCodexLocalProvider(): ExecutionProviderInstance {
+  return defineProviderInstance({
+    connectivity: "connectionful",
+    id: "codex-local-web",
+    provider: "openai-codex",
+    startSession: async (context) =>
+      completeDeterministicSession(
+        context,
+        `Completed ${context.task.title} with deterministic Codex local web mode.`
+      ),
+  })
+}
+
 function completeDeterministicSession(
   context: ProviderSessionStartContext,
   summary: string
 ): Awaited<ReturnType<ExecutionProviderInstance["startSession"]>> {
   const providerSession = {
-    external: [{ kind: "claude.session" as const, sessionId: "local-web-dev" }],
-    provider: "claude-code" as const,
-    providerInstanceId: makeProviderInstanceId("claude-local-web"),
-    providerSessionId: "claude-code:local-web-dev",
+    external:
+      context.agent.provider === "claude-code"
+        ? [{ kind: "claude.session" as const, sessionId: "local-web-dev" }]
+        : [
+            {
+              kind: "codex.thread" as const,
+              threadId: "local-web-dev-thread",
+            },
+            {
+              kind: "codex.turn" as const,
+              threadId: "local-web-dev-thread",
+              turnId: "local-web-dev-turn",
+            },
+          ],
+    provider: context.agent.provider,
+    providerInstanceId: context.agent.providerInstanceId,
+    providerSessionId:
+      context.agent.provider === "claude-code"
+        ? "claude-code:local-web-dev"
+        : "openai-codex:local-web-dev-thread:local-web-dev-turn",
   }
 
   return completeProviderSession({

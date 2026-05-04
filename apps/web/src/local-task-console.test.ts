@@ -12,64 +12,144 @@ import {
 } from "@stoneforge/execution"
 import type {
   ExecutionProviderInstance,
+  ProviderKind,
   ProviderSessionStartContext,
 } from "@stoneforge/execution"
 
 import { createLocalTaskConsole } from "./index.js"
 
 describe("TanStack Start local web Task console", () => {
-  it("runs a no-code Task in local single-user mode", async () => {
+  it("runs no-code Tasks for Claude Code and OpenAI Codex in local single-user mode", async () => {
     const console = createLocalTaskConsole({
       idSequence: {
         nextAgentId: () => makeAgentId("agent-generated"),
-        nextAssignmentId: () => makeAssignmentId("assignment-local-web"),
-        nextSessionId: () => makeSessionId("session-local-web"),
-        nextTaskId: () => makeTaskId("task-local-web"),
+        nextAssignmentId: (() => {
+          const ids = [
+            makeAssignmentId("assignment-local-web-claude"),
+            makeAssignmentId("assignment-local-web-codex"),
+          ]
+
+          return () => ids.shift() ?? makeAssignmentId("assignment-extra")
+        })(),
+        nextSessionId: (() => {
+          const ids = [
+            makeSessionId("session-local-web-claude"),
+            makeSessionId("session-local-web-codex"),
+          ]
+
+          return () => ids.shift() ?? makeSessionId("session-extra")
+        })(),
+        nextTaskId: (() => {
+          const ids = [
+            makeTaskId("task-local-web-claude"),
+            makeTaskId("task-local-web-codex"),
+          ]
+
+          return () => ids.shift() ?? makeTaskId("task-extra")
+        })(),
       },
       providerInstances: [
         completedLocalProvider(
           "claude-local-web",
+          "claude-code",
           "Local web checked the Task."
+        ),
+        completedLocalProvider(
+          "codex-local-web",
+          "openai-codex",
+          "Codex checked the Task."
         ),
       ],
       workspace: {
-        agentId: makeAgentId("agent-claude-local"),
-        providerInstanceId: makeProviderInstanceId("claude-local-web"),
+        providers: [
+          {
+            agentId: makeAgentId("agent-claude-local"),
+            model: "claude-sonnet-4-6",
+            modelFamily: "claude",
+            provider: "claude-code",
+            providerInstanceId: makeProviderInstanceId("claude-local-web"),
+          },
+          {
+            agentId: makeAgentId("agent-codex-local"),
+            model: "gpt-5.5",
+            modelFamily: "gpt",
+            provider: "openai-codex",
+            providerInstanceId: makeProviderInstanceId("codex-local-web"),
+          },
+        ],
         runtimeId: makeRuntimeId("runtime-local-web"),
         workspaceId: makeWorkspaceId("workspace-local-web"),
       },
     })
 
-    const run = await console.runNoCodeTask({
+    const claudeRun = await console.runNoCodeTask({
       intent: "Confirm local web can dispatch through the control plane.",
+      provider: "claude-code",
       title: "Verify local web dispatch",
     })
+    const codexRun = await console.runNoCodeTask({
+      intent: "Confirm local web can dispatch to Codex.",
+      provider: "openai-codex",
+      title: "Verify Codex local web dispatch",
+    })
 
-    expect(run).toMatchObject({
+    expect(claudeRun).toMatchObject({
       connectionMode: "local",
       humanPrincipal: "local-human",
+      provider: "claude-code",
       status: "completed",
       task: {
-        id: makeTaskId("task-local-web"),
+        id: makeTaskId("task-local-web-claude"),
         state: "completed",
         title: "Verify local web dispatch",
       },
     })
+    expect(codexRun).toMatchObject({
+      provider: "openai-codex",
+      status: "completed",
+      task: {
+        id: makeTaskId("task-local-web-codex"),
+        state: "completed",
+        title: "Verify Codex local web dispatch",
+      },
+    })
 
     expect(await console.readTaskConsole()).toMatchObject({
+      assignments: [{ provider: "claude-code" }, { provider: "openai-codex" }],
       connectionMode: "local",
       humanPrincipal: "local-human",
+      lineage: [
+        { event: "task.created" },
+        { event: "task.activated" },
+        { event: "assignment.started", provider: "claude-code" },
+        { event: "session.completed" },
+        { event: "task.completed" },
+        { event: "task.created" },
+        { event: "task.activated" },
+        { event: "assignment.started", provider: "openai-codex" },
+        { event: "session.completed" },
+        { event: "task.completed" },
+      ],
       tasks: [
         {
-          id: makeTaskId("task-local-web"),
+          id: makeTaskId("task-local-web-claude"),
           state: "completed",
           title: "Verify local web dispatch",
+        },
+        {
+          id: makeTaskId("task-local-web-codex"),
+          state: "completed",
+          title: "Verify Codex local web dispatch",
         },
       ],
       sessions: [
         {
           finalSummary: "Local web checked the Task.",
           providerSessionId: "claude-code:local-web",
+        },
+        {
+          finalSummary: "Codex checked the Task.",
+          providerSessionId: "openai-codex:local-web:turn-local-web",
         },
       ],
     })
@@ -80,6 +160,7 @@ describe("TanStack Start local web Task console", () => {
       providerInstances: [
         completedLocalProvider(
           "claude-local-web",
+          "claude-code",
           "Default workspace completed."
         ),
       ],
@@ -98,6 +179,7 @@ describe("TanStack Start local web Task console", () => {
     await expect(
       console.runNoCodeTask({
         intent: "Run through default local web configuration.",
+        provider: "claude-code",
         title: "Default local Task",
       })
     ).resolves.toMatchObject({
@@ -109,32 +191,73 @@ describe("TanStack Start local web Task console", () => {
       },
     })
   })
+
+  it("configures default Claude Code and OpenAI Codex provider Agents", async () => {
+    const console = createLocalTaskConsole()
+
+    await expect(console.readTaskConsole()).resolves.toMatchObject({
+      connectionMode: "local",
+      humanPrincipal: "local-human",
+      workspace: {
+        id: makeWorkspaceId("workspace-local-web"),
+        state: "ready",
+      },
+    })
+  })
+
+  it("rejects a default local web Workspace without a Codex provider", () => {
+    expect(() =>
+      createLocalTaskConsole({
+        workspace: {
+          providers: [
+            {
+              agentId: makeAgentId("agent-claude-local"),
+              model: "claude-sonnet-4-6",
+              modelFamily: "claude",
+              provider: "claude-code",
+              providerInstanceId: makeProviderInstanceId("claude-local-web"),
+            },
+          ],
+          runtimeId: makeRuntimeId("runtime-local-web"),
+          workspaceId: makeWorkspaceId("workspace-local-web"),
+        },
+      })
+    ).toThrow("Local web Workspace is missing a openai-codex Provider.")
+  })
 })
 
 function completedLocalProvider(
   id: string,
+  provider: ProviderKind,
   summary: string
 ): ExecutionProviderInstance {
   return defineProviderInstance({
-    connectivity: "connectionless",
+    connectivity:
+      provider === "claude-code" ? "connectionless" : "connectionful",
     id,
-    provider: "claude-code",
-    startSession: async (context) => completeSession(context, id, summary),
+    provider,
+    startSession: async (context) =>
+      completeSession(context, id, provider, summary),
   })
 }
 
 function completeSession(
   context: ProviderSessionStartContext,
   id: string,
+  provider: ProviderKind,
   summary: string
 ): Awaited<ReturnType<ExecutionProviderInstance["startSession"]>> {
   const providerInstanceId = makeProviderInstanceId(id)
+  const providerSessionId =
+    provider === "claude-code"
+      ? "claude-code:local-web"
+      : "openai-codex:local-web:turn-local-web"
 
   return {
     events: [
       {
         kind: "provider.session.started",
-        providerSessionId: "claude-code:local-web",
+        providerSessionId,
       },
       {
         kind: "provider.session.completed",
@@ -144,19 +267,39 @@ function completeSession(
     ],
     logs: [],
     providerSession: {
-      external: [{ kind: "claude.session", sessionId: "local-web" }],
-      provider: "claude-code",
+      external:
+        provider === "claude-code"
+          ? [{ kind: "claude.session", sessionId: "local-web" }]
+          : [
+              { kind: "codex.thread", threadId: "local-web" },
+              {
+                kind: "codex.turn",
+                threadId: "local-web",
+                turnId: "turn-local-web",
+              },
+            ],
+      provider,
       providerInstanceId,
-      providerSessionId: "claude-code:local-web",
+      providerSessionId,
     },
     sessionId: context.sessionId,
     status: "completed",
     terminalOutcome: {
       providerSession: {
-        external: [{ kind: "claude.session", sessionId: "local-web" }],
-        provider: "claude-code",
+        external:
+          provider === "claude-code"
+            ? [{ kind: "claude.session", sessionId: "local-web" }]
+            : [
+                { kind: "codex.thread", threadId: "local-web" },
+                {
+                  kind: "codex.turn",
+                  threadId: "local-web",
+                  turnId: "turn-local-web",
+                },
+              ],
+        provider,
         providerInstanceId,
-        providerSessionId: "claude-code:local-web",
+        providerSessionId,
       },
       status: "completed",
       summary,

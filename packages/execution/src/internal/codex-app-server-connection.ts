@@ -3,11 +3,11 @@ import { createInterface, type Interface } from "node:readline"
 
 import type {
   CodexAppServerTurnInput,
-  CodexAppServerTurnResult
+  CodexAppServerTurnResult,
 } from "../models.js"
 import type {
   ProviderSessionEvent,
-  ProviderTranscriptEntry
+  ProviderTranscriptEntry,
 } from "../provider-models.js"
 import {
   isErrorResponse,
@@ -18,7 +18,7 @@ import {
   type JsonRpcIncomingMessage,
   type JsonRpcNotification,
   type JsonRpcOutgoingMessage,
-  type JsonRpcRequest
+  type JsonRpcRequest,
 } from "./codex-app-server-json.js"
 import {
   encodeJsonRpcOutgoingMessage,
@@ -27,7 +27,7 @@ import {
   readCodexTranscriptEntry,
   readThreadStartResponse,
   readTurnCompletion,
-  readTurnStartResponse
+  readTurnStartResponse,
 } from "./codex-app-server-schema.js"
 import { completedCodexTurnResult } from "./codex-app-server-result.js"
 
@@ -43,9 +43,11 @@ interface ActiveTurn {
   readonly turnId: string
 }
 
+type CompletedTurn = NonNullable<ReturnType<typeof readTurnCompletion>>
+
 export class CodexAppServerJsonRpcConnection {
   private readonly activeText: string[] = []
-  private readonly completedTurns = new Map<string, string>()
+  private readonly completedTurns = new Map<string, CompletedTurn>()
   private readonly events: ProviderSessionEvent[] = []
   private readonly lines: Interface
   private readonly pending = new Map<JsonRpcId, PendingRequest>()
@@ -55,9 +57,7 @@ export class CodexAppServerJsonRpcConnection {
   private nextId = 1
   private stderr = ""
 
-  constructor(
-    private readonly process: ChildProcessWithoutNullStreams
-  ) {
+  constructor(private readonly process: ChildProcessWithoutNullStreams) {
     process.stderr.setEncoding("utf8")
     process.stderr.on("data", (chunk: string) => {
       this.stderr += chunk
@@ -84,8 +84,8 @@ export class CodexAppServerJsonRpcConnection {
       clientInfo: {
         name: "stoneforge",
         title: "Stoneforge",
-        version: "0.1.0"
-      }
+        version: "0.1.0",
+      },
     })
     this.notify("initialized", {})
   }
@@ -95,12 +95,12 @@ export class CodexAppServerJsonRpcConnection {
       ...(input.cwd === undefined ? {} : { cwd: input.cwd }),
       approvalPolicy: "never",
       model: input.model,
-      serviceName: "stoneforge"
+      serviceName: "stoneforge",
     })
     const threadId = readThreadStartResponse(result)
     this.events.push({
       kind: "provider.session.started",
-      providerSessionId: threadId
+      providerSessionId: threadId,
     })
     return threadId
   }
@@ -116,17 +116,21 @@ export class CodexAppServerJsonRpcConnection {
       model: input.model,
       sandboxPolicy: { type: "readOnly" },
       summary: "concise",
-      threadId
+      threadId,
     })
     const turnId = readTurnStartResponse(result)
     this.events.push({
       kind: "provider.turn.started",
-      turnId
+      turnId,
     })
     const completedStatus = this.completedTurns.get(turnId)
     if (completedStatus !== undefined) {
       this.completedTurns.delete(turnId)
-      const completed = this.completedTurnResult(threadId, turnId, completedStatus)
+      const completed = this.completedTurnResult(
+        threadId,
+        turnId,
+        completedStatus
+      )
       if (completed instanceof Error) {
         throw completed
       }
@@ -139,7 +143,7 @@ export class CodexAppServerJsonRpcConnection {
         reject,
         resolve,
         threadId,
-        turnId
+        turnId,
       }
     })
   }
@@ -266,14 +270,14 @@ export class CodexAppServerJsonRpcConnection {
       return
     }
 
-    const { status, turnId } = turn
+    const { turnId } = turn
     const activeTurn = this.takeActiveTurn(turnId)
     if (activeTurn === undefined) {
-      this.completedTurns.set(turnId, status)
+      this.completedTurns.set(turnId, turn)
       return
     }
 
-    this.resolveActiveTurn(activeTurn, status)
+    this.resolveActiveTurn(activeTurn, turn)
   }
 
   private takeActiveTurn(turnId: string): ActiveTurn | undefined {
@@ -286,11 +290,14 @@ export class CodexAppServerJsonRpcConnection {
     return activeTurn
   }
 
-  private resolveActiveTurn(activeTurn: ActiveTurn, status: string): void {
+  private resolveActiveTurn(
+    activeTurn: ActiveTurn,
+    completion: CompletedTurn
+  ): void {
     const completed = this.completedTurnResult(
       activeTurn.threadId,
       activeTurn.turnId,
-      status
+      completion
     )
     if (completed instanceof Error) {
       activeTurn.reject(completed)
@@ -322,16 +329,17 @@ export class CodexAppServerJsonRpcConnection {
   private completedTurnResult(
     threadId: string,
     turnId: string,
-    status: string
+    completion: CompletedTurn
   ): CodexAppServerTurnResult | Error {
     return completedCodexTurnResult({
       activeText: this.activeText,
       completedText: this.completedText,
       events: this.events,
-      status,
+      failureMessage: completion.failureMessage,
+      status: completion.status,
       threadId,
       transcript: this.transcript,
-      turnId
+      turnId,
     })
   }
 }

@@ -18,29 +18,26 @@ import type {
 
 const describeProviderSmoke =
   process.env.STONEFORGE_PROVIDER_SMOKE === "1" ? describe : describe.skip
+const CODEX_SMOKE_TIMEOUT_MS = 240_000
 
 describeProviderSmoke("real provider smoke tests", () => {
-  it(
-    "starts a real Claude Code no-code Session",
-    async () => {
-      const provider = createClaudeCodeProviderRuntime({
-        id: "claude-code-smoke",
+  it("starts a real Claude Code no-code Session", async () => {
+    const provider = createClaudeCodeProviderRuntime({
+      id: "claude-code-smoke",
+    })
+
+    const result = await provider.startSession(
+      startContext({
+        model: process.env.STONEFORGE_CLAUDE_SMOKE_MODEL ?? "claude-sonnet-4-6",
+        provider,
       })
+    )
 
-      const result = await provider.startSession(
-        startContext({
-          model: process.env.STONEFORGE_CLAUDE_SMOKE_MODEL ?? "claude-sonnet-4-6",
-          provider,
-        })
-      )
-
-      expect(result.status).toBe("completed")
-      expect(result.providerSession.provider).toBe("claude-code")
-      expect(result.providerSession.providerSessionId.length).toBeGreaterThan(0)
-      expect(result.terminalOutcome?.summary.length ?? 0).toBeGreaterThan(0)
-    },
-    120_000
-  )
+    expect(result.status).toBe("completed")
+    expect(result.providerSession.provider).toBe("claude-code")
+    expect(result.providerSession.providerSessionId.length).toBeGreaterThan(0)
+    expect(result.terminalOutcome?.summary.length ?? 0).toBeGreaterThan(0)
+  }, 120_000)
 
   it(
     "starts a real OpenAI Codex no-code Session",
@@ -61,7 +58,7 @@ describeProviderSmoke("real provider smoke tests", () => {
       expect(result.providerSession.providerSessionId.length).toBeGreaterThan(0)
       expect(result.terminalOutcome?.summary.length ?? 0).toBeGreaterThan(0)
     },
-    120_000
+    CODEX_SMOKE_TIMEOUT_MS
   )
 })
 
@@ -71,7 +68,9 @@ function startContext(input: {
 }): ProviderSessionStartContext {
   return {
     agent: {
-      acceptableRuntimes: [{ id: makeRuntimeId("runtime-smoke"), priority: 10 }],
+      acceptableRuntimes: [
+        { id: makeRuntimeId("runtime-smoke"), priority: 10 },
+      ],
       concurrencyLimit: 1,
       id: makeAgentId(`agent-${input.provider.provider}-smoke`),
       model: input.model,
@@ -79,7 +78,9 @@ function startContext(input: {
       provider: input.provider.provider,
       providerInstanceId: input.provider.id,
     },
-    assignmentId: makeAssignmentId(`assignment-${input.provider.provider}-smoke`),
+    assignmentId: makeAssignmentId(
+      `assignment-${input.provider.provider}-smoke`
+    ),
     noCode: true,
     runtime: {
       capacity: 1,

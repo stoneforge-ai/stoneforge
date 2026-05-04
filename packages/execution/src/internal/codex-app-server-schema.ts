@@ -2,13 +2,13 @@ import { z } from "zod"
 
 import type {
   ProviderSessionEvent,
-  ProviderTranscriptEntry
+  ProviderTranscriptEntry,
 } from "../provider-models.js"
 import type {
   JsonObject,
   JsonRpcIncomingMessage,
   JsonRpcNotification,
-  JsonRpcOutgoingMessage
+  JsonRpcOutgoingMessage,
 } from "./codex-app-server-json.js"
 
 const jsonRpcIdSchema = z.union([z.number(), z.string()])
@@ -16,59 +16,67 @@ const jsonObjectSchema = z.record(z.string(), z.json())
 
 const jsonRpcSuccessResponseSchema = z.object({
   id: jsonRpcIdSchema,
-  result: jsonObjectSchema
+  result: jsonObjectSchema,
 })
 
 const jsonRpcErrorResponseSchema = z.object({
   error: z.object({
     code: z.number(),
-    message: z.string()
+    message: z.string(),
   }),
-  id: jsonRpcIdSchema
+  id: jsonRpcIdSchema,
 })
 
 const jsonRpcRequestSchema = z.object({
   id: jsonRpcIdSchema,
   method: z.string(),
-  params: jsonObjectSchema.optional()
+  params: jsonObjectSchema.optional(),
 })
 
 const jsonRpcNotificationSchema = z.object({
   id: z.undefined().optional(),
   method: z.string(),
-  params: jsonObjectSchema.optional()
+  params: jsonObjectSchema.optional(),
 })
 
 const threadStartResponseSchema = z.object({
   thread: z.object({
-    id: z.string()
-  })
+    id: z.string(),
+  }),
 })
 
 const turnStartResponseSchema = z.object({
   turn: z.object({
-    id: z.string()
-  })
+    id: z.string(),
+  }),
 })
 
 const agentMessageDeltaNotificationSchema = z.object({
   delta: z.string(),
-  itemId: z.string().optional()
+  itemId: z.string().optional(),
 })
 
 const itemCompletedNotificationSchema = z.object({
   item: z.object({
     id: z.string().optional(),
     text: z.string().optional(),
-    type: z.string()
-  })
+    type: z.string(),
+  }),
 })
+
+const codexTurnErrorSchema = z.union([
+  z.string().trim().min(1),
+  z
+    .object({ message: z.string().trim().min(1) })
+    .transform((error) => error.message),
+])
 
 const turnCompletedNotificationSchema = z.object({
   turn: z.object({
+    error: codexTurnErrorSchema.nullish(),
     id: z.string(),
-    status: z.string()
-  })
+    status: z.string(),
+  }),
 })
 
 export function parseJsonRpcIncomingMessageWithSchemas(
@@ -80,7 +88,7 @@ export function parseJsonRpcIncomingMessageWithSchemas(
     jsonRpcSuccessResponseSchema,
     jsonRpcErrorResponseSchema,
     jsonRpcRequestSchema,
-    jsonRpcNotificationSchema
+    jsonRpcNotificationSchema,
   ]) {
     const result = schema.safeParse(parsed)
     if (result.success) {
@@ -132,7 +140,7 @@ export function readCodexNotificationEvent(
 
   return {
     kind: "provider.event",
-    name: `codex.${message.method}`
+    name: `codex.${message.method}`,
   }
 }
 
@@ -148,7 +156,7 @@ function readAgentMessageDeltaEvent(
     kind: "provider.transcript.delta",
     providerItemId: decoded.data.itemId,
     role: "assistant",
-    text: decoded.data.delta
+    text: decoded.data.delta,
   }
 }
 
@@ -167,7 +175,7 @@ function readItemCompletedEvent(
   return {
     kind: "provider.event",
     name: `codex.item.${decoded.data.item.type}`,
-    providerItemId: decoded.data.item.id
+    providerItemId: decoded.data.item.id,
   }
 }
 
@@ -183,7 +191,7 @@ function readAgentMessageCompletedEvent(item: {
     kind: "provider.transcript.item.completed",
     providerItemId: item.id,
     role: "assistant",
-    text: item.text
+    text: item.text,
   }
 }
 
@@ -197,7 +205,7 @@ function readTurnCompletedEvent(
 
   return {
     kind: "provider.event",
-    name: `codex.turn.${decoded.data.turn.status}`
+    name: `codex.turn.${decoded.data.turn.status}`,
   }
 }
 
@@ -228,13 +236,17 @@ function readAgentMessageTranscriptEntry(item: {
   return {
     providerItemId: item.id,
     role: "assistant",
-    text: item.text
+    text: item.text,
   }
 }
 
-export function readTurnCompletion(
-  message: JsonRpcNotification
-): { readonly status: string; readonly turnId: string } | undefined {
+export function readTurnCompletion(message: JsonRpcNotification):
+  | {
+      readonly failureMessage?: string
+      readonly status: string
+      readonly turnId: string
+    }
+  | undefined {
   if (message.method !== "turn/completed") {
     return undefined
   }
@@ -245,7 +257,8 @@ export function readTurnCompletion(
   }
 
   return {
+    failureMessage: decoded.data.turn.error ?? undefined,
     status: decoded.data.turn.status,
-    turnId: decoded.data.turn.id
+    turnId: decoded.data.turn.id,
   }
 }

@@ -15,7 +15,6 @@ process.stdin.on("data", (chunk) => {
       write({ id: message.id, result: { userAgent: "fixture-codex-app-server" } });
       continue;
     }
-    if (message.method === "initialized") continue;
     if (message.method === "thread/start") {
       write({ id: message.id, result: { thread: { id: "thread-from-app-server" } } });
       continue;
@@ -96,7 +95,6 @@ process.stdin.on("data", (chunk) => {
       write({ id: message.id, result: {} });
       continue;
     }
-    if (message.method === "initialized") continue;
     if (message.method === "thread/start") {
       write({ id: message.id, result: { thread: { id: "thread-completed-item" } } });
       continue;
@@ -153,7 +151,6 @@ process.stdin.on("data", (chunk) => {
       write({ id: message.id, result: {} });
       continue;
     }
-    if (message.method === "initialized") continue;
     if (message.method === "thread/start") {
       write({ id: message.id, result: { thread: { id: "thread-early" } } });
       continue;
@@ -199,7 +196,26 @@ process.stdin.on("data", (chunk) => {
 });
 `
 
-export const codexAppServerFailedTurnScript = `
+export const codexAppServerFailedTurnScript =
+  codexAppServerFailedTurnScriptWithError(
+    "thread-failed",
+    "turn-failed",
+    `{ message: '{"detail":"model gpt-5.5 is not available"}' }`
+  )
+
+export const codexAppServerFailedTurnRawErrorScript =
+  codexAppServerFailedTurnScriptWithError(
+    "thread-failed-raw",
+    "turn-failed-raw",
+    `{ message: "provider failure without JSON detail" }`
+  )
+
+function codexAppServerFailedTurnScriptWithError(
+  threadId: string,
+  turnId: string,
+  error: string
+): string {
+  return `
 let buffer = "";
 const write = (message) => process.stdout.write(JSON.stringify(message) + "\\n");
 process.stdin.setEncoding("utf8");
@@ -214,21 +230,27 @@ process.stdin.on("data", (chunk) => {
       write({ id: message.id, result: {} });
       continue;
     }
-    if (message.method === "initialized") continue;
     if (message.method === "thread/start") {
-      write({ id: message.id, result: { thread: { id: "thread-failed" } } });
+      write({ id: message.id, result: { thread: { id: "${threadId}" } } });
       continue;
     }
     if (message.method === "turn/start") {
-      write({ id: message.id, result: { turn: { id: "turn-failed" } } });
+      write({ id: message.id, result: { turn: { id: "${turnId}" } } });
       write({
         method: "turn/completed",
-        params: { turn: { id: "turn-failed", status: "failed" } }
+        params: {
+          turn: {
+            error: ${error},
+            id: "${turnId}",
+            status: "failed"
+          }
+        }
       });
     }
   }
 });
 `
+}
 
 export const codexAppServerMalformedTurnScript = `
 let buffer = "";
@@ -245,7 +267,6 @@ process.stdin.on("data", (chunk) => {
       write({ id: message.id, result: {} });
       continue;
     }
-    if (message.method === "initialized") continue;
     if (message.method === "thread/start") {
       write({ id: message.id, result: { thread: { id: "thread-malformed" } } });
       continue;
@@ -277,10 +298,8 @@ process.stdin.on("data", (chunk) => {
       write({ id: message.id, result: {} });
       continue;
     }
-    if (message.method === "initialized") continue;
     if (message.method === "thread/start") {
       write({ id: message.id, result: { thread: { id: "thread-crash" } } });
-      continue;
     }
     if (message.method === "turn/start") {
       write({ id: message.id, result: { turn: { id: "turn-crash" } } });

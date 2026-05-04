@@ -13,7 +13,7 @@ import {
   ProviderOperationUnsupportedError,
   makeSessionId,
   makeTaskId,
-  makeWorkspaceId
+  makeWorkspaceId,
 } from "./index.js"
 import {
   codexAppServerCompletedItemScript,
@@ -21,17 +21,18 @@ import {
   codexAppServerExitDuringTurnScript,
   codexAppServerExitScript,
   codexAppServerFailedTurnScript,
+  codexAppServerFailedTurnRawErrorScript,
   codexAppServerFixtureScript,
   codexAppServerInitializeErrorScript,
   codexAppServerInvalidJsonScript,
   codexAppServerMalformedThreadScript,
-  codexAppServerMalformedTurnScript
+  codexAppServerMalformedTurnScript,
 } from "./codex-app-server-fixtures.test-support.js"
 import { codexAppServerHungTurnScript } from "./codex-app-server-hung-fixture.test-support.js"
 import type {
   CodexAppServerClient,
   CodexAppServerTurnInput,
-  ProviderSessionStartContext
+  ProviderSessionStartContext,
 } from "./index.js"
 
 describe("production provider adapters", () => {
@@ -41,21 +42,23 @@ describe("production provider adapters", () => {
         connectivity: "connectionless",
         supportsCancel: false,
         supportsInterrupt: false,
-        supportsResume: false
+        supportsResume: false,
       },
-      provider: "claude-code"
+      provider: "claude-code",
     })
     expect(createOpenAICodexProviderRuntime()).toMatchObject({
       capabilities: {
         connectivity: "connectionful",
         supportsCancel: false,
         supportsInterrupt: false,
-        supportsResume: false
+        supportsResume: false,
       },
-      provider: "openai-codex"
+      provider: "openai-codex",
     })
     expect(typeof createNodeCodexAppServerClient().runTurn).toBe("function")
-    expectTypeOf(createNodeCodexAppServerClient()).toMatchTypeOf<CodexAppServerClient>()
+    expectTypeOf(
+      createNodeCodexAppServerClient()
+    ).toMatchTypeOf<CodexAppServerClient>()
   })
 
   it("runs Claude Code for a no-code Assignment through the Agent SDK", async () => {
@@ -69,31 +72,33 @@ describe("production provider adapters", () => {
             result: "Claude checked the task and no code changes were needed.",
             session_id: "claude-session",
             subtype: "success",
-            type: "result"
-          }
+            type: "result",
+          },
         ])
-      }
+      },
     })
 
-    await expect(adapter.startSession(startContext("claude-code"))).resolves.toMatchObject({
+    await expect(
+      adapter.startSession(startContext("claude-code"))
+    ).resolves.toMatchObject({
       providerSession: {
         external: [{ kind: "claude.session", sessionId: "claude-session" }],
         provider: "claude-code",
         providerInstanceId: makeProviderInstanceId("claude-code-default"),
-        providerSessionId: "claude-code:claude-session"
+        providerSessionId: "claude-code:claude-session",
       },
       sessionId: makeSessionId("session-provider"),
       status: "completed",
       terminalOutcome: {
         status: "completed",
-        summary: "Claude checked the task and no code changes were needed."
+        summary: "Claude checked the task and no code changes were needed.",
       },
       transcript: [
         {
           role: "assistant",
-          text: "Claude checked the task and no code changes were needed."
-        }
-      ]
+          text: "Claude checked the task and no code changes were needed.",
+        },
+      ],
     })
     expect(calls).toEqual([
       {
@@ -101,11 +106,11 @@ describe("production provider adapters", () => {
           model: "claude-sonnet-4-6",
           pathToClaudeCodeExecutable: "/opt/stoneforge/bin/claude",
           permissionMode: "dontAsk",
-          tools: []
+          tools: [],
         },
         prompt:
-          "Stoneforge no-code Task\n\nTitle: Verify no-code provider path\n\nIntent:\nConfirm provider dispatch without repository edits.\n\nReturn a concise completion summary and do not edit files."
-      }
+          "Stoneforge no-code Task\n\nTitle: Verify no-code provider path\n\nIntent:\nConfirm provider dispatch without repository edits.\n\nReturn a concise completion summary and do not edit files.",
+      },
     ])
   })
 
@@ -119,8 +124,8 @@ describe("production provider adapters", () => {
             events: [
               {
                 kind: "provider.turn.started",
-                turnId: "turn-codex"
-              }
+                turnId: "turn-codex",
+              },
             ],
             finalSummary: "Codex verified the task without code changes.",
             logs: [],
@@ -128,14 +133,14 @@ describe("production provider adapters", () => {
             transcript: [
               {
                 role: "assistant",
-                text: "Codex verified the task without code changes."
-              }
+                text: "Codex verified the task without code changes.",
+              },
             ],
             threadId: "thread-codex",
-            turnId: "turn-codex"
+            turnId: "turn-codex",
           }
-        }
-      }
+        },
+      },
     })
 
     const result = await adapter.startSession(startContext("openai-codex"))
@@ -144,34 +149,38 @@ describe("production provider adapters", () => {
       expect.arrayContaining([
         expect.objectContaining({
           kind: "provider.turn.started",
-          turnId: "turn-codex"
-        })
+          turnId: "turn-codex",
+        }),
       ])
     )
     expect(result).toMatchObject({
       providerSession: {
         external: [
           { kind: "codex.thread", threadId: "thread-codex" },
-          { kind: "codex.turn", threadId: "thread-codex", turnId: "turn-codex" }
+          {
+            kind: "codex.turn",
+            threadId: "thread-codex",
+            turnId: "turn-codex",
+          },
         ],
         provider: "openai-codex",
         providerInstanceId: makeProviderInstanceId("openai-codex-default"),
-        providerSessionId: "openai-codex:thread-codex:turn-codex"
+        providerSessionId: "openai-codex:thread-codex:turn-codex",
       },
       sessionId: makeSessionId("session-provider"),
       status: "completed",
       terminalOutcome: {
         status: "completed",
-        summary: "Codex verified the task without code changes."
-      }
+        summary: "Codex verified the task without code changes.",
+      },
     })
     expect(calls).toEqual([
       {
         cwd: "/workspaces/stoneforge",
         model: "gpt-5.5",
         prompt:
-          "Stoneforge no-code Task\n\nTitle: Verify no-code provider path\n\nIntent:\nConfirm provider dispatch without repository edits.\n\nReturn a concise completion summary and do not edit files."
-      }
+          "Stoneforge no-code Task\n\nTitle: Verify no-code provider path\n\nIntent:\nConfirm provider dispatch without repository edits.\n\nReturn a concise completion summary and do not edit files.",
+      },
     ])
   })
 
@@ -182,14 +191,14 @@ describe("production provider adapters", () => {
           {
             errors: ["not authenticated"],
             subtype: "error_during_execution",
-            type: "result"
-          }
-        ])
+            type: "result",
+          },
+        ]),
     })
 
-    await expect(adapter.startSession(startContext("claude-code"))).rejects.toThrow(
-      "claude-code Agent SDK failed: not authenticated"
-    )
+    await expect(
+      adapter.startSession(startContext("claude-code"))
+    ).rejects.toThrow("claude-code Agent SDK failed: not authenticated")
   })
 
   it("waits for the Claude Agent SDK result message", async () => {
@@ -201,38 +210,46 @@ describe("production provider adapters", () => {
             result: "Claude completed after setup.",
             session_id: "claude-session",
             subtype: "success",
-            type: "result"
-          }
-        ])
+            type: "result",
+          },
+        ]),
     })
 
     const result = await adapter.startSession(startContext("claude-code"))
 
     expect(result.events).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ kind: "provider.event", name: "claude.system" }),
-        expect.objectContaining({ kind: "provider.event", name: "claude.result" })
+        expect.objectContaining({
+          kind: "provider.event",
+          name: "claude.system",
+        }),
+        expect.objectContaining({
+          kind: "provider.event",
+          name: "claude.result",
+        }),
       ])
     )
     expect(result).toMatchObject({
       providerSession: {
-        providerSessionId: "claude-code:claude-session"
+        providerSessionId: "claude-code:claude-session",
       },
       sessionId: makeSessionId("session-provider"),
       status: "completed",
       terminalOutcome: {
         status: "completed",
-        summary: "Claude completed after setup."
-      }
+        summary: "Claude completed after setup.",
+      },
     })
   })
 
   it("rejects Claude Agent SDK streams that finish without a result", async () => {
     const adapter = createClaudeCodeProviderRuntime({
-      query: () => claudeAgentMessages([{ type: "system" }])
+      query: () => claudeAgentMessages([{ type: "system" }]),
     })
 
-    await expect(adapter.startSession(startContext("claude-code"))).rejects.toThrow(
+    await expect(
+      adapter.startSession(startContext("claude-code"))
+    ).rejects.toThrow(
       "claude-code Agent SDK completed without a result message."
     )
   })
@@ -242,13 +259,13 @@ describe("production provider adapters", () => {
       appServerClient: {
         runTurn: async () => {
           throw new Error("codex app-server request failed: not authenticated")
-        }
-      }
+        },
+      },
     })
 
-    await expect(adapter.startSession(startContext("openai-codex"))).rejects.toThrow(
-      "codex app-server request failed: not authenticated"
-    )
+    await expect(
+      adapter.startSession(startContext("openai-codex"))
+    ).rejects.toThrow("codex app-server request failed: not authenticated")
   })
 
   it("represents provider lifecycle capabilities and typed unsupported operations", async () => {
@@ -256,31 +273,31 @@ describe("production provider adapters", () => {
     const providerSession = {
       external: [
         { kind: "codex.thread", threadId: "thread-codex" },
-        { kind: "codex.turn", threadId: "thread-codex", turnId: "turn-codex" }
+        { kind: "codex.turn", threadId: "thread-codex", turnId: "turn-codex" },
       ],
       provider: "openai-codex",
       providerInstanceId: makeProviderInstanceId("openai-codex-default"),
-      providerSessionId: "openai-codex:thread-codex:turn-codex"
+      providerSessionId: "openai-codex:thread-codex:turn-codex",
     } as const
 
     expect(adapter.capabilities).toMatchObject({
       connectivity: "connectionful",
       supportsCancel: false,
       supportsInterrupt: false,
-      supportsResume: false
+      supportsResume: false,
     })
     await expect(
       adapter.resumeSession({
         ...startContext("openai-codex"),
         previousSession: providerSession,
-        resumePrompt: "Continue the task."
+        resumePrompt: "Continue the task.",
       })
     ).rejects.toBeInstanceOf(ProviderOperationUnsupportedError)
     await expect(
       adapter.interruptSession({
         assignmentId: makeAssignmentId("assignment-provider"),
         providerSession,
-        sessionId: makeSessionId("session-provider")
+        sessionId: makeSessionId("session-provider"),
       })
     ).rejects.toThrow(
       "openai-codex provider instance openai-codex-default does not support interrupt."
@@ -290,13 +307,13 @@ describe("production provider adapters", () => {
   it("drives a Codex App Server over stdio JSON-RPC", async () => {
     const appServerClient = createNodeCodexAppServerClient({
       command: process.execPath,
-      commandArgs: ["-e", codexAppServerFixtureScript]
+      commandArgs: ["-e", codexAppServerFixtureScript],
     })
 
     const result = await appServerClient.runTurn({
       cwd: "/workspaces/stoneforge",
       model: "gpt-5.5",
-      prompt: "Summarize this repo."
+      prompt: "Summarize this repo.",
     })
 
     expect(result.events).toEqual(
@@ -304,12 +321,12 @@ describe("production provider adapters", () => {
         expect.objectContaining({
           kind: "provider.transcript.delta",
           role: "assistant",
-          text: "Codex App Server completed task."
+          text: "Codex App Server completed task.",
         }),
         expect.objectContaining({
           kind: "provider.turn.started",
-          turnId: "turn-from-app-server"
-        })
+          turnId: "turn-from-app-server",
+        }),
       ])
     )
     expect(result).toMatchObject({
@@ -319,24 +336,24 @@ describe("production provider adapters", () => {
       transcript: [
         {
           role: "assistant",
-          text: "Codex App Server completed task."
-        }
+          text: "Codex App Server completed task.",
+        },
       ],
       threadId: "thread-from-app-server",
-      turnId: "turn-from-app-server"
+      turnId: "turn-from-app-server",
     })
   })
 
   it("rejects Codex App Server JSON-RPC error responses", async () => {
     const appServerClient = createNodeCodexAppServerClient({
       command: process.execPath,
-      commandArgs: ["-e", codexAppServerInitializeErrorScript]
+      commandArgs: ["-e", codexAppServerInitializeErrorScript],
     })
 
     await expect(
       appServerClient.runTurn({
         model: "gpt-5.5",
-        prompt: "Summarize this repo."
+        prompt: "Summarize this repo.",
       })
     ).rejects.toThrow("codex app-server request failed: not authenticated")
   })
@@ -344,12 +361,12 @@ describe("production provider adapters", () => {
   it("uses Codex App Server completed agent messages as the summary", async () => {
     const appServerClient = createNodeCodexAppServerClient({
       command: process.execPath,
-      commandArgs: ["-e", codexAppServerCompletedItemScript]
+      commandArgs: ["-e", codexAppServerCompletedItemScript],
     })
 
     const result = await appServerClient.runTurn({
       model: "gpt-5.5",
-      prompt: "Summarize this repo."
+      prompt: "Summarize this repo.",
     })
 
     expect(result.events).toEqual(
@@ -358,8 +375,8 @@ describe("production provider adapters", () => {
           kind: "provider.transcript.item.completed",
           providerItemId: "item-agent-message",
           role: "assistant",
-          text: "Authoritative completed item summary."
-        })
+          text: "Authoritative completed item summary.",
+        }),
       ])
     )
     expect(result).toMatchObject({
@@ -369,24 +386,24 @@ describe("production provider adapters", () => {
         {
           providerItemId: "item-agent-message",
           role: "assistant",
-          text: "Authoritative completed item summary."
-        }
+          text: "Authoritative completed item summary.",
+        },
       ],
       threadId: "thread-completed-item",
-      turnId: "turn-completed-item"
+      turnId: "turn-completed-item",
     })
   })
 
   it("handles Codex App Server turn completion before turn/start response", async () => {
     const appServerClient = createNodeCodexAppServerClient({
       command: process.execPath,
-      commandArgs: ["-e", codexAppServerEarlyCompletionScript]
+      commandArgs: ["-e", codexAppServerEarlyCompletionScript],
     })
 
     await expect(
       appServerClient.runTurn({
         model: "gpt-5.5",
-        prompt: "Summarize this repo."
+        prompt: "Summarize this repo.",
       })
     ).resolves.toMatchObject({
       finalSummary: "Early completion summary.",
@@ -394,25 +411,24 @@ describe("production provider adapters", () => {
       transcript: [
         {
           role: "assistant",
-          text: "Early completion summary."
-        }
+          text: "Early completion summary.",
+        },
       ],
       threadId: "thread-early",
-      turnId: "turn-early"
+      turnId: "turn-early",
     })
   })
-
 
   it("rejects invalid Codex App Server JSON-RPC messages", async () => {
     const appServerClient = createNodeCodexAppServerClient({
       command: process.execPath,
-      commandArgs: ["-e", codexAppServerInvalidJsonScript]
+      commandArgs: ["-e", codexAppServerInvalidJsonScript],
     })
 
     await expect(
       appServerClient.runTurn({
         model: "gpt-5.5",
-        prompt: "Summarize this repo."
+        prompt: "Summarize this repo.",
       })
     ).rejects.toThrow("codex app-server emitted invalid JSON-RPC message.")
   })
@@ -420,13 +436,13 @@ describe("production provider adapters", () => {
   it("rejects malformed Codex App Server thread responses", async () => {
     const appServerClient = createNodeCodexAppServerClient({
       command: process.execPath,
-      commandArgs: ["-e", codexAppServerMalformedThreadScript]
+      commandArgs: ["-e", codexAppServerMalformedThreadScript],
     })
 
     await expect(
       appServerClient.runTurn({
         model: "gpt-5.5",
-        prompt: "Summarize this repo."
+        prompt: "Summarize this repo.",
       })
     ).rejects.toThrow("codex app-server response missing object field thread.")
   })
@@ -434,27 +450,45 @@ describe("production provider adapters", () => {
   it("rejects failed Codex App Server turns", async () => {
     const appServerClient = createNodeCodexAppServerClient({
       command: process.execPath,
-      commandArgs: ["-e", codexAppServerFailedTurnScript]
+      commandArgs: ["-e", codexAppServerFailedTurnScript],
     })
 
     await expect(
       appServerClient.runTurn({
         model: "gpt-5.5",
-        prompt: "Summarize this repo."
+        prompt: "Summarize this repo.",
       })
-    ).rejects.toThrow("codex app-server turn ended as failed.")
+    ).rejects.toThrow(
+      "codex app-server turn failed: model gpt-5.5 is not available"
+    )
+  })
+
+  it("preserves raw Codex App Server turn failure messages", async () => {
+    const appServerClient = createNodeCodexAppServerClient({
+      command: process.execPath,
+      commandArgs: ["-e", codexAppServerFailedTurnRawErrorScript],
+    })
+
+    await expect(
+      appServerClient.runTurn({
+        model: "gpt-5.5",
+        prompt: "Summarize this repo.",
+      })
+    ).rejects.toThrow(
+      "codex app-server turn failed: provider failure without JSON detail"
+    )
   })
 
   it("rejects malformed Codex App Server turn responses", async () => {
     const appServerClient = createNodeCodexAppServerClient({
       command: process.execPath,
-      commandArgs: ["-e", codexAppServerMalformedTurnScript]
+      commandArgs: ["-e", codexAppServerMalformedTurnScript],
     })
 
     await expect(
       appServerClient.runTurn({
         model: "gpt-5.5",
-        prompt: "Summarize this repo."
+        prompt: "Summarize this repo.",
       })
     ).rejects.toThrow("codex app-server response missing string field id.")
   })
@@ -462,13 +496,13 @@ describe("production provider adapters", () => {
   it("rejects Codex App Server process exits while requests are pending", async () => {
     const appServerClient = createNodeCodexAppServerClient({
       command: process.execPath,
-      commandArgs: ["-e", codexAppServerExitScript]
+      commandArgs: ["-e", codexAppServerExitScript],
     })
 
     await expect(
       appServerClient.runTurn({
         model: "gpt-5.5",
-        prompt: "Summarize this repo."
+        prompt: "Summarize this repo.",
       })
     ).rejects.toThrow("codex app-server exited with code 7: startup failed")
   })
@@ -476,13 +510,13 @@ describe("production provider adapters", () => {
   it("rejects Codex App Server process exits while a turn is active", async () => {
     const appServerClient = createNodeCodexAppServerClient({
       command: process.execPath,
-      commandArgs: ["-e", codexAppServerExitDuringTurnScript]
+      commandArgs: ["-e", codexAppServerExitDuringTurnScript],
     })
 
     await expect(
       appServerClient.runTurn({
         model: "gpt-5.5",
-        prompt: "Summarize this repo."
+        prompt: "Summarize this repo.",
       })
     ).rejects.toThrow("codex app-server exited with code 8: turn crashed")
   })
@@ -491,13 +525,13 @@ describe("production provider adapters", () => {
     const appServerClient = createNodeCodexAppServerClient({
       command: process.execPath,
       commandArgs: ["-e", codexAppServerHungTurnScript],
-      requestTimeoutMs: 200
+      requestTimeoutMs: 200,
     })
 
     await expect(
       appServerClient.runTurn({
         model: "gpt-5.5",
-        prompt: "Summarize this repo."
+        prompt: "Summarize this repo.",
       })
     ).rejects.toThrow("codex app-server turn/start timed out.")
   })
@@ -505,10 +539,37 @@ describe("production provider adapters", () => {
   it("allows Codex app-server command paths to be configured per Runtime environment", async () => {
     const adapter = createOpenAICodexProviderRuntime({
       command: process.execPath,
-      commandArgs: ["-e", codexAppServerFixtureScript]
+      commandArgs: ["-e", codexAppServerFixtureScript],
     })
 
     await adapter.startSession(startContext("openai-codex"))
+  })
+
+  it("uses the environment Codex app-server command when no command is configured", async () => {
+    const previousCommand = process.env.STONEFORGE_CODEX_COMMAND
+    process.env.STONEFORGE_CODEX_COMMAND = process.execPath
+
+    try {
+      const appServerClient = createNodeCodexAppServerClient({
+        commandArgs: ["-e", codexAppServerFixtureScript],
+      })
+
+      await expect(
+        appServerClient.runTurn({
+          model: "gpt-5.5",
+          prompt: "Summarize this repo.",
+        })
+      ).resolves.toMatchObject({
+        finalSummary: "Codex App Server completed task.",
+        status: "completed",
+      })
+    } finally {
+      if (previousCommand === undefined) {
+        delete process.env.STONEFORGE_CODEX_COMMAND
+      } else {
+        process.env.STONEFORGE_CODEX_COMMAND = previousCommand
+      }
+    }
   })
 })
 
@@ -555,7 +616,7 @@ function startContext(
       providerInstanceId:
         provider === "claude-code"
           ? makeProviderInstanceId("claude-code-default")
-          : makeProviderInstanceId("openai-codex-default")
+          : makeProviderInstanceId("openai-codex-default"),
     },
     assignmentId: makeAssignmentId("assignment-provider"),
     noCode: true,
@@ -564,13 +625,13 @@ function startContext(
       id: makeRuntimeId("runtime"),
       state: "healthy",
       type: "local-worktree",
-      worktreePath: "/workspaces/stoneforge"
+      worktreePath: "/workspaces/stoneforge",
     },
     sessionId: makeSessionId("session-provider"),
     task: {
       id: makeTaskId("task-provider"),
       intent: "Confirm provider dispatch without repository edits.",
-      title: "Verify no-code provider path"
+      title: "Verify no-code provider path",
     },
     workspace: {
       id: makeWorkspaceId("workspace-provider"),
@@ -578,9 +639,9 @@ function startContext(
         owner: "stoneforge-ai",
         provider: "github",
         repo: "stoneforge",
-        targetBranch: "main"
+        targetBranch: "main",
       },
-      state: "ready"
-    }
+      state: "ready",
+    },
   }
 }

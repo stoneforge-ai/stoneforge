@@ -6,13 +6,23 @@ import {
   readLocalTaskConsole,
   runLocalNoCodeTask,
 } from "../local-task-server.js"
-import type { LocalTaskConsoleView } from "../local-task-console.js"
+import type {
+  LocalTaskConsoleView,
+  LocalWebProvider,
+} from "../local-task-console.js"
 
 const panelClassName =
   "border-2 border-[#17211c] bg-[rgba(250,248,240,0.92)] shadow-[8px_8px_0_#17211c] max-[800px]:shadow-[5px_5px_0_#17211c]"
 const labelClassName = "text-[0.78rem] font-extrabold uppercase text-[#687264]"
 const fieldClassName =
   "w-full rounded-none border border-[#17211c] bg-[#fffdf4] text-[#17211c] focus:outline-[3px] focus:outline-offset-2 focus:outline-[#d83c1f]"
+const providerOptions = [
+  { label: "Claude Code", value: "claude-code" },
+  { label: "OpenAI Codex", value: "openai-codex" },
+] satisfies readonly {
+  readonly label: string
+  readonly value: LocalWebProvider
+}[]
 
 export const Route = createFileRoute("/")({
   component: LocalWebConsole,
@@ -26,6 +36,7 @@ function LocalWebConsole() {
   const [intent, setIntent] = useState(
     "Confirm the TanStack Start local web shell can run a no-code Task through the control plane."
   )
+  const [provider, setProvider] = useState<LocalWebProvider>("claude-code")
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
@@ -35,7 +46,9 @@ function LocalWebConsole() {
     setSubmitting(true)
 
     try {
-      const result = await runLocalNoCodeTask({ data: { intent, title } })
+      const result = await runLocalNoCodeTask({
+        data: { intent, provider, title },
+      })
 
       if (result.status === "completed") {
         await router.invalidate()
@@ -99,6 +112,31 @@ function LocalWebConsole() {
               value={intent}
             />
           </label>
+          <fieldset className="grid gap-2">
+            <legend className={labelClassName}>Provider</legend>
+            <div className="grid grid-cols-2 gap-2">
+              {providerOptions.map((option) => (
+                <label
+                  className={`grid min-h-12 cursor-pointer place-items-center border border-[#17211c] px-3 text-center text-[0.82rem] font-extrabold uppercase ${
+                    provider === option.value
+                      ? "bg-[#17211c] text-[#fffdf4]"
+                      : "bg-[#e3dfd1] text-[#17211c]"
+                  }`}
+                  key={option.value}
+                >
+                  <input
+                    checked={provider === option.value}
+                    className="sr-only"
+                    name="provider"
+                    onChange={() => setProvider(option.value)}
+                    type="radio"
+                    value={option.value}
+                  />
+                  {option.label}
+                </label>
+              ))}
+            </div>
+          </fieldset>
           <button
             className="flex min-h-12 cursor-pointer items-center justify-center gap-[9px] border-2 border-[#17211c] bg-[#d83c1f] font-black text-[#fffdf4] focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#d83c1f] disabled:cursor-progress disabled:opacity-70"
             disabled={submitting}
@@ -148,7 +186,7 @@ function TaskSummary({ state }: { readonly state: LocalTaskConsoleView }) {
         <Clock3 size={18} />
         <h2 className="m-0 text-xl">Execution</h2>
       </div>
-      <dl className="mb-6 grid grid-cols-3 gap-3">
+      <dl className="mb-6 grid grid-cols-4 gap-3 max-[800px]:grid-cols-2">
         <div className="border border-[#17211c] bg-[#e3dfd1] p-3">
           <dt className={labelClassName}>Tasks</dt>
           <dd className="mt-0.5 mb-0 text-[1.75rem] font-black">
@@ -167,6 +205,12 @@ function TaskSummary({ state }: { readonly state: LocalTaskConsoleView }) {
             {state.sessions.length}
           </dd>
         </div>
+        <div className="border border-[#17211c] bg-[#e3dfd1] p-3">
+          <dt className={labelClassName}>Lineage</dt>
+          <dd className="mt-0.5 mb-0 text-[1.75rem] font-black">
+            {state.lineage.length}
+          </dd>
+        </div>
       </dl>
 
       {latestTask === undefined ? (
@@ -182,6 +226,11 @@ function TaskSummary({ state }: { readonly state: LocalTaskConsoleView }) {
           <p className="m-0 w-fit bg-[#17211c] px-2 py-[5px] text-[0.78rem] font-extrabold text-[#fffdf4] uppercase">
             {latestTask.state}
           </p>
+          {latestSession === undefined ? null : (
+            <p className="m-0 w-fit border border-[#17211c] bg-[#e3dfd1] px-2 py-[5px] text-[0.78rem] font-extrabold text-[#17211c] uppercase">
+              {latestSession.provider}
+            </p>
+          )}
           <blockquote className="m-0 border-l-4 border-[#d83c1f] pl-3.5 text-[#304039]">
             {latestSession?.finalSummary ?? "Session summary is not available."}
           </blockquote>
