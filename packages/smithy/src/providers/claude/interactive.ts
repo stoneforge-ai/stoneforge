@@ -13,6 +13,7 @@ import { dirname, join } from 'node:path';
 import { createRequire } from 'node:module';
 import * as pty from 'node-pty';
 import type { IPty } from 'node-pty';
+import { buildClaudeSpawnEnv } from './env.js';
 import type {
   InteractiveProvider,
   InteractiveSession,
@@ -117,19 +118,12 @@ export class ClaudeInteractiveProvider implements InteractiveProvider {
     const sessionId = options.resumeSessionId ?? randomUUID();
     const args = this.buildArgs(options, sessionId);
 
-    // Build environment
-    const env: Record<string, string> = {
-      ...(process.env as Record<string, string>),
-      ...options.environmentVariables,
-    };
-    // Strip CLAUDECODE so the spawned claude doesn't see itself as nested
-    // inside another Claude Code session (claude refuses to start with
-    // "Claude Code cannot be launched inside another Claude Code session"
-    // when CLAUDECODE is inherited from a parent Claude Code process).
-    delete env.CLAUDECODE;
-    if (options.stoneforgeRoot) {
-      env.STONEFORGE_ROOT = options.stoneforgeRoot;
-    }
+    // Build environment via shared helper that strips CLAUDECODE
+    // (see env.ts for why this matters).
+    const env = buildClaudeSpawnEnv(process.env, {
+      overrides: options.environmentVariables,
+      stoneforgeRoot: options.stoneforgeRoot,
+    });
 
     const cols = options.cols ?? 120;
     const rows = options.rows ?? 30;
