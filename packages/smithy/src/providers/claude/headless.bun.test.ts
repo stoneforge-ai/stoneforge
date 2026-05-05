@@ -351,4 +351,50 @@ describe('ClaudeHeadlessProvider', () => {
       expect(provider.name).toBe('claude-headless');
     });
   });
+
+  describe('CLAUDECODE env handling', () => {
+    // Regression test for the nested-session refusal: if CLAUDECODE is set
+    // in the parent process env (e.g., stoneforge is invoked from inside
+    // an existing Claude Code session), it must NOT be propagated to the
+    // spawned claude subprocess. Modern claude versions read CLAUDECODE
+    // and refuse to start, exiting 1, which the spawner surfaces as the
+    // cryptic "Session exited before init" error.
+    it('strips CLAUDECODE from the spawned env even when present in process.env', async () => {
+      const { ClaudeHeadlessProvider } = await import('./headless.js');
+      const provider = new ClaudeHeadlessProvider();
+
+      const previous = process.env.CLAUDECODE;
+      process.env.CLAUDECODE = '1';
+      try {
+        const session = await provider.spawn({ workingDirectory: '/test/dir' });
+        session.close();
+
+        expect(capturedSdkOptions).toBeDefined();
+        const env = capturedSdkOptions!.env as Record<string, string> | undefined;
+        expect(env).toBeDefined();
+        expect(env!.CLAUDECODE).toBeUndefined();
+      } finally {
+        if (previous === undefined) {
+          delete process.env.CLAUDECODE;
+        } else {
+          process.env.CLAUDECODE = previous;
+        }
+      }
+    });
+
+    it('strips CLAUDECODE even when caller passes it via environmentVariables', async () => {
+      const { ClaudeHeadlessProvider } = await import('./headless.js');
+      const provider = new ClaudeHeadlessProvider();
+
+      const session = await provider.spawn({
+        workingDirectory: '/test/dir',
+        environmentVariables: { CLAUDECODE: '1', OTHER_VAR: 'keep-me' },
+      });
+      session.close();
+
+      const env = capturedSdkOptions!.env as Record<string, string> | undefined;
+      expect(env!.CLAUDECODE).toBeUndefined();
+      expect(env!.OTHER_VAR).toBe('keep-me');
+    });
+  });
 });

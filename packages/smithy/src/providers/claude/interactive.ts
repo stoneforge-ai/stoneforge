@@ -13,6 +13,7 @@ import { dirname, join } from 'node:path';
 import { createRequire } from 'node:module';
 import * as pty from 'node-pty';
 import type { IPty } from 'node-pty';
+import { buildClaudeSpawnEnv } from './env.js';
 import type {
   InteractiveProvider,
   InteractiveSession,
@@ -117,15 +118,12 @@ export class ClaudeInteractiveProvider implements InteractiveProvider {
     const sessionId = options.resumeSessionId ?? randomUUID();
     const args = this.buildArgs(options, sessionId);
 
-    // Build environment
-    const env: Record<string, string> = {
-      ...(process.env as Record<string, string>),
-      CLAUDECODE: '1',
-      ...options.environmentVariables,
-    };
-    if (options.stoneforgeRoot) {
-      env.STONEFORGE_ROOT = options.stoneforgeRoot;
-    }
+    // Build environment via shared helper that strips CLAUDECODE
+    // (see env.ts for why this matters).
+    const env = buildClaudeSpawnEnv(process.env, {
+      overrides: options.environmentVariables,
+      stoneforgeRoot: options.stoneforgeRoot,
+    });
 
     const cols = options.cols ?? 120;
     const rows = options.rows ?? 30;
