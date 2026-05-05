@@ -296,10 +296,7 @@ export interface DispatchDaemonConfig {
   readonly ensureTargetBranchExists?: (projectRoot: string, branchName: string) => Promise<void>;
 
   /** Optional logger override. Defaults to the module-level dispatch-daemon logger. Used for testability. */
-  readonly logger?: { warn: (...args: unknown[]) => void };
-
-  /** Number of ticks between repeated stuck-queue warnings. Default 20. */
-  readonly stuckWarnTickInterval?: number;
+  readonly logger?: { warn: (...args: unknown[]) => void; info?: (...args: unknown[]) => void };
 }
 
 /**
@@ -364,8 +361,7 @@ interface NormalizedConfig {
   directorInboxForwardingEnabled: boolean;
   directorInboxIdleThresholdMs: number;
   ensureTargetBranchExists: (projectRoot: string, branchName: string) => Promise<void>;
-  logger?: { warn: (...args: unknown[]) => void };
-  stuckWarnTickInterval: number;
+  logger?: { warn: (...args: unknown[]) => void; info?: (...args: unknown[]) => void };
 }
 
 // ============================================================================
@@ -627,7 +623,8 @@ export class DispatchDaemonImpl implements DispatchDaemon {
    * Reset to POSITIVE_INFINITY when the queue is healthy so re-stuckening
    * warns immediately again.
    */
-  private ticksSinceLastStuckWarn = Number.POSITIVE_INFINITY;
+  /** Tracks the last reported stuck state so we log only on transitions, never on every tick. */
+  private lastReportedStuck = false;
 
   constructor(
     api: QuarryAPI,
@@ -799,8 +796,13 @@ export class DispatchDaemonImpl implements DispatchDaemon {
     await this.runPollCycle();
   }
 
+  /**
+   * Logs ONLY on stuck-queue state transitions, never repeats while the state holds.
+   * Healthy → Stuck: emits a single STUCK warn line.
+   * Stuck → Healthy: emits a single RESUMED info line.
+   * No periodic reminders, so a long-running stuck state does not spam logs.
+   */
   private async maybeLogStuckQueueWarning(): Promise<void> {
-    const interval = this.config.stuckWarnTickInterval;
     let health: DispatchHealth;
     try {
       health = await this.getDispatchHealth();
@@ -809,19 +811,20 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       return;
     }
 
-    if (!health.stuck) {
-      this.ticksSinceLastStuckWarn = Number.POSITIVE_INFINITY;
-      return;
+    if (health.stuck && !this.lastReportedStuck) {
+      const log = this.config.logger ?? logger;
+      log.warn(
+        `[dispatch] STUCK: ${health.readyUnassignedTasks} task(s) ready, no available workers. Register or enable a worker so dispatch can proceed.`
+      );
+      this.lastReportedStuck = true;
+    } else if (!health.stuck && this.lastReportedStuck) {
+      const log = this.config.logger ?? logger;
+      const info = log.info ?? log.warn;
+      info(
+        `[dispatch] RESUMED: ${health.availableWorkers} worker(s) available, dispatch flowing again.`
+      );
+      this.lastReportedStuck = false;
     }
-
-    this.ticksSinceLastStuckWarn += 1;
-    if (this.ticksSinceLastStuckWarn < interval) return;
-
-    const log = this.config.logger ?? logger;
-    log.warn(
-      `[dispatch] ${health.readyUnassignedTasks} task(s) ready, no available workers. Register or enable a worker so dispatch can proceed.`
-    );
-    this.ticksSinceLastStuckWarn = 0;
   }
 
   // ----------------------------------------
@@ -2138,7 +2141,6 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       directorInboxIdleThresholdMs: config?.directorInboxIdleThresholdMs ?? 120_000,
       ensureTargetBranchExists: config?.ensureTargetBranchExists ?? ensureTargetBranchExists,
       logger: config?.logger,
-      stuckWarnTickInterval: config?.stuckWarnTickInterval ?? 20,
     };
   }
 

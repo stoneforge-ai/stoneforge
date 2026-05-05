@@ -6587,11 +6587,12 @@ describe('getDispatchHealth', () => {
   });
 });
 
-describe('stuck-queue tick warning', () => {
-  test('emits a warn log on tick when the queue is stuck', async () => {
+describe('stuck-queue transition logging', () => {
+  test('emits a STUCK warn on the healthy → stuck transition, then stays silent on subsequent ticks', async () => {
     const warnSpy = mock((..._args: unknown[]) => {});
+    const infoSpy = mock((..._args: unknown[]) => {});
     const harness = await setupDaemonHarness({
-      configOverrides: { logger: { warn: warnSpy } },
+      configOverrides: { logger: { warn: warnSpy, info: infoSpy } },
     });
     try {
       const task = await createTask({
@@ -6602,10 +6603,44 @@ describe('stuck-queue tick warning', () => {
       await harness.api.create(task as unknown as Record<string, unknown> & { createdBy: EntityId });
       // No workers registered; queue is stuck.
       await harness.daemon.tick();
-      expect(warnSpy).toHaveBeenCalled();
+      expect(warnSpy).toHaveBeenCalledTimes(1);
       const message = warnSpy.mock.calls[0][0] as string;
+      expect(message).toContain('STUCK');
       expect(message).toContain('1 task(s) ready');
       expect(message).toContain('no available workers');
+
+      // Subsequent stuck ticks must NOT spam the log (transition-only model).
+      await harness.daemon.tick();
+      await harness.daemon.tick();
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      await harness.dispose();
+    }
+  });
+
+  test('emits a RESUMED info on the stuck → healthy transition', async () => {
+    const warnSpy = mock((..._args: unknown[]) => {});
+    const infoSpy = mock((..._args: unknown[]) => {});
+    const harness = await setupDaemonHarness({
+      configOverrides: { logger: { warn: warnSpy, info: infoSpy } },
+    });
+    try {
+      const task = await createTask({
+        title: 'x',
+        createdBy: harness.systemEntity,
+        status: TaskStatus.OPEN,
+      });
+      await harness.api.create(task as unknown as Record<string, unknown> & { createdBy: EntityId });
+      // First tick: queue is stuck (no workers). Triggers STUCK warn.
+      await harness.daemon.tick();
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+
+      // Register a worker; on next tick the queue is healthy. Triggers RESUMED info.
+      await harness.registry.registerWorker({ name: 'w1', workerMode: 'ephemeral', createdBy: harness.systemEntity, maxConcurrentTasks: 1 });
+      await harness.daemon.tick();
+      expect(infoSpy).toHaveBeenCalledTimes(1);
+      const infoMessage = infoSpy.mock.calls[0][0] as string;
+      expect(infoMessage).toContain('RESUMED');
     } finally {
       await harness.dispose();
     }
