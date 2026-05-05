@@ -1,4 +1,4 @@
-export { createExecutionControlPlane } from "./control-plane.js"
+export { createExecutionControlPlane } from "./control-plane/index.js"
 export {
   makeAgentId,
   makeAssignmentId,
@@ -8,16 +8,16 @@ export {
   makeTaskId,
   makeWorkspaceId
 } from "./ids.js"
-export { createNodeCodexAppServerClient } from "./codex-app-server.js"
+export { createNodeCodexAppServerClient } from "./providers/openai-codex/app-server/client.js"
 export {
   createClaudeCodeProviderRuntime,
   createOpenAICodexProviderRuntime
-} from "./providers.js"
+} from "./providers/index.js"
 export {
   completeProviderSession,
   defineProviderInstance,
   ProviderOperationUnsupportedError
-} from "./provider-models.js"
+} from "./providers/models.js"
 export type {
   CompleteProviderSessionInput,
   DefineProviderInstanceInput,
@@ -26,7 +26,7 @@ export type {
   ProviderSessionStartContext,
   ProviderSessionStartResult,
   ProviderTranscriptEntry
-} from "./provider-models.js"
+} from "./providers/models.js"
 export type {
   AgentId,
   AgentConfig,

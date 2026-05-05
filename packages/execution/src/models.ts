@@ -27,7 +27,7 @@ import type {
   ProviderSessionIdentity,
   ProviderSessionStartResult,
   ProviderTranscriptEntry
-} from "./provider-models.js"
+} from "./providers/models.js"
 
 export type {
   AcceptableRuntime,
@@ -89,6 +89,7 @@ export interface ReadWorkspaceExecutionInput {
 export interface CodexAppServerTurnInput {
   readonly cwd?: string
   readonly model: string
+  readonly onEvent?: (event: ProviderSessionEvent) => void
   readonly prompt: string
 }
 
@@ -187,6 +188,13 @@ export type ExecutionLineageEvent =
     }
   | {
       readonly event: "session.completed"
+      readonly providerInstanceId: ProviderInstanceId
+      readonly providerSessionId: string
+      readonly sessionId: SessionId
+    }
+  | {
+      readonly event: "session.failed"
+      readonly message: string
       readonly providerInstanceId: ProviderInstanceId
       readonly providerSessionId: string
       readonly sessionId: SessionId

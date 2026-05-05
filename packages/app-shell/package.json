@@ -9,8 +9,8 @@
       "default": "./dist/index.js"
     },
     "./local-task-console-view": {
-      "types": "./dist/local-task-console-view.d.ts",
-      "default": "./dist/local-task-console-view.js"
+      "types": "./dist/components/index.d.ts",
+      "default": "./dist/components/index.js"
     },
     "./styles.css": "./src/styles.css"
   },

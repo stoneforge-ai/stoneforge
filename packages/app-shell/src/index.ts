@@ -1,20 +1,30 @@
-export { createLocalTaskConsole } from "./local-task-console.js"
-export { LocalTaskConsoleScreen } from "./local-task-console-view.js"
+export { createLocalTaskConsole } from "./lib/control-plane/index.js"
+export {
+  sessionActivityItems,
+  taskExecutionProjection
+} from "./lib/projections/index.js"
+export { LocalTaskConsoleScreen } from "./components/index.js"
 export type {
   ControlPlaneConnectionMode,
   CreateLocalTaskConsoleInput,
   LocalControlPlaneConnectionMode,
   LocalHumanPrincipal,
   LocalTaskConsole,
+  LocalTaskDispatchResult,
   LocalTaskConsoleView,
   LocalTaskProvider,
   LocalTaskProviderConfig,
   LocalTaskRunResult,
+  LocalTaskStartResult,
   LocalTaskWorkspaceConfig,
-  RunNoCodeTaskInput,
-} from "./local-task-console.js"
+  RunNoCodeTaskInput
+} from "./lib/control-plane/index.js"
 export type {
   LocalTaskConsoleCopy,
   LocalTaskConsoleDraft,
-  LocalTaskConsoleViewProps,
-} from "./local-task-console-view.js"
+  LocalTaskConsoleViewProps
+} from "./components/index.js"
+export type {
+  SessionActivityItem,
+  TaskExecutionProjection
+} from "./lib/projections/index.js"

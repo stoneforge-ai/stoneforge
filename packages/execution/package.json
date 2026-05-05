@@ -14,7 +14,7 @@
     "clean": "rm -rf dist coverage",
     "coverage": "vitest run --coverage",
     "lint": "eslint \"src/**/*.ts\"",
-    "smoke:providers": "STONEFORGE_PROVIDER_SMOKE=1 vitest run src/providers.smoke.test.ts",
+    "smoke:providers": "STONEFORGE_PROVIDER_SMOKE=1 vitest run src/providers/providers.smoke.test.ts",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.test.json --noEmit"
   },

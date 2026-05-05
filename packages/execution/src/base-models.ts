@@ -17,8 +17,8 @@ export type SessionConnectivity = "connectionful" | "connectionless"
 export type RuntimeState = "healthy" | "unhealthy"
 export type RuntimeType = "container" | "local-worktree" | "managed-sandbox"
 export type TaskState = "draft" | "ready" | "in_progress" | "completed"
-export type AssignmentStatus = "running" | "completed"
-export type SessionStatus = "running" | "completed"
+export type AssignmentStatus = "running" | "completed" | "failed"
+export type SessionStatus = "running" | "completed" | "failed"
 export type WorkspaceState = "degraded" | "ready"
 export type AgentTag =
   | `agent:${string}`

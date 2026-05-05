@@ -85,8 +85,8 @@ async function main() {
     const text = await waitForPageText(cdp, sessionId, "Browser Codex Task")
 
     assertIncludes(text, "Tasks")
-    assertIncludes(text, "Assignments")
-    assertIncludes(text, "Sessions")
+    assertIncludes(text, "Assignment")
+    assertIncludes(text, "Session")
     assertIncludes(text, "Lineage")
     assertIncludes(text, "openai-codex")
     assertIncludes(

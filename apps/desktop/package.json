@@ -6,9 +6,9 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json && vite build",
     "coverage": "vitest run --coverage",
-    "dev": "pnpm build && electron dist/main.js",
+    "dev": "pnpm build && electron dist/main/index.js",
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
-    "smoke": "pnpm build && STONEFORGE_DESKTOP_SMOKE=1 electron dist/main.js",
+    "smoke": "pnpm build && STONEFORGE_DESKTOP_SMOKE=1 electron dist/main/index.js",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.test.json --noEmit"
   },

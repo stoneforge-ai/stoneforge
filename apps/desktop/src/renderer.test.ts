@@ -12,6 +12,10 @@ describe("Electron desktop renderer", () => {
       new URL("./renderer/main.tsx", import.meta.url),
       "utf8"
     )
+    const page = readFileSync(
+      new URL("./renderer/app/home/HomePage.tsx", import.meta.url),
+      "utf8"
+    )
     const styles = readFileSync(
       new URL("./renderer/styles.css", import.meta.url),
       "utf8"
@@ -20,8 +24,8 @@ describe("Electron desktop renderer", () => {
     expect(html).toContain('<div id="root"></div>')
     expect(html).toContain('<script type="module" src="/main.tsx"></script>')
     expect(renderer).toContain("createRoot")
-    expect(renderer).toContain("Desktop Task Console")
-    expect(renderer).toContain("window.stoneforgeDesktop")
+    expect(page).toContain("Desktop Task Console")
+    expect(page).toContain("window.stoneforgeDesktop")
     expect(styles).toContain('@import "tailwindcss";')
     expect(html).toContain("Content-Security-Policy")
   })

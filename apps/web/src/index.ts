@@ -1,9 +1,9 @@
-export { createLocalTaskConsole } from "./local-task-console.js"
-export { taskRunFailureMessage } from "./local-task-errors.js"
+export { createLocalTaskConsole } from "./lib/local-task/console.js"
+export { taskRunFailureMessage } from "./lib/local-task/errors.js"
 export type {
   CreateLocalTaskConsoleInput,
   LocalTaskConsole,
   LocalTaskConsoleView,
   LocalTaskRunResult,
-  RunNoCodeTaskInput,
-} from "./local-task-console.js"
+  RunNoCodeTaskInput
+} from "./lib/local-task/console.js"
