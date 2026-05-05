@@ -1,5 +1,7 @@
 # @stoneforge/core
 
+## 1.25.0
+
 ## 1.24.0
 
 ### Patch Changes

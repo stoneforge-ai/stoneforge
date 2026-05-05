@@ -1,5 +1,11 @@
 # @stoneforge/quarry-web
 
+## 1.25.0
+
+### Patch Changes
+
+- @stoneforge/ui@1.25.0
+
 ## 1.24.0
 
 ### Patch Changes
