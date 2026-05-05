@@ -950,6 +950,30 @@ async function agentStartHandler(
       spawnMode = options.mode as 'headless' | 'interactive';
     }
 
+    // Resolve effective spawn mode using the same rule as
+    // SpawnerServiceImpl.determineSpawnMode: director → interactive,
+    // worker/steward → headless, unless explicitly overridden.
+    const effectiveMode: 'headless' | 'interactive' =
+      spawnMode ?? (agentRole === 'director' ? 'interactive' : 'headless');
+
+    if (effectiveMode === 'headless' && !options.prompt && !options.resume) {
+      return failure(
+        [
+          `Cannot start a headless ${agentRole} without an initial prompt.`,
+          `Headless agents read input via stdin; without --prompt or --resume the process exits immediately.`,
+          ``,
+          `Provide one of:`,
+          `  --prompt "..."           Initial instructions for the agent`,
+          `  --resume <session-id>    Resume a previous session`,
+          `  --mode interactive       Start as an interactive (PTY) session`,
+          ``,
+          `Note: in dispatch-driven workflows, the daemon spawns workers automatically when tasks are ready.`,
+          `Manual restart of ephemeral workers is usually unnecessary.`,
+        ].join('\n'),
+        ExitCode.VALIDATION
+      );
+    }
+
     // Spawn the agent
     const result = await spawner.spawn(id as EntityId, agentRole, {
       initialPrompt: options.prompt,
@@ -1040,6 +1064,8 @@ Options:
   --stream                 Stream agent output after starting
   --provider <name>        Override agent provider for this session
   --model <model>          Override model for this session
+
+For headless workers/stewards (default), one of --prompt, --resume, or --mode interactive is required.
 
 Examples:
   sf agent start el-abc123

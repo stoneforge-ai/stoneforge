@@ -482,4 +482,39 @@ describe('agent disable / enable behavioural', () => {
       rmSync(tmpRoot, { recursive: true, force: true });
     }
   });
+
+  test('start refuses headless invocation without --prompt or --resume', async () => {
+    const tmpRoot = mkdtempSync(join(tmpdir(), 'sf-start-validation-test-'));
+    const cwdBefore = process.cwd();
+    try {
+      mkdirSync(join(tmpRoot, '.stoneforge'), { recursive: true });
+      const dbPath = join(tmpRoot, '.stoneforge', 'stoneforge.db');
+      const tmpBackend = createStorage({ path: dbPath, create: true });
+      initializeSchema(tmpBackend);
+      const tmpApi = createOrchestratorAPI(tmpBackend);
+      const registered = await tmpApi.registerWorker({
+        name: 'naked-worker',
+        workerMode: 'ephemeral',
+        createdBy: CREATOR,
+      });
+
+      process.chdir(tmpRoot);
+      try {
+        const result = await agentStartCommand.handler!(
+          [registered.id as unknown as string],
+          { db: dbPath } as never
+        );
+        expect(result.exitCode).not.toBe(0);
+        const errMsg = String(result.error ?? '');
+        expect(errMsg).toContain('headless');
+        expect(errMsg).toContain('--prompt');
+        expect(errMsg).toContain('--resume');
+        expect(errMsg).toContain('--mode interactive');
+      } finally {
+        process.chdir(cwdBefore);
+      }
+    } finally {
+      rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
 });
