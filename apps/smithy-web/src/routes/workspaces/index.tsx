@@ -28,6 +28,7 @@ import {
   type LayoutPreset,
 } from '../../components/workspace';
 import { useAgent, useResumeAgentSession } from '../../api/hooks/useAgents';
+import { DispatchHealthBanner } from '../../components/dispatch/DispatchHealthBanner';
 
 /** Layout preset configuration */
 const layoutPresets: { id: LayoutPreset; icon: typeof Square; label: string }[] = [
@@ -330,6 +331,9 @@ export function WorkspacesPage() {
           </button>
         </div>
       </div>
+
+      {/* Dispatch health banner */}
+      <DispatchHealthBanner className="mx-6 mt-4" />
 
       {/* Main content area */}
       <div className="flex-1 min-h-0 p-4 overflow-hidden">

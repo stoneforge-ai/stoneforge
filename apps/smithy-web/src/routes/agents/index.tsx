@@ -17,6 +17,7 @@ import { AgentCard, CreateAgentDialog, DeleteAgentDialog, RenameAgentDialog, Sta
 import { PoolCard, CreatePoolDialog, EditPoolDialog } from '../../components/pool';
 import { AgentWorkspaceGraph } from '../../components/agent-graph';
 import type { Agent, SessionStatus, AgentRole, StewardFocus } from '../../api/types';
+import { DispatchHealthBanner } from '../../components/dispatch/DispatchHealthBanner';
 
 type TabValue = 'agents' | 'stewards' | 'pools' | 'graph';
 
@@ -428,6 +429,9 @@ export function AgentsPage() {
           </button>
         </nav>
       </div>
+
+      {/* Dispatch health banner */}
+      <DispatchHealthBanner />
 
       {/* Content */}
       {currentTab === 'graph' ? (

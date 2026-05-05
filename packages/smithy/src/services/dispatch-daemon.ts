@@ -294,6 +294,29 @@ export interface DispatchDaemonConfig {
    * Useful for testing without triggering real git remote operations.
    */
   readonly ensureTargetBranchExists?: (projectRoot: string, branchName: string) => Promise<void>;
+
+  /** Optional logger override. Defaults to the module-level dispatch-daemon logger. Used for testability. */
+  readonly logger?: { warn: (...args: unknown[]) => void; info?: (...args: unknown[]) => void };
+}
+
+/**
+ * Snapshot of the dispatch worker queue's stuck state.
+ * Computed on demand from the agent registry and ready-task list.
+ * A queue is "stuck" when there are unassigned ready tasks but no worker
+ * could take them (registered, not disabled, not terminated). At-capacity
+ * workers do NOT count: the queue is busy, not stuck.
+ */
+export interface DispatchHealth {
+  /** Count of ready tasks (api.ready result) that have no assignee. */
+  readonly readyUnassignedTasks: number;
+  /** Count of workers eligible to take new work: registered, not disabled, not terminated. */
+  readonly availableWorkers: number;
+  /** True iff readyUnassignedTasks > 0 && availableWorkers === 0. */
+  readonly stuck: boolean;
+  /** Convenience alias for stuck, matching the field name surfaced in the HTTP and UI layers. */
+  readonly hasStuckQueue: boolean;
+  /** Timestamp the snapshot was computed (ISO 8601). */
+  readonly computedAt: string;
 }
 
 /**
@@ -338,6 +361,7 @@ interface NormalizedConfig {
   directorInboxForwardingEnabled: boolean;
   directorInboxIdleThresholdMs: number;
   ensureTargetBranchExists: (projectRoot: string, branchName: string) => Promise<void>;
+  logger?: { warn: (...args: unknown[]) => void; info?: (...args: unknown[]) => void };
 }
 
 // ============================================================================
@@ -478,13 +502,29 @@ export interface DispatchDaemon {
   /**
    * Gets the current configuration.
    */
-  getConfig(): Omit<Required<DispatchDaemonConfig>, 'onSessionStarted'> & { onSessionStarted?: OnSessionStartedCallback };
+  getConfig(): Omit<Required<DispatchDaemonConfig>, 'onSessionStarted' | 'logger'> & { onSessionStarted?: OnSessionStartedCallback; logger?: { warn: (...args: unknown[]) => void } };
 
   /**
    * Updates the configuration.
    * Takes effect on the next poll cycle.
    */
   updateConfig(config: Partial<DispatchDaemonConfig>): void;
+
+  // ----------------------------------------
+  // Health
+  // ----------------------------------------
+
+  /**
+   * Returns a snapshot of dispatch worker-queue health.
+   * Inexpensive (one ready-task query, one agent list query); safe to call from HTTP routes.
+   */
+  getDispatchHealth(): Promise<DispatchHealth>;
+
+  /**
+   * Manually triggers one complete poll cycle (same work as the interval-driven cycle).
+   * Useful for testing and for callers that want to force an immediate dispatch pass.
+   */
+  tick(): Promise<void>;
 
   // ----------------------------------------
   // Events
@@ -575,6 +615,16 @@ export class DispatchDaemonImpl implements DispatchDaemon {
 
   /** TTL for emitted warning deduplication keys (5 minutes). */
   private static readonly WARNING_DEDUP_TTL_MS = 5 * 60 * 1000;
+
+  /**
+   * Ticks elapsed since the last stuck-queue warn was emitted.
+   * Initialized to POSITIVE_INFINITY so the first stuck tick warns immediately
+   * (Infinity + 1 is still Infinity, which is >= any interval).
+   * Reset to POSITIVE_INFINITY when the queue is healthy so re-stuckening
+   * warns immediately again.
+   */
+  /** Tracks the last reported stuck state so we log only on transitions, never on every tick. */
+  private lastReportedStuck = false;
 
   constructor(
     api: QuarryAPI,
@@ -712,6 +762,69 @@ export class DispatchDaemonImpl implements DispatchDaemon {
 
   isRunning(): boolean {
     return this.running;
+  }
+
+  // ----------------------------------------
+  // Health
+  // ----------------------------------------
+
+  async getDispatchHealth(): Promise<DispatchHealth> {
+    const readyTasks = await this.api.ready({ includeEphemeral: true });
+    const readyUnassignedTasks = readyTasks.filter(t => !t.assignee).length;
+
+    const allAgents = await this.agentRegistry.listAgents();
+    const availableWorkers = allAgents.filter(a => {
+      const meta = getAgentMetadata(a);
+      if (!meta || meta.agentRole !== 'worker') return false;
+      if (isAgentDisabled(a)) return false;
+      if (meta.sessionStatus === 'terminated') return false;
+      return true;
+    }).length;
+
+    const stuck = readyUnassignedTasks > 0 && availableWorkers === 0;
+
+    return {
+      readyUnassignedTasks,
+      availableWorkers,
+      stuck,
+      hasStuckQueue: stuck,
+      computedAt: new Date().toISOString(),
+    };
+  }
+
+  async tick(): Promise<void> {
+    await this.runPollCycle();
+  }
+
+  /**
+   * Logs ONLY on stuck-queue state transitions, never repeats while the state holds.
+   * Healthy → Stuck: emits a single STUCK warn line.
+   * Stuck → Healthy: emits a single RESUMED info line.
+   * No periodic reminders, so a long-running stuck state does not spam logs.
+   */
+  private async maybeLogStuckQueueWarning(): Promise<void> {
+    let health: DispatchHealth;
+    try {
+      health = await this.getDispatchHealth();
+    } catch {
+      // Health computation must never crash the tick loop.
+      return;
+    }
+
+    if (health.stuck && !this.lastReportedStuck) {
+      const log = this.config.logger ?? logger;
+      log.warn(
+        `[dispatch] STUCK: ${health.readyUnassignedTasks} task(s) ready, no available workers. Register or enable a worker so dispatch can proceed.`
+      );
+      this.lastReportedStuck = true;
+    } else if (!health.stuck && this.lastReportedStuck) {
+      const log = this.config.logger ?? logger;
+      const info = log.info ?? log.warn;
+      info(
+        `[dispatch] RESUMED: ${health.availableWorkers} worker(s) available, dispatch flowing again.`
+      );
+      this.lastReportedStuck = false;
+    }
   }
 
   // ----------------------------------------
@@ -1916,7 +2029,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
   // Configuration
   // ----------------------------------------
 
-  getConfig(): Omit<Required<DispatchDaemonConfig>, 'onSessionStarted'> & { onSessionStarted?: OnSessionStartedCallback } {
+  getConfig(): Omit<Required<DispatchDaemonConfig>, 'onSessionStarted' | 'logger'> & { onSessionStarted?: OnSessionStartedCallback; logger?: { warn: (...args: unknown[]) => void } } {
     return { ...this.config };
   }
 
@@ -2027,6 +2140,7 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       directorInboxForwardingEnabled: config?.directorInboxForwardingEnabled ?? true,
       directorInboxIdleThresholdMs: config?.directorInboxIdleThresholdMs ?? 120_000,
       ensureTargetBranchExists: config?.ensureTargetBranchExists ?? ensureTargetBranchExists,
+      logger: config?.logger,
     };
   }
 
@@ -2133,6 +2247,8 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       if (this.config.workflowAutoTransitionEnabled) {
         await this.pollWorkflowAutoTransition();
       }
+
+      await this.maybeLogStuckQueueWarning();
     } finally {
       this.polling = false;
     }

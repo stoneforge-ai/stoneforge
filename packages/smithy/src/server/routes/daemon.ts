@@ -30,7 +30,7 @@ export function createDaemonRoutes(services: Services) {
   const app = new Hono();
 
   // GET /api/daemon/status
-  app.get('/api/daemon/status', (c) => {
+  app.get('/api/daemon/status', async (c) => {
     if (!dispatchDaemon) {
       return c.json({
         isRunning: false,
@@ -42,6 +42,14 @@ export function createDaemonRoutes(services: Services) {
 
     const config = dispatchDaemon.getConfig();
     const rateLimitStatus = dispatchDaemon.getRateLimitStatus();
+
+    let health: import('../../services/dispatch-daemon.js').DispatchHealth | undefined;
+    try {
+      health = await dispatchDaemon.getDispatchHealth();
+    } catch (err) {
+      logger.warn('Failed to compute dispatch health for /api/daemon/status:', err);
+    }
+
     return c.json({
       isRunning: dispatchDaemon.isRunning(),
       available: true,
@@ -55,6 +63,7 @@ export function createDaemonRoutes(services: Services) {
         directorInboxForwardingEnabled: config.directorInboxForwardingEnabled,
       },
       rateLimit: rateLimitStatus,
+      health,
     });
   });
 

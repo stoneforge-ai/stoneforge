@@ -623,6 +623,18 @@ export interface ApprovalRequestResponse {
 }
 
 // ============================================================================
+// Daemon / Dispatch Types
+// ============================================================================
+
+export interface DispatchHealth {
+  readyUnassignedTasks: number;
+  availableWorkers: number;
+  stuck: boolean;
+  hasStuckQueue: boolean;
+  computedAt: string;
+}
+
+// ============================================================================
 // Provider Metrics Types
 // ============================================================================
 
