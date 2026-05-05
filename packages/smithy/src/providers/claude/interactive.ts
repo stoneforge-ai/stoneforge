@@ -120,9 +120,13 @@ export class ClaudeInteractiveProvider implements InteractiveProvider {
     // Build environment
     const env: Record<string, string> = {
       ...(process.env as Record<string, string>),
-      CLAUDECODE: '1',
       ...options.environmentVariables,
     };
+    // Strip CLAUDECODE so the spawned claude doesn't see itself as nested
+    // inside another Claude Code session (claude refuses to start with
+    // "Claude Code cannot be launched inside another Claude Code session"
+    // when CLAUDECODE is inherited from a parent Claude Code process).
+    delete env.CLAUDECODE;
     if (options.stoneforgeRoot) {
       env.STONEFORGE_ROOT = options.stoneforgeRoot;
     }
