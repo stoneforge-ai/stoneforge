@@ -392,11 +392,16 @@ export class SyncEngine {
       return 'skipped';
     }
 
-    // Skip closed/tombstone tasks and archived documents — they're done
-    // and shouldn't sync. If an element is later reopened/reactivated,
-    // it will be picked up again naturally since the filter no longer applies.
+    // Closed tasks must still push — the close transition itself needs to
+    // reach the remote so the linked issue closes and its sf:status:* label
+    // updates. Downstream hash + event checks in pushElement/pushDocument
+    // dedupe subsequent pushes, so this is safe and self-throttling.
+    //
+    // Tombstones (deleted tasks) and archived documents stay skipped:
+    // they're terminal states that shouldn't generate any further sync
+    // traffic.
     const elementStatus = (element as unknown as { status: string }).status;
-    if (elementStatus === 'closed' || elementStatus === 'tombstone' || elementStatus === 'archived') {
+    if (elementStatus === 'tombstone' || elementStatus === 'archived') {
       return 'skipped';
     }
 

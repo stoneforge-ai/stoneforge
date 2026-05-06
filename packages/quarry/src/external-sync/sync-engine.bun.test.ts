@@ -1151,7 +1151,12 @@ describe('Error classification', () => {
 describe('SyncEngine closed/tombstone task filtering', () => {
   // --- Push path ---
 
-  test('push skips closed tasks', async () => {
+  test('push propagates closed tasks so the close-event reaches the remote', async () => {
+    // Regression: previously, closed tasks were unconditionally skipped on
+    // push, which left the linked GitHub issue OPEN forever and its
+    // sf:status:* label out of date. The close transition itself is the
+    // change that needs to be pushed; downstream hash + event checks
+    // dedupe subsequent pushes.
     const syncState = createTestSyncState({
       lastPushedHash: 'old-hash-that-differs',
       lastPushedAt: '2024-01-01T00:00:00.000Z' as Timestamp,
@@ -1161,12 +1166,82 @@ describe('SyncEngine closed/tombstone task filtering', () => {
       status: 'closed',
     } as unknown as Element;
 
+    let capturedUpdates: Partial<ExternalTaskInput> | undefined;
+    const engine = buildEngine({
+      elements: [element],
+      events: [
+        { elementId: element.id, eventType: 'closed', createdAt: '2024-01-05T00:00:00.000Z' as Timestamp },
+      ],
+      onUpdateIssue: (_project, _externalId, updates) => {
+        capturedUpdates = updates;
+      },
+    });
+
+    const result = await engine.push({ all: true });
+    expect(result.pushed).toBe(1);
+    expect(result.skipped).toBe(0);
+    expect(capturedUpdates).toBeDefined();
+    // The remote state must reflect the closure so the linked GitHub issue
+    // closes and its sf:status:* labels update.
+    expect(capturedUpdates!.state).toBe('closed');
+  });
+
+  test('push closed task: idempotent — skipped when lastPushedHash matches current hash', async () => {
+    // After removing the early `closed` skip, downstream hash dedupe must
+    // still prevent re-pushing a task whose content (including closed state)
+    // has not changed since the last push.
+    const baseElement = {
+      ...createTestElement({ _syncState: createTestSyncState() }),
+      status: 'closed',
+    } as unknown as Element;
+
+    const { computeContentHashSync } = await import('../sync/hash.js');
+    const matchingHash = computeContentHashSync(baseElement).hash;
+
+    const element = {
+      ...createTestElement({
+        _syncState: createTestSyncState({
+          lastPushedHash: matchingHash,
+          lastPushedAt: '2024-01-01T00:00:00.000Z' as Timestamp,
+        }),
+      }),
+      status: 'closed',
+    } as unknown as Element;
+
     let updateCalled = false;
     const engine = buildEngine({
       elements: [element],
       events: [
-        { elementId: element.id, eventType: 'updated', createdAt: '2024-01-05T00:00:00.000Z' as Timestamp },
+        { elementId: element.id, eventType: 'closed', createdAt: '2024-01-05T00:00:00.000Z' as Timestamp },
       ],
+      onUpdateIssue: () => {
+        updateCalled = true;
+      },
+    });
+
+    const result = await engine.push({ all: true });
+    expect(updateCalled).toBe(false);
+    expect(result.pushed).toBe(0);
+    expect(result.skipped).toBe(1);
+  });
+
+  test('push closed task: skipped when no updated/closed/reopened events since lastPushedAt', async () => {
+    // Downstream event-based dedupe must still kick in for closed tasks:
+    // if no relevant events have occurred since the last push, there is
+    // nothing new to propagate.
+    const syncState = createTestSyncState({
+      lastPushedHash: 'different-old-hash',
+      lastPushedAt: '2024-01-02T00:00:00.000Z' as Timestamp,
+    });
+    const element = {
+      ...createTestElement({ _syncState: syncState }),
+      status: 'closed',
+    } as unknown as Element;
+
+    let updateCalled = false;
+    const engine = buildEngine({
+      elements: [element],
+      events: [], // no updated/closed/reopened events since lastPushedAt
       onUpdateIssue: () => {
         updateCalled = true;
       },
