@@ -158,11 +158,12 @@ export class CodexInteractiveProvider implements InteractiveProvider {
 
   private buildArgs(options: InteractiveSpawnOptions): string[] {
     const args: string[] = [];
+    const autoRunFlags = ['--sandbox', 'workspace-write', '--ask-for-approval', 'never'];
 
     if (options.resumeSessionId) {
-      args.push('resume', shellQuote(options.resumeSessionId), '--full-auto');
+      args.push(...autoRunFlags, 'resume', shellQuote(options.resumeSessionId));
     } else {
-      args.push('--full-auto', '--cd', shellQuote(options.workingDirectory));
+      args.push(...autoRunFlags, '--cd', shellQuote(options.workingDirectory));
     }
 
     // Add model flag if provided

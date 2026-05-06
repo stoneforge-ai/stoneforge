@@ -214,11 +214,12 @@ describe('CodexInteractiveProvider model flag', () => {
   }): string[] {
     const shellQuote = posixShellQuote;
     const args: string[] = [];
+    const autoRunFlags = ['--sandbox', 'workspace-write', '--ask-for-approval', 'never'];
 
     if (options.resumeSessionId) {
-      args.push('resume', shellQuote(options.resumeSessionId), '--full-auto');
+      args.push(...autoRunFlags, 'resume', shellQuote(options.resumeSessionId));
     } else {
-      args.push('--full-auto', '--cd', shellQuote(options.workingDirectory));
+      args.push(...autoRunFlags, '--cd', shellQuote(options.workingDirectory));
     }
 
     // Add model flag if provided
@@ -237,7 +238,16 @@ describe('CodexInteractiveProvider model flag', () => {
 
     expect(args).toContain('--model');
     expect(args).toContain("'gpt-4o'");
-    expect(args).toEqual(['--full-auto', '--cd', "'/workspace'", '--model', "'gpt-4o'"]);
+    expect(args).toEqual([
+      '--sandbox',
+      'workspace-write',
+      '--ask-for-approval',
+      'never',
+      '--cd',
+      "'/workspace'",
+      '--model',
+      "'gpt-4o'",
+    ]);
   });
 
   it('should not include --model flag when model is undefined', () => {
@@ -246,7 +256,15 @@ describe('CodexInteractiveProvider model flag', () => {
     });
 
     expect(args).not.toContain('--model');
-    expect(args).toEqual(['--full-auto', '--cd', "'/workspace'"]);
+    expect(args).not.toContain('--full-auto');
+    expect(args).toEqual([
+      '--sandbox',
+      'workspace-write',
+      '--ask-for-approval',
+      'never',
+      '--cd',
+      "'/workspace'",
+    ]);
   });
 
   it('should include --model flag when resuming with model', () => {
@@ -256,9 +274,17 @@ describe('CodexInteractiveProvider model flag', () => {
       model: 'o3-mini',
     });
 
-    expect(args).toContain('resume');
-    expect(args).toContain('--model');
-    expect(args).toContain("'o3-mini'");
+    expect(args).not.toContain('--full-auto');
+    expect(args).toEqual([
+      '--sandbox',
+      'workspace-write',
+      '--ask-for-approval',
+      'never',
+      'resume',
+      "'thr_abc123'",
+      '--model',
+      "'o3-mini'",
+    ]);
   });
 
   it('should properly quote model names with special characters', () => {
