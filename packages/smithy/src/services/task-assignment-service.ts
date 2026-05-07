@@ -564,7 +564,22 @@ export class TaskAssignmentServiceImpl implements TaskAssignmentService {
     let mergeRequestId: number | undefined;
 
     if (branch && this.mergeRequestProvider && options?.createMergeRequest !== false) {
-      const baseBranch = options?.baseBranch || currentMeta?.targetBranch || 'main';
+      // Resolution order: explicit --baseBranch → task's targetBranch metadata →
+      // workspace config (`merge.targetBranch`) → hardcoded `main`. Without the
+      // config layer, stewards (which cannot own a `targetBranch` field) had no
+      // way to set a project-wide target.
+      let configTargetBranch: string | undefined;
+      try {
+        const { loadConfig } = await import('@stoneforge/quarry');
+        const cfg = loadConfig();
+        const value = (cfg.merge as { targetBranch?: string | null } | undefined)?.targetBranch;
+        if (typeof value === 'string' && value.length > 0) {
+          configTargetBranch = value;
+        }
+      } catch {
+        // Config not loadable — fall through to hardcoded default
+      }
+      const baseBranch = options?.baseBranch || currentMeta?.targetBranch || configTargetBranch || 'main';
       let body = `## Task\n\n**ID:** ${task.id}\n**Title:** ${task.title}\n\n`;
       if (options?.summary) {
         body += `## Summary\n\n${options.summary}\n\n`;
