@@ -4917,6 +4917,232 @@ describe('recoverOrphanedTask - rapid-exit detection', () => {
 });
 
 // ============================================================================
+// Rapid-exit detection — agent-aware executable (no fallback chain)
+// ============================================================================
+
+describe('recoverOrphanedTask - rapid-exit silent rate limit (no fallback chain)', () => {
+  let api: QuarryAPI;
+  let inboxService: InboxService;
+  let agentRegistry: AgentRegistry;
+  let taskAssignment: TaskAssignmentService;
+  let dispatchService: DispatchService;
+  let sessionManager: SessionManager;
+  let worktreeManager: WorktreeManager;
+  let stewardScheduler: StewardScheduler;
+  let settingsService: SettingsService;
+  let daemon: DispatchDaemon;
+  let testDbPath: string;
+  let systemEntity: EntityId;
+
+  /**
+   * Same shape as the helper in the parent rapid-exit suite — a session
+   * manager whose startSession returns a real EventEmitter so tests can
+   * synthesize 'event' / 'exit' messages and exercise the rapid-exit
+   * detector attached by recoverOrphanedTask.
+   */
+  function createMockSessionManagerWithEvents(): SessionManager & { _lastEvents: EventEmitter | null } {
+    const sessions = new Map<EntityId, SessionRecord>();
+    let lastEvents: EventEmitter | null = null;
+
+    const mgr = {
+      _lastEvents: null as EventEmitter | null,
+      startSession: mock(async (agentId: EntityId, options?: StartSessionOptions) => {
+        const events = new EventEmitter();
+        lastEvents = events;
+        mgr._lastEvents = events;
+        const session: SessionRecord = {
+          id: `session-${Date.now()}`,
+          agentId,
+          agentRole: 'worker',
+          workerMode: 'ephemeral',
+          status: 'running',
+          workingDirectory: options?.workingDirectory,
+          worktree: options?.worktree,
+          createdAt: createTimestamp(),
+          startedAt: createTimestamp(),
+          lastActivityAt: createTimestamp(),
+        };
+        sessions.set(agentId, session);
+        return { session, events };
+      }),
+      getActiveSession: mock((agentId: EntityId) => {
+        return sessions.get(agentId) ?? null;
+      }),
+      stopSession: mock(async () => {}),
+      suspendSession: mock(async () => {}),
+      resumeSession: mock(async (agentId: EntityId) => {
+        const events = new EventEmitter();
+        lastEvents = events;
+        mgr._lastEvents = events;
+        const session: SessionRecord = {
+          id: `session-resume-${Date.now()}`,
+          agentId,
+          agentRole: 'worker',
+          workerMode: 'ephemeral',
+          status: 'running',
+          createdAt: createTimestamp(),
+          startedAt: createTimestamp(),
+          lastActivityAt: createTimestamp(),
+        };
+        sessions.set(agentId, session);
+        return { session, events };
+      }),
+      getSession: mock(() => undefined),
+      listSessions: mock(() => []),
+      messageSession: mock(async () => ({ success: true })),
+      getSessionHistory: mock(() => []),
+      pruneInactiveSessions: mock(() => 0),
+      reconcileOnStartup: mock(async () => ({ reconciled: 0, errors: [] })),
+      on: mock(() => {}),
+      off: mock(() => {}),
+      emit: mock(() => {}),
+    } as unknown as SessionManager & { _lastEvents: EventEmitter | null };
+
+    return mgr;
+  }
+
+  beforeEach(async () => {
+    testDbPath = `/tmp/dispatch-daemon-rapid-exit-no-chain-${Date.now()}-${Math.random().toString(36).slice(2)}.db`;
+    const storage = createStorage({ path: testDbPath, create: true });
+    initializeSchema(storage);
+
+    api = createQuarryAPI(storage);
+    inboxService = createInboxService(storage);
+    agentRegistry = createAgentRegistry(api);
+    taskAssignment = createTaskAssignmentService(api);
+    dispatchService = createDispatchService(api, taskAssignment, agentRegistry);
+    sessionManager = createMockSessionManagerWithEvents();
+    worktreeManager = createMockWorktreeManager();
+    stewardScheduler = createMockStewardScheduler();
+    // Empty fallbackChain — exercises the branch that previously hardcoded 'claude'.
+    settingsService = createMockSettingsService();
+
+    const { createEntity, EntityTypeValue } = await import('@stoneforge/core');
+    const entity = await createEntity({
+      name: 'test-system-rapid-exit-no-chain',
+      entityType: EntityTypeValue.SYSTEM,
+      createdBy: 'system:test' as EntityId,
+    });
+    const saved = await api.create(entity as unknown as Record<string, unknown> & { createdBy: EntityId });
+    systemEntity = saved.id as unknown as EntityId;
+
+    daemon = new DispatchDaemonImpl(
+      api,
+      agentRegistry,
+      sessionManager,
+      dispatchService,
+      worktreeManager,
+      taskAssignment,
+      stewardScheduler,
+      inboxService,
+      {
+        pollIntervalMs: 100,
+        orphanRecoveryEnabled: true,
+        maxResumeAttemptsBeforeRecovery: 5,
+      },
+      undefined,
+      settingsService
+    );
+  });
+
+  afterEach(async () => {
+    await daemon.stop();
+    if (fs.existsSync(testDbPath)) {
+      fs.unlinkSync(testDbPath);
+    }
+  });
+
+  async function createAssignedTask(
+    title: string,
+    workerId: EntityId,
+    meta?: { sessionId?: string; worktree?: string; branch?: string; resumeCount?: number }
+  ): Promise<Task> {
+    const task = await createTask({
+      title,
+      createdBy: systemEntity,
+      status: TaskStatus.IN_PROGRESS,
+      assignee: workerId,
+    });
+    const saved = await api.create(task as unknown as Record<string, unknown> & { createdBy: EntityId }) as Task;
+
+    await api.update(saved.id, {
+      metadata: updateOrchestratorTaskMeta(undefined, {
+        assignedAgent: workerId,
+        branch: meta?.branch ?? 'agent/test/task-branch',
+        worktree: meta?.worktree ?? '/worktrees/test/task',
+        sessionId: meta?.sessionId,
+        resumeCount: meta?.resumeCount,
+      }),
+    });
+
+    return (await api.get<Task>(saved.id))!;
+  }
+
+  test('records silent rate limit against codex executable when worker provider is codex', async () => {
+    // Regression: in the no-fallback-chain branch, the silent rate limit was
+    // recorded against 'claude' regardless of the worker's actual provider.
+    // For codex workers this surfaced in the dashboard banner as
+    // "claude hit its rate limit" and paused dispatch on the wrong executable.
+    const worker = await agentRegistry.registerWorker({
+      name: 'rapid-exit-codex-worker',
+      workerMode: 'ephemeral',
+      createdBy: systemEntity,
+      maxConcurrentTasks: 1,
+      provider: 'codex',
+    });
+    const workerId = worker.id as unknown as EntityId;
+    await createAssignedTask('Codex task with rapid exit', workerId, {
+      worktree: '/worktrees/rapid-exit-codex-worker/task',
+      resumeCount: 0,
+    });
+
+    expect(daemon.getRateLimitStatus().limits).toHaveLength(0);
+
+    await daemon.recoverOrphanedAssignments();
+
+    // Simulate rapid exit without any output — the silent rate limit branch
+    const events = (sessionManager as ReturnType<typeof createMockSessionManagerWithEvents>)._lastEvents!;
+    events.emit('exit', 1, null);
+
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    const status = daemon.getRateLimitStatus();
+    expect(status.isPaused).toBe(true);
+    expect(status.limits).toHaveLength(1);
+    expect(status.limits[0].executable).toBe('codex');
+  });
+
+  test('records silent rate limit against claude executable when worker provider is claude-code (default)', async () => {
+    // Backward-compat: workers created without an explicit provider default
+    // to 'claude-code' on the registry side; the rate-limit tracker keeps
+    // the historical 'claude' executable name (the binary name) for those.
+    const worker = await agentRegistry.registerWorker({
+      name: 'rapid-exit-default-worker',
+      workerMode: 'ephemeral',
+      createdBy: systemEntity,
+      maxConcurrentTasks: 1,
+    });
+    const workerId = worker.id as unknown as EntityId;
+    await createAssignedTask('Default-provider task with rapid exit', workerId, {
+      worktree: '/worktrees/rapid-exit-default-worker/task',
+      resumeCount: 0,
+    });
+
+    await daemon.recoverOrphanedAssignments();
+
+    const events = (sessionManager as ReturnType<typeof createMockSessionManagerWithEvents>)._lastEvents!;
+    events.emit('exit', 1, null);
+
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    const status = daemon.getRateLimitStatus();
+    expect(status.isPaused).toBe(true);
+    expect(status.limits).toHaveLength(1);
+    expect(status.limits[0].executable).toBe('claude');
+  });
+});
+
+// ============================================================================
 // Triage Session Rate Limit Guard Tests
 // ============================================================================
 
@@ -5443,6 +5669,55 @@ describe('spawnRecoveryStewardForTask - rate limit session history guard', () =>
     const expectedResetTime = Date.now() + RAPID_EXIT_FALLBACK_RESET_MS;
     // Allow 10 seconds of tolerance
     expect(Math.abs(resetTime.getTime() - expectedResetTime)).toBeLessThan(10_000);
+  });
+
+  test('records rate limit against codex executable when worker provider is codex', async () => {
+    // Regression: previously the rate limit was hardcoded to 'claude' regardless
+    // of the worker's actual provider, so codex workers showed up in the
+    // dispatch banner as "claude hit its rate limit" and the dispatch pause
+    // was attributed to the wrong executable.
+    const worker = await agentRegistry.registerWorker({
+      name: 'rl-record-codex-worker',
+      workerMode: 'ephemeral',
+      createdBy: systemEntity,
+      maxConcurrentTasks: 1,
+      provider: 'codex',
+    });
+    const workerId = worker.id as unknown as EntityId;
+    await createTestRecoverySteward('recovery-steward-rl-codex');
+
+    await createTaskWithRateLimitPattern('Codex rate-limited task', workerId);
+
+    const result = await daemon.recoverOrphanedAssignments();
+    expect(result.processed).toBe(0);
+    expect(sessionManager.startSession).not.toHaveBeenCalled();
+
+    const status = daemon.getRateLimitStatus();
+    expect(status.isPaused).toBe(true);
+    expect(status.limits.length).toBe(1);
+    expect(status.limits[0].executable).toBe('codex');
+  });
+
+  test('records rate limit against worker.executablePath when explicit executable override is set', async () => {
+    const worker = await agentRegistry.registerWorker({
+      name: 'rl-record-custom-bin-worker',
+      workerMode: 'ephemeral',
+      createdBy: systemEntity,
+      maxConcurrentTasks: 1,
+      provider: 'claude-code',
+      executablePath: '/usr/local/bin/claude-canary',
+    });
+    const workerId = worker.id as unknown as EntityId;
+    await createTestRecoverySteward('recovery-steward-rl-custom-bin');
+
+    await createTaskWithRateLimitPattern('Custom-bin rate-limited task', workerId);
+
+    await daemon.recoverOrphanedAssignments();
+
+    const status = daemon.getRateLimitStatus();
+    expect(status.isPaused).toBe(true);
+    expect(status.limits.length).toBe(1);
+    expect(status.limits[0].executable).toBe('/usr/local/bin/claude-canary');
   });
 
   test('rate limit pattern detection prevents repeated log spam on subsequent cycles', async () => {
