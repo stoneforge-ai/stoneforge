@@ -13,10 +13,124 @@ import type { Command, GlobalOptions, CommandResult, CommandOption } from '@ston
 import { success, failure, ExitCode, getOutputMode } from '@stoneforge/quarry/cli';
 import type { ElementId, Task } from '@stoneforge/core';
 import { TaskStatus, createTimestamp } from '@stoneforge/core';
+import type { MergeRequestProvider } from '../../services/merge-request-provider.js';
 
 // ============================================================================
 // Shared Helpers
 // ============================================================================
+
+/**
+ * Configuration shape consumed by {@link selectMergeProvider}. Intentionally
+ * narrow — we only care about `merge.requireApproval` here, so tests don't
+ * need to construct a full `Configuration` object.
+ */
+export interface MergeProviderConfig {
+  merge?: { requireApproval?: boolean } | undefined;
+}
+
+/**
+ * Factories used by {@link selectMergeProvider}. Defaulted to the real
+ * implementations; tests pass stubs that return inert provider objects.
+ *
+ * @internal
+ */
+export interface MergeProviderFactories {
+  local: () => MergeRequestProvider;
+  github: () => MergeRequestProvider;
+}
+
+/**
+ * Selects which {@link MergeRequestProvider} the CLI should wire into the
+ * task assignment service.
+ *
+ * Mirrors the canonical pattern in `server/services.ts` so the CLI honours
+ * the same `merge.requireApproval` config the long-running orchestrator
+ * uses. Default behaviour (no config or `requireApproval=false`) is the
+ * original `LocalMergeProvider`.
+ *
+ * Exported so unit tests can exercise the conditional in isolation without
+ * touching the dynamic-import / DB-bootstrap code path of
+ * {@link createTaskAssignmentService}.
+ *
+ * @internal
+ */
+export function selectMergeProvider(
+  config: MergeProviderConfig,
+  factories: MergeProviderFactories,
+): MergeRequestProvider {
+  const requireApproval = config.merge?.requireApproval ?? false;
+  return requireApproval ? factories.github() : factories.local();
+}
+
+/**
+ * Result of probing for the `gh` CLI on PATH.
+ *
+ * @internal
+ */
+export interface GhProbeResult {
+  available: boolean;
+  /** Human-readable detail surfaced when `available` is `false`. */
+  reason?: string;
+}
+
+/**
+ * Probe-function shape used by {@link assertGhCliAvailable}. Pulled out so
+ * tests can inject a deterministic stub instead of touching `child_process`.
+ *
+ * @internal
+ */
+export type GhProbe = () => Promise<GhProbeResult>;
+
+/**
+ * Default `gh` probe — runs `gh --version` and treats a clean exit as
+ * "available". Any spawn error (most commonly `ENOENT`) is treated as
+ * unavailable. Never throws.
+ */
+async function defaultGhProbe(): Promise<GhProbeResult> {
+  const { spawn } = await import('node:child_process');
+  return new Promise<GhProbeResult>((resolve) => {
+    let settled = false;
+    const settle = (result: GhProbeResult) => {
+      if (settled) return;
+      settled = true;
+      resolve(result);
+    };
+
+    try {
+      const proc = spawn('gh', ['--version'], { stdio: 'ignore' });
+      proc.on('error', (err: Error) => {
+        settle({ available: false, reason: err.message });
+      });
+      proc.on('close', (code: number | null) => {
+        if (code === 0) settle({ available: true });
+        else settle({ available: false, reason: `gh --version exited with code ${code}` });
+      });
+    } catch (err) {
+      settle({ available: false, reason: err instanceof Error ? err.message : String(err) });
+    }
+  });
+}
+
+/**
+ * Throws a user-friendly error if the `gh` CLI is not available on PATH.
+ *
+ * Used when `merge.requireApproval=true` so we fail loudly with actionable
+ * guidance instead of silently falling back to the no-op local provider —
+ * that silent fallback is the original bug we're fixing.
+ *
+ * @internal
+ */
+export async function assertGhCliAvailable(probe: GhProbe = defaultGhProbe): Promise<void> {
+  const result = await probe();
+  if (result.available) return;
+
+  const detail = result.reason ? ` (${result.reason})` : '';
+  throw new Error(
+    `Cannot create GitHub pull requests: the \`gh\` CLI is not available on PATH${detail}. ` +
+    'Install it from https://cli.github.com/ and run `gh auth login`, or set ' +
+    '`merge.requireApproval` to `false` in your workspace config to use the local merge provider.'
+  );
+}
 
 /**
  * Creates task assignment service
@@ -26,9 +140,9 @@ async function createTaskAssignmentService(options: GlobalOptions): Promise<{
   error?: string;
 }> {
   try {
-    const { createStorage, initializeSchema, findStoneforgeDir } = await import('@stoneforge/quarry');
+    const { createStorage, initializeSchema, findStoneforgeDir, loadConfig } = await import('@stoneforge/quarry');
     const { createTaskAssignmentService: createService } = await import('../../services/task-assignment-service.js');
-    const { createLocalMergeProvider } = await import('../../services/merge-request-provider.js');
+    const { createLocalMergeProvider, createGitHubMergeProvider } = await import('../../services/merge-request-provider.js');
     const { QuarryAPIImpl } = await import('@stoneforge/quarry');
 
     const stoneforgeDir = findStoneforgeDir(process.cwd());
@@ -43,7 +157,22 @@ async function createTaskAssignmentService(options: GlobalOptions): Promise<{
     const backend = createStorage({ path: dbPath, create: true });
     initializeSchema(backend);
     const api = new QuarryAPIImpl(backend);
-    const mergeProvider = createLocalMergeProvider();
+
+    // Mirror the wiring used in server/services.ts so CLI behaviour matches the
+    // long-running orchestrator: when the workspace requires approval, route
+    // through the GitHub provider; otherwise fall back to the no-op local one.
+    const config = loadConfig();
+    const requireApproval = config.merge?.requireApproval ?? false;
+    if (requireApproval) {
+      // Fail early with actionable guidance instead of silently degrading to
+      // LocalMergeProvider when `gh` is missing.
+      await assertGhCliAvailable();
+    }
+    const mergeProvider = selectMergeProvider(config, {
+      local: createLocalMergeProvider,
+      github: createGitHubMergeProvider,
+    });
+
     const { dirname } = await import('node:path');
     const workspaceRoot = dirname(stoneforgeDir);
     const service = createService(api, mergeProvider, workspaceRoot);
