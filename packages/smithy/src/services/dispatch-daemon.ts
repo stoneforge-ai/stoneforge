@@ -2192,6 +2192,43 @@ export class DispatchDaemonImpl implements DispatchDaemon {
   }
 
   /**
+   * Resolves the executable name to use when recording a rate limit for an
+   * agent's session, in the absence of a configured fallback chain.
+   *
+   * Mirrors the resolution priority of {@link resolveExecutableWithFallback}
+   * (per-agent override → workspace-wide default for the provider → bare
+   * provider name) but performs no rate-limit tracker lookups — its sole
+   * purpose is to produce a stable executable identifier to attribute a
+   * detected rate limit to.
+   *
+   * The returned name is what surfaces in the dashboard rate-limit banner
+   * and in `getRateLimitStatus().limits[].executable`. Using the agent's
+   * provider rather than a hardcoded value is what makes the banner
+   * accurate when, e.g., a codex worker rapid-exits.
+   *
+   * `'claude-code'` (the canonical Claude provider name) is mapped to
+   * `'claude'` (the binary name) for backward compatibility with the
+   * pre-existing tracker entries and dashboard display for default
+   * Claude workers.
+   */
+  private resolveDefaultExecutableForAgent(agent: AgentEntity): string {
+    const meta = getAgentMetadata(agent);
+    const agentExecutablePath = (meta as { executablePath?: string } | undefined)?.executablePath;
+    if (agentExecutablePath) return agentExecutablePath;
+
+    const providerName = (meta as { provider?: string } | undefined)?.provider ?? 'claude-code';
+
+    if (this.settingsService) {
+      const defaultPath = this.settingsService.getAgentDefaults().defaultExecutablePaths[providerName];
+      if (defaultPath) return defaultPath;
+    }
+
+    // 'claude-code' is the canonical provider name; 'claude' is the binary
+    // and what the rate-limit tracker / banner have always used for Claude.
+    return providerName === 'claude-code' ? 'claude' : providerName;
+  }
+
+  /**
    * Terminates sessions that have exceeded the configured max duration.
    * Prevents stuck workers from blocking their slot indefinitely.
    *
@@ -2539,8 +2576,12 @@ export class DispatchDaemonImpl implements DispatchDaemon {
           this.handleRateLimitDetected(executable, resetTime);
         }
       } else {
-        // No fallback chain — apply to the default provider
-        this.handleRateLimitDetected('claude', resetTime);
+        // No fallback chain — attribute the rate limit to the worker's own
+        // provider/executable rather than a hardcoded default, so the
+        // dashboard banner and dispatch pause reflect the actual limited
+        // executable (e.g. 'codex' for codex workers, not 'claude').
+        const workerExecutable = this.resolveDefaultExecutableForAgent(worker);
+        this.handleRateLimitDetected(workerExecutable, resetTime);
       }
 
       logger.info(
@@ -3419,7 +3460,11 @@ export class DispatchDaemonImpl implements DispatchDaemon {
           this.handleRateLimitDetected(executable, resetTime);
         }
       } else {
-        this.handleRateLimitDetected('claude', resetTime);
+        // No fallback chain — attribute the rate limit to the failing
+        // worker's own provider/executable so the banner and dispatch
+        // pause reflect the actual limited executable.
+        const workerExecutable = this.resolveDefaultExecutableForAgent(worker);
+        this.handleRateLimitDetected(workerExecutable, resetTime);
       }
 
       return false;
