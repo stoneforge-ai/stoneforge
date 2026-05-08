@@ -950,6 +950,31 @@ async function agentStartHandler(
       spawnMode = options.mode as 'headless' | 'interactive';
     }
 
+    // Resolve model with the same precedence as session-manager.resolveModel:
+    //   1. explicit --model flag
+    //   2. agent metadata.model (per-agent override)
+    //   3. workspace defaultModels[providerName] (server-side settings)
+    //   4. undefined → provider/SDK built-in default
+    // Without this, manual `sf agent start` calls bypass workspace defaults
+    // even though daemon-driven dispatches honor them.
+    const providerName = (meta as { provider?: string }).provider ?? 'claude-code';
+    const agentModelMeta = (meta as { model?: string }).model;
+    let resolvedModel: string | undefined = options.model ?? agentModelMeta;
+    if (!resolvedModel && stoneforgeDir) {
+      try {
+        const { createStorage, initializeSchema } = await import('@stoneforge/quarry');
+        const { createSettingsService } = await import('../../services/settings-service.js');
+        const dbPath = options.db ?? `${stoneforgeDir}/stoneforge.db`;
+        const backend = createStorage({ path: dbPath, create: false });
+        initializeSchema(backend);
+        const settingsService = createSettingsService(backend);
+        const defaults = settingsService.getAgentDefaults();
+        resolvedModel = defaults.defaultModels?.[providerName];
+      } catch {
+        // Settings unavailable — fall through to provider built-in default
+      }
+    }
+
     // Spawn the agent
     const result = await spawner.spawn(id as EntityId, agentRole, {
       initialPrompt: options.prompt,
@@ -958,6 +983,7 @@ async function agentStartHandler(
       workingDirectory: options.workdir,
       cols: options.cols ? parseInt(options.cols, 10) : undefined,
       rows: options.rows ? parseInt(options.rows, 10) : undefined,
+      model: resolvedModel,
     });
 
     // If task ID is provided, assign the task to this agent

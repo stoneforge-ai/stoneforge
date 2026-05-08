@@ -563,8 +563,12 @@ export class SessionManagerImpl implements SessionManager {
     const agentExecutablePath = options?.executablePathOverride ?? (meta as { executablePath?: string }).executablePath;
     const providerOverride = await this.resolveProvider(providerName, agentExecutablePath);
 
-    // Resolve model: use options override, or fall back to agent metadata
-    const modelOverride = options?.model ?? (meta as { model?: string }).model;
+    // Resolve model: explicit options override wins, then agent metadata,
+    // then workspace `defaultModels[providerName]`, then provider built-in
+    // default. resolveModel handles tiers 2 and 3.
+    const agentModelMeta = (meta as { model?: string }).model;
+    const modelOverride = options?.model
+      ?? this.resolveModel(providerName ?? 'claude-code', agentModelMeta);
 
     // Build spawn options.
     // Pass the resolved executable path as claudePath so the spawner can track
@@ -693,8 +697,12 @@ export class SessionManagerImpl implements SessionManager {
     const providerOverride = await this.resolveProvider(providerName, agentExecutablePath);
     const resolvedExecutablePath = this.resolveExecutablePath(providerName ?? 'claude-code', agentExecutablePath);
 
-    // Resolve model from agent metadata (resume doesn't allow model override)
-    const modelFromMeta = (meta as { model?: string }).model;
+    // Resolve model: agent metadata, then workspace `defaultModels[providerName]`,
+    // then provider built-in default. Resume doesn't allow a per-call override
+    // (the resumed session is locked to whatever the original session used in
+    // theory, but Claude Code SDK will honor a fresh --model on resume).
+    const agentModelMeta = (meta as { model?: string }).model;
+    const modelFromMeta = this.resolveModel(providerName ?? 'claude-code', agentModelMeta);
 
     // Build spawn options with resume
     const spawnOptions: SpawnOptions = {
@@ -1310,6 +1318,41 @@ export class SessionManagerImpl implements SessionManager {
     }
 
     // Priority 3: No custom path — provider will use its built-in default
+    return undefined;
+  }
+
+  /**
+   * Resolves the model for a session, mirroring `resolveExecutablePath`'s
+   * 3-tier priority chain:
+   *  1. Agent-specific model override (from agent metadata)
+   *  2. Workspace-wide default from settings (`defaultModels[providerName]`)
+   *  3. undefined (provider/SDK will use its built-in default)
+   *
+   * Without tier 2, an agent with no explicit model falls straight to the SDK
+   * default (e.g. sonnet for Claude Code) regardless of what the workspace's
+   * agent-defaults UI shows. This mismatched the operator's expectation that
+   * setting "default model = opus" in the UI would apply to every agent that
+   * didn't set its own model.
+   */
+  private resolveModel(
+    providerName: string,
+    agentModel?: string
+  ): string | undefined {
+    // Priority 1: Agent-specific override
+    if (agentModel) {
+      return agentModel;
+    }
+
+    // Priority 2: Workspace-wide default from settings
+    if (this.settingsService) {
+      const defaults = this.settingsService.getAgentDefaults();
+      const workspaceModel = defaults.defaultModels?.[providerName];
+      if (workspaceModel) {
+        return workspaceModel;
+      }
+    }
+
+    // Priority 3: No custom model — provider/SDK uses its built-in default
     return undefined;
   }
 

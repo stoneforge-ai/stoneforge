@@ -110,6 +110,8 @@ const WORKSPACE_KEY = 'settings.workspace';
 const STEWARD_SCHEDULES_KEY = 'settings.stewardSchedules';
 const AGENT_DEFAULTS_KEY = 'settings.agentDefaults';
 
+const API_BASE = '/api';
+
 // ============================================================================
 // Helper Functions
 // ============================================================================
@@ -280,37 +282,125 @@ export function useStewardScheduleSettings() {
 }
 
 /**
- * Hook for managing agent default settings (provider & model)
+ * Hook for managing agent default settings (provider & model).
+ *
+ * Server-backed via `/api/settings/agent-defaults`: the daemon reads these
+ * values at spawn time when an agent has no per-agent override, so they MUST
+ * round-trip to the server. Local state is a debounced cache to keep the UI
+ * responsive while the persist call completes.
+ *
+ * Falls back to localStorage on initial render so the UI doesn't flash empty
+ * while the fetch is in flight; the localStorage entry is treated as a hint
+ * only and is overwritten by the server's authoritative response.
  */
 export function useAgentDefaultsSettings() {
   const [settings, setSettingsState] = useState<AgentDefaultsSettings>(() =>
     loadFromStorage(AGENT_DEFAULTS_KEY, DEFAULT_AGENT_DEFAULTS_SETTINGS)
   );
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Fetch authoritative values from server on mount
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchDefaults() {
+      try {
+        const res = await fetch(`${API_BASE}/settings/agent-defaults`, {
+          headers: { 'Content-Type': 'application/json' },
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json() as {
+          defaultProvider?: AgentProvider;
+          defaultModels?: Record<string, string>;
+        };
+        if (cancelled) return;
+        setSettingsState({
+          defaultProvider: data.defaultProvider ?? DEFAULT_AGENT_DEFAULTS_SETTINGS.defaultProvider,
+          defaultModels: data.defaultModels ?? {},
+        });
+        setIsLoading(false);
+      } catch (err) {
+        if (!cancelled) {
+          setError(String(err));
+          setIsLoading(false);
+        }
+      }
+    }
+    fetchDefaults();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Mirror local state to localStorage as a hint cache
   useEffect(() => {
     saveToStorage(AGENT_DEFAULTS_KEY, settings);
   }, [settings]);
 
-  const setSettings = useCallback((updates: Partial<AgentDefaultsSettings>) => {
-    setSettingsState((prev) => ({ ...prev, ...updates }));
+  // Persist to server (PUT). Merges with the existing server config so we
+  // don't clobber `defaultExecutablePaths` or `fallbackChain`.
+  const persistToServer = useCallback(async (next: AgentDefaultsSettings) => {
+    try {
+      setError(null);
+      // Read current server state to preserve unrelated fields (paths, chain)
+      const cur = await fetch(`${API_BASE}/settings/agent-defaults`, {
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const curBody = cur.ok ? await cur.json() : {};
+      const res = await fetch(`${API_BASE}/settings/agent-defaults`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          defaultExecutablePaths: curBody.defaultExecutablePaths ?? {},
+          fallbackChain: curBody.fallbackChain,
+          defaultProvider: next.defaultProvider,
+          defaultModels: next.defaultModels,
+        }),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({ error: { message: 'Unknown error' } }));
+        throw new Error(errData.error?.message || `HTTP ${res.status}`);
+      }
+    } catch (err) {
+      setError(String(err));
+    }
   }, []);
 
+  const debouncedPersist = useCallback((next: AgentDefaultsSettings) => {
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    debounceTimerRef.current = setTimeout(() => persistToServer(next), 400);
+  }, [persistToServer]);
+
+  const setSettings = useCallback((updates: Partial<AgentDefaultsSettings>) => {
+    setSettingsState((prev) => {
+      const next = { ...prev, ...updates };
+      debouncedPersist(next);
+      return next;
+    });
+  }, [debouncedPersist]);
+
   const setDefaultModel = useCallback((provider: string, model: string) => {
-    setSettingsState((prev) => ({
-      ...prev,
-      defaultModels: { ...prev.defaultModels, [provider]: model },
-    }));
-  }, []);
+    setSettingsState((prev) => {
+      const next = {
+        ...prev,
+        defaultModels: { ...prev.defaultModels, [provider]: model },
+      };
+      debouncedPersist(next);
+      return next;
+    });
+  }, [debouncedPersist]);
 
   const resetToDefaults = useCallback(() => {
     setSettingsState(DEFAULT_AGENT_DEFAULTS_SETTINGS);
-  }, []);
+    debouncedPersist(DEFAULT_AGENT_DEFAULTS_SETTINGS);
+  }, [debouncedPersist]);
 
   return {
     settings,
     setSettings,
     setDefaultModel,
     resetToDefaults,
+    isLoading,
+    error,
   };
 }
 
@@ -318,7 +408,6 @@ export function useAgentDefaultsSettings() {
 // Server-backed Executable Path Settings
 // ============================================================================
 
-const API_BASE = '/api';
 
 /**
  * Response shape from GET /api/settings/agent-defaults

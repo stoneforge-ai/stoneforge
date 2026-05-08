@@ -1433,3 +1433,174 @@ describe('SessionManager executable path tracking', () => {
     expect(spawner._lastSpawnOptions?.claudePath).toBeUndefined();
   });
 });
+
+// ============================================================================
+// Model resolution: agent metadata → workspace defaults → undefined
+// ============================================================================
+
+describe('SessionManager model resolution', () => {
+  /**
+   * Minimal SettingsService mock returning a configurable agentDefaults blob.
+   * Only `getAgentDefaults` is exercised by `resolveModel`; other methods can
+   * stay as no-op stubs.
+   */
+  function createMockSettingsService(defaults: {
+    defaultExecutablePaths?: Record<string, string>;
+    defaultModels?: Record<string, string>;
+    fallbackChain?: string[];
+    defaultProvider?: string;
+  }) {
+    const filled = {
+      defaultExecutablePaths: defaults.defaultExecutablePaths ?? {},
+      ...(defaults.defaultModels ? { defaultModels: defaults.defaultModels } : {}),
+      ...(defaults.fallbackChain ? { fallbackChain: defaults.fallbackChain } : {}),
+      ...(defaults.defaultProvider ? { defaultProvider: defaults.defaultProvider } : {}),
+    };
+    return {
+      getAgentDefaults: () => filled,
+      // The other methods aren't used by resolveModel; unsafe-cast through
+      // unknown so tests don't have to stub the entire SettingsService surface.
+    } as unknown as Parameters<typeof createSessionManager>[3];
+  }
+
+  test('agent.model wins over workspace default', async () => {
+    const agentWithModel: AgentEntity = {
+      id: testAgentId,
+      type: ElementType.ENTITY,
+      name: 'agent-with-model',
+      entityType: 'agent',
+      version: 1,
+      createdAt: createTimestamp(),
+      updatedAt: createTimestamp(),
+      createdBy: testCreatorId,
+      tags: [],
+      metadata: {
+        agent: {
+          agentRole: 'worker' as const,
+          workerMode: 'ephemeral' as const,
+          sessionStatus: 'idle',
+          model: 'claude-sonnet-4-X',
+        },
+      },
+    } as unknown as AgentEntity;
+
+    const agents = new Map<EntityId, AgentEntity>();
+    agents.set(testAgentId, agentWithModel);
+
+    const spawner = createMockSpawnerService();
+    const registry = createMockAgentRegistry(agents);
+    const api = createMockApi();
+    const settingsService = createMockSettingsService({
+      defaultModels: { 'claude-code': 'claude-opus-4-X' },
+    });
+    const sessionManager = createSessionManager(spawner, api, registry, settingsService);
+
+    await sessionManager.startSession(testAgentId, {});
+
+    expect(spawner._lastSpawnOptions?.model).toBe('claude-sonnet-4-X');
+  });
+
+  test('workspace default model is used when agent has no model override', async () => {
+    const agents = new Map<EntityId, AgentEntity>();
+    agents.set(testAgentId, createMockAgent(testAgentId, 'worker'));
+
+    const spawner = createMockSpawnerService();
+    const registry = createMockAgentRegistry(agents);
+    const api = createMockApi();
+    const settingsService = createMockSettingsService({
+      defaultModels: { 'claude-code': 'claude-opus-4-X' },
+    });
+    const sessionManager = createSessionManager(spawner, api, registry, settingsService);
+
+    await sessionManager.startSession(testAgentId, {});
+
+    expect(spawner._lastSpawnOptions?.model).toBe('claude-opus-4-X');
+  });
+
+  test('workspace default is keyed by provider — only matching provider entries apply', async () => {
+    // Agent has no explicit provider, so it defaults to 'claude-code'.
+    // Workspace has a 'codex' default but no 'claude-code' default — agent
+    // must resolve to undefined, NOT pick up the codex value.
+    const agents = new Map<EntityId, AgentEntity>();
+    agents.set(testAgentId, createMockAgent(testAgentId, 'worker'));
+
+    const spawner = createMockSpawnerService();
+    const registry = createMockAgentRegistry(agents);
+    const api = createMockApi();
+    const settingsService = createMockSettingsService({
+      defaultModels: { 'codex': 'gpt-5' },
+    });
+    const sessionManager = createSessionManager(spawner, api, registry, settingsService);
+
+    await sessionManager.startSession(testAgentId, {});
+
+    expect(spawner._lastSpawnOptions?.model).toBeUndefined();
+  });
+
+  test('falls back to undefined (provider built-in default) when neither agent nor workspace has a model', async () => {
+    const agents = new Map<EntityId, AgentEntity>();
+    agents.set(testAgentId, createMockAgent(testAgentId, 'worker'));
+
+    const spawner = createMockSpawnerService();
+    const registry = createMockAgentRegistry(agents);
+    const api = createMockApi();
+    const settingsService = createMockSettingsService({});
+    const sessionManager = createSessionManager(spawner, api, registry, settingsService);
+
+    await sessionManager.startSession(testAgentId, {});
+
+    expect(spawner._lastSpawnOptions?.model).toBeUndefined();
+  });
+
+  test('no settingsService still resolves correctly (workspace tier silently skipped)', async () => {
+    const agents = new Map<EntityId, AgentEntity>();
+    agents.set(testAgentId, createMockAgent(testAgentId, 'worker'));
+
+    const spawner = createMockSpawnerService();
+    const registry = createMockAgentRegistry(agents);
+    const api = createMockApi();
+    // No settingsService passed.
+    const sessionManager = createSessionManager(spawner, api, registry);
+
+    await sessionManager.startSession(testAgentId, {});
+
+    expect(spawner._lastSpawnOptions?.model).toBeUndefined();
+  });
+
+  test('options.model override wins over both agent and workspace defaults', async () => {
+    const agentWithModel: AgentEntity = {
+      id: testAgentId,
+      type: ElementType.ENTITY,
+      name: 'agent-with-model',
+      entityType: 'agent',
+      version: 1,
+      createdAt: createTimestamp(),
+      updatedAt: createTimestamp(),
+      createdBy: testCreatorId,
+      tags: [],
+      metadata: {
+        agent: {
+          agentRole: 'worker' as const,
+          workerMode: 'ephemeral' as const,
+          sessionStatus: 'idle',
+          model: 'claude-sonnet-4-X',
+        },
+      },
+    } as unknown as AgentEntity;
+
+    const agents = new Map<EntityId, AgentEntity>();
+    agents.set(testAgentId, agentWithModel);
+
+    const spawner = createMockSpawnerService();
+    const registry = createMockAgentRegistry(agents);
+    const api = createMockApi();
+    const settingsService = createMockSettingsService({
+      defaultModels: { 'claude-code': 'claude-opus-4-X' },
+    });
+    const sessionManager = createSessionManager(spawner, api, registry, settingsService);
+
+    await sessionManager.startSession(testAgentId, { model: 'claude-haiku-X' });
+
+    expect(spawner._lastSpawnOptions?.model).toBe('claude-haiku-X');
+  });
+});

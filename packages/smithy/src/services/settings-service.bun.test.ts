@@ -144,6 +144,65 @@ describe('SettingsService', () => {
       const result = service.getAgentDefaults();
       expect(result.fallbackChain).toBeUndefined();
     });
+
+    test('returns stored defaultModels', () => {
+      service.setSetting(SETTING_KEYS.AGENT_DEFAULTS, {
+        defaultExecutablePaths: {},
+        defaultModels: {
+          'claude-code': 'claude-opus-4-X',
+          'codex': 'gpt-5',
+        },
+      });
+      const result = service.getAgentDefaults();
+      expect(result.defaultModels).toEqual({
+        'claude-code': 'claude-opus-4-X',
+        'codex': 'gpt-5',
+      });
+    });
+
+    test('returns stored defaultProvider', () => {
+      service.setSetting(SETTING_KEYS.AGENT_DEFAULTS, {
+        defaultExecutablePaths: {},
+        defaultProvider: 'opencode',
+      });
+      const result = service.getAgentDefaults();
+      expect(result.defaultProvider).toBe('opencode');
+    });
+
+    test('omits defaultModels when missing or empty', () => {
+      service.setSetting(SETTING_KEYS.AGENT_DEFAULTS, {
+        defaultExecutablePaths: {},
+        defaultModels: {},
+      });
+      const result = service.getAgentDefaults();
+      expect(result.defaultModels).toBeUndefined();
+    });
+
+    test('filters non-string entries from defaultModels on read', () => {
+      service.setSetting(SETTING_KEYS.AGENT_DEFAULTS, {
+        defaultExecutablePaths: {},
+        defaultModels: {
+          'claude-code': 'claude-opus-4-X',
+          'invalid': 42,
+          'empty': '',
+          'codex': 'gpt-5',
+        },
+      });
+      const result = service.getAgentDefaults();
+      expect(result.defaultModels).toEqual({
+        'claude-code': 'claude-opus-4-X',
+        'codex': 'gpt-5',
+      });
+    });
+
+    test('ignores non-string defaultProvider on read', () => {
+      service.setSetting(SETTING_KEYS.AGENT_DEFAULTS, {
+        defaultExecutablePaths: {},
+        defaultProvider: 42,
+      });
+      const result = service.getAgentDefaults();
+      expect(result.defaultProvider).toBeUndefined();
+    });
   });
 
   describe('setAgentDefaults', () => {
@@ -233,6 +292,41 @@ describe('SettingsService', () => {
         fallbackChain: [],
       });
       expect(result.fallbackChain).toEqual([]);
+    });
+
+    test('persists defaultModels and defaultProvider', () => {
+      const input: ServerAgentDefaults = {
+        defaultExecutablePaths: {},
+        defaultModels: { 'claude-code': 'claude-opus-4-X' },
+        defaultProvider: 'claude-code',
+      };
+      const result = service.setAgentDefaults(input);
+      expect(result.defaultModels).toEqual({ 'claude-code': 'claude-opus-4-X' });
+      expect(result.defaultProvider).toBe('claude-code');
+      // Round-trip: read it back
+      const retrieved = service.getAgentDefaults();
+      expect(retrieved.defaultModels).toEqual({ 'claude-code': 'claude-opus-4-X' });
+      expect(retrieved.defaultProvider).toBe('claude-code');
+    });
+
+    test('filters non-string defaultModels values on write', () => {
+      const input = {
+        defaultExecutablePaths: {},
+        defaultModels: {
+          'claude-code': 'claude-opus-4-X',
+          'invalid': 42 as unknown as string,
+        },
+      } as unknown as ServerAgentDefaults;
+      const result = service.setAgentDefaults(input);
+      expect(result.defaultModels).toEqual({ 'claude-code': 'claude-opus-4-X' });
+    });
+
+    test('omits defaultProvider when empty string', () => {
+      const result = service.setAgentDefaults({
+        defaultExecutablePaths: {},
+        defaultProvider: '',
+      });
+      expect(result.defaultProvider).toBeUndefined();
     });
   });
 

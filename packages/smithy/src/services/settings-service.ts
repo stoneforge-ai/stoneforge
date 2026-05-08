@@ -34,6 +34,21 @@ export interface ServerAgentDefaults {
   defaultExecutablePaths: Record<string, string>;
   /** Ordered list of executable names/paths for rate limit fallback. When one hits its limit, the next available is used. */
   fallbackChain?: string[];
+  /**
+   * Provider name → default model identifier (e.g. { 'claude-code': 'claude-opus-4-X' }).
+   * Applied at spawn time when an agent has no per-agent `model` override in its
+   * metadata. Read by session-manager's `resolveModel`. Same precedence model as
+   * `defaultExecutablePaths`: agent metadata wins, this fills the gap, provider
+   * built-in default is last resort.
+   */
+  defaultModels?: Record<string, string>;
+  /**
+   * Default provider name when an agent has no `provider` in its metadata.
+   * Currently advisory — `resolveProvider` already falls back to 'claude-code'
+   * when unset, so persisting this aligns the UI's view with the server's
+   * authoritative default.
+   */
+  defaultProvider?: string;
 }
 
 /**
@@ -229,6 +244,25 @@ export function createSettingsService(storage: StorageBackend): SettingsService 
         );
       }
 
+      // Include defaultModels if it's a valid object of strings
+      const models = value?.defaultModels;
+      if (models && typeof models === 'object' && !Array.isArray(models)) {
+        const sanitized: Record<string, string> = {};
+        for (const [provider, model] of Object.entries(models as Record<string, unknown>)) {
+          if (typeof model === 'string' && model.length > 0) {
+            sanitized[provider] = model;
+          }
+        }
+        if (Object.keys(sanitized).length > 0) {
+          result.defaultModels = sanitized;
+        }
+      }
+
+      // Include defaultProvider if it's a non-empty string
+      if (typeof value?.defaultProvider === 'string' && value.defaultProvider.length > 0) {
+        result.defaultProvider = value.defaultProvider;
+      }
+
       return result;
     },
 
@@ -251,6 +285,24 @@ export function createSettingsService(storage: StorageBackend): SettingsService 
         validated.fallbackChain = defaults.fallbackChain.filter(
           (entry): entry is string => typeof entry === 'string'
         );
+      }
+
+      // Validate defaultModels — same pattern as defaultExecutablePaths.
+      if (defaults.defaultModels && typeof defaults.defaultModels === 'object') {
+        const sanitizedModels: Record<string, string> = {};
+        for (const [provider, model] of Object.entries(defaults.defaultModels)) {
+          if (typeof model === 'string' && model.length > 0) {
+            sanitizedModels[provider] = model;
+          }
+        }
+        if (Object.keys(sanitizedModels).length > 0) {
+          validated.defaultModels = sanitizedModels;
+        }
+      }
+
+      // Validate defaultProvider — must be a non-empty string when present.
+      if (typeof defaults.defaultProvider === 'string' && defaults.defaultProvider.length > 0) {
+        validated.defaultProvider = defaults.defaultProvider;
       }
 
       this.setSetting(SETTING_KEYS.AGENT_DEFAULTS, validated);
