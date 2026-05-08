@@ -77,6 +77,48 @@ export function createSettingsRoutes(services: Services) {
         }
       }
 
+      // Validate defaultModels if provided — must be an object of strings
+      if (body.defaultModels !== undefined && typeof body.defaultModels !== 'object') {
+        return c.json(
+          {
+            error: {
+              code: 'INVALID_INPUT',
+              message: 'defaultModels must be an object mapping provider names to model identifiers',
+            },
+          },
+          400
+        );
+      }
+      if (body.defaultModels) {
+        for (const [key, value] of Object.entries(body.defaultModels)) {
+          if (typeof value !== 'string') {
+            return c.json(
+              {
+                error: {
+                  code: 'INVALID_INPUT',
+                  message: `defaultModels.${key} must be a string, got ${typeof value}`,
+                },
+              },
+              400
+            );
+          }
+        }
+      }
+
+      // Validate defaultProvider if provided — must be a non-empty string
+      if (body.defaultProvider !== undefined
+        && (typeof body.defaultProvider !== 'string' || body.defaultProvider.length === 0)) {
+        return c.json(
+          {
+            error: {
+              code: 'INVALID_INPUT',
+              message: 'defaultProvider must be a non-empty string',
+            },
+          },
+          400
+        );
+      }
+
       // Validate fallbackChain if provided — must be an array
       if (body.fallbackChain !== undefined && !Array.isArray(body.fallbackChain)) {
         return c.json(
@@ -96,6 +138,14 @@ export function createSettingsRoutes(services: Services) {
 
       if (body.fallbackChain !== undefined) {
         defaults.fallbackChain = body.fallbackChain;
+      }
+
+      if (body.defaultModels !== undefined) {
+        defaults.defaultModels = body.defaultModels;
+      }
+
+      if (body.defaultProvider !== undefined) {
+        defaults.defaultProvider = body.defaultProvider;
       }
 
       const updated = settingsService.setAgentDefaults(defaults);
