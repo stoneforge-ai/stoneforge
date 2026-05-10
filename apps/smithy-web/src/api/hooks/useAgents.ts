@@ -25,6 +25,17 @@ import type {
 // ============================================================================
 
 const API_BASE = '/api';
+const CODEX_RESUME_SESSION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function hasValidProviderSessionIdForAgent(agent: Agent, session: unknown): session is { providerSessionId: string } {
+  const providerSessionId = (session as { providerSessionId?: unknown } | null)?.providerSessionId;
+  if (typeof providerSessionId !== 'string' || providerSessionId.length === 0) {
+    return false;
+  }
+
+  return agent.metadata?.agent?.provider !== 'codex'
+    || CODEX_RESUME_SESSION_ID_PATTERN.test(providerSessionId);
+}
 
 async function fetchApi<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
@@ -211,25 +222,23 @@ export function useDirectors(): {
     })),
   });
 
-  const directors: DirectorInfo[] = useMemo(() => {
-    return (directorAgents ?? []).map((director, i) => {
-      const query = statusQueries[i];
-      const statusData = query?.data;
-      const history = statusData?.recentHistory ?? [];
-      const lastResumableSession = history.find((h) => !!h.providerSessionId) ?? null;
+  const directors: DirectorInfo[] = (directorAgents ?? []).map((director, i) => {
+    const query = statusQueries[i];
+    const statusData = query?.data;
+    const history = statusData?.recentHistory ?? [];
+    const lastResumableSession = history.find((h) => hasValidProviderSessionIdForAgent(director, h)) ?? null;
 
-      return {
-        director,
-        hasActiveSession: statusData?.hasActiveSession ?? false,
-        activeSession: statusData?.activeSession ?? null,
-        recentHistory: history,
-        lastResumableSession,
-        hasResumableSession: lastResumableSession !== null,
-        isLoading: query?.isLoading ?? true,
-        error: (query?.error as Error) ?? null,
-      };
-    });
-  }, [directorAgents, statusQueries]);
+    return {
+      director,
+      hasActiveSession: statusData?.hasActiveSession ?? false,
+      activeSession: statusData?.activeSession ?? null,
+      recentHistory: history,
+      lastResumableSession,
+      hasResumableSession: lastResumableSession !== null,
+      isLoading: query?.isLoading ?? true,
+      error: (query?.error as Error) ?? null,
+    };
+  });
 
   const isLoading = agentsLoading || statusQueries.some(q => q.isLoading);
   const combinedError = agentsError ?? statusQueries.find(q => q.error)?.error ?? null;
