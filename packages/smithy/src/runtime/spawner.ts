@@ -584,7 +584,11 @@ export class SpawnerServiceImpl implements SpawnerService {
     // Handle provider interactive sessions
     if (session.interactiveSession) {
       if (graceful) {
-        session.interactiveSession.write('exit\r');
+        if (session.interactiveSession.requestExit) {
+          session.interactiveSession.requestExit();
+        } else {
+          session.interactiveSession.write('exit\r');
+        }
 
         await new Promise<void>((resolve) => {
           const timeout = setTimeout(() => {

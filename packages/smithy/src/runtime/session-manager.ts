@@ -746,9 +746,6 @@ export class SessionManagerImpl implements SessionManager {
       throw new Error(`Session not found: ${sessionId}`);
     }
 
-    // Clean up event listeners to prevent leaks
-    this.cleanupSessionEventListeners(sessionId);
-
     // Update session state BEFORE terminating to prevent race with exit event handler
     const updatedSession: InternalSessionState = {
       ...session,
@@ -764,11 +761,18 @@ export class SessionManagerImpl implements SessionManager {
       this.agentSessions.delete(session.agentId);
     }
 
-    // Add to history (do this before terminate to avoid race with exit handler)
-    this.addToHistory(session.agentId, updatedSession);
-
-    // Now terminate via spawner (may trigger exit event, but status already terminated)
+    // Now terminate via spawner (may trigger exit/provider-session-id events, but status already terminated).
+    // Keep listeners attached until this completes so provider-specific graceful shutdown output
+    // can still update providerSessionId before the session is added to history.
     await this.spawner.terminate(sessionId, options?.graceful ?? true);
+
+    const finalSession = this.sessions.get(sessionId) ?? updatedSession;
+
+    // Clean up event listeners after graceful termination output has been observed.
+    this.cleanupSessionEventListeners(sessionId);
+
+    // Add to history after terminate so providerSessionId captured during shutdown is included.
+    this.addToHistory(session.agentId, finalSession);
 
     // Update agent's session status in database
     await this.registry.updateAgentSession(session.agentId, undefined, 'idle');
@@ -780,7 +784,7 @@ export class SessionManagerImpl implements SessionManager {
     this.scheduleTerminatedSessionCleanup(sessionId);
 
     // Emit status change
-    session.events.emit('status', 'terminated');
+    finalSession.events.emit('status', 'terminated');
 
     // Log session termination
     this.operationLog?.write('info', 'session', `Session terminated for agent ${session.agentId}${options?.reason ? `: ${options.reason}` : ''}`, { agentId: session.agentId, sessionId });

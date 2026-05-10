@@ -21,6 +21,7 @@ import { notifySSEClientsOfNewSession } from './events.js';
 import { createLogger } from '../../utils/logger.js';
 
 const logger = createLogger('sessions');
+const CODEX_RESUME_SESSION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type NotifyClientsCallback = (
   agentId: EntityId,
@@ -603,6 +604,17 @@ Please begin working on this task. Use \`sf task get ${taskResult.id}\` to see f
           return c.json({ error: { code: 'NO_RESUMABLE_SESSION', message: 'No resumable session found' } }, 404);
         }
         providerSessionId = resumable.providerSessionId;
+      }
+
+      const meta = getAgentMetadata(agent);
+      if ((meta as { provider?: string } | undefined)?.provider === 'codex'
+        && !CODEX_RESUME_SESSION_ID_PATTERN.test(providerSessionId)) {
+        return c.json({
+          error: {
+            code: 'INVALID_PROVIDER_SESSION_ID',
+            message: 'Codex resume requires a valid UUID session ID',
+          },
+        }, 400);
       }
 
       const { session, events, uwpCheck } = await sessionManager.resumeSession(agentId, {
