@@ -26,6 +26,42 @@ type CodexInteractiveArgOptions = Pick<
   'resumeSessionId' | 'workingDirectory' | 'model'
 >;
 
+const CODEX_RESUME_SESSION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const CODEX_CONTINUE_SESSION_PATTERN =
+  /To continue this session,\s+run\s+codex\s+resume\s+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
+const ANSI_ESCAPE_PATTERN = /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
+const MAX_CODEX_OUTPUT_BUFFER = 4096;
+
+export function isCodexResumeSessionId(value: string): value is ProviderSessionId {
+  return CODEX_RESUME_SESSION_ID_PATTERN.test(value);
+}
+
+export function extractCodexResumeSessionId(output: string): ProviderSessionId | undefined {
+  const normalizedOutput = output.replace(ANSI_ESCAPE_PATTERN, '');
+  return normalizedOutput.match(CODEX_CONTINUE_SESSION_PATTERN)?.[1];
+}
+
+export function createCodexResumeSessionIdDetector(
+  maxBufferLength = MAX_CODEX_OUTPUT_BUFFER,
+): (chunk: string) => ProviderSessionId | undefined {
+  let buffer = '';
+
+  return (chunk: string) => {
+    buffer = (buffer + chunk).slice(-maxBufferLength);
+    return extractCodexResumeSessionId(buffer);
+  };
+}
+
+export function writeCodexExitCommand(
+  write: (data: string) => void,
+  scheduleEnter: (callback: () => void) => void = (callback) => {
+    setTimeout(callback, 50);
+  },
+): void {
+  write('/exit');
+  scheduleEnter(() => write('\r'));
+}
+
 export function buildCodexInteractiveArgs(
   options: CodexInteractiveArgOptions,
   platform: NodeJS.Platform = process.platform,
@@ -34,6 +70,9 @@ export function buildCodexInteractiveArgs(
   const args: string[] = [];
 
   if (options.resumeSessionId) {
+    if (!isCodexResumeSessionId(options.resumeSessionId)) {
+      throw new Error(`Invalid Codex resume session ID: ${options.resumeSessionId}`);
+    }
     args.push('resume', quote(options.resumeSessionId), '--sandbox', 'workspace-write');
   } else {
     args.push('--sandbox', 'workspace-write', '--cd', quote(options.workingDirectory));
@@ -53,14 +92,16 @@ export function buildCodexInteractiveArgs(
 class CodexInteractiveSession implements InteractiveSession {
   private ptyProcess: IPty;
   private sessionId: ProviderSessionId | undefined;
+  private readonly detectResumeSessionId = createCodexResumeSessionIdDetector();
 
   readonly pid?: number;
 
-  constructor(ptyProcess: IPty) {
+  constructor(ptyProcess: IPty, resumeSessionId?: ProviderSessionId) {
     this.ptyProcess = ptyProcess;
     this.pid = ptyProcess.pid;
+    this.sessionId = resumeSessionId;
 
-    // Listen for thread/session ID in output and auto-respond to terminal queries.
+    // Listen for Codex's continuation footer and auto-respond to terminal queries.
     // Codex sends DSR (Device Status Report) \x1b[6n on startup to query cursor
     // position. When no terminal emulator (e.g. xterm.js) is connected to respond,
     // codex times out and exits. We auto-respond with a default cursor position
@@ -71,9 +112,9 @@ class CodexInteractiveSession implements InteractiveSession {
       }
 
       if (!this.sessionId) {
-        const match = data.match(/(?:Thread|Session|thr_)[:=\s]*([a-z0-9_-]+)/i);
-        if (match) {
-          this.sessionId = match[1];
+        const detectedSessionId = this.detectResumeSessionId(data);
+        if (detectedSessionId) {
+          this.sessionId = detectedSessionId;
         }
       }
     });
@@ -81,6 +122,10 @@ class CodexInteractiveSession implements InteractiveSession {
 
   write(data: string): void {
     this.ptyProcess.write(data);
+  }
+
+  requestExit(): void {
+    writeCodexExitCommand((data) => this.ptyProcess.write(data));
   }
 
   resize(cols: number, rows: number): void {
@@ -156,7 +201,10 @@ export class CodexInteractiveProvider implements InteractiveProvider {
       env,
     });
 
-    const session = new CodexInteractiveSession(ptyProcess);
+    const resumeSessionId = options.resumeSessionId && isCodexResumeSessionId(options.resumeSessionId)
+      ? options.resumeSessionId
+      : undefined;
+    const session = new CodexInteractiveSession(ptyProcess, resumeSessionId);
 
     // On Windows, write the command to cmd.exe stdin (bash -c handles this on Unix)
     if (process.platform === 'win32') {

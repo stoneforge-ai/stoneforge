@@ -6,7 +6,13 @@
 
 import { describe, it, expect, mock, beforeEach, afterEach } from 'bun:test';
 import type { CodexClient, CodexModelInfo } from './server-manager.js';
-import { buildCodexInteractiveArgs } from './interactive.js';
+import {
+  buildCodexInteractiveArgs,
+  createCodexResumeSessionIdDetector,
+  extractCodexResumeSessionId,
+  isCodexResumeSessionId,
+  writeCodexExitCommand,
+} from './interactive.js';
 import { posixShellQuote, shellQuote } from '../shell-quote.js';
 
 // ---------------------------------------------------------------------------
@@ -205,6 +211,8 @@ describe('CodexHeadlessProvider model passthrough', () => {
 // ---------------------------------------------------------------------------
 
 describe('CodexInteractiveProvider model flag', () => {
+  const codexSessionId = '019e1277-6206-74e1-bb66-bbd8e9534628';
+
   it('builds interactive spawn args with the documented workspace-write sandbox', () => {
     const args = buildCodexInteractiveArgs({
       workingDirectory: '/workspace',
@@ -236,7 +244,7 @@ describe('CodexInteractiveProvider model flag', () => {
 
   it('should include --model flag when resuming with model', () => {
     const args = buildCodexInteractiveArgs({
-      resumeSessionId: 'thr_abc123',
+      resumeSessionId: codexSessionId,
       workingDirectory: '/workspace',
       model: 'o3-mini',
     }, 'linux');
@@ -244,7 +252,14 @@ describe('CodexInteractiveProvider model flag', () => {
     expect(args).toContain('resume');
     expect(args).toContain('--model');
     expect(args).toContain("'o3-mini'");
-    expect(args).toEqual(['resume', "'thr_abc123'", '--sandbox', 'workspace-write', '--model', "'o3-mini'"]);
+    expect(args).toEqual(['resume', `'${codexSessionId}'`, '--sandbox', 'workspace-write', '--model', "'o3-mini'"]);
+  });
+
+  it('should reject non-UUID resume session IDs', () => {
+    expect(() => buildCodexInteractiveArgs({
+      resumeSessionId: 'thr_abc123',
+      workingDirectory: '/workspace',
+    }, 'linux')).toThrow('Invalid Codex resume session ID');
   });
 
   it('should properly quote model names with special characters', () => {
@@ -255,6 +270,62 @@ describe('CodexInteractiveProvider model flag', () => {
 
     expect(args).toContain("--model");
     expect(args).toContain("'model'\\''s-name'");
+  });
+});
+
+describe('Codex interactive resume session ID parsing', () => {
+  const codexSessionId = '019e1277-6206-74e1-bb66-bbd8e9534628';
+
+  it('extracts UUID from Codex continuation footer', () => {
+    expect(extractCodexResumeSessionId(
+      `Token usage: total=19,927\nTo continue this session, run codex resume ${codexSessionId}\n`,
+    )).toBe(codexSessionId);
+  });
+
+  it('ignores ordinary session management text', () => {
+    expect(extractCodexResumeSessionId('Agent Session Management')).toBeUndefined();
+  });
+
+  it('ignores Codex session-not-found errors', () => {
+    expect(extractCodexResumeSessionId(
+      'No saved session found with ID management. Run `codex resume` without an ID to choose from existing sessions.',
+    )).toBeUndefined();
+  });
+
+  it('ignores non-UUID continuation footer values', () => {
+    expect(extractCodexResumeSessionId('To continue this session, run codex resume management')).toBeUndefined();
+  });
+
+  it('detects footer split across PTY chunks', () => {
+    const detect = createCodexResumeSessionIdDetector();
+
+    expect(detect('Token usage: total=19,927\nTo continue this session, ')).toBeUndefined();
+    expect(detect(`run codex resume ${codexSessionId}\n`)).toBe(codexSessionId);
+  });
+
+  it('validates Codex resume IDs as UUIDs', () => {
+    expect(isCodexResumeSessionId(codexSessionId)).toBe(true);
+    expect(isCodexResumeSessionId('management')).toBe(false);
+    expect(isCodexResumeSessionId('thr_abc123')).toBe(false);
+  });
+});
+
+describe('Codex interactive graceful exit', () => {
+  it('writes slash exit and schedules Enter as separate PTY writes', () => {
+    const writes: string[] = [];
+    const scheduled: (() => void)[] = [];
+
+    writeCodexExitCommand(
+      (data) => writes.push(data),
+      (callback) => scheduled.push(callback),
+    );
+
+    expect(writes).toEqual(['/exit']);
+    expect(scheduled).toHaveLength(1);
+
+    scheduled[0]();
+
+    expect(writes).toEqual(['/exit', '\r']);
   });
 });
 
