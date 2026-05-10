@@ -21,6 +21,31 @@ import { shellQuote } from '../shell-quote.js';
 // Helpers
 // ============================================================================
 
+type CodexInteractiveArgOptions = Pick<
+  InteractiveSpawnOptions,
+  'resumeSessionId' | 'workingDirectory' | 'model'
+>;
+
+export function buildCodexInteractiveArgs(
+  options: CodexInteractiveArgOptions,
+  platform: NodeJS.Platform = process.platform,
+): string[] {
+  const quote = (value: string) => shellQuote(value, platform);
+  const args: string[] = [];
+
+  if (options.resumeSessionId) {
+    args.push('resume', quote(options.resumeSessionId), '--sandbox', 'workspace-write');
+  } else {
+    args.push('--sandbox', 'workspace-write', '--cd', quote(options.workingDirectory));
+  }
+
+  if (options.model) {
+    args.push('--model', quote(options.model));
+  }
+
+  return args;
+}
+
 // ============================================================================
 // Codex Interactive Session
 // ============================================================================
@@ -95,7 +120,7 @@ export class CodexInteractiveProvider implements InteractiveProvider {
   }
 
   async spawn(options: InteractiveSpawnOptions): Promise<InteractiveSession> {
-    const args = this.buildArgs(options);
+    const args = buildCodexInteractiveArgs(options);
 
     const env: Record<string, string> = {
       ...(process.env as Record<string, string>),
@@ -156,20 +181,4 @@ export class CodexInteractiveProvider implements InteractiveProvider {
     }
   }
 
-  private buildArgs(options: InteractiveSpawnOptions): string[] {
-    const args: string[] = [];
-
-    if (options.resumeSessionId) {
-      args.push('resume', shellQuote(options.resumeSessionId), '--full-auto');
-    } else {
-      args.push('--full-auto', '--cd', shellQuote(options.workingDirectory));
-    }
-
-    // Add model flag if provided
-    if (options.model) {
-      args.push('--model', shellQuote(options.model));
-    }
-
-    return args;
-  }
 }
