@@ -211,14 +211,28 @@ describe('CodexInteractiveProvider model flag', () => {
     resumeSessionId?: string;
     workingDirectory: string;
     model?: string;
+    supportsFullAuto?: boolean;
   }): string[] {
     const shellQuote = posixShellQuote;
     const args: string[] = [];
+    const automationArgs = (options.supportsFullAuto ?? true)
+      ? ['--full-auto']
+      : ['--ask-for-approval', 'never', '--sandbox', 'workspace-write'];
 
     if (options.resumeSessionId) {
-      args.push('resume', shellQuote(options.resumeSessionId), '--full-auto');
+      args.push(
+        'resume',
+        ...automationArgs,
+        '--cd',
+        shellQuote(options.workingDirectory),
+        shellQuote(options.resumeSessionId),
+      );
     } else {
-      args.push('--full-auto', '--cd', shellQuote(options.workingDirectory));
+      args.push(
+        ...automationArgs,
+        '--cd',
+        shellQuote(options.workingDirectory),
+      );
     }
 
     // Add model flag if provided
@@ -237,7 +251,13 @@ describe('CodexInteractiveProvider model flag', () => {
 
     expect(args).toContain('--model');
     expect(args).toContain("'gpt-4o'");
-    expect(args).toEqual(['--full-auto', '--cd', "'/workspace'", '--model', "'gpt-4o'"]);
+    expect(args).toEqual([
+      '--full-auto',
+      '--cd',
+      "'/workspace'",
+      '--model',
+      "'gpt-4o'",
+    ]);
   });
 
   it('should not include --model flag when model is undefined', () => {
@@ -246,7 +266,27 @@ describe('CodexInteractiveProvider model flag', () => {
     });
 
     expect(args).not.toContain('--model');
-    expect(args).toEqual(['--full-auto', '--cd', "'/workspace'"]);
+    expect(args).toEqual([
+      '--full-auto',
+      '--cd',
+      "'/workspace'",
+    ]);
+  });
+
+  it('should fall back to explicit approval and sandbox flags when --full-auto is unavailable', () => {
+    const args = buildArgs({
+      workingDirectory: '/workspace',
+      supportsFullAuto: false,
+    });
+
+    expect(args).toEqual([
+      '--ask-for-approval',
+      'never',
+      '--sandbox',
+      'workspace-write',
+      '--cd',
+      "'/workspace'",
+    ]);
   });
 
   it('should include --model flag when resuming with model', () => {
@@ -257,6 +297,8 @@ describe('CodexInteractiveProvider model flag', () => {
     });
 
     expect(args).toContain('resume');
+    expect(args).toContain('--full-auto');
+    expect(args).toContain('--cd');
     expect(args).toContain('--model');
     expect(args).toContain("'o3-mini'");
   });

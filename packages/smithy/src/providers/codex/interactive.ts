@@ -8,6 +8,7 @@
  */
 
 import * as pty from 'node-pty';
+import { execSync } from 'node:child_process';
 import type { IPty } from 'node-pty';
 import type {
   InteractiveProvider,
@@ -89,6 +90,7 @@ class CodexInteractiveSession implements InteractiveSession {
 export class CodexInteractiveProvider implements InteractiveProvider {
   readonly name = 'codex-interactive';
   private readonly executablePath: string;
+  private supportsFullAutoFlag: boolean | undefined;
 
   constructor(executablePath = 'codex') {
     this.executablePath = executablePath;
@@ -158,11 +160,22 @@ export class CodexInteractiveProvider implements InteractiveProvider {
 
   private buildArgs(options: InteractiveSpawnOptions): string[] {
     const args: string[] = [];
+    const automationArgs = this.buildAutomationArgs();
 
     if (options.resumeSessionId) {
-      args.push('resume', shellQuote(options.resumeSessionId), '--full-auto');
+      args.push(
+        'resume',
+        ...automationArgs,
+        '--cd',
+        shellQuote(options.workingDirectory),
+        shellQuote(options.resumeSessionId),
+      );
     } else {
-      args.push('--full-auto', '--cd', shellQuote(options.workingDirectory));
+      args.push(
+        ...automationArgs,
+        '--cd',
+        shellQuote(options.workingDirectory),
+      );
     }
 
     // Add model flag if provided
@@ -171,5 +184,31 @@ export class CodexInteractiveProvider implements InteractiveProvider {
     }
 
     return args;
+  }
+
+  private buildAutomationArgs(): string[] {
+    if (this.supportsFullAuto()) {
+      return ['--full-auto'];
+    }
+
+    return ['--ask-for-approval', 'never', '--sandbox', 'workspace-write'];
+  }
+
+  private supportsFullAuto(): boolean {
+    if (this.supportsFullAutoFlag !== undefined) {
+      return this.supportsFullAutoFlag;
+    }
+
+    try {
+      const help = execSync(`${shellQuote(this.executablePath)} --help`, {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      });
+      this.supportsFullAutoFlag = help.includes('--full-auto');
+    } catch {
+      this.supportsFullAutoFlag = false;
+    }
+
+    return this.supportsFullAutoFlag;
   }
 }
