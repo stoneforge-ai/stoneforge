@@ -6,6 +6,7 @@
 
 import { describe, it, expect, mock, beforeEach, afterEach } from 'bun:test';
 import type { CodexClient, CodexModelInfo } from './server-manager.js';
+import { buildCodexInteractiveArgs } from './interactive.js';
 import { posixShellQuote, shellQuote } from '../shell-quote.js';
 
 // ---------------------------------------------------------------------------
@@ -204,68 +205,53 @@ describe('CodexHeadlessProvider model passthrough', () => {
 // ---------------------------------------------------------------------------
 
 describe('CodexInteractiveProvider model flag', () => {
-  // Use the POSIX form directly so assertions are deterministic regardless of
-  // the host OS the tests run on. A separate suite below covers the Windows
-  // quoter.
-  function buildArgs(options: {
-    resumeSessionId?: string;
-    workingDirectory: string;
-    model?: string;
-  }): string[] {
-    const shellQuote = posixShellQuote;
-    const args: string[] = [];
-
-    if (options.resumeSessionId) {
-      args.push('resume', shellQuote(options.resumeSessionId), '--full-auto');
-    } else {
-      args.push('--full-auto', '--cd', shellQuote(options.workingDirectory));
-    }
-
-    // Add model flag if provided
-    if (options.model) {
-      args.push('--model', shellQuote(options.model));
-    }
-
-    return args;
-  }
-
-  it('should include --model flag when model is provided', () => {
-    const args = buildArgs({
+  it('builds interactive spawn args with the documented workspace-write sandbox', () => {
+    const args = buildCodexInteractiveArgs({
       workingDirectory: '/workspace',
       model: 'gpt-4o',
-    });
+    }, 'linux');
+
+    expect(args).toEqual(['--sandbox', 'workspace-write', '--cd', "'/workspace'", '--model', "'gpt-4o'"]);
+  });
+
+  it('should include --model flag when model is provided', () => {
+    const args = buildCodexInteractiveArgs({
+      workingDirectory: '/workspace',
+      model: 'gpt-4o',
+    }, 'linux');
 
     expect(args).toContain('--model');
     expect(args).toContain("'gpt-4o'");
-    expect(args).toEqual(['--full-auto', '--cd', "'/workspace'", '--model', "'gpt-4o'"]);
+    expect(args).toEqual(['--sandbox', 'workspace-write', '--cd', "'/workspace'", '--model', "'gpt-4o'"]);
   });
 
   it('should not include --model flag when model is undefined', () => {
-    const args = buildArgs({
+    const args = buildCodexInteractiveArgs({
       workingDirectory: '/workspace',
-    });
+    }, 'linux');
 
     expect(args).not.toContain('--model');
-    expect(args).toEqual(['--full-auto', '--cd', "'/workspace'"]);
+    expect(args).toEqual(['--sandbox', 'workspace-write', '--cd', "'/workspace'"]);
   });
 
   it('should include --model flag when resuming with model', () => {
-    const args = buildArgs({
+    const args = buildCodexInteractiveArgs({
       resumeSessionId: 'thr_abc123',
       workingDirectory: '/workspace',
       model: 'o3-mini',
-    });
+    }, 'linux');
 
     expect(args).toContain('resume');
     expect(args).toContain('--model');
     expect(args).toContain("'o3-mini'");
+    expect(args).toEqual(['resume', "'thr_abc123'", '--sandbox', 'workspace-write', '--model', "'o3-mini'"]);
   });
 
   it('should properly quote model names with special characters', () => {
-    const args = buildArgs({
+    const args = buildCodexInteractiveArgs({
       workingDirectory: '/workspace',
       model: "model's-name",
-    });
+    }, 'linux');
 
     expect(args).toContain("--model");
     expect(args).toContain("'model'\\''s-name'");
