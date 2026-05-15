@@ -272,6 +272,10 @@ export async function initializeServices(options: ServicesOptions = {}): Promise
 
   // Create pool service for agent concurrency limiting
   const poolService = createAgentPoolService(api, sessionManager, agentRegistry);
+  sessionManager.onSessionEnded((session) => {
+    if (session.agentRole === 'director') return;
+    return poolService.onAgentSessionEnded(session.agentId);
+  });
 
   const inboxService = createInboxService(storageBackend);
   const sessionMessageService = createSessionMessageService(storageBackend);

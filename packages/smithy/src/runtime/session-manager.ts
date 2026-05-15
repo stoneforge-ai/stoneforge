@@ -137,6 +137,8 @@ export interface StopSessionOptions {
   readonly reason?: string;
 }
 
+export type SessionEndedCallback = (session: SessionRecord) => void | Promise<void>;
+
 /**
  * Options for sending a message to a session
  */
@@ -464,6 +466,14 @@ export interface SessionManager {
    * Called after construction to avoid circular dependency issues.
    */
   setOperationLog(log: OperationLogService): void;
+
+  /**
+   * Registers a callback for sessions leaving active execution.
+   *
+   * @param callback - Called when a session is terminated or suspended
+   * @returns Function to remove the callback
+   */
+  onSessionEnded(callback: SessionEndedCallback): () => void;
 }
 
 // ============================================================================
@@ -494,6 +504,7 @@ export class SessionManagerImpl implements SessionManager {
   private readonly agentSessions: Map<EntityId, string> = new Map(); // agentId -> active sessionId
   private readonly sessionHistory: Map<EntityId, SessionHistoryEntry[]> = new Map();
   private readonly sessionCleanupFns: Map<string, () => void> = new Map(); // sessionId -> cleanup function
+  private readonly sessionEndedCallbacks: Set<SessionEndedCallback> = new Set();
 
   private operationLog: OperationLogService | undefined;
 
@@ -520,6 +531,13 @@ export class SessionManagerImpl implements SessionManager {
    */
   setOperationLog(log: OperationLogService): void {
     this.operationLog = log;
+  }
+
+  onSessionEnded(callback: SessionEndedCallback): () => void {
+    this.sessionEndedCallbacks.add(callback);
+    return () => {
+      this.sessionEndedCallbacks.delete(callback);
+    };
   }
 
   // ----------------------------------------
@@ -785,6 +803,7 @@ export class SessionManagerImpl implements SessionManager {
 
     // Emit status change
     finalSession.events.emit('status', 'terminated');
+    this.notifySessionEnded(finalSession);
 
     // Log session termination
     this.operationLog?.write('info', 'session', `Session terminated for agent ${session.agentId}${options?.reason ? `: ${options.reason}` : ''}`, { agentId: session.agentId, sessionId });
@@ -854,6 +873,7 @@ export class SessionManagerImpl implements SessionManager {
 
     // Emit status change
     updatedSession.events.emit('status', 'suspended');
+    this.notifySessionEnded(updatedSession);
   }
 
   // ----------------------------------------
@@ -1409,6 +1429,7 @@ export class SessionManagerImpl implements SessionManager {
     this.persistSession(session.id).then(() => {
       this.scheduleTerminatedSessionCleanup(session.id);
     }).catch(() => {});
+    this.notifySessionEnded(updated);
   }
 
   private setupSpawnerEventHandlers(): void {
@@ -1528,6 +1549,7 @@ export class SessionManagerImpl implements SessionManager {
         this.scheduleTerminatedSessionCleanup(session.id);
 
         updatedSession.events.emit('status', 'terminated');
+        this.notifySessionEnded(updatedSession);
       } else {
         console.log(`[session-manager] Session ${session.id} already in status: ${currentSession?.status ?? 'not found'}`);
       }
@@ -1575,6 +1597,21 @@ export class SessionManagerImpl implements SessionManager {
       cleanup();
       this.sessionCleanupFns.delete(sessionId);
       console.log(`[session-manager] Cleaned up event listeners for session ${sessionId}`);
+    }
+  }
+
+  private notifySessionEnded(session: InternalSessionState): void {
+    if (this.sessionEndedCallbacks.size === 0) return;
+
+    const publicSession = this.toPublicSession(session);
+    for (const callback of this.sessionEndedCallbacks) {
+      Promise.resolve(callback(publicSession)).catch((error) => {
+        this.operationLog?.write('warn', 'session', `Session ended callback failed for ${session.id}`, {
+          agentId: session.agentId,
+          sessionId: session.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
     }
   }
 
