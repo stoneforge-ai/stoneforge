@@ -45,6 +45,7 @@ import type { SettingsService, ServerAgentDefaults } from './settings-service.js
 import { createAgentRegistry, getAgentMetadata, type AgentRegistry, type AgentEntity } from './agent-registry.js';
 import { createTaskAssignmentService, type TaskAssignmentService } from './task-assignment-service.js';
 import { createDispatchService, type DispatchService } from './dispatch-service.js';
+import type { AgentPoolService } from './agent-pool-service.js';
 import type { SessionManager, SessionRecord, StartSessionOptions } from '../runtime/session-manager.js';
 import type { WorktreeManager, CreateWorktreeResult, CreateWorktreeOptions } from '../git/worktree-manager.js';
 import type { StewardScheduler } from './steward-scheduler.js';
@@ -270,6 +271,110 @@ describe('DispatchDaemon Integration', () => {
           workingDirectory: expect.stringContaining('worktrees'),
         })
       );
+    });
+
+    test('records pool occupancy before starting a worker session', async () => {
+      const callOrder: string[] = [];
+      const worker = await createTestWorker('pool-worker');
+      await createTestTask('Task for pool worker');
+
+      const poolService = {
+        canSpawn: mock(async () => ({ canSpawn: true })),
+        onAgentSessionStarting: mock(async () => {
+          callOrder.push('onAgentSessionStarting');
+        }),
+        onAgentSessionEnded: mock(async () => {}),
+      } as unknown as AgentPoolService;
+
+      (sessionManager.startSession as ReturnType<typeof mock>).mockImplementation(
+        async (agentId: EntityId, options?: StartSessionOptions) => {
+          callOrder.push('startSession');
+          const session: SessionRecord = {
+            id: `session-${Date.now()}`,
+            agentId,
+            agentRole: 'worker',
+            workerMode: 'ephemeral',
+            status: 'running',
+            workingDirectory: options?.workingDirectory,
+            worktree: options?.worktree,
+            createdAt: createTimestamp(),
+            startedAt: createTimestamp(),
+            lastActivityAt: createTimestamp(),
+          };
+          return { session, events: new EventEmitter() };
+        }
+      );
+
+      await daemon.stop();
+      daemon = createDispatchDaemon(
+        api,
+        agentRegistry,
+        sessionManager,
+        dispatchService,
+        worktreeManager,
+        taskAssignment,
+        stewardScheduler,
+        inboxService,
+        {
+          ensureTargetBranchExists: mockEnsureTargetBranchExists,
+          pollIntervalMs: 100,
+          workerAvailabilityPollEnabled: true,
+          inboxPollEnabled: true,
+          stewardTriggerPollEnabled: false,
+          workflowTaskPollEnabled: false,
+        },
+        poolService
+      );
+
+      const result = await daemon.pollWorkerAvailability();
+
+      expect(result.processed).toBe(1);
+      expect(callOrder).toEqual(['onAgentSessionStarting', 'startSession']);
+      expect(poolService.onAgentSessionStarting).toHaveBeenCalledWith(worker.id);
+    });
+
+    test('releases reserved pool occupancy when worker session startup fails', async () => {
+      const worker = await createTestWorker('pool-fail-worker');
+      await createTestTask('Task for failed pool worker');
+
+      const poolService = {
+        canSpawn: mock(async () => ({ canSpawn: true })),
+        onAgentSessionStarting: mock(async () => {}),
+        onAgentSessionEnded: mock(async () => {}),
+      } as unknown as AgentPoolService;
+
+      (sessionManager.startSession as ReturnType<typeof mock>).mockImplementation(
+        async () => {
+          throw new Error('provider unavailable');
+        }
+      );
+
+      await daemon.stop();
+      daemon = createDispatchDaemon(
+        api,
+        agentRegistry,
+        sessionManager,
+        dispatchService,
+        worktreeManager,
+        taskAssignment,
+        stewardScheduler,
+        inboxService,
+        {
+          ensureTargetBranchExists: mockEnsureTargetBranchExists,
+          pollIntervalMs: 100,
+          workerAvailabilityPollEnabled: true,
+          inboxPollEnabled: true,
+          stewardTriggerPollEnabled: false,
+          workflowTaskPollEnabled: false,
+        },
+        poolService
+      );
+
+      const result = await daemon.pollWorkerAvailability();
+
+      expect(result.processed).toBe(0);
+      expect(poolService.onAgentSessionStarting).toHaveBeenCalledWith(worker.id);
+      expect(poolService.onAgentSessionEnded).toHaveBeenCalledWith(worker.id);
     });
 
     test('does not dispatch to worker with active session', async () => {

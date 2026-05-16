@@ -512,8 +512,17 @@ export function createMockSessionManager(
   const agentSessions = new Map<EntityId, string>();
   const mockSessions = new Map<string, MockSession>();
   const { EventEmitter } = require('node:events') as typeof import('node:events');
+  const sessionEndedCallbacks = new Set<(session: SessionRecord) => void | Promise<void>>();
 
   let sessionCounter = 0;
+
+  const notifySessionEnded = (session: SessionRecord): void => {
+    for (const callback of sessionEndedCallbacks) {
+      Promise.resolve(callback(session)).catch(() => {
+        // Test helper callbacks are best-effort.
+      });
+    }
+  };
 
   const manager: MockSessionManager = {
     mockSessions,
@@ -564,12 +573,14 @@ export function createMockSessionManager(
 
       const session = sessions.get(sessionId);
       if (session) {
-        sessions.set(sessionId, {
+        const endedSession = {
           ...session,
           status: 'terminated',
           endedAt: createTimestamp(),
-        });
+        } as SessionRecord;
+        sessions.set(sessionId, endedSession);
         agentSessions.delete(session.agentId);
+        notifySessionEnded(endedSession);
       }
     },
 
@@ -644,12 +655,13 @@ export function createMockSessionManager(
         throw new Error(`Session not found: ${sessionId}`);
       }
 
-      sessions.set(sessionId, {
+      const endedSession = {
         ...session,
         status: 'terminated',
         endedAt: createTimestamp(),
         terminationReason: options?.reason,
-      });
+      } as SessionRecord;
+      sessions.set(sessionId, endedSession);
 
       agentSessions.delete(session.agentId);
 
@@ -660,6 +672,7 @@ export function createMockSessionManager(
       }
 
       await agentRegistry.updateAgentSession(session.agentId, undefined, 'idle');
+      notifySessionEnded(endedSession);
     },
 
     async suspendSession(sessionId: string, reason?: string): Promise<void> {
@@ -668,12 +681,13 @@ export function createMockSessionManager(
         throw new Error(`Session not found: ${sessionId}`);
       }
 
-      sessions.set(sessionId, {
+      const suspendedSession = {
         ...session,
         status: 'suspended',
         endedAt: createTimestamp(),
         terminationReason: reason,
-      });
+      } as SessionRecord;
+      sessions.set(sessionId, suspendedSession);
 
       agentSessions.delete(session.agentId);
       await agentRegistry.updateAgentSession(
@@ -681,6 +695,7 @@ export function createMockSessionManager(
         session.providerSessionId,
         'suspended'
       );
+      notifySessionEnded(suspendedSession);
     },
 
     async interruptSession(sessionId: string): Promise<void> {
@@ -815,6 +830,13 @@ export function createMockSessionManager(
 
     setOperationLog(): void {
       // No-op for mock
+    },
+
+    onSessionEnded(callback: (session: SessionRecord) => void | Promise<void>): () => void {
+      sessionEndedCallbacks.add(callback);
+      return () => {
+        sessionEndedCallbacks.delete(callback);
+      };
     },
   };
 

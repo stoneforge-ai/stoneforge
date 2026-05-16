@@ -124,6 +124,8 @@ export interface InteractiveSession {
   readonly pid?: number;
   /** Write data to the PTY */
   write(data: string): void;
+  /** Request a graceful provider-specific exit, if different from shell exit */
+  requestExit?(): void;
   /** Resize the terminal */
   resize(cols: number, rows: number): void;
   /** Kill the PTY */

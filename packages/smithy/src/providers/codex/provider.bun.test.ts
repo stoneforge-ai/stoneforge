@@ -6,6 +6,13 @@
 
 import { describe, it, expect, mock, beforeEach, afterEach } from 'bun:test';
 import type { CodexClient, CodexModelInfo } from './server-manager.js';
+import {
+  buildCodexInteractiveArgs,
+  createCodexResumeSessionIdDetector,
+  extractCodexResumeSessionId,
+  isCodexResumeSessionId,
+  writeCodexExitCommand,
+} from './interactive.js';
 import { posixShellQuote, shellQuote } from '../shell-quote.js';
 
 // ---------------------------------------------------------------------------
@@ -204,71 +211,121 @@ describe('CodexHeadlessProvider model passthrough', () => {
 // ---------------------------------------------------------------------------
 
 describe('CodexInteractiveProvider model flag', () => {
-  // Use the POSIX form directly so assertions are deterministic regardless of
-  // the host OS the tests run on. A separate suite below covers the Windows
-  // quoter.
-  function buildArgs(options: {
-    resumeSessionId?: string;
-    workingDirectory: string;
-    model?: string;
-  }): string[] {
-    const shellQuote = posixShellQuote;
-    const args: string[] = [];
+  const codexSessionId = '019e1277-6206-74e1-bb66-bbd8e9534628';
 
-    if (options.resumeSessionId) {
-      args.push('resume', shellQuote(options.resumeSessionId), '--full-auto');
-    } else {
-      args.push('--full-auto', '--cd', shellQuote(options.workingDirectory));
-    }
-
-    // Add model flag if provided
-    if (options.model) {
-      args.push('--model', shellQuote(options.model));
-    }
-
-    return args;
-  }
-
-  it('should include --model flag when model is provided', () => {
-    const args = buildArgs({
+  it('builds interactive spawn args with the documented workspace-write sandbox', () => {
+    const args = buildCodexInteractiveArgs({
       workingDirectory: '/workspace',
       model: 'gpt-4o',
-    });
+    }, 'linux');
+
+    expect(args).toEqual(['--sandbox', 'workspace-write', '--cd', "'/workspace'", '--model', "'gpt-4o'"]);
+  });
+
+  it('should include --model flag when model is provided', () => {
+    const args = buildCodexInteractiveArgs({
+      workingDirectory: '/workspace',
+      model: 'gpt-4o',
+    }, 'linux');
 
     expect(args).toContain('--model');
     expect(args).toContain("'gpt-4o'");
-    expect(args).toEqual(['--full-auto', '--cd', "'/workspace'", '--model', "'gpt-4o'"]);
+    expect(args).toEqual(['--sandbox', 'workspace-write', '--cd', "'/workspace'", '--model', "'gpt-4o'"]);
   });
 
   it('should not include --model flag when model is undefined', () => {
-    const args = buildArgs({
+    const args = buildCodexInteractiveArgs({
       workingDirectory: '/workspace',
-    });
+    }, 'linux');
 
     expect(args).not.toContain('--model');
-    expect(args).toEqual(['--full-auto', '--cd', "'/workspace'"]);
+    expect(args).toEqual(['--sandbox', 'workspace-write', '--cd', "'/workspace'"]);
   });
 
   it('should include --model flag when resuming with model', () => {
-    const args = buildArgs({
-      resumeSessionId: 'thr_abc123',
+    const args = buildCodexInteractiveArgs({
+      resumeSessionId: codexSessionId,
       workingDirectory: '/workspace',
       model: 'o3-mini',
-    });
+    }, 'linux');
 
     expect(args).toContain('resume');
     expect(args).toContain('--model');
     expect(args).toContain("'o3-mini'");
+    expect(args).toEqual(['resume', `'${codexSessionId}'`, '--sandbox', 'workspace-write', '--model', "'o3-mini'"]);
+  });
+
+  it('should reject non-UUID resume session IDs', () => {
+    expect(() => buildCodexInteractiveArgs({
+      resumeSessionId: 'thr_abc123',
+      workingDirectory: '/workspace',
+    }, 'linux')).toThrow('Invalid Codex resume session ID');
   });
 
   it('should properly quote model names with special characters', () => {
-    const args = buildArgs({
+    const args = buildCodexInteractiveArgs({
       workingDirectory: '/workspace',
       model: "model's-name",
-    });
+    }, 'linux');
 
     expect(args).toContain("--model");
     expect(args).toContain("'model'\\''s-name'");
+  });
+});
+
+describe('Codex interactive resume session ID parsing', () => {
+  const codexSessionId = '019e1277-6206-74e1-bb66-bbd8e9534628';
+
+  it('extracts UUID from Codex continuation footer', () => {
+    expect(extractCodexResumeSessionId(
+      `Token usage: total=19,927\nTo continue this session, run codex resume ${codexSessionId}\n`,
+    )).toBe(codexSessionId);
+  });
+
+  it('ignores ordinary session management text', () => {
+    expect(extractCodexResumeSessionId('Agent Session Management')).toBeUndefined();
+  });
+
+  it('ignores Codex session-not-found errors', () => {
+    expect(extractCodexResumeSessionId(
+      'No saved session found with ID management. Run `codex resume` without an ID to choose from existing sessions.',
+    )).toBeUndefined();
+  });
+
+  it('ignores non-UUID continuation footer values', () => {
+    expect(extractCodexResumeSessionId('To continue this session, run codex resume management')).toBeUndefined();
+  });
+
+  it('detects footer split across PTY chunks', () => {
+    const detect = createCodexResumeSessionIdDetector();
+
+    expect(detect('Token usage: total=19,927\nTo continue this session, ')).toBeUndefined();
+    expect(detect(`run codex resume ${codexSessionId}\n`)).toBe(codexSessionId);
+  });
+
+  it('validates Codex resume IDs as UUIDs', () => {
+    expect(isCodexResumeSessionId(codexSessionId)).toBe(true);
+    expect(isCodexResumeSessionId('management')).toBe(false);
+    expect(isCodexResumeSessionId('thr_abc123')).toBe(false);
+  });
+});
+
+describe('Codex interactive graceful exit', () => {
+  it('writes slash exit and schedules Enter as separate PTY writes', () => {
+    const writes: string[] = [];
+    const scheduled: (() => void)[] = [];
+
+    writeCodexExitCommand(
+      (data) => writes.push(data),
+      (callback) => scheduled.push(callback),
+    );
+
+    expect(writes).toEqual(['/exit']);
+    expect(scheduled).toHaveLength(1);
+
+    scheduled[0]();
+
+    expect(writes).toEqual(['/exit', '\r']);
   });
 });
 

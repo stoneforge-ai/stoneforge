@@ -184,8 +184,19 @@ export interface AgentPoolService {
   // ----------------------------------------
 
   /**
+   * Notifies the service that an agent session is starting.
+   * Updates pool status accordingly.
+   *
+   * @param agentId - The starting agent ID
+   */
+  onAgentSessionStarting(agentId: EntityId): Promise<void>;
+
+  /**
    * Notifies the service that an agent has been spawned.
    * Updates pool status accordingly.
+   *
+   * @deprecated Use onAgentSessionStarting so pool occupancy is reserved before
+   * the provider process can exit.
    *
    * @param agentId - The spawned agent ID
    */
@@ -622,7 +633,7 @@ export class AgentPoolServiceImpl implements AgentPoolService {
   // Agent Tracking
   // ----------------------------------------
 
-  async onAgentSpawned(agentId: EntityId): Promise<void> {
+  async onAgentSessionStarting(agentId: EntityId): Promise<void> {
     // Get agent details
     const agent = await this.agentRegistry.getAgent(agentId);
     if (!agent) {
@@ -649,6 +660,10 @@ export class AgentPoolServiceImpl implements AgentPoolService {
     // Update status for each pool
     for (const pool of pools) {
       const status = this.statusCache.get(pool.id) ?? await this.getPoolStatus(pool.id);
+      if (status.activeAgentIds.includes(agentId)) {
+        continue;
+      }
+
       const typeKey = this.getAgentTypeKey(agent);
 
       const updatedStatus: AgentPoolStatus = {
@@ -664,6 +679,10 @@ export class AgentPoolServiceImpl implements AgentPoolService {
 
       this.statusCache.set(pool.id, updatedStatus);
     }
+  }
+
+  async onAgentSpawned(agentId: EntityId): Promise<void> {
+    return this.onAgentSessionStarting(agentId);
   }
 
   async onAgentSessionEnded(agentId: EntityId): Promise<void> {
@@ -702,6 +721,10 @@ export class AgentPoolServiceImpl implements AgentPoolService {
     // Update status for each pool
     for (const pool of pools) {
       const status = this.statusCache.get(pool.id) ?? await this.getPoolStatus(pool.id);
+      if (!status.activeAgentIds.includes(agentId)) {
+        continue;
+      }
+
       const typeKey = this.getAgentTypeKey(agent);
 
       const updatedStatus: AgentPoolStatus = {

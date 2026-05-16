@@ -1229,6 +1229,58 @@ describe('SessionManager', () => {
       expect(updatedSession?.status).toBe('terminated');
     });
 
+    test('onExit notifies session-ended callbacks', async () => {
+      const endedSessionIds: string[] = [];
+      sessionManager.onSessionEnded((endedSession) => {
+        endedSessionIds.push(endedSession.id);
+      });
+
+      const { session } = await sessionManager.startSession(testAgentId);
+
+      const spawnerEmitter = spawner._mockEmitters.get(session.id);
+      spawnerEmitter?.emit('exit', 0, null);
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(endedSessionIds).toEqual([session.id]);
+    });
+
+    test('startSession waits for prior session-ended callbacks for the same agent', async () => {
+      let releaseCallback: (() => void) | undefined;
+      let callbackStarted = false;
+      let callbackFinished = false;
+      sessionManager.onSessionEnded(async () => {
+        callbackStarted = true;
+        await new Promise<void>((resolve) => {
+          releaseCallback = resolve;
+        });
+        callbackFinished = true;
+      });
+
+      const { session: firstSession } = await sessionManager.startSession(testAgentId);
+      spawner._mockEmitters.get(firstSession.id)?.emit('exit', 0, null);
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(callbackStarted).toBe(true);
+
+      const secondStart = sessionManager.startSession(testAgentId);
+      let secondStarted = false;
+      secondStart.then(() => {
+        secondStarted = true;
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(secondStarted).toBe(false);
+      expect(callbackFinished).toBe(false);
+
+      releaseCallback?.();
+      const { session: secondSession } = await secondStart;
+
+      expect(callbackFinished).toBe(true);
+      expect(secondStarted).toBe(true);
+      expect(secondSession.id).not.toBe(firstSession.id);
+    });
+
     test('onExit does not modify already-terminated sessions', async () => {
       const { session } = await sessionManager.startSession(testAgentId);
       await sessionManager.stopSession(session.id, { reason: 'Explicit stop' });
@@ -1260,6 +1312,11 @@ describe('SessionManager', () => {
     });
 
     test('listSessions excludes sessions with dead PIDs', async () => {
+      const endedSessionIds: string[] = [];
+      sessionManager.onSessionEnded((endedSession) => {
+        endedSessionIds.push(endedSession.id);
+      });
+
       const { session } = await sessionManager.startSession(testAgentId);
 
       // Manually set a dead PID on the session to simulate a crashed process
@@ -1276,6 +1333,7 @@ describe('SessionManager', () => {
       const allSessions = sessionManager.listSessions({ status: 'terminated' });
       expect(allSessions).toHaveLength(1);
       expect(allSessions[0].terminationReason).toContain('Process no longer alive');
+      expect(endedSessionIds).toEqual([session.id]);
     });
 
     test('listSessions cleans up starting sessions with dead PIDs', async () => {

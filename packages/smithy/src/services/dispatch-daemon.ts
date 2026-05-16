@@ -790,6 +790,27 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       : this.rateLimitTracker.getAllLimits().length > 0;
   }
 
+  private async reservePoolSlot(agentId: EntityId): Promise<boolean> {
+    if (!this.poolService) {
+      return false;
+    }
+
+    await this.poolService.onAgentSessionStarting(agentId);
+    return true;
+  }
+
+  private async releaseReservedPoolSlot(agentId: EntityId, reserved: boolean): Promise<void> {
+    if (!reserved || !this.poolService) {
+      return;
+    }
+
+    try {
+      await this.poolService.onAgentSessionEnded(agentId);
+    } catch (error) {
+      logger.error(`Failed to release reserved pool slot for agent ${agentId}:`, error);
+    }
+  }
+
   getRateLimitStatus(): {
     isPaused: boolean;
     limits: Array<{ executable: string; resetsAt: string }>;
@@ -2801,15 +2822,24 @@ export class DispatchDaemonImpl implements DispatchDaemon {
     // Build initial prompt with task context
     const initialPrompt = await this.buildTaskPrompt(task, workerId);
 
+    const poolSlotReserved = await this.reservePoolSlot(workerId);
+
     // Spawn worker INSIDE the worktree BEFORE dispatching the task.
     // This ensures that if the session fails to start (e.g. provider not
     // available), the task stays unassigned and available for other agents.
-    const { session, events } = await this.sessionManager.startSession(workerId, {
-      workingDirectory: worktreePath,
-      worktree: worktreePath,
-      initialPrompt,
-      executablePathOverride: executableOverride ?? undefined,
-    });
+    let session: SessionRecord;
+    let events: EventEmitter;
+    try {
+      ({ session, events } = await this.sessionManager.startSession(workerId, {
+        workingDirectory: worktreePath,
+        worktree: worktreePath,
+        initialPrompt,
+        executablePathOverride: executableOverride ?? undefined,
+      }));
+    } catch (error) {
+      await this.releaseReservedPoolSlot(workerId, poolSlotReserved);
+      throw error;
+    }
 
     // Attach event listeners IMMEDIATELY after session start, before any awaits.
     // This prevents a race condition where rate_limited events emitted during
@@ -2899,11 +2929,6 @@ export class DispatchDaemonImpl implements DispatchDaemon {
         finalMetadata = updateOrchestratorTaskMeta(finalMetadata, metaUpdate);
       }
       await this.api.update<Task>(task.id, { metadata: finalMetadata });
-    }
-
-    // Notify pool service that agent was spawned
-    if (this.poolService) {
-      await this.poolService.onAgentSpawned(workerId);
     }
 
     this.emitter.emit('agent:spawned', workerId, worktreePath);
@@ -3319,14 +3344,23 @@ export class DispatchDaemonImpl implements DispatchDaemon {
 
     const workingDirectory = worktreePath;
 
+    const poolSlotReserved = await this.reservePoolSlot(stewardId);
+
     // Start the steward session
-    const { session, events } = await this.sessionManager.startSession(stewardId, {
-      workingDirectory,
-      worktree: worktreePath,
-      initialPrompt,
-      interactive: false, // Stewards use headless mode
-      executablePathOverride: stewardExecutableOverride ?? undefined,
-    });
+    let session: SessionRecord;
+    let events: EventEmitter;
+    try {
+      ({ session, events } = await this.sessionManager.startSession(stewardId, {
+        workingDirectory,
+        worktree: worktreePath,
+        initialPrompt,
+        interactive: false, // Stewards use headless mode
+        executablePathOverride: stewardExecutableOverride ?? undefined,
+      }));
+    } catch (error) {
+      await this.releaseReservedPoolSlot(stewardId, poolSlotReserved);
+      throw error;
+    }
 
     // Attach event listeners IMMEDIATELY after session start, before any awaits.
     // This prevents a race where rate_limited events emitted during the async
@@ -3365,11 +3399,6 @@ export class DispatchDaemonImpl implements DispatchDaemon {
       assignee: stewardId,
       metadata: finalMetadata,
     });
-
-    // Notify pool service that agent was spawned
-    if (this.poolService) {
-      await this.poolService.onAgentSpawned(stewardId);
-    }
 
     this.emitter.emit('agent:spawned', stewardId, worktreePath);
     logger.info(`Spawned merge steward ${steward.name} for task ${task.id}`);
@@ -3533,16 +3562,25 @@ export class DispatchDaemonImpl implements DispatchDaemon {
     // 4. Build the recovery steward prompt
     const initialPrompt = await this.buildRecoveryStewardPrompt(task, stewardId, taskMeta);
 
+    const poolSlotReserved = await this.reservePoolSlot(stewardId);
+
     // 5. Start the recovery steward session BEFORE unassigning the worker.
     //    If startSession fails (rate limited, pool full, etc.), the task retains
     //    its original worker assignment and is not left orphaned.
-    const { session, events } = await this.sessionManager.startSession(stewardId, {
-      workingDirectory: worktreePath,
-      worktree: worktreePath,
-      initialPrompt,
-      interactive: false, // Stewards use headless mode
-      executablePathOverride: recoveryExecutableOverride ?? undefined,
-    });
+    let session: SessionRecord;
+    let events: EventEmitter;
+    try {
+      ({ session, events } = await this.sessionManager.startSession(stewardId, {
+        workingDirectory: worktreePath,
+        worktree: worktreePath,
+        initialPrompt,
+        interactive: false, // Stewards use headless mode
+        executablePathOverride: recoveryExecutableOverride ?? undefined,
+      }));
+    } catch (error) {
+      await this.releaseReservedPoolSlot(stewardId, poolSlotReserved);
+      throw error;
+    }
 
     // 5a. Attach event listeners IMMEDIATELY after session start, before any awaits.
     //     This prevents a race where rate_limited events emitted during the async
@@ -3602,10 +3640,6 @@ export class DispatchDaemonImpl implements DispatchDaemon {
         );
       }
       throw metadataError;
-    }
-
-    if (this.poolService) {
-      await this.poolService.onAgentSpawned(stewardId);
     }
 
     this.emitter.emit('agent:spawned', stewardId, worktreePath);

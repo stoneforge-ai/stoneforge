@@ -102,6 +102,61 @@ describe('SpawnerService', () => {
         'Session not found'
       );
     });
+
+    test('uses provider-specific requestExit for graceful interactive termination', async () => {
+      let exitCallback: ((code: number, signal?: number) => void) | undefined;
+      const writes: string[] = [];
+
+      const interactiveProvider: InteractiveProvider = {
+        name: 'mock-interactive',
+        spawn: async (): Promise<InteractiveSession> => ({
+          pid: 12345,
+          write: (data: string) => {
+            writes.push(data);
+          },
+          requestExit: () => {
+            writes.push('requestExit');
+            exitCallback?.(0);
+          },
+          resize: () => {},
+          kill: () => {
+            writes.push('kill');
+          },
+          onData: () => {},
+          onExit: (callback: (code: number, signal?: number) => void) => {
+            exitCallback = callback;
+          },
+          getSessionId: () => undefined,
+        }),
+        isAvailable: async () => true,
+      };
+
+      const provider: AgentProvider = {
+        name: 'mock-provider',
+        headless: createMockHeadlessProvider(createImmediateExitHeadlessSession),
+        interactive: interactiveProvider,
+        isAvailable: async () => true,
+        getInstallInstructions: () => 'No install needed for mock',
+        listModels: async (): Promise<ModelInfo[]> => [],
+      };
+
+      const service = new SpawnerServiceImpl({
+        provider,
+        workingDirectory: '/tmp',
+        timeout: 1000,
+      });
+
+      const result = await service.spawn(testAgentId, 'director', {
+        mode: 'interactive',
+      });
+
+      await service.terminate(result.session.id, true);
+
+      expect(writes).toContain('requestExit');
+      expect(writes).not.toContain('exit\r');
+      expect(writes).not.toContain('kill');
+      expect(service.getSession(result.session.id)?.status).toBe('terminated');
+    });
   });
 
   describe('suspend', () => {
