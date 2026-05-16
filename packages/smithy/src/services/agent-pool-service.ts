@@ -702,6 +702,10 @@ export class AgentPoolServiceImpl implements AgentPoolService {
     // Update status for each pool
     for (const pool of pools) {
       const status = this.statusCache.get(pool.id) ?? await this.getPoolStatus(pool.id);
+      if (!status.activeAgentIds.includes(agentId)) {
+        continue;
+      }
+
       const typeKey = this.getAgentTypeKey(agent);
 
       const updatedStatus: AgentPoolStatus = {
