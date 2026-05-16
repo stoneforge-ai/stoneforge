@@ -67,12 +67,35 @@ describe('AgentPoolService', () => {
       createdBy: systemEntity,
     });
 
-    await poolService.onAgentSpawned(activeWorker.id as unknown as EntityId);
+    await poolService.onAgentSessionStarting(activeWorker.id as unknown as EntityId);
     await poolService.onAgentSessionEnded(idleWorker.id as unknown as EntityId);
 
     const status = await poolService.getPoolStatus(pool.id as ElementId);
     expect(status.activeCount).toBe(1);
     expect(status.availableSlots).toBe(0);
     expect(status.activeAgentIds).toEqual([activeWorker.id]);
+  });
+
+  test('does not double-count an agent whose pool slot is already reserved', async () => {
+    const pool = await poolService.createPool({
+      name: 'deduped_ephemeral_workers',
+      maxSize: 2,
+      agentTypes: [{ role: 'worker', workerMode: 'ephemeral' }],
+      createdBy: systemEntity,
+    });
+
+    const worker = await agentRegistry.registerWorker({
+      name: 'deduped-worker',
+      workerMode: 'ephemeral',
+      createdBy: systemEntity,
+    });
+
+    await poolService.onAgentSessionStarting(worker.id as unknown as EntityId);
+    await poolService.onAgentSessionStarting(worker.id as unknown as EntityId);
+
+    const status = await poolService.getPoolStatus(pool.id as ElementId);
+    expect(status.activeCount).toBe(1);
+    expect(status.availableSlots).toBe(1);
+    expect(status.activeAgentIds).toEqual([worker.id]);
   });
 });
