@@ -1245,6 +1245,42 @@ describe('SessionManager', () => {
       expect(endedSessionIds).toEqual([session.id]);
     });
 
+    test('startSession waits for prior session-ended callbacks for the same agent', async () => {
+      let releaseCallback: (() => void) | undefined;
+      let callbackStarted = false;
+      let callbackFinished = false;
+      sessionManager.onSessionEnded(async () => {
+        callbackStarted = true;
+        await new Promise<void>((resolve) => {
+          releaseCallback = resolve;
+        });
+        callbackFinished = true;
+      });
+
+      const { session: firstSession } = await sessionManager.startSession(testAgentId);
+      spawner._mockEmitters.get(firstSession.id)?.emit('exit', 0, null);
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(callbackStarted).toBe(true);
+
+      const secondStart = sessionManager.startSession(testAgentId);
+      let secondStarted = false;
+      secondStart.then(() => {
+        secondStarted = true;
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(secondStarted).toBe(false);
+      expect(callbackFinished).toBe(false);
+
+      releaseCallback?.();
+      const { session: secondSession } = await secondStart;
+
+      expect(callbackFinished).toBe(true);
+      expect(secondStarted).toBe(true);
+      expect(secondSession.id).not.toBe(firstSession.id);
+    });
+
     test('onExit does not modify already-terminated sessions', async () => {
       const { session } = await sessionManager.startSession(testAgentId);
       await sessionManager.stopSession(session.id, { reason: 'Explicit stop' });

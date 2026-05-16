@@ -505,6 +505,7 @@ export class SessionManagerImpl implements SessionManager {
   private readonly sessionHistory: Map<EntityId, SessionHistoryEntry[]> = new Map();
   private readonly sessionCleanupFns: Map<string, () => void> = new Map(); // sessionId -> cleanup function
   private readonly sessionEndedCallbacks: Set<SessionEndedCallback> = new Set();
+  private readonly sessionEndCleanupPromises: Map<EntityId, Promise<void>> = new Map();
 
   private operationLog: OperationLogService | undefined;
 
@@ -548,6 +549,8 @@ export class SessionManagerImpl implements SessionManager {
     agentId: EntityId,
     options?: StartSessionOptions
   ): Promise<{ session: SessionRecord; events: EventEmitter }> {
+    await this.waitForSessionEndCleanup(agentId);
+
     // Get agent to determine role and mode
     const agent = await this.registry.getAgent(agentId);
     if (!agent) {
@@ -639,6 +642,8 @@ export class SessionManagerImpl implements SessionManager {
     agentId: EntityId,
     options: ResumeSessionOptions
   ): Promise<{ session: SessionRecord; events: EventEmitter; uwpCheck?: ResumeUWPCheckResult }> {
+    await this.waitForSessionEndCleanup(agentId);
+
     // Get agent to determine role and mode
     const agent = await this.registry.getAgent(agentId);
     if (!agent) {
@@ -803,7 +808,7 @@ export class SessionManagerImpl implements SessionManager {
 
     // Emit status change
     finalSession.events.emit('status', 'terminated');
-    this.notifySessionEnded(finalSession);
+    await this.notifySessionEnded(finalSession);
 
     // Log session termination
     this.operationLog?.write('info', 'session', `Session terminated for agent ${session.agentId}${options?.reason ? `: ${options.reason}` : ''}`, { agentId: session.agentId, sessionId });
@@ -873,7 +878,7 @@ export class SessionManagerImpl implements SessionManager {
 
     // Emit status change
     updatedSession.events.emit('status', 'suspended');
-    this.notifySessionEnded(updatedSession);
+    await this.notifySessionEnded(updatedSession);
   }
 
   // ----------------------------------------
@@ -1429,7 +1434,7 @@ export class SessionManagerImpl implements SessionManager {
     this.persistSession(session.id).then(() => {
       this.scheduleTerminatedSessionCleanup(session.id);
     }).catch(() => {});
-    this.notifySessionEnded(updated);
+    void this.notifySessionEnded(updated);
   }
 
   private setupSpawnerEventHandlers(): void {
@@ -1549,7 +1554,7 @@ export class SessionManagerImpl implements SessionManager {
         this.scheduleTerminatedSessionCleanup(session.id);
 
         updatedSession.events.emit('status', 'terminated');
-        this.notifySessionEnded(updatedSession);
+        await this.notifySessionEnded(updatedSession);
       } else {
         console.log(`[session-manager] Session ${session.id} already in status: ${currentSession?.status ?? 'not found'}`);
       }
@@ -1600,19 +1605,44 @@ export class SessionManagerImpl implements SessionManager {
     }
   }
 
-  private notifySessionEnded(session: InternalSessionState): void {
-    if (this.sessionEndedCallbacks.size === 0) return;
-
-    const publicSession = this.toPublicSession(session);
-    for (const callback of this.sessionEndedCallbacks) {
-      Promise.resolve(callback(publicSession)).catch((error) => {
-        this.operationLog?.write('warn', 'session', `Session ended callback failed for ${session.id}`, {
-          agentId: session.agentId,
-          sessionId: session.id,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      });
+  private async waitForSessionEndCleanup(agentId: EntityId): Promise<void> {
+    const cleanup = this.sessionEndCleanupPromises.get(agentId);
+    if (cleanup) {
+      await cleanup;
     }
+  }
+
+  private notifySessionEnded(session: InternalSessionState): Promise<void> {
+    const previousCleanup = this.sessionEndCleanupPromises.get(session.agentId) ?? Promise.resolve();
+    const runCallbacks = async () => {
+      if (this.sessionEndedCallbacks.size === 0) return;
+
+      const publicSession = this.toPublicSession(session);
+      await Promise.all(Array.from(this.sessionEndedCallbacks, async (callback) => {
+        try {
+          await callback(publicSession);
+        } catch (error) {
+          this.operationLog?.write('warn', 'session', `Session ended callback failed for ${session.id}`, {
+            agentId: session.agentId,
+            sessionId: session.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }));
+    };
+
+    const cleanup = this.sessionEndCleanupPromises.has(session.agentId)
+      ? previousCleanup.then(runCallbacks)
+      : runCallbacks();
+
+    const trackedCleanup = cleanup.finally(() => {
+      if (this.sessionEndCleanupPromises.get(session.agentId) === trackedCleanup) {
+        this.sessionEndCleanupPromises.delete(session.agentId);
+      }
+    });
+
+    this.sessionEndCleanupPromises.set(session.agentId, trackedCleanup);
+    return trackedCleanup;
   }
 
   private createSessionState(
